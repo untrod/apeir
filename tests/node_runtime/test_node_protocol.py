@@ -206,7 +206,14 @@ def test_relay_transfers_verified_artifact_and_executes_lease_and_stop_controls(
     asyncio.run(scenario())
 
 
-async def _wait_for(predicate, timeout: float = 5.0) -> None:
+async def _wait_for(predicate, timeout: float = 20.0) -> None:
+    """Wait for relay convergence without assuming workstation-speed I/O.
+
+    Hosted Windows runners can take more than five seconds to copy and verify the
+    artifact while the complete test suite is under load. The assertion remains
+    fail-closed; this only gives the asynchronous relay enough time to report its
+    final state.
+    """
     deadline = asyncio.get_running_loop().time() + timeout
     while asyncio.get_running_loop().time() < deadline:
         if predicate():
