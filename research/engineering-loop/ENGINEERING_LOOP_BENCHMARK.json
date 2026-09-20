@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "experiment": "APEIR Engineering Loop Experiment 001",
+  "status": "not_run",
+  "reference_task": "esp32-s3-sensor-board",
+  "baselines": [
+    "model-shell-kicad",
+    "model-hardware-as-code",
+    "model-tools-apeir"
+  ],
+  "metrics": {
+    "completion_rate": null,
+    "unsupported_action_rate": null,
+    "false_success_rate": null,
+    "recovery_rate": null,
+    "verification_coverage": null,
+    "human_intervention_count": null,
+    "engineering_iterations": null,
+    "input_tokens": null,
+    "output_tokens": null,
+    "model_cost": null,
+    "compute_seconds": null,
+    "tool_runtime_seconds": null
+  },
+  "faults": [
+    "3v3-rail-zero",
+    "i2c-device-missing",
+    "firmware-boot-loop",
+    "pull-up-constraint-violation"
+  ],
+  "runs": [],
+  "notes": "No result has been recorded. Null is not a passing value."
+}

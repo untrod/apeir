@@ -12,7 +12,6 @@ import shutil
 import signal
 import socket
 import struct
-import subprocess
 import sys
 import threading
 import time
@@ -649,15 +648,21 @@ def _memory_bytes() -> tuple[int, int]:
             return int(status.total_physical), int(status.available_physical)
     if sys.platform == "darwin":
         try:
-            completed = subprocess.run(
-                ["/usr/sbin/sysctl", "-n", "hw.memsize"],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=5,
+            import ctypes
+
+            libc = ctypes.CDLL("libc.dylib", use_errno=True)
+            value = ctypes.c_uint64()
+            size = ctypes.c_size_t(ctypes.sizeof(value))
+            result = libc.sysctlbyname(
+                b"hw.memsize",
+                ctypes.byref(value),
+                ctypes.byref(size),
+                None,
+                0,
             )
-            return int(completed.stdout.strip()), 0
-        except (OSError, ValueError, subprocess.SubprocessError):
+            if result == 0 and value.value > 0:
+                return int(value.value), 0
+        except (AttributeError, OSError, ValueError):
             pass
     try:
         values: dict[str, int] = {}
