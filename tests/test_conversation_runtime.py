@@ -54,8 +54,26 @@ def test_conversation_export_import_delete_and_citations(tmp_path):
 def test_conversation_export_streams_all_messages_with_integrity(tmp_path):
     store = ConversationStore(tmp_path, active_window=2_000)
     conversation = store.create("workspace", "user")
-    for index in range(1_005):
-        store.append(ConversationMessage(conversation.conversation_id, "user", f"message-{index}"))
+    # The test exercises export pagination beyond the 1,000-message history
+    # limit. Seed its fixture in one transaction so platform-specific fsync
+    # latency does not turn this into an append performance test.
+    with store._db() as connection:
+        connection.executemany(
+            """INSERT INTO messages (
+                message_id, conversation_id, role, content, created_at, event_id,
+                run_id, task_id, attachment_ids_json, citations_json, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, NULL, '', '', '[]', '[]', '{}')""",
+            [
+                (
+                    f"bulk-message-{index}",
+                    conversation.conversation_id,
+                    "user",
+                    f"message-{index}",
+                    "2026-01-01T00:00:00Z",
+                )
+                for index in range(1_005)
+            ],
+        )
 
     exported = store.export(conversation.conversation_id, page_size=37)
     assert exported["schema_version"] == "2.0"
