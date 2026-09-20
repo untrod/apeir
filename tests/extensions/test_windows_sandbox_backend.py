@@ -186,7 +186,13 @@ def test_readonly_workspace_is_replaced_by_content_snapshot(tmp_path):
         read_allowed_paths=[str(workspace)],
         write_allowed_paths=[],
     )
-    mappings, _ = _build_mappings(policy, control)
+    # Exercise staging independently of mapping-root admission. Hosted Windows
+    # runners place their temporary directory below a reparse point, which the
+    # production admission path correctly rejects.
+    mappings = [
+        (control.resolve(), r"C:\NousControl", True),
+        (workspace.resolve(), r"C:\NousWorkspace", True),
+    ]
     result = _snapshot_readonly_mappings(mappings, staged, policy)
     mapped = next(host for host, guest, _ in result if guest == r"C:\NousWorkspace")
     assert mapped != workspace.resolve()
@@ -205,7 +211,10 @@ def test_snapshot_budget_fails_before_copy(tmp_path):
         working_dir=str(workspace),
         max_staging_bytes=16,
     )
-    mappings, _ = _build_mappings(policy, control)
+    mappings = [
+        (control.resolve(), r"C:\NousControl", True),
+        (workspace.resolve(), r"C:\NousWorkspace", True),
+    ]
     with pytest.raises(ValueError, match="staging limits"):
         _snapshot_readonly_mappings(mappings, tmp_path / "staged", policy)
     assert not (tmp_path / "staged").exists()
@@ -223,7 +232,10 @@ def test_writable_mapping_is_staged_and_guarded_commit(tmp_path):
         working_dir=str(workspace),
         write_allowed_paths=[str(workspace)],
     )
-    mappings, _ = _build_mappings(policy, control)
+    mappings = [
+        (control.resolve(), r"C:\NousControl", True),
+        (workspace.resolve(), r"C:\NousWorkspace", False),
+    ]
     staged, commits = _stage_mappings(mappings, staged_root, policy)
     staged_workspace = next(root for root, guest, _ in staged if guest == r"C:\NousWorkspace")
     staged_workspace.joinpath("after.txt").write_text("after", encoding="utf-8")
@@ -242,7 +254,10 @@ def test_writable_commit_rejects_host_mutation(tmp_path):
         working_dir=str(workspace),
         write_allowed_paths=[str(workspace)],
     )
-    mappings, _ = _build_mappings(policy, control)
+    mappings = [
+        (control.resolve(), r"C:\NousControl", True),
+        (workspace.resolve(), r"C:\NousWorkspace", False),
+    ]
     _, commits = _stage_mappings(mappings, tmp_path / "staged", policy)
     (workspace / "host-change.txt").write_text("external", encoding="utf-8")
     with pytest.raises(ValueError, match="changed"):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+import typer
 
 
 def test_runtime_api_initializes_runtime_services_before_serving(monkeypatch, tmp_path):
@@ -111,7 +112,6 @@ def test_runtime_api_fails_closed_when_workspace_initialization_fails(
     monkeypatch,
     tmp_path,
 ):
-    from click.exceptions import Exit
     from nous_runtime.cli.runtime_api import start_runtime_api
 
     calls: list[str] = []
@@ -138,7 +138,7 @@ def test_runtime_api_fails_closed_when_workspace_initialization_fails(
         lambda _root: {"ok": False, "message": "workspace rejected"},
     )
 
-    with pytest.raises(Exit) as raised:
+    with pytest.raises(typer.Exit) as raised:
         start_runtime_api(host="127.0.0.1", port=8770)
 
     assert raised.value.exit_code == 1

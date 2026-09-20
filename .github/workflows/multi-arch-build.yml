@@ -3,6 +3,10 @@
 
 name: APEIR Distribution Multi-Arch Build
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main, kernel/*, feature/*, fix/*, release/*]

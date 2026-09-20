@@ -12,6 +12,8 @@ import shutil
 import signal
 import socket
 import struct
+import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -645,6 +647,18 @@ def _memory_bytes() -> tuple[int, int]:
         status.length = ctypes.sizeof(MemoryStatus)
         if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
             return int(status.total_physical), int(status.available_physical)
+    if sys.platform == "darwin":
+        try:
+            completed = subprocess.run(
+                ["/usr/sbin/sysctl", "-n", "hw.memsize"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            return int(completed.stdout.strip()), 0
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
     try:
         values: dict[str, int] = {}
         for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():

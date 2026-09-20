@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 from urllib.parse import urlsplit
 
+from nous_runtime.extensions.async_compat import timeout
 from nous_runtime.extensions.executor import AdapterResult, ExtensionInvocation
 
 try:
@@ -87,7 +88,7 @@ class McpSdkExecutionAdapter:
                 "MCP remote execution requires HTTPS in the current security profile"
             )
         try:
-            async with asyncio.timeout(self.timeout_seconds):
+            async with timeout(self.timeout_seconds):
                 if self.client_target_factory:
                     target = self.client_target_factory(invocation, target_url)
                     async with Client(

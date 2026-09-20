@@ -379,7 +379,8 @@ def test_stdio_bridge_runs_only_through_strong_policy_without_permit_egress(
     assert policy.write_allowed_paths == []
     assert policy.args[0] == "-I"
     assert Path(policy.args[1]).name == "mcp_stdio_bridge.py"
-    assert policy.args[2:] == [sys.executable, "-m", "fixture_server"]
+    assert Path(policy.args[2]).samefile(sys.executable)
+    assert policy.args[3:] == ["-m", "fixture_server"]
 
 
 def test_stdio_credentials_fail_closed_without_local_provider(tmp_path: Path):

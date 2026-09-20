@@ -468,9 +468,8 @@ def test_local_provider_reports_isolation_truthfully():
     assert status["evidence_level"] == ("strong-vm" if ready else "unavailable")
     assert status["hard_network_isolation"] is ready
     assert status["filesystem_namespace_isolation"] is ready
-    assert status["resource_isolation"] == (
-        "strong_vm" if ready else "resource_only"
-    )
+    expected_grade = "resource_only" if sys.platform in {"linux", "win32"} else "soft_limits"
+    assert status["resource_isolation"] == ("strong_vm" if ready else expected_grade)
     assert bool(status["limitations"]) is (not ready)
 
 

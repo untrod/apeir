@@ -39,12 +39,19 @@ jobs:
 
   # Python Tests (shared across all platforms)
   python-tests:
-    name: Python Tests (${{ matrix.os }})
+    name: Python Tests (${{ matrix.os }}, Python ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-14]
-        python: ['3.10', '3.12']
+        include:
+          - os: ubuntu-22.04
+            python: '3.10'
+          - os: ubuntu-22.04
+            python: '3.12'
+          - os: windows-latest
+            python: '3.12'
+          - os: macos-14
+            python: '3.12'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

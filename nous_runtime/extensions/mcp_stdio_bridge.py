@@ -8,6 +8,8 @@ import os
 import sys
 from typing import Any
 
+from nous_runtime.extensions.async_compat import timeout as timeout_context
+
 
 def _model_value(value: Any) -> Any:
     if hasattr(value, "model_dump"):
@@ -25,7 +27,7 @@ async def _run(request: dict[str, Any], command: str, args: list[str]) -> dict[s
         command=command, args=args,
         env={"PYTHONIOENCODING": "utf-8"}, cwd=os.getcwd(),
     )
-    async with asyncio.timeout(timeout):
+    async with timeout_context(timeout):
         async with Client(server, read_timeout_seconds=timeout, mode="auto") as client:
             operation = str(request.get("operation") or "")
             if operation == "tools/list":

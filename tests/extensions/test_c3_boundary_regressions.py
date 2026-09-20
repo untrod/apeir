@@ -13,6 +13,7 @@ from nous_runtime.extensions.mcp_sdk import (
     _PinnedHttpsTransport, _validated_public_addresses,
 )
 from nous_runtime.extensions.executor import ExtensionInvocation
+from nous_runtime.extensions.async_compat import timeout
 from nous_runtime.kernel.sandbox import SandboxPolicy, SandboxResult
 from nous_runtime.kernel.windows_sandbox import _build_mappings, _bounded_text
 
@@ -118,7 +119,7 @@ def test_sse_first_event_arrives_before_response_eof():
             ),
         )
         async with httpx2.AsyncClient(transport=transport) as client:
-            async with asyncio.timeout(2):
+            async with timeout(2):
                 async with client.stream("GET", "https://mcp.example.test/mcp") as response:
                     assert await anext(response.aiter_raw()) == b"data: first\n\n"
     asyncio.run(check())
