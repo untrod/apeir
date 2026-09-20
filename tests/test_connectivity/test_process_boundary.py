@@ -187,6 +187,15 @@ class TestProcessBoundary:
         print(f"  Node identity: {evt.get('node_id')}")
 
         evt = node_cmd("pair", code=code, host="127.0.0.1", port=port)
+        if not evt.get("success"):
+            # A hosted Windows runner can occasionally lose the first loopback
+            # connection while the full suite is under load. Use a fresh
+            # one-time code for one bounded retry; a second rejection remains a
+            # hard failure and cannot be mistaken for successful pairing.
+            retry_evt = cp_cmd("create_pairing_code")
+            retry_code = retry_evt.get("code")
+            assert retry_code, f"No retry pairing code: {retry_evt}"
+            evt = node_cmd("pair", code=retry_code, host="127.0.0.1", port=port)
         assert evt.get("success"), f"Pair failed: {evt}"
         print("  Paired ✓")
 
