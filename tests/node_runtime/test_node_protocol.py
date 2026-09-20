@@ -198,10 +198,41 @@ def test_relay_transfers_verified_artifact_and_executes_lease_and_stop_controls(
             )
             assert service.artifact_store.resolve(digest).read_bytes() == payload
             assert server.lease_results["lease-remote-1"]["fencing_token"] == 1
+            assert server.pending_controls.get(service.identity.node_id, []) == []
         finally:
             stop.set()
             await asyncio.wait_for(task, timeout=2)
             await server.stop()
+
+    asyncio.run(scenario())
+
+
+def test_control_remains_pending_when_initial_delivery_fails(tmp_path: Path):
+    class FailingConnection:
+        async def send(self, _payload: str) -> None:
+            raise OSError("simulated disconnect")
+
+    async def scenario() -> None:
+        service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+        server = NodeRelayServer()
+        node_id = service.identity.node_id
+        server.register_node(node_id, service.identity.public_key)
+        server.connections[node_id] = FailingConnection()
+
+        with pytest.raises(OSError, match="simulated disconnect"):
+            await server.queue_lease_acquire(node_id, "lease-retry-1", "gpu:0", 60)
+
+        assert server.pending_controls[node_id] == [
+            {
+                "message_type": "LEASE_ACQUIRE",
+                "payload": {
+                    "lease_id": "lease-retry-1",
+                    "resource_id": "gpu:0",
+                    "ttl_seconds": 60,
+                },
+                "idempotency_key": "lease-retry-1",
+            }
+        ]
 
     asyncio.run(scenario())
 

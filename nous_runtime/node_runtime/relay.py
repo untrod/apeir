@@ -216,9 +216,15 @@ class NodeRelayServer:
             "payload": payload,
             "idempotency_key": idempotency_key,
         }
+        controls = self.pending_controls.setdefault(node_id, [])
+        if not any(
+            item.get("message_type") == message_type
+            and item.get("idempotency_key") == idempotency_key
+            for item in controls
+        ):
+            controls.append(request)
         connection = self.connections.get(node_id)
         if connection is None:
-            self.pending_controls.setdefault(node_id, []).append(request)
             return
         await self._send(
             connection,
@@ -269,7 +275,7 @@ class NodeRelayServer:
                 await self._send_workload(websocket, node_id, request)
             for digest, artifact in list(self.pending_artifacts.get(node_id, {}).items()):
                 await self._send_artifact(websocket, node_id, digest, artifact)
-            for request in self.pending_controls.pop(node_id, []):
+            for request in list(self.pending_controls.get(node_id, [])):
                 await self._send(
                     websocket,
                     node_id,
@@ -313,6 +319,7 @@ class NodeRelayServer:
             if workload_id:
                 self.results[workload_id] = envelope.payload
                 self.pending.get(node_id, {}).pop(workload_id, None)
+                self._complete_control(node_id, "WORKLOAD_STOP", workload_id)
         elif envelope.message_type == "ARTIFACT_READY":
             digest = str(envelope.payload.get("digest", ""))
             if digest:
@@ -322,7 +329,11 @@ class NodeRelayServer:
         elif envelope.message_type == "ACK":
             lease = envelope.payload.get("lease")
             if isinstance(lease, dict) and lease.get("lease_id"):
-                self.lease_results[str(lease["lease_id"])] = lease
+                lease_id = str(lease["lease_id"])
+                self.lease_results[lease_id] = lease
+                acknowledged = str(envelope.payload.get("acknowledged", ""))
+                if acknowledged in {"LEASE_ACQUIRE", "LEASE_RELEASE"}:
+                    self._complete_control(node_id, acknowledged, lease_id)
         elif envelope.message_type not in {"HEARTBEAT", "ACK", "ERROR"}:
             await self._send(
                 websocket,
@@ -339,6 +350,26 @@ class NodeRelayServer:
             {"acknowledged": envelope.message_type},
             reply_to=envelope.message_id,
         )
+
+    def _complete_control(
+        self, node_id: str, message_type: str, idempotency_key: str
+    ) -> None:
+        """Remove a control only after its terminal node response is received."""
+        controls = self.pending_controls.get(node_id)
+        if not controls:
+            return
+        remaining = [
+            request
+            for request in controls
+            if not (
+                request.get("message_type") == message_type
+                and request.get("idempotency_key") == idempotency_key
+            )
+        ]
+        if remaining:
+            self.pending_controls[node_id] = remaining
+        else:
+            self.pending_controls.pop(node_id, None)
 
     async def _send_workload(
         self, websocket: Any, node_id: str, request: dict[str, Any]
@@ -546,6 +577,7 @@ class NodeRelayClient:
                 "ACK",
                 {"acknowledged": "LEASE_ACQUIRE", "lease": lease},
                 reply_to=envelope.message_id,
+                idempotency_key=envelope.idempotency_key,
             )
         elif envelope.message_type == "LEASE_RELEASE":
             lease = self.service.release_lease(
@@ -557,6 +589,7 @@ class NodeRelayClient:
                 "ACK",
                 {"acknowledged": "LEASE_RELEASE", "lease": lease},
                 reply_to=envelope.message_id,
+                idempotency_key=envelope.idempotency_key,
             )
         elif envelope.message_type == "ARTIFACT_FETCH":
             try:
