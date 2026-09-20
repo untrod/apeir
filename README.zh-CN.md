@@ -88,7 +88,8 @@ npm run build
 Windows x64 安装包和便携包：
 
 ```powershell
-.\scripts\build-windows-x64-launcher.ps1 -KernelRoot C:\path\to\apeir-kernel
+$env:APEIR_KERNEL_ROOT = (Resolve-Path "..\apeir-kernel").Path
+.\scripts\build-windows-x64-launcher.ps1 -KernelRoot $env:APEIR_KERNEL_ROOT
 ```
 
 构建脚本会拒绝与锁文件提交不一致的 Kernel。Sidecar、安装包、数据库、

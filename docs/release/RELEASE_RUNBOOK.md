@@ -34,7 +34,8 @@ cd ..
 ## 4. Build Windows artifacts
 
 ```powershell
-.\scripts\build-windows-x64-launcher.ps1 -KernelRoot C:\path\to\apeir-kernel
+$env:APEIR_KERNEL_ROOT = (Resolve-Path "..\apeir-kernel").Path
+.\scripts\build-windows-x64-launcher.ps1 -KernelRoot $env:APEIR_KERNEL_ROOT
 ```
 
 Run install, upgrade, launch, shutdown, uninstall, orphan-process, and Windows

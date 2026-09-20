@@ -102,7 +102,8 @@ npm run build
 Build the Windows x64 installer and portable bundle from the repository root:
 
 ```powershell
-.\scripts\build-windows-x64-launcher.ps1 -KernelRoot C:\path\to\apeir-kernel
+$env:APEIR_KERNEL_ROOT = (Resolve-Path "..\apeir-kernel").Path
+.\scripts\build-windows-x64-launcher.ps1 -KernelRoot $env:APEIR_KERNEL_ROOT
 ```
 
 The build refuses a Kernel checkout that does not match the locked revision.

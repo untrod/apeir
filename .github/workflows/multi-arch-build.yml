@@ -27,7 +27,7 @@ jobs:
       - name: Install Tier 1 deps
         run: |
           pip install --upgrade pip
-          pip install ".[tier1,dev]"
+          pip install ".[tier1,dev,a2a,mcp]"
 
       - name: Run platform detection tests
         run: python -m pytest tests/platform/test_detector.py -v
@@ -63,7 +63,7 @@ jobs:
       - name: Install Tier 1 deps (ARM64)
         run: |
           pip install --upgrade pip
-          pip install ".[tier1,arm64,dev]"
+          pip install ".[tier1,arm64,dev,a2a,mcp]"
 
       - name: Run platform detection tests
         run: python -m pytest tests/platform/test_detector.py -v
@@ -99,7 +99,7 @@ jobs:
       - name: Install Tier 1 deps
         run: |
           pip install --upgrade pip
-          pip install ".[tier1,dev]"
+          pip install ".[tier1,dev,a2a,mcp]"
 
       - name: Run tests
         run: python -m pytest tests/ -m "unit or integration" -v --ignore=tests/lite/
