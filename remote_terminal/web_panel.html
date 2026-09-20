@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>指挥层终端 · Web</title>
+<style>
+:root{--bg:#f8f9fa;--card:#fff;--text:#1a1a1a;--sub:#666;--accent:#1976d2;--danger:#d32f2f;--bubble-user:#d7e3ff;--bubble-ai:#f5f5f5;--radius:12px}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1a1a;--card:#2a2a2a;--text:#eee;--sub:#999;--bubble-user:#1a3a5c;--bubble-ai:#2a2a2a}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:14px -apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column}
+header{background:var(--card);padding:12px 16px;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:8px}
+header h1{font-size:18px;flex:1}
+header select,header button{padding:6px 12px;border:1px solid #ccc;border-radius:6px;font-size:13px;background:var(--card);color:var(--text)}
+#msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:85%;padding:10px 14px;border-radius:var(--radius);line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.msg.user{align-self:flex-end;background:var(--bubble-user);border-bottom-right-radius:4px}
+.msg.ai{align-self:flex-start;background:var(--bubble-ai);border-bottom-left-radius:4px}
+.msg .steps{margin-top:8px;font:11px monospace;color:var(--sub);border-top:1px solid #ddd;padding-top:6px}
+.msg .steps s{color:#999}
+#input-bar{background:var(--card);padding:10px 16px;border-top:1px solid #ddd;display:flex;gap:8px}
+#input-bar input{flex:1;padding:10px 14px;border:1px solid #ccc;border-radius:20px;font-size:14px;outline:none;background:var(--bg);color:var(--text)}
+#input-bar button{padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:20px;font-size:14px;cursor:pointer}
+.status{text-align:center;color:var(--sub);font-size:12px;padding:4px}
+</style>
+</head>
+<body>
+<header>
+<h1>⚡ 指挥层</h1>
+<select id="model"><option>deepseek-chat</option><option>deepseek-reasoner</option></select>
+<button onclick="newSession()">新建</button>
+<select id="sessions" onchange="switchSession(this.value)"><option>加载中...</option></select>
+</header>
+<div id="msgs"></div>
+<div id="status" class="status"></div>
+<div id="input-bar">
+<input id="input" placeholder="输入指令... 或 / 查看命令" onkeydown="if(event.key==='Enter')send()">
+<button onclick="send()">发送</button>
+</div>
+<script>
+const BASE=window.location.origin;
+const TOKEN='{{TOKEN}}';
+let sid=localStorage.getItem('web_sid')||crypto.randomUUID();
+localStorage.setItem('web_sid',sid);
+let busy=false;
+
+async function api(method,path,body){
+  const u=`${BASE}${path}?token=${TOKEN}`;
+  const opts={method,headers:{'Content-Type':'application/json'}};
+  if(body)opts.body=JSON.stringify(body);
+  const r=await fetch(u,opts);
+  return r.json();
+}
+
+function addMsg(role,content,steps){
+  const d=document.createElement('div');
+  d.className=`msg ${role}`;
+  d.textContent=content;
+  if(steps){const s=document.createElement('div');s.className='steps';s.innerHTML=steps.split('\n').map(l=>`<s>✓ ${l.replace('$ ','')}</s>`).join('<br>');d.appendChild(s)}
+  document.getElementById('msgs').appendChild(d);
+  document.getElementById('msgs').scrollTop=document.getElementById('msgs').scrollHeight;
+}
+
+async function send(){
+  const inp=document.getElementById('input');
+  const text=inp.value.trim();
+  if(!text||busy)return;
+  addMsg('user',text);
+  inp.value='';busy=true;
+  document.getElementById('status').textContent='🔍 分析中...';
+  try{
+    // SSE stream
+    const u=`${BASE}/chat/stream?session_id=${sid}&message=${encodeURIComponent(text)}&model=${document.getElementById('model').value}&token=${TOKEN}`;
+    const r=await fetch(u,{headers:{'Accept':'text/event-stream'}});
+    const reader=r.body.getReader();
+    const decoder=new TextDecoder();
+    let buf='',ev='',dt='',done=false;
+    while(!done){
+      const{value,done:rd}=await reader.read();
+      if(rd)break;
+      buf+=decoder.decode(value,{stream:true});
+      const lines=buf.split('\n');buf=lines.pop()||'';
+      for(const line of lines){
+        if(line.startsWith('event: '))ev=line.slice(7).trim();
+        else if(line.startsWith('data: '))dt=line.slice(6).trim();
+        else if(line===''&&dt){
+          try{const j=JSON.parse(dt);
+          if(ev==='analyzing')document.getElementById('status').textContent='🔍 分析意图...';
+          else if(ev==='planning')document.getElementById('status').textContent='📋 规划步骤...';
+          else if(ev==='executing'){const c=j.command||'';document.getElementById('status').textContent=`⚡ 执行: ${c.substring(0,50)}`}
+          else if(ev==='step_done'){const c=j.command||'';document.getElementById('status').textContent=`✓ ${c.substring(0,50)}`}
+          else if(ev==='done'){addMsg('ai',j.reply||'',(j.steps||[]).map(s=>'$ '+s.command).join('\n'));document.getElementById('status').textContent='';done=true}
+          else if(ev==='confirmation_required'){addMsg('ai','⚠️ 危险命令需确认: '+j.command);document.getElementById('status').textContent='等待确认...'}
+          else if(ev==='error'){addMsg('ai','出错: '+j.message);document.getElementById('status').textContent=''}
+          }catch(e){}
+          ev='';dt='';
+        }
+      }
+    }
+  }catch(e){addMsg('ai','连接失败: '+e.message);document.getElementById('status').textContent=''}
+  busy=false;
+  loadSessions();
+}
+
+function newSession(){sid=crypto.randomUUID();localStorage.setItem('web_sid',sid);document.getElementById('msgs').innerHTML='';loadSessions()}
+function switchSession(id){if(id){sid=id;localStorage.setItem('web_sid',sid);document.getElementById('msgs').innerHTML='';loadSessions()}}
+async function loadSessions(){
+  try{const r=await api('GET','/sessions');if(r.sessions){const sel=document.getElementById('sessions');sel.innerHTML='<option value="">-- 选择会话 --</option>'+r.sessions.map(s=>`<option value="${s.session_id}" ${s.session_id===sid?'selected':''}>${(s.name||s.preview||s.session_id.slice(0,8)).slice(0,30)} (${s.message_count}条)</option>`).join('')}}
+  catch(e){}
+}
+loadSessions();
+</script>
+</body>
+</html>

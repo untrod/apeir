@@ -1,0 +1,81 @@
+# Production execution path
+
+APEIR exposes two explicitly named execution scopes. Model inference has one
+authoritative Rust Kernel path:
+
+```text
+NKI request
+  -> authentication, contract and deadline validation
+  -> Workload IR normalization
+  -> Safety Envelope
+  -> admission
+  -> Scheduler Core policy
+  -> resource lease
+  -> journaled intent
+  -> provider execution
+  -> transactional effect gate when applicable
+  -> receipt verification
+  -> journaled commit or compensation
+  -> result, trace and metrics
+```
+
+Compatibility APIs that invoke models must translate to an NKI request. They
+may not write the Kernel journal, grant a Kernel lease, select credentials or
+mark a model workload complete.
+
+Bounded local effects currently use the Python Runtime service scope:
+
+```text
+API or Chat tool request
+  -> authenticated AuthorizationContext
+  -> ExecutionAuthorizationGate
+  -> optional one-use ApprovalBroker lease
+  -> central RuntimeCapabilityExecutor
+  -> Document / Environment / Network / Simulation / Scientific service
+  -> EventStream + ArtifactRegistry evidence
+```
+
+This second path is real and governed, but it does **not** traverse the Rust
+Kernel. Responses and UI status must report `execution_scope=runtime-service`
+and `kernel_traversed=false`. It must not issue, emulate, or persist Kernel
+permits, leases, receipts, or journal entries.
+
+## Product execution projection
+
+The Python product Runtime currently projects complex interactive requests
+into the durable ProjectStore while the request itself follows the canonical
+Runtime Pipeline and Model Gateway. The projection owns conversation-to-project
+binding, work-item status, execution attempts, and project checkpoints. It does
+not invoke providers, devices, or tools directly.
+
+```text
+Chat request
+  -> Workload Profile
+  -> Project / WorkItem binding
+  -> Runtime Pipeline
+  -> Gateway and governed tools
+  -> verification
+  -> attempt + checkpoint + project progress
+```
+
+The binding is a compatibility materialized view until project lifecycle is
+hosted directly by `nousd`; it must never override a kernel journal outcome.
+
+## Current migration boundary
+
+The Rust daemon is authoritative for model-workload admission, durable state,
+leases and scheduling.
+Engine ABI adapters exist for llama.cpp and vLLM. Python ModelGateway remains a
+compatibility client while out-of-process provider execution is moved fully
+behind the provider host. A client-side provider response is not a kernel commit;
+the compatibility model path must report its outcome through NKI. Local effect
+services remain separate and are never described as Kernel-executed.
+
+## Prohibited bypasses
+
+- direct provider calls from product modules;
+- tool or device effects outside the transactional effect engine;
+- SQLite or journal writes outside `nous-state`;
+- optimistic desktop lifecycle mutations;
+- secret values in configuration, events, traces or state;
+- adaptive policy activation without safety and governance approval.

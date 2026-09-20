@@ -1,0 +1,11 @@
+{
+  "id": "workflow_assistant",
+  "name": "工作流助理",
+  "description": "处理搜索、写作、日程、文件、二维码、密码等通用工作流。",
+  "tool_profile": "full",
+  "triggers": ["搜索", "查一下", "写邮件", "通知", "日程", "提醒", "文件", "二维码", "密码", "总结"],
+  "permissions": ["web.search", "files.read", "files.write", "calendar.write"],
+  "tools": ["web_search", "web_fetch", "file_read", "file_write", "search_files", "password_generate", "qr_generate", "add_calendar_event", "add_reminder"],
+  "success_criteria": ["纯写作不调用系统工具", "联网结果要给来源或说明不确定性", "写文件前确认路径"],
+  "instruction": "当前 Skill: 工作流助理。先判断是否真的需要工具;纯写作直接完成。涉及文件、日程、提醒、外部搜索时再调用对应工具,并说明关键结果。"
+}

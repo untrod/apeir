@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nous.dev/spec/node-protocol/v1/node-envelope.schema.json",
+  "title": "Nous Node Protocol v1 Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "protocol_version", "message_id", "message_type", "source", "target", "sequence", "created_at", "payload", "signature"],
+  "properties": {
+    "protocol": {"const": "nous-node"},
+    "protocol_version": {"const": "1.0"},
+    "message_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "message_type": {"enum": ["REGISTER", "HEARTBEAT", "RESOURCE_REPORT", "WORKLOAD_START", "WORKLOAD_STOP", "WORKLOAD_STATUS", "LEASE_ACQUIRE", "LEASE_RELEASE", "ARTIFACT_FETCH", "ARTIFACT_READY", "DEVICE_REPORT", "TELEMETRY", "ERROR", "ACK"]},
+    "source": {"type": "string", "minLength": 1, "maxLength": 256},
+    "target": {"type": "string", "minLength": 1, "maxLength": 256},
+    "sequence": {"type": "integer", "minimum": 1},
+    "idempotency_key": {"type": "string", "maxLength": 256},
+    "reply_to": {"type": "string", "maxLength": 128},
+    "created_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "payload": {"type": "object"},
+    "signature": {"type": "string", "pattern": "^[0-9a-f]{128}$"}
+  }
+}

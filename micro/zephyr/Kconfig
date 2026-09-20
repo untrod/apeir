@@ -1,0 +1,5 @@
+menuconfig NOUS_MICRO
+    bool "Nous Micro execution runtime"
+    default n
+    help
+      Enables the fixed-memory Nous Micro runtime and NMP v1 protocol.

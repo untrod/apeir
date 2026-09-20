@@ -1,0 +1,7 @@
+<resources>
+    <!--
+      用系统框架自带的 Material 主题,不引入 appcompat,保持依赖最小。
+      实际界面外观由 Compose 的 MaterialTheme 决定,这里只是个无标题栏的承载主题。
+    -->
+    <style name="Theme.RemoteTerminal" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

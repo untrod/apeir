@@ -1,0 +1,9 @@
+{
+  "request_id": "req-legacy-001",
+  "nki_version": 1,
+  "server_timestamp_us": 1722760800000000,
+  "trace_id": "trace-legacy-abc",
+  "payload": {
+    "healthy": true
+  }
+}

@@ -1,0 +1,14 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nous-provider-sdk"
+version = "1.0.0b1"
+description = "Provider ABI SDK for Nous Foundation"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+dependencies = ["nous-runtime>=2.0.0rc3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["nous_provider"]

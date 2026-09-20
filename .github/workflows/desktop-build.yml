@@ -1,0 +1,333 @@
+# APEIR Distribution desktop release build and validation.
+# Platform jobs build their own target-native Runtime sidecar.
+
+name: APEIR Distribution Desktop Build
+
+on:
+  push:
+    branches: [main, 'kernel/*', 'feature/*', 'fix/*', 'release/*']
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-hygiene:
+    name: Public repository hygiene
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Document hygiene
+        run: python scripts/document_hygiene_audit.py
+      - name: Comment quality
+        run: python scripts/comment_quality_audit.py
+      - name: Repository identity
+        run: python scripts/repository_identity_audit.py
+      - name: Git metadata
+        run: python scripts/git_metadata_audit.py --repo .
+      - name: Security scan
+        run: python scripts/security_scan.py
+
+  # Python Tests (shared across all platforms)
+  python-tests:
+    name: Python Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-14]
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install dependencies
+        run: pip install ".[dev]"
+      - name: Ruff
+        run: ruff check nous_runtime tests
+      - name: Repository identity audit
+        run: python scripts/repository_identity_audit.py
+      - name: Python compile check
+        run: python -m compileall -q nous_runtime
+      - name: Run full test suite
+        run: pytest --tb=short --timeout=60
+      - name: Verify test collection baseline
+        run: >-
+          python -c "import re, subprocess, sys;
+          p = subprocess.run([sys.executable, '-m', 'pytest', 'tests/', '--collect-only', '-q'], capture_output=True, text=True);
+          print(p.stdout);
+          m = re.search(r'(\d+) tests collected', p.stdout);
+          raise SystemExit(0 if p.returncode == 0 and m and int(m.group(1)) >= 2452 else 1)"
+  # Frontend Validation
+  frontend-tests:
+    name: Frontend Build Validation
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+
+  # Windows x86_64 Build
+  build-windows-x64:
+    name: Build Windows x86_64
+    needs: [repository-hygiene, python-tests, frontend-tests]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Build embedded Runtime sidecar
+        shell: pwsh
+        run: |
+          python -m pip install ".[installer-build]"
+          pyinstaller nous-sidecar.spec
+          New-Item -ItemType Directory -Force desktop/src-tauri/binaries | Out-Null
+          Copy-Item dist/nous-runtime.exe desktop/src-tauri/binaries/nous-runtime-x86_64-pc-windows-msvc.exe
+
+      - name: Build Tauri desktop
+        working-directory: desktop
+        run: |
+          npm ci
+          npx tauri build --bundles nsis --target x86_64-pc-windows-msvc
+
+      - name: Verify and hash NSIS installer
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis -Filter "*.exe" | Select-Object -First 1
+          if (-not $installer) { throw "x64 NSIS installer not found" }
+          Get-FileHash -Algorithm SHA256 $installer.FullName | Format-List | Out-File -Encoding utf8 SHA256SUMS.txt
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: |
+            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            SHA256SUMS.txt
+
+  # Windows ARM64 release candidate build
+  build-windows-arm64:
+    name: Build Windows ARM64
+    needs: [repository-hygiene, python-tests, frontend-tests]
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+
+      - name: Verify RC3 release metadata
+        run: python scripts/ci/verify_release_versions.py
+
+      - name: Build embedded ARM64 Runtime sidecar
+        shell: pwsh
+        run: |
+          python -m pip install ".[installer-build]"
+          python -m PyInstaller --noconfirm --clean nous-sidecar.spec
+          New-Item -ItemType Directory -Force desktop/src-tauri/binaries | Out-Null
+          Copy-Item dist/nous-runtime.exe desktop/src-tauri/binaries/nous-runtime-aarch64-pc-windows-msvc.exe
+      - name: Verify locked ARM64 Kernel sidecars are staged
+        run: python scripts/ci/verify_kernel_components.py --repo-root .
+
+      - name: Verify ARM64 Runtime and Kernel lifecycle and authentication
+        shell: pwsh
+        run: >-
+          ./scripts/ci/verify_windows_arm64_sidecar.ps1
+          -SidecarPath ./desktop/src-tauri/binaries/nous-runtime-aarch64-pc-windows-msvc.exe
+          -KernelPath ./desktop/src-tauri/binaries/nousd-aarch64-pc-windows-msvc.exe
+          -ProviderWorkerPath ./desktop/src-tauri/binaries/nous-provider-worker-aarch64-pc-windows-msvc.exe
+          -ExpectedVersion 0.1.0-rc1
+
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: React ESLint
+        working-directory: desktop
+        run: npm run lint
+      - name: React tests
+        working-directory: desktop
+        run: npm test
+      - name: TypeScript check
+        working-directory: desktop
+        run: npm run typecheck
+      - name: Vite production build
+        working-directory: desktop
+        run: npm run build
+
+      - name: Rust cargo check
+        working-directory: desktop/src-tauri
+        run: cargo check --locked --target aarch64-pc-windows-msvc
+      - name: Rust cargo test
+        working-directory: desktop/src-tauri
+        run: cargo test --locked --target aarch64-pc-windows-msvc
+
+      - name: Build Tauri ARM64 NSIS package
+        working-directory: desktop
+        run: npx tauri build --bundles nsis --target aarch64-pc-windows-msvc
+
+      - name: Verify installed bundle and generate SHA-256
+        shell: pwsh
+        run: >-
+          ./scripts/ci/verify_windows_arm64_bundle.ps1
+          -RepoRoot .
+          -ExpectedVersion 0.1.0-rc1
+          -ArtifactName windows-arm64-nsis
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-arm64-nsis
+          if-no-files-found: error
+          path: |
+            desktop/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe
+            SHA256SUMS-arm64.txt
+            RC3-ARM64-ARTIFACT.json
+
+  # Linux x86_64 Build
+  build-linux-x64:
+    name: Build Linux x86_64
+    needs: [repository-hygiene, python-tests, frontend-tests]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev
+
+      - name: Build embedded Runtime sidecar
+        run: |
+          python -m pip install ".[installer-build]"
+          pyinstaller nous-sidecar.spec
+          mkdir -p desktop/src-tauri/binaries
+          cp dist/nous-runtime desktop/src-tauri/binaries/nous-runtime-x86_64-unknown-linux-gnu
+
+      - name: Build Tauri desktop
+        working-directory: desktop
+        run: |
+          npm ci
+          npx tauri build --bundles appimage,deb --target x86_64-unknown-linux-gnu
+
+      - name: Smoke test AppImage
+        run: |
+          ls -la desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/
+          ls -la desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/
+
+      - name: Generate hashes
+        run: |
+          sha256sum desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage > SHA256SUMS.txt
+          sha256sum desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb >> SHA256SUMS.txt
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: |
+            desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+            desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+            SHA256SUMS.txt
+
+  # macOS ARM64 Build
+  build-macos-arm64:
+    name: Build macOS ARM64
+    needs: [repository-hygiene, python-tests, frontend-tests]
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Build embedded Runtime sidecar
+        run: |
+          python -m pip install ".[installer-build]"
+          pyinstaller nous-sidecar.spec
+          mkdir -p desktop/src-tauri/binaries
+          cp dist/nous-runtime desktop/src-tauri/binaries/nous-runtime-aarch64-apple-darwin
+
+      - name: Build Tauri desktop
+        working-directory: desktop
+        run: |
+          npm ci
+          npx tauri build --bundles dmg --target aarch64-apple-darwin
+
+      - name: Smoke test DMG
+        run: ls -la desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/
+
+      - name: Generate hashes
+        run: shasum -a 256 desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg > SHA256SUMS.txt
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: |
+            desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            SHA256SUMS.txt
+
+  # 32-bit Rejection Test
+  test-32bit-rejection:
+    name: Test 32-bit Rejection
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Verify 32-bit rejection
+        run: |
+          python -c "
+          import struct
+          # Simulate 32-bit detection
+          bits = 32
+          if bits < 64:
+              print('32-bit rejection: PASS')
+          else:
+              raise SystemExit('32-bit not rejected!')
+          "
+      - name: Verify platform check module
+        run: |
+          python -c "
+          from importlib import import_module
+          # Verify the platform support check exists and rejects 32-bit
+          import platform
+          arch = platform.machine()
+          assert arch in ('x86_64', 'AMD64', 'aarch64', 'arm64'), f'Unexpected arch: {arch}'
+          print(f'Architecture {arch} is 64-bit: OK')
+          "

@@ -1,0 +1,6 @@
+# Android local build settings.
+# Copy to local.properties and fill values for your machine/deployment.
+
+sdk.dir=/path/to/android/sdk
+NOUS_SERVER_URL=
+NOUS_BRAIN_HOST=

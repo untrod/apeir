@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nous.ai/schemas/telemetry/v1.0.0",
+  "title": "Nous Runtime Execution Telemetry",
+  "description": "Schema for RC1 execution telemetry output files",
+  "version": "1.0.0",
+  "type": "object",
+  "required": ["schema_version", "run_id", "started_at", "completed_at"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Telemetry schema version (frozen for RC1)"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run_[a-f0-9]{12}$",
+      "description": "Unique run identifier"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Run start time (ISO 8601 UTC)"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Run completion time (ISO 8601 UTC)"
+    },
+    "total_tasks": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total tasks in this run"
+    },
+    "tasks_succeeded": { "type": "integer", "minimum": 0 },
+    "tasks_failed": { "type": "integer", "minimum": 0 },
+    "tasks_cancelled": { "type": "integer", "minimum": 0 },
+    "task_success_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Fraction of finished tasks that succeeded"
+    },
+    "verified_success_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Fraction of finished tasks with passing verification"
+    },
+    "false_completion_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Fraction of tasks marked success but verification failed"
+    },
+    "recovery_success_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Fraction of recovery attempts that succeeded"
+    },
+    "human_intervention_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Fraction of tasks requiring human intervention"
+    },
+    "artifact_integrity_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Fraction of artifacts verified intact"
+    },
+    "event_loss_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Estimated event loss per task"
+    },
+    "duplicate_execution_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Fraction of tasks executed more than once"
+    },
+    "provider_failure_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Fraction of tasks encountering provider errors"
+    },
+    "repeatability_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Fraction of tasks producing consistent output on retry"
+    },
+    "latency_p50_ms": { "type": "number", "minimum": 0 },
+    "latency_p95_ms": { "type": "number", "minimum": 0 },
+    "latency_p99_ms": { "type": "number", "minimum": 0 },
+    "total_cost_usd": { "type": "number", "minimum": 0 },
+    "cost_per_verified_task_usd": { "type": "number", "minimum": 0 },
+    "total_tokens": { "type": "integer", "minimum": 0 },
+    "node_utilization_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+    "routing_regret_count": { "type": "integer", "minimum": 0 },
+    "top_error_codes": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 2,
+        "items": [
+          { "type": "string", "description": "Error code" },
+          { "type": "integer", "minimum": 1, "description": "Occurrence count" }
+        ]
+      }
+    },
+    "models_used": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "providers_used": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

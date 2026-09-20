@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "contract": "NPA",
+  "required_checks": [
+    "metadata",
+    "discovery",
+    "resource_claim",
+    "execution",
+    "telemetry",
+    "nki_registration",
+    "credential_reference_only",
+    "standard_error_mapping",
+    "safe_shutdown"
+  ],
+  "forbidden": [
+    "direct_journal_access",
+    "kernel_private_import",
+    "plaintext_credential_storage",
+    "state_authority",
+    "effect_commit"
+  ]
+}

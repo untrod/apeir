@@ -1,0 +1,15 @@
+{
+  "request_id": "req-golden-002",
+  "nki_version": 2,
+  "server_timestamp_us": 1722760800000000,
+  "trace_id": "trace-golden-def456",
+  "status": "error",
+  "error": {
+    "code": "ERROR_RESOURCE_INSUFFICIENT",
+    "message": "VRAM: need 8589934592 bytes, have 4194304000 bytes",
+    "failed_phase": "ADMIT",
+    "cause": "GPU memory exhausted",
+    "retryable": false,
+    "recommended_delay_ms": 0
+  }
+}

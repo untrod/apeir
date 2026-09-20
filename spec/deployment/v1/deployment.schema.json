@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nous.dev/spec/deployment/v1/deployment.schema.json",
+  "title": "Nous Deployment v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "deployment_id", "artifact_digest", "target_id", "mode", "state", "created_at", "updated_at", "previous_active", "release_path", "error_code", "error_message", "events", "receipt"],
+  "properties": {
+    "schema": {"const": "nous.deployment/v1"},
+    "deployment_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "artifact_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "target_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+    "mode": {"const": "static"},
+    "state": {"enum": ["PENDING", "RESOLVING", "TRANSFERRING", "INSTALLING", "STARTING", "VERIFYING", "ACTIVE", "FAILED", "ROLLING_BACK", "ROLLED_BACK"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "previous_active": {"type": "string"},
+    "release_path": {"type": "string"},
+    "error_code": {"type": "string"},
+    "error_message": {"type": "string"},
+    "events": {"type": "array", "items": {"type": "object"}},
+    "receipt": {"type": "object"}
+  }
+}

@@ -1,0 +1,16 @@
+name: hello_pack
+version: 1.0.0
+description: Minimal example pack — demonstrates the Pack system
+
+capabilities:
+  - example.hello
+  - example.echo
+
+providers:
+  - hello_provider
+
+dependencies:
+  runtime: ">=1.0"
+
+config:
+  greeting: "Hello from Nous Runtime!"

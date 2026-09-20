@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nous.dev/spec/artifact/v1/content-artifact.schema.json",
+  "title": "Nous Content Artifact v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "artifact_id", "digest", "artifact_type", "name", "size_bytes", "created_at", "media_type", "produced_by", "depends_on", "deployed_to", "derived_from", "metadata"],
+  "properties": {
+    "schema": {"const": "nous.content-artifact/v1"},
+    "artifact_id": {"$ref": "#/$defs/digest"},
+    "digest": {"$ref": "#/$defs/digest"},
+    "artifact_type": {"enum": ["code", "file", "model", "dataset", "report", "document", "binary", "source_bundle", "container", "firmware", "configuration", "calibration", "model_request", "model_response", "route_decision", "model_metrics", "verification_result"]},
+    "name": {"type": "string", "minLength": 1},
+    "size_bytes": {"type": "integer", "minimum": 0},
+    "created_at": {"type": "string", "format": "date-time"},
+    "media_type": {"type": "string", "minLength": 1},
+    "produced_by": {"type": "string"},
+    "depends_on": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/digest"}},
+    "deployed_to": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "derived_from": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/digest"}},
+    "metadata": {"type": "object"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

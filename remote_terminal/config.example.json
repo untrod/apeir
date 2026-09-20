@@ -1,0 +1,11 @@
+{
+  "BRAIN_HOST": "",
+  "BRAIN_PORT": "8770",
+  "DEFAULT_DEVICE": "laptop",
+  "AUTH_TOKEN": "change-me-to-a-strong-random-string",
+  "LLM_API_URL": "https://api.deepseek.com/chat/completions",
+  "LLM_MODEL": "deepseek-chat",
+  "LLM_TIMEOUT": "60",
+  "AGENT_SIGNING_SECRET": "change-me-to-another-strong-random-string",
+  "ALLOWED_IPS": ""
+}

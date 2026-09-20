@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nous 学习引擎 — 文档上传</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
+.container { max-width: 600px; margin: 40px auto; padding: 20px; }
+h1 { font-size: 1.4em; margin-bottom: 20px; }
+.card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+.card h2 { font-size: 1.1em; margin-bottom: 12px; }
+.upload-zone { border: 2px dashed #ccc; border-radius: 10px; padding: 30px; text-align: center; cursor: pointer; transition: .2s; }
+.upload-zone:hover, .upload-zone.drag { border-color: #4A90D9; background: #f0f7ff; }
+.upload-zone p { color: #999; font-size: .9em; }
+input, select, button { font-size: .95em; padding: 10px 14px; border-radius: 8px; border: 1px solid #ddd; width: 100%; margin: 6px 0; }
+button { background: #4A90D9; color: #fff; border: none; cursor: pointer; font-weight: 600; }
+button:hover { background: #357ABD; }
+.status { font-size: .85em; padding: 8px; border-radius: 6px; margin-top: 8px; }
+.status.ok { background: #e8f5e9; color: #2e7d32; }
+.status.err { background: #ffebee; color: #c62828; }
+.status.info { background: #e3f2fd; color: #1565c0; }
+.file-list { font-size: .85em; }
+.file-list div { padding: 6px 0; border-bottom: 1px solid #f0f0f0; }
+.server-input { display: flex; gap: 8px; }
+.server-input input { flex: 1; }
+#tokenRow { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+#tokenRow input { flex: 1; margin: 0; }
+#tokenRow button { width: auto; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>📚 Nous 学习引擎</h1>
+
+<div class="card" id="tokenRow">
+    <input type="password" id="token" placeholder="鉴权令牌 (Token)" style="flex:1">
+    <button onclick="saveToken()" style="width:auto">保存</button>
+</div>
+
+<div class="card">
+    <h2>📤 上传文档</h2>
+    <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <p>📁 点击选择文件 或 拖拽到此处</p>
+        <p style="font-size:.75em;color:#bbb">支持 PDF / Word / TXT</p>
+    </div>
+    <input type="file" id="fileInput" style="display:none" accept=".pdf,.docx,.doc,.txt,.md" multiple>
+    <div style="display:flex;gap:8px">
+        <select id="subject">
+            <option value="">自动检测科目</option>
+            <option value="math">数学</option>
+            <option value="english">英语</option>
+            <option value="chinese">语文</option>
+            <option value="cs">计算机</option>
+            <option value="physics">物理</option>
+            <option value="chemistry">化学</option>
+        </select>
+    </div>
+    <div id="fileList" class="file-list"></div>
+    <button onclick="uploadFiles()">🚀 上传并解析</button>
+    <div id="uploadStatus"></div>
+</div>
+
+<div class="card">
+    <h2>📋 已上传文档</h2>
+    <div id="docList">加载中...</div>
+</div>
+
+<div class="card" style="font-size:.8em;color:#999">
+    <p>上传后 AI 自动: 识别章节结构 → 提取知识点和公式 → 生成练习题 → 入库</p>
+    <p>大文件(>50MB)后台流式处理,处理完可用 learn_list_docs 查看结果</p>
+</div>
+</div>
+
+<script>
+let selectedFiles = [];
+
+// Token 管理
+const savedToken = localStorage.getItem('nous_token');
+if (savedToken) document.getElementById('token').value = savedToken;
+function saveToken() {
+    const t = document.getElementById('token').value.trim();
+    localStorage.setItem('nous_token', t);
+    alert('Token 已保存');
+    loadDocs();
+}
+
+// 文件选择
+document.getElementById('fileInput').addEventListener('change', (e) => {
+    selectedFiles = Array.from(e.target.files);
+    showFiles();
+});
+
+// 拖拽上传
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag');
+    selectedFiles = Array.from(e.dataTransfer.files);
+    showFiles();
+});
+
+function showFiles() {
+    document.getElementById('fileList').innerHTML = selectedFiles
+        .map(f => `<div>📄 ${f.name} (${(f.size/1024).toFixed(1)}KB)</div>`).join('');
+}
+
+async function uploadFiles() {
+    const token = document.getElementById('token').value.trim();
+    if (!token) { alert('请先输入 Token'); return; }
+    const subject = document.getElementById('subject').value;
+    const status = document.getElementById('uploadStatus');
+    status.innerHTML = '<div class="status info">⏳ 上传并解析中...</div>';
+
+    for (const file of selectedFiles) {
+        try {
+            const text = await file.text();
+            const ts = Math.floor(Date.now()/1000).toString();
+            const nonce = crypto.randomUUID().replace(/-/g,'');
+            const resp = await fetch(`/chat?session_id=upload_${Date.now()}&message=${
+                encodeURIComponent(`请调用 learn_upload_doc 上传文件。文件路径: ${file.name}。不要执行其他操作,只返回上传结果。`)
+            }&model=deepseek-chat&token=${encodeURIComponent(token)}&ts=${ts}&nonce=${nonce}`);
+            const json = await resp.json();
+            if (json.ok) {
+                status.innerHTML += `<div class="status ok">✅ ${file.name} — 处理完成</div>`;
+            } else {
+                status.innerHTML += `<div class="status err">❌ ${file.name} — ${json.error||'失败'}</div>`;
+            }
+        } catch(e) {
+            status.innerHTML += `<div class="status err">❌ ${file.name} — ${e.message}</div>`;
+        }
+    }
+    selectedFiles = [];
+    showFiles();
+    setTimeout(loadDocs, 3000);
+}
+
+// 加载文档列表
+async function loadDocs() {
+    const token = document.getElementById('token').value.trim();
+    if (!token) { document.getElementById('docList').innerHTML = '请先输入 Token'; return; }
+    try {
+        const ts = Math.floor(Date.now()/1000).toString();
+        const nonce = crypto.randomUUID().replace(/-/g,'');
+        const resp = await fetch(`/chat/stream?session_id=docs_${Date.now()}&message=${
+            encodeURIComponent('learn_list_docs')
+        }&model=deepseek-chat&token=${encodeURIComponent(token)}&ts=${ts}&nonce=${nonce}`);
+        const text = await resp.text();
+        document.getElementById('docList').innerHTML = text.substring(0, 1000) || '暂无文档';
+    } catch(e) {
+        document.getElementById('docList').innerHTML = '加载失败';
+    }
+}
+
+if (savedToken) loadDocs();
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+prune RemoteTerminal
+prune remote_terminal
+graft remote_terminal/nous_core
+global-exclude *.py[cod]
+global-exclude __pycache__

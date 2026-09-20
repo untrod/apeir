@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nous.dev/schemas/extensions/v1/extension-provenance.schema.json",
+  "title": "Nous Extension Provenance",
+  "type": "object",
+  "required": [
+    "schema",
+    "extension_id",
+    "source_type",
+    "source",
+    "imported_at",
+    "original_digest",
+    "normalized_ir_digest",
+    "installer",
+    "adapter",
+    "sbom",
+    "signature_status",
+    "signature_digest"
+  ],
+  "properties": {
+    "schema": {"const": "nous.extension-provenance/v1"},
+    "extension_id": {"type": "string", "minLength": 1},
+    "source_type": {"type": "string", "minLength": 1},
+    "source": {"type": "string"},
+    "imported_at": {"type": "string", "format": "date-time"},
+    "original_digest": {"pattern": "^sha256:[0-9a-f]{64}$"},
+    "normalized_ir_digest": {"pattern": "^sha256:[0-9a-f]{64}$"},
+    "installer": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {"name": {"type": "string"}, "version": {"type": "string"}}
+    },
+    "adapter": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {"name": {"type": "string"}, "version": {"type": "string"}}
+    },
+    "sbom": {
+      "type": "object",
+      "required": ["format", "spec_version", "path", "digest"],
+      "properties": {
+        "format": {"const": "CycloneDX"},
+        "spec_version": {"const": "1.6"},
+        "path": {"const": "bom.json"},
+        "digest": {"pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "signature_status": {"enum": ["Unsigned", "Signed", "Verified", "Invalid", "Unknown"]},
+    "signature_digest": {"pattern": "^sha256:[0-9a-f]{64}$"},
+    "build_provenance": {"type": "object"}
+  }
+}

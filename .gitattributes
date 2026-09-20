@@ -1,0 +1,39 @@
+# Normalize text files for cross-platform development.
+* text=auto
+
+*.py text eol=lf
+*.pyi text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.rs text eol=lf
+*.sh text eol=lf
+*.service text eol=lf
+*.kt text eol=lf
+*.kts text eol=lf
+*.xml text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.ps1 text eol=lf
+*.properties text eol=lf
+*.gradle text eol=lf
+.gitignore text eol=lf
+.env.example text eol=lfDockerfile text eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.exe binary
+*.db binary

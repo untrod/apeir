@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Nous</string>
+    <string name="accessibility_service_description">Nous 手机助手: 让 AI 帮你操作手机界面。需要此权限才能自动点击、输入、滑动等。Nous 不会记录或上传你的隐私数据。</string>
+</resources>

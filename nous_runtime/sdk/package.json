@@ -1,0 +1,23 @@
+{
+  "name": "@nous-runtime/sdk",
+  "version": "0.1.0-rc1",
+  "description": "TypeScript and JavaScript client for the Nous Server Runtime",
+  "license": "Apache-2.0",
+  "main": "client.js",
+  "types": "dist/client.d.ts",
+  "files": [
+    "client.js",
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --check client.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

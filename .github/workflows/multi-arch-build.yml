@@ -1,0 +1,203 @@
+# Multi-architecture build and test pipeline.
+# Tier 1 targets are release-blocking. The ARMv7 Lite target is informational.
+
+name: APEIR Distribution Multi-Arch Build
+
+on:
+  push:
+    branches: [main, kernel/*, feature/*, fix/*, release/*]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # Tier 1: Linux amd64
+  linux-amd64:
+    name: "Tier 1 — Linux amd64"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+
+      - name: Install Tier 1 deps
+        run: |
+          pip install --upgrade pip
+          pip install ".[tier1,dev]"
+
+      - name: Run platform detection tests
+        run: python -m pytest tests/platform/test_detector.py -v
+
+      - name: Run Tier 1 tests
+        run: python -m pytest tests/ -m "unit or integration" -v --ignore=tests/lite/
+
+      - name: Build wheel
+        run: pip wheel . -w dist/ --no-deps
+
+      - name: Generate SBOM
+        run: |
+          python -m pip install "cyclonedx-bom==7.3.1"
+          python -m cyclonedx_py environment --output-file dist/sbom-amd64.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64
+          path: dist/
+
+  # Tier 1: Linux ARM64
+  linux-arm64:
+    name: "Tier 1 — Linux ARM64"
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+
+      - name: Install Tier 1 deps (ARM64)
+        run: |
+          pip install --upgrade pip
+          pip install ".[tier1,arm64,dev]"
+
+      - name: Run platform detection tests
+        run: python -m pytest tests/platform/test_detector.py -v
+
+      - name: Run ARM64 tests
+        run: python -m pytest tests/ -m "unit or integration" -v --ignore=tests/lite/
+
+      - name: Build wheel
+        run: pip wheel . -w dist/ --no-deps
+
+      - name: Generate SBOM
+        run: |
+          python -m pip install "cyclonedx-bom==7.3.1"
+          python -m cyclonedx_py environment --output-file dist/sbom-arm64.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64
+          path: dist/
+
+  # Tier 1: Windows amd64
+  windows-amd64:
+    name: "Tier 1 — Windows amd64"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+
+      - name: Install Tier 1 deps
+        run: |
+          pip install --upgrade pip
+          pip install ".[tier1,dev]"
+
+      - name: Run tests
+        run: python -m pytest tests/ -m "unit or integration" -v --ignore=tests/lite/
+
+      - name: Build wheel
+        run: pip wheel . -w dist/ --no-deps
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64
+          path: dist/
+
+  # Tier 1: Windows ARM64
+  windows-arm64:
+    name: "Tier 1 — Windows ARM64"
+    # Cross-compile on x64 because GitHub-hosted Windows ARM64 runners are unavailable.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+
+      - name: Install deps
+        run: |
+          pip install --upgrade pip
+          pip install ".[tier1]"
+
+      - name: Cross-compile check
+        run: python -c "from nous_runtime.platform import BUILD_TARGETS; print('Windows ARM64 target defined:', 'windows-arm64-msvc-64-full' in BUILD_TARGETS)"
+
+      - name: Build wheel
+        run: pip wheel . -w dist/ --no-deps
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-arm64
+          path: dist/
+
+  # Tier 2: Linux ARMv7 Lite
+  linux-armv7-lite:
+    name: "Tier 2 — Linux ARMv7 Lite (non-blocking)"
+    runs-on: ubuntu-latest
+    # Lite node failures do not block a Tier 1 release.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+
+      - name: Install Lite deps
+        run: |
+          pip install --upgrade pip
+          pip install ".[tier2-lite]"
+
+      - name: Verify Lite node restrictions
+        run: |
+          python -c "
+          from nous_runtime.platform import Architecture, RuntimeTier, LITE_NODE_RESTRICTED_CAPABILITIES, LITE_NODE_ALWAYS_ALLOWED
+          arch = Architecture.ARMV7
+          tier = RuntimeTier.from_arch(arch)
+          assert tier == RuntimeTier.LITE, f'Expected LITE, got {tier}'
+          assert 'model.invoke' in LITE_NODE_RESTRICTED_CAPABILITIES
+          assert 'desktop.ui' in LITE_NODE_RESTRICTED_CAPABILITIES
+          assert 'identity.attest' in LITE_NODE_ALWAYS_ALLOWED
+          print('Lite node restrictions verified OK')
+          "
+
+      - name: Run Lite node tests
+        run: python -m pytest tests/lite/ -v
+
+      - name: Build wheel
+        run: pip wheel . -w dist/ --no-deps
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-armv7-lite
+          path: dist/
+
+  # SBOM aggregation
+  sbom:
+    name: Aggregate SBOM
+    needs: [linux-amd64, linux-arm64, windows-amd64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Merge SBOMs
+        run: |
+          echo "SBOMs generated per architecture:"
+          find . -name "sbom-*.json" -exec echo "  {}" \;
+      - name: Upload merged SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-all-architectures
+          path: "*/sbom-*.json"

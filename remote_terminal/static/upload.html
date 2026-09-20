@@ -1,0 +1,191 @@
+<!doctype html><html lang="zh"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nous 资料上传</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+  background:#0f1115;color:#e6e8ec;padding:24px;max-width:900px;margin:0 auto}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:#8b93a1;font-size:13px;margin-bottom:18px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+input[type=text]{background:#1a1e26;border:1px solid #2b313c;color:#e6e8ec;
+  border-radius:8px;padding:9px 12px;font-size:14px;outline:none}
+#drop{border:2px dashed #3a4250;border-radius:14px;padding:40px 20px;text-align:center;
+  color:#9aa3b2;cursor:pointer;transition:.15s;background:#141821}
+#drop.over{border-color:#4a90d9;background:#16202b;color:#cfe2f5}
+#drop b{color:#e6e8ec}
+.btn{background:#4a90d9;color:#fff;border:none;border-radius:8px;padding:9px 16px;
+  font-size:14px;cursor:pointer}
+.btn:active{opacity:.8}
+.list{margin-top:24px}
+.doc{display:flex;align-items:center;gap:10px;background:#141821;border:1px solid #232a35;
+  border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:14px}
+.doc .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{font-size:12px;color:#8b93a1}
+.ok{color:#5cc98a}.wait{color:#e0a83a}
+.subj{width:110px}
+.prog{height:4px;background:#232a35;border-radius:3px;overflow:hidden;margin-top:6px}
+.prog>i{display:block;height:100%;background:#4a90d9;width:0;transition:.2s}
+.item{background:#141821;border:1px solid #232a35;border-radius:10px;padding:10px 12px;margin-bottom:8px}
+small{color:#8b93a1}
+</style></head><body>
+<h1>📤 Nous 资料上传</h1>
+<div class="sub">拖拽或选择文件(PDF / Word / txt / md)。科目留空 = AI 自动归类。上传后后台自动解析。<br>
+  图片暂不支持(无 OCR);单文件建议 &lt; 30MB,大课本可拆章上传更稳。</div>
+<div class="row">
+  <input type="text" id="stage" list="stages" placeholder="阶段(可空=自动)">
+  <input type="text" id="subject" list="subjects" placeholder="科目(可空=自动)" style="flex:1">
+  <select id="dtype">
+    <option value="">类型:自动</option>
+    <option>课本</option><option>讲义</option><option>题库</option>
+    <option>试卷</option><option>笔记</option><option>资料</option>
+  </select>
+  <label class="sub" style="margin:0"><input type="checkbox" id="onlyup" checked> 仅上传(稍后批量解析)</label>
+  <label class="sub" style="margin:0"><input type="checkbox" id="keep"> 保留原件</label>
+  <button class="btn" onclick="document.getElementById('file').click()">选择文件</button>
+  <button class="btn" onclick="document.getElementById('folder').click()">选择文件夹</button>
+  <input type="file" id="file" multiple style="display:none">
+  <input type="file" id="folder" webkitdirectory multiple style="display:none">
+</div>
+<div class="row"><button class="btn" id="pauseBtn" onclick="togglePause()" style="display:none">⏸ 暂停</button><span id="qstat" class="sub"></span></div>
+<datalist id="stages"></datalist>
+<datalist id="subjects"></datalist>
+<div id="drop">把文件拖到这里,或点 <b>选择文件</b></div>
+<div id="uploads"></div>
+<div class="list"><h1 style="font-size:16px">📚 资料库
+  <button class="btn" style="font-size:12px;padding:4px 10px;background:#7a3a3a" onclick="clearFailed()">清除失败</button>
+  <button class="btn" style="font-size:12px;padding:4px 10px;background:#7a5a2a" onclick="clearEmpty()">清除空白(0/0)</button>
+  <button class="btn" style="font-size:12px;padding:4px 10px;background:#5a5a7a" onclick="clearPending()">清除待解析/卡住</button>
+  <button class="btn" style="font-size:13px;padding:5px 12px;background:#2a6a4a" onclick="parsePending()">🚀 开始解析 <span id="pendN"></span></button>
+  <button class="btn" style="font-size:12px;padding:4px 10px;background:#8a2a2a" onclick="clearAll()">清空全部</button></h1>
+  <div id="docs">加载中…</div></div>
+<script>
+const TOKEN="{{TOKEN}}";
+const drop=document.getElementById('drop'),fileInput=document.getElementById('file'),
+  ups=document.getElementById('uploads');
+drop.onclick=()=>fileInput.click();
+['dragenter','dragover'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',ev=>handle(ev.dataTransfer.files));
+fileInput.onchange=()=>handle(fileInput.files);
+document.getElementById('folder').onchange=e=>handle(e.target.files);
+const OKEXT=['pdf','doc','docx','txt','md'];
+let q=[],running=false,total=0,doneN=0,paused=false,skipN=0;
+let existingNames=new Set();   // 库里已有内容的文件名 → 防重,不再上传
+function handle(files){
+  let fs=[...files].filter(f=>OKEXT.includes((f.name.split('.').pop()||'').toLowerCase()));
+  const before=fs.length;
+  fs=fs.filter(f=>!existingNames.has(f.name));
+  skipN+=(before-fs.length);
+  q.push(...fs);total+=fs.length;
+  if(before-fs.length>0) document.getElementById('qstat').textContent=`已跳过 ${skipN} 个重复,排队 ${q.length} 个…`;
+  pump();
+}
+function togglePause(){
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶ 继续':'⏸ 暂停';
+  if(!paused){pump();}
+  else{document.getElementById('qstat').textContent=`⏸ 已暂停,剩 ${q.length} 个待传`;}
+}
+async function pump(){
+  if(running||paused)return;running=true;
+  document.getElementById('pauseBtn').style.display='';
+  while(q.length){
+    if(paused){running=false;return;}
+    const f=q.shift();await uploadOne(f);doneN++;
+    document.getElementById('qstat').textContent=`批量进度 ${doneN}/${total}(顺序上传中…)`;
+  }
+  running=false;document.getElementById('pauseBtn').style.display='none';
+  document.getElementById('qstat').textContent=`✓ 本批 ${doneN}/${total} 已提交,后台分析归类中`;loadDocs();
+}
+function clearFailed(){
+  fetch('/learn/docs/clear_failed',{method:'POST',headers:{'X-Auth-Token':TOKEN}})
+    .then(r=>r.json()).then(()=>loadDocs());
+}
+function parsePending(){
+  fetch('/learn/parse_pending',{method:'POST',headers:{'X-Auth-Token':TOKEN}})
+    .then(r=>r.json()).then(j=>{alert('开始后台解析 '+(j.pending||0)+' 份,会一份份处理,刷新看进度');loadDocs();});
+}
+function clearPending(){
+  if(!confirm('清除所有「待解析/卡住」的资料?(已解析好的会保留)'))return;
+  fetch('/learn/docs/clear_pending',{method:'POST',headers:{'X-Auth-Token':TOKEN}})
+    .then(r=>r.json()).then(j=>{alert('已清除 '+(j.deleted||0)+' 个未完成资料');loadDocs();});
+}
+function clearEmpty(){
+  if(!confirm('清除所有「已解析但0知识点0题」的资料?(建议重抽试卷后再清剩余)'))return;
+  fetch('/learn/docs/clear_empty',{method:'POST',headers:{'X-Auth-Token':TOKEN}})
+    .then(r=>r.json()).then(j=>{alert('已清除 '+(j.deleted||0)+' 个空白资料');loadDocs();});
+}
+function clearAll(){
+  if(!confirm('⚠️ 清空整个资料库(所有文档+知识点+题目+词卡)?用于"只留精选:先清空再传"。考试/计划/课表会保留。不可恢复!'))return;
+  if(!confirm('再确认一次:真的清空全部资料?'))return;
+  existingNames=new Set();
+  fetch('/learn/docs/clear_all',{method:'POST',headers:{'X-Auth-Token':TOKEN}})
+    .then(r=>r.json()).then(j=>{alert('已清空 '+(j.deleted||0)+' 份资料,可以开始上传精选了');loadDocs();});
+}
+function b64(file){return new Promise((res,rej)=>{const r=new FileReader();
+  r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file)})}
+async function uploadOne(file){
+  const box=document.createElement('div');box.className='item';
+  box.innerHTML=`<div>${file.name} <small>(${(file.size/1048576).toFixed(1)} MB)</small></div>
+    <div class="prog"><i></i></div><small class="st">上传中…</small>`;
+  ups.prepend(box);const bar=box.querySelector('i'),st=box.querySelector('.st');
+  bar.style.width='30%';
+  try{
+    const qs=new URLSearchParams({filename:file.name,
+      subject:document.getElementById('subject').value.trim(),
+      stage:document.getElementById('stage').value.trim(),
+      doc_type:document.getElementById('dtype').value,
+      keep:document.getElementById('keep').checked?'1':'0',
+      parse:document.getElementById('onlyup').checked?'0':'1'});
+    const r=await fetch('/learn/upload_raw?'+qs.toString(),{method:'POST',
+      headers:{'X-Auth-Token':TOKEN,'Content-Type':'application/octet-stream'},body:file});
+    const j=await r.json();bar.style.width='100%';
+    if(j.ok){st.innerHTML=j.skipped?'<span class="wait">↷ 已存在,跳过</span>':'<span class="ok">✓ 已提交,后台分析中</span>';setTimeout(loadDocs,1500)}
+    else{st.innerHTML='<span style="color:#e06a6a">✗ '+(j.error||'失败')+'</span>'}
+  }catch(e){st.innerHTML='<span style="color:#e06a6a">✗ '+e+'</span>'}
+}
+async function loadTax(){
+  try{const r=await fetch('/learn/taxonomy?token='+encodeURIComponent(TOKEN));
+    const j=await r.json();if(!j.ok)return;
+    document.getElementById('stages').innerHTML=(j.stages||[]).map(s=>`<option value="${s}">`).join('');
+    document.getElementById('subjects').innerHTML=(j.subjects||[]).map(s=>`<option value="${s}">`).join('');
+  }catch(e){}
+}
+function saveMeta(id,field,val,inp){fetch('/learn/doc/'+id+'/meta',{method:'POST',
+  headers:{'Content-Type':'application/json','X-Auth-Token':TOKEN},
+  body:JSON.stringify({[field]:val})}).then(()=>{if(inp){inp.style.borderColor='#5cc98a';
+  setTimeout(()=>inp.style.borderColor='#2b313c',800)}})}
+async function loadDocs(){
+  try{const r=await fetch('/learn/docs?token='+encodeURIComponent(TOKEN));
+    const j=await r.json();const el=document.getElementById('docs');
+    if(!j.ok||!j.docs.length){el.innerHTML='<small>暂无资料</small>';return}
+    existingNames=new Set(j.docs.filter(d=>d.parsed&&((d.kp_count||0)+(d.ex_count||0))>0).map(d=>d.filename));
+    const np=j.docs.filter(d=>d.status==='pending').length;
+    document.getElementById('pendN').textContent=np?('('+np+')'):'';
+    el.innerHTML='';j.docs.forEach(d=>{
+      const row=document.createElement('div');row.className='doc';
+      let status;
+      if(d.status==='error'){status=`<span style="color:#e06a6a" title="${(d.note||'').replace(/"/g,'')}">✗ 失败:${(d.note||'').slice(0,40)}</span>`;}
+      else if(d.status==='pending'){status='<span class="sub">⏳ 待解析</span>';}
+      else if(d.parsed){status=`<span class="ok">已解析 ${d.kp_count}知识点 ${d.ex_count}题</span>`;}
+      else{status=`<span class="wait">解析中…${d.progress||''}</span>`;}
+      row.innerHTML=`<span class="name" title="${d.filename}">${d.filename}</span>
+        <input class="subj" style="width:84px" type="text" value="${d.stage||''}" placeholder="阶段">
+        <input class="subj" type="text" value="${d.subject||''}" placeholder="科目">
+        <input class="subj" style="width:64px" type="text" value="${d.doc_type||''}" placeholder="类型">
+        <span class="tag">${status}</span>
+        <button class="del" title="删除" style="background:none;border:none;color:#e06a6a;cursor:pointer;font-size:14px">🗑</button>`;
+      const ins=row.querySelectorAll('.subj');
+      ins[0].onchange=()=>saveMeta(d.id,'stage',ins[0].value.trim(),ins[0]);
+      ins[1].onchange=()=>saveMeta(d.id,'subject',ins[1].value.trim(),ins[1]);
+      ins[2].onchange=()=>saveMeta(d.id,'doc_type',ins[2].value.trim(),ins[2]);
+      row.querySelector('.del').onclick=()=>{
+        if(confirm('删除「'+d.filename+'」及其知识点?'))
+          fetch('/learn/doc/'+d.id+'/delete',{method:'POST',headers:{'X-Auth-Token':TOKEN}}).then(()=>loadDocs());
+      };
+      el.appendChild(row)})}
+  catch(e){document.getElementById('docs').innerHTML='<small>加载失败</small>'}
+}
+loadTax();loadDocs();setInterval(loadDocs,8000);
+</script></body></html>

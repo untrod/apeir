@@ -1,0 +1,120 @@
+# APEIR Distribution repository hygiene
+
+# Local archives created during repository consolidation
+.local-archive/
+
+# Runtime state and local configuration
+.apeir/
+.nous/
+workspace.json
+intelligence/manifests/store.json
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+config.local.json
+clients.json
+devices.json
+local.properties
+*.private.key
+
+# Databases and runtime data
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+data/
+sessions/
+sessions.json
+sessions.json.*
+vector_data/
+llm_usage.json
+plan_export.json
+brain_memory.db
+
+# User content
+learn_docs/
+
+# Logs and recordings
+*.log
+*.log.*
+*.wav
+!examples/**/*.wav
+
+# Backups and archives
+*.bak
+*.bak*
+*.tar
+*.tar.gz
+*.zip
+backups/
+server_backup/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.pytest*/
+/.pytest-*.xml
+.ruff_cache/
+.mypy_cache/
+.audit/
+.sprint*_validation/
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+
+# Temporary and generated validation output
+.tmp*/
+tmp/
+temp/
+reports/
+audit-package/
+
+# Build output
+artifacts/
+build/
+dist/
+target/
+
+# Android and Gradle
+RemoteTerminal/local.properties
+RemoteTerminal/app/local.properties
+RemoteTerminal/.gradle/
+RemoteTerminal/.kotlin/
+RemoteTerminal/build/
+RemoteTerminal/app/build/
+*.apk
+
+# Desktop and Node
+node_modules/
+
+# IDE and local agent configuration
+.idea/
+.claude/
+.agents/
+.codex/
+*.code-workspace
+
+# Operating-system noise
+Thumbs.db
+.DS_Store
+
+# Large local artifacts
+*.img
+*.bin
+*.xlsx
+*.docx
+
+# Runtime pack registry
+remote_terminal/data/pack_registry.json
+# Generated desktop Runtime sidecars
+desktop/src-tauri/binaries/

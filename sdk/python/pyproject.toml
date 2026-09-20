@@ -1,0 +1,14 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nous-kernel-sdk"
+version = "0.1.0"
+description = "Python NKI client for Nous Foundation"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+dependencies = ["nous-runtime>=2.0.0rc3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["nous_kernel"]

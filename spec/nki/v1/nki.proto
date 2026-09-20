@@ -1,0 +1,1402 @@
+// NKI v1 — Nous Kernel Interface
+// Version: 1.0.0-draft
+// Date: 2026-08-04
+//
+// This is the single source of truth for all NKI types.
+// All language bindings (Rust, Python, C, TypeScript) are generated from this file.
+
+syntax = "proto3";
+package nous.kernel.v1;
+
+// ────────────────────────────────────────────────────────────
+// Common metadata
+// ────────────────────────────────────────────────────────────
+
+message ObjectMeta {
+  string uid = 1;
+  uint32 schema_version = 2;
+  string name = 3;
+  string namespace = 4;
+  string owner_principal = 5;
+  int64 created_at_us = 6;
+  int64 updated_at_us = 7;
+  uint64 generation = 8;
+  string resource_version = 9;
+  map<string, string> labels = 10;
+  map<string, string> annotations = 11;
+  string phase = 12;
+  string phase_reason = 13;
+  HealthStatus health = 14;
+  repeated Condition conditions = 15;
+  string trace_id = 16;
+  AuditMetadata audit = 17;
+}
+
+message Condition {
+  string type = 1;
+  ConditionStatus status = 2;
+  string reason = 3;
+  string message = 4;
+  int64 last_transition_us = 5;
+  int64 observed_us = 6;
+}
+
+enum ConditionStatus {
+  CONDITION_TRUE = 0;
+  CONDITION_FALSE = 1;
+  CONDITION_UNKNOWN = 2;
+}
+
+enum HealthStatus {
+  HEALTH_UNKNOWN = 0;
+  HEALTH_HEALTHY = 1;
+  HEALTH_DEGRADED = 2;
+  HEALTH_UNHEALTHY = 3;
+  HEALTH_CRITICAL = 4;
+}
+
+message AuditMetadata {
+  string created_by = 1;
+  string updated_by = 2;
+  string approved_by = 3;
+  string deployment = 4;
+}
+
+// ────────────────────────────────────────────────────────────
+// Resource model
+// ────────────────────────────────────────────────────────────
+
+message ResourceVector {
+  uint64 cpu_cores_millis = 1;       // CPU cores in millicores
+  uint64 cpu_time_us = 2;            // CPU time budget
+  uint64 ram_bytes = 3;              // Normal RAM
+  uint64 pinned_ram_bytes = 4;       // Pinned/page-locked RAM
+  uint64 device_memory_bytes = 5;    // GPU/NPU VRAM
+  uint64 kv_cache_bytes = 6;         // KV cache allocation
+  uint64 storage_bytes = 7;          // Disk
+  uint64 memory_bandwidth_bps = 8;   // Memory bandwidth
+  uint64 interconnect_bandwidth_bps = 9;
+  uint64 network_bandwidth_bps = 10;
+  uint64 power_milliwatts = 11;
+  uint64 thermal_budget_millic = 12; // Temperature in millidegrees C
+  uint64 time_budget_us = 13;        // Wall-clock time budget
+}
+
+message ResourceDomain {
+  string domain_id = 1;
+  string parent_domain_id = 2;
+  ResourceVector capacity = 3;
+  ResourceVector allocated = 4;
+  ResourceVector reserved = 5;
+  ResourceLimits hard_limits = 6;
+  ResourceLimits soft_limits = 7;
+}
+
+message ResourceLimits {
+  optional uint64 max_cpu_cores_millis = 1;
+  optional uint64 max_ram_bytes = 2;
+  optional uint64 max_device_memory_bytes = 3;
+  optional uint64 max_kv_cache_bytes = 4;
+  optional uint64 max_storage_bytes = 5;
+  optional uint64 max_power_milliwatts = 6;
+  optional uint64 max_concurrent_workloads = 7;
+}
+
+message ResourceLease {
+  string lease_id = 1;
+  string workload_id = 2;
+  string principal_id = 3;
+  ResourceVector reserved = 4;
+  string node_id = 5;
+  string device_id = 6;
+  int64 granted_at_us = 7;
+  int64 expires_at_us = 8;
+  uint64 generation = 9;
+  bool renewable = 10;
+}
+
+// ────────────────────────────────────────────────────────────
+// Workload types (RFC-0003)
+// ────────────────────────────────────────────────────────────
+
+enum WorkloadType {
+  WORKLOAD_TYPE_UNSPECIFIED = 0;
+  CHAT = 1;
+  COMPLETION = 2;
+  STRUCTURED_OUTPUT = 3;
+  EMBEDDING = 4;
+  RERANK = 5;
+  VISION = 6;
+  SPEECH = 7;
+  MODEL_INFERENCE = 8;
+  AGENT_PROGRAM = 9;
+  WORKFLOW = 10;
+  TOOL_EXECUTION = 11;
+  RETRIEVAL = 12;
+  EVALUATION = 13;
+  BATCH = 14;
+  DEVICE_OPERATION = 15;
+  MODEL_IMPORT = 16;
+  MODEL_COMPILE = 17;
+  BENCHMARK = 18;
+  KERNEL_COMMAND = 19;
+}
+
+enum WorkloadPhase {
+  WORKLOAD_CREATED = 0;
+  WORKLOAD_VALIDATING = 1;
+  WORKLOAD_VALIDATED = 2;
+  WORKLOAD_REJECTED = 3;
+  WORKLOAD_ADMITTED = 4;
+  WORKLOAD_PLACED = 5;
+  WORKLOAD_PREPARING = 6;
+  WORKLOAD_RUNNING = 7;
+  WORKLOAD_QUIESCING = 8;
+  WORKLOAD_CHECKPOINTING = 9;
+  WORKLOAD_CHECKPOINTED = 10;
+  WORKLOAD_RECOVERING = 11;
+  WORKLOAD_SUCCEEDED = 12;
+  WORKLOAD_FAILED = 13;
+  WORKLOAD_CANCELLED = 14;
+  WORKLOAD_LOST = 15;
+  WORKLOAD_QUARANTINED = 16;
+}
+
+message WorkloadSpec {
+  string workload_id = 1;
+  string idempotency_key = 2;
+  uint32 schema_version = 3;
+  string principal_id = 4;
+  string namespace = 5;
+  string goal = 6;
+  WorkloadType workload_type = 7;
+  ExecutionGraph execution_graph = 8;
+  ModelRequirements model_requirements = 9;
+  CapabilityRequirements capability_requirements = 10;
+  DeviceRequirements device_requirements = 11;
+  QualityRequirements quality_requirements = 12;
+  SecurityRequirements security_requirements = 13;
+  ResourceRequirements resource_requirements = 14;
+  LatencySLO latency_slo = 15;
+  int64 deadline_us = 16;
+  EnergyBudget energy_budget = 17;
+  CostBudget cost_budget = 18;
+  CheckpointPolicy checkpoint_policy = 19;
+  CancellationPolicy cancellation_policy = 20;
+  RetryPolicy retry_policy = 21;
+  FallbackPolicy fallback_policy = 22;
+  OutputContract output_contract = 23;
+}
+
+message Workload {
+  ObjectMeta meta = 1;
+  WorkloadSpec spec = 2;
+  WorkloadStatus status = 3;
+}
+
+message WorkloadStatus {
+  WorkloadPhase phase = 1;
+  uint32 current_phase_index = 2;
+  string node_id = 3;
+  string engine_id = 4;
+  string model_revision = 5;
+  ResourceLease lease = 6;
+  repeated Run runs = 7;
+  CheckpointRef latest_checkpoint = 8;
+  repeated Condition conditions = 9;
+  int64 started_at_us = 10;
+  int64 completed_at_us = 11;
+  PerformanceMetrics metrics = 12;
+  ErrorInfo error = 13;
+}
+
+message ExecutionGraph {
+  repeated PhaseNode nodes = 1;
+  repeated PhaseEdge edges = 2;
+  string entry_node_id = 3;
+}
+
+message PhaseNode {
+  string node_id = 1;
+  PhaseType phase_type = 2;
+  PhaseConfig config = 3;
+  string description = 4;
+}
+
+enum PhaseType {
+  PHASE_TYPE_UNSPECIFIED = 0;
+  RECEIVE = 1;
+  VALIDATE = 2;
+  AUTHENTICATE = 3;
+  RESOLVE_CONTEXT = 4;
+  RETRIEVE = 5;
+  PLAN = 6;
+  ADMIT = 7;
+  PLACE = 8;
+  PREPARE = 9;
+  TOKENIZE = 10;
+  ENCODE = 11;
+  PREFILL = 12;
+  DECODE = 13;
+  TOOL_EXECUTE = 14;
+  OBSERVE = 15;
+  VERIFY = 16;
+  REPLAN = 17;
+  FINALIZE = 18;
+  COMMIT = 19;
+  COMPENSATE = 20;
+  CHECKPOINT = 21;
+}
+
+message PhaseEdge {
+  string from_node_id = 1;
+  string to_node_id = 2;
+  EdgeCondition condition = 3;
+}
+
+message EdgeCondition {
+  oneof condition {
+    AlwaysCondition always = 1;
+    OnSuccessCondition on_success = 2;
+    OnFailureCondition on_failure = 3;
+    OutputMatchCondition on_output = 4;
+    QualityThresholdCondition quality = 5;
+    ApprovalRequiredCondition approval = 6;
+    RetryExhaustedCondition retry_exhausted = 7;
+  }
+}
+
+message AlwaysCondition {}
+message OnSuccessCondition {}
+message OnFailureCondition {}
+
+message OutputMatchCondition {
+  string field_path = 1;     // JSONPath expression
+  string pattern = 2;        // Regex pattern
+}
+
+message QualityThresholdCondition {
+  double threshold = 1;      // 0.0–1.0
+}
+
+message ApprovalRequiredCondition {
+  string approver_role = 1;
+}
+
+message RetryExhaustedCondition {
+  uint32 max_retries = 1;
+}
+
+message PhaseConfig {
+  repeated string input_artifacts = 1;
+  repeated string output_artifacts = 2;
+  repeated string allowed_devices = 3;
+  repeated string allowed_engines = 4;
+  ResourceVector estimated_resources = 5;
+  bool is_idempotent = 6;
+  bool is_cancellable = 7;
+  bool is_retryable = 8;
+  bool is_migratable = 9;
+  bool is_checkpointable = 10;
+  bool has_side_effects = 11;
+  string compensation_phase_id = 12;
+  uint32 timeout_seconds = 13;
+  uint32 estimated_duration_ms = 14;
+  string quality_verifier_phase_id = 15;
+}
+
+// ────────────────────────────────────────────────────────────
+// Requirements
+// ────────────────────────────────────────────────────────────
+
+message ModelRequirements {
+  repeated string allowed_model_families = 1;
+  repeated string allowed_architectures = 2;
+  repeated string excluded_models = 3;
+  string preferred_model = 4;
+  uint64 max_tokens_per_request = 5;
+  uint64 min_context_length = 6;
+  uint64 max_context_length = 7;
+  double min_quality_score = 8;
+  bool thinking_required = 9;
+  uint32 min_thinking_budget = 10;
+  repeated Modality input_modalities = 11;
+  repeated Modality output_modalities = 12;
+  QuantizationTolerance quantization = 13;
+  double max_acceptable_perplexity_increase = 14;
+  RoutingPreference routing = 15;
+}
+
+enum Modality {
+  MODALITY_UNSPECIFIED = 0;
+  TEXT = 1;
+  IMAGE = 2;
+  AUDIO = 3;
+  VIDEO = 4;
+  CODE = 5;
+}
+
+enum QuantizationTolerance {
+  QUANTIZATION_FULL_PRECISION_ONLY = 0;
+  QUANTIZATION_INT8_OK = 1;
+  QUANTIZATION_INT4_OK = 2;
+  QUANTIZATION_ANY = 3;
+}
+
+enum RoutingPreference {
+  ROUTING_ANY = 0;
+  ROUTING_LOCAL_ONLY = 1;
+  ROUTING_LOCAL_PREFERRED = 2;
+  ROUTING_LOWEST_LATENCY = 3;
+  ROUTING_LOWEST_COST = 4;
+  ROUTING_HIGHEST_QUALITY = 5;
+}
+
+message CapabilityRequirements {
+  repeated string required_capabilities = 1;
+  repeated string forbidden_capabilities = 2;
+  string minimum_capability_level = 3;
+}
+
+message DeviceRequirements {
+  repeated DeviceType allowed_device_types = 1;
+  uint64 min_vram_bytes = 2;
+  bool require_unified_memory = 3;
+  repeated string required_extensions = 4;
+}
+
+enum DeviceType {
+  DEVICE_TYPE_UNSPECIFIED = 0;
+  CPU = 1;
+  CUDA = 2;
+  ROCM = 3;
+  VULKAN = 4;
+  OPENVINO = 5;
+  METAL = 6;
+  SYCL = 7;
+  CANN = 8;
+  QNN = 9;
+  DSP = 10;
+  FPGA = 11;
+  NPU = 12;
+  REMOTE = 13;
+}
+
+message QualityRequirements {
+  double minimum_quality = 1;
+  double uncertainty_limit = 2;
+  bool verification_required = 3;
+  string verifier_model = 4;
+  bool evidence_required = 5;
+  bool human_review_required = 6;
+  QualityEscalation escalation = 7;
+  repeated string required_benchmarks = 8;
+}
+
+message QualityEscalation {
+  bool enabled = 1;
+  uint32 max_retries = 2;
+  string fallback_model = 3;
+  string escalation_verifier = 4;
+}
+
+message SecurityRequirements {
+  DataClassification data_classification = 1;
+  bool allow_network_access = 2;
+  repeated string allowed_hosts = 3;
+  bool allow_file_access = 4;
+  repeated string allowed_paths = 5;
+  bool allow_side_effects = 6;
+  bool reversible_side_effects_only = 7;
+  bool require_approval = 8;
+  string isolation_profile = 9;
+  bool audit_all_output = 10;
+}
+
+enum DataClassification {
+  DATA_PUBLIC = 0;
+  DATA_INTERNAL = 1;
+  DATA_CONFIDENTIAL = 2;
+  DATA_RESTRICTED = 3;
+}
+
+message ResourceRequirements {
+  ResourceVector minimum = 1;
+  ResourceVector maximum = 2;
+  ResourceVector preferred = 3;
+  PriorityClass priority = 4;
+  PreemptionPolicy preemption = 5;
+}
+
+enum PriorityClass {
+  PRIORITY_SYSTEM = 0;
+  PRIORITY_INTERACTIVE = 1;
+  PRIORITY_BATCH = 2;
+  PRIORITY_BEST_EFFORT = 3;
+}
+
+enum PreemptionPolicy {
+  PREEMPTION_NEVER = 0;
+  PREEMPTION_IF_LOWER_PRIORITY = 1;
+  PREEMPTION_ALWAYS = 2;
+}
+
+// ────────────────────────────────────────────────────────────
+// Budgets, SLOs, Policies
+// ────────────────────────────────────────────────────────────
+
+message LatencySLO {
+  uint64 max_ttft_ms = 1;          // Time to first token
+  uint64 max_tpot_ms = 2;          // Time per output token
+  uint64 max_total_ms = 3;         // Total wall-clock time
+  uint64 max_queue_ms = 4;         // Max time in queue
+}
+
+message EnergyBudget {
+  uint64 max_joules = 1;
+  bool prefer_efficiency = 2;
+}
+
+message CostBudget {
+  uint64 max_microcents = 1;
+  string currency = 2;
+  CostModel cost_model = 3;
+}
+
+enum CostModel {
+  COST_PER_TOKEN = 0;
+  COST_PER_REQUEST = 1;
+  COST_PER_SECOND = 2;
+}
+
+message CheckpointPolicy {
+  bool enabled = 1;
+  CheckpointStrategy strategy = 2;
+  uint32 min_interval_seconds = 3;
+  uint32 max_checkpoints = 4;
+  uint32 retention_seconds = 5;
+}
+
+enum CheckpointStrategy {
+  CHECKPOINT_NONE = 0;
+  CHECKPOINT_BEFORE_RISKY_PHASE = 1;
+  CHECKPOINT_PERIODIC = 2;
+  CHECKPOINT_AFTER_EVERY_PHASE = 3;
+}
+
+message CancellationPolicy {
+  bool cancellable = 1;
+  bool graceful = 2;
+  uint32 grace_period_seconds = 3;
+  repeated string uncancellable_phases = 4;
+}
+
+message RetryPolicy {
+  uint32 max_retries = 1;
+  uint32 initial_backoff_ms = 2;
+  uint32 max_backoff_ms = 3;
+  double backoff_multiplier = 4;
+  repeated string retryable_errors = 5;
+  bool retry_on_timeout = 6;
+}
+
+message FallbackPolicy {
+  bool enabled = 1;
+  repeated FallbackStep steps = 2;
+}
+
+message FallbackStep {
+  string condition = 1;
+  string action = 2;
+  string target = 3;
+}
+
+message OutputContract {
+  OutputFormat format = 1;
+  string json_schema = 2;
+  uint32 max_output_tokens = 3;
+  bool include_reasoning = 4;
+  bool include_evidence = 5;
+  bool include_tool_traces = 6;
+  bool include_metrics = 7;
+  repeated string redact_patterns = 8;
+}
+
+enum OutputFormat {
+  OUTPUT_TEXT = 0;
+  OUTPUT_JSON = 1;
+  OUTPUT_JSON_SCHEMA = 2;
+  OUTPUT_STREAM = 3;
+}
+
+// ────────────────────────────────────────────────────────────
+// Run and execution tracking
+// ────────────────────────────────────────────────────────────
+
+message Run {
+  string run_id = 1;
+  string workload_id = 2;
+  uint32 run_number = 3;
+  RunPhase phase = 4;
+  repeated PhaseExecution phases = 5;
+  ResourceVector consumed = 6;
+  int64 started_at_us = 7;
+  int64 ended_at_us = 8;
+  RunOutcome outcome = 9;
+}
+
+enum RunPhase {
+  RUN_CREATED = 0;
+  RUN_PREPARING = 1;
+  RUN_EXECUTING = 2;
+  RUN_VERIFYING = 3;
+  RUN_FINALIZING = 4;
+  RUN_COMPLETED = 5;
+  RUN_FAILED = 6;
+  RUN_CANCELLED = 7;
+}
+
+enum RunOutcome {
+  OUTCOME_UNKNOWN = 0;
+  OUTCOME_SUCCESS = 1;
+  OUTCOME_PARTIAL_SUCCESS = 2;
+  OUTCOME_FAILURE = 3;
+  OUTCOME_CANCELLED = 4;
+  OUTCOME_TIMED_OUT = 5;
+}
+
+message PhaseExecution {
+  string phase_node_id = 1;
+  PhaseType phase_type = 2;
+  int64 started_at_us = 3;
+  int64 ended_at_us = 4;
+  PhaseExecutionStatus status = 5;
+  string engine_id = 6;
+  string device_id = 7;
+  PerformanceMetrics metrics = 8;
+  ErrorInfo error = 9;
+  bytes output_artifact_ref = 10;
+}
+
+enum PhaseExecutionStatus {
+  PHASE_PENDING = 0;
+  PHASE_RUNNING = 1;
+  PHASE_COMPLETED = 2;
+  PHASE_FAILED = 3;
+  PHASE_SKIPPED = 4;
+  PHASE_TIMED_OUT = 5;
+}
+
+// ────────────────────────────────────────────────────────────
+// Model
+// ────────────────────────────────────────────────────────────
+
+message ModelPackage {
+  ObjectMeta meta = 1;
+  ModelPackageSpec spec = 2;
+  ModelPackageStatus status = 3;
+}
+
+message ModelPackageSpec {
+  string family = 1;
+  string architecture = 2;
+  uint64 total_parameters = 3;
+  uint64 activated_parameters = 4;
+  uint32 layer_count = 5;
+  uint32 hidden_size = 6;
+  string attention_type = 7;
+  uint32 attention_heads = 8;
+  uint32 kv_heads = 9;
+  uint32 head_dimension = 10;
+  uint32 expert_count = 11;
+  uint32 active_experts = 12;
+  uint32 shared_experts = 13;
+  uint64 context_length = 14;
+  string rope_parameters = 15;
+  string tokenizer = 16;
+  repeated string modalities = 17;
+  string vision_encoder = 18;
+  string audio_encoder = 19;
+  string weight_format = 20;
+  string weight_precision = 21;
+  string activation_precision = 22;
+  string quantization = 23;
+  repeated string tensor_shapes = 24;
+  uint64 kv_bytes_per_token = 25;
+  repeated string supported_engines = 26;
+  repeated string supported_devices = 27;
+  repeated string required_operators = 28;
+  repeated string parallelism_support = 29;
+  ResourceVector memory_requirements = 30;
+  string license = 31;
+  string source = 32;
+  bytes sha256 = 33;
+  bytes signature = 34;
+  string sbom = 35;
+  string security_status = 36;
+  repeated BenchmarkProfile benchmark_profiles = 37;
+}
+
+message ModelPackageStatus {
+  ModelLifecyclePhase phase = 1;
+  repeated string loaded_on_engines = 2;
+  repeated string loaded_on_devices = 3;
+  int64 validated_at_us = 4;
+  int64 last_used_at_us = 5;
+  repeated Condition conditions = 6;
+}
+
+enum ModelLifecyclePhase {
+  MODEL_PHASE_UNKNOWN = 0;
+  MODEL_IMPORTING = 1;
+  MODEL_IMPORTED = 2;
+  MODEL_VALIDATING = 3;
+  MODEL_VALIDATED = 4;
+  MODEL_LOADING = 5;
+  MODEL_LOADED = 6;
+  MODEL_ACTIVE = 7;
+  MODEL_UNLOADING = 8;
+  MODEL_UNLOADED = 9;
+  MODEL_REMOVING = 10;
+  MODEL_REMOVED = 11;
+  MODEL_FAILED = 12;
+  MODEL_QUARANTINED = 13;
+}
+
+message BenchmarkProfile {
+  string benchmark_name = 1;
+  string hardware_config = 2;
+  string engine = 3;
+  double tokens_per_second = 4;
+  uint64 ttft_ms = 5;
+  uint64 tpot_ms = 6;
+  uint64 memory_bytes = 7;
+  double quality_score = 8;
+  int64 run_at_us = 9;
+}
+
+// ────────────────────────────────────────────────────────────
+// Engine
+// ────────────────────────────────────────────────────────────
+
+message Engine {
+  ObjectMeta meta = 1;
+  EngineSpec spec = 2;
+  EngineStatus status = 3;
+}
+
+message EngineSpec {
+  string engine_type = 1;
+  string version = 2;
+  repeated string capabilities = 3;
+  repeated string supported_architectures = 4;
+  repeated string supported_quantizations = 5;
+  bool supports_streaming = 6;
+  bool supports_batching = 7;
+  bool supports_pause = 8;
+  bool supports_snapshot = 9;
+  DeviceRequirements device_requirements = 10;
+}
+
+message EngineStatus {
+  EnginePhase phase = 1;
+  string process_id = 2;
+  repeated string loaded_models = 3;
+  ResourceVector allocated = 4;
+  PerformanceMetrics metrics = 5;
+  int64 last_health_check_us = 6;
+}
+
+enum EnginePhase {
+  ENGINE_PHASE_UNKNOWN = 0;
+  ENGINE_STARTING = 1;
+  ENGINE_READY = 2;
+  ENGINE_LOADING_MODEL = 3;
+  ENGINE_RUNNING = 4;
+  ENGINE_DRAINING = 5;
+  ENGINE_STOPPING = 6;
+  ENGINE_STOPPED = 7;
+  ENGINE_UNHEALTHY = 8;
+}
+
+// ────────────────────────────────────────────────────────────
+// Device
+// ────────────────────────────────────────────────────────────
+
+message Device {
+  ObjectMeta meta = 1;
+  DeviceSpec spec = 2;
+  DeviceStatus status = 3;
+}
+
+message DeviceSpec {
+  DeviceType device_type = 1;
+  string vendor = 2;
+  string model = 3;
+  string driver_version = 4;
+  ResourceVector total_resources = 5;
+  repeated string capabilities = 6;
+}
+
+message DeviceStatus {
+  DevicePhase phase = 1;
+  ResourceVector available = 2;
+  double temperature_celsius = 3;
+  uint64 power_milliwatts = 4;
+  double utilization_percent = 5;
+  repeated string active_engines = 6;
+  TopologyLink topology = 7;
+  int64 last_health_check_us = 8;
+}
+
+enum DevicePhase {
+  DEVICE_PHASE_UNKNOWN = 0;
+  DEVICE_DISCOVERED = 1;
+  DEVICE_PROBED = 2;
+  DEVICE_BOUND = 3;
+  DEVICE_INITIALIZED = 4;
+  DEVICE_READY = 5;
+  DEVICE_ALLOCATING = 6;
+  DEVICE_BUSY = 7;
+  DEVICE_DRAINING = 8;
+  DEVICE_SUSPENDED = 9;
+  DEVICE_RESETTING = 10;
+  DEVICE_FAILED = 11;
+  DEVICE_UNBOUND = 12;
+}
+
+message TopologyLink {
+  string from_device_id = 1;
+  string to_device_id = 2;
+  string link_type = 3;        // PCIe, NVLink, RDMA, Ethernet, etc.
+  uint64 bandwidth_bps = 4;
+  uint64 latency_ns = 5;
+}
+
+// ────────────────────────────────────────────────────────────
+// Node
+// ────────────────────────────────────────────────────────────
+
+message Node {
+  ObjectMeta meta = 1;
+  NodeSpec spec = 2;
+  NodeStatus status = 3;
+}
+
+message NodeSpec {
+  string hostname = 1;
+  string arch = 2;
+  string os = 3;
+  ResourceVector capacity = 4;
+  repeated string roles = 5;
+}
+
+message NodeStatus {
+  NodePhase phase = 1;
+  ResourceVector allocatable = 2;
+  repeated string devices = 3;
+  repeated string engines = 4;
+  repeated string active_workloads = 5;
+  int64 last_heartbeat_us = 6;
+  string kernel_version = 7;
+}
+
+enum NodePhase {
+  NODE_PHASE_UNKNOWN = 0;
+  NODE_STARTING = 1;
+  NODE_READY = 2;
+  NODE_BUSY = 3;
+  NODE_DRAINING = 4;
+  NODE_DISCONNECTED = 5;
+  NODE_FAILED = 6;
+}
+
+// ────────────────────────────────────────────────────────────
+// Principal & Capability
+// ────────────────────────────────────────────────────────────
+
+message Principal {
+  ObjectMeta meta = 1;
+  PrincipalSpec spec = 2;
+  PrincipalStatus status = 3;
+}
+
+message PrincipalSpec {
+  PrincipalType type = 1;
+  string display_name = 2;
+  bytes public_key = 3;
+  repeated string roles = 4;
+}
+
+enum PrincipalType {
+  PRINCIPAL_UNSPECIFIED = 0;
+  USER = 1;
+  SERVICE = 2;
+  NODE = 3;
+  SYSTEM = 4;
+}
+
+message PrincipalStatus {
+  bool authenticated = 1;
+  int64 last_seen_us = 2;
+  repeated string active_leases = 3;
+}
+
+message CapabilityGrant {
+  string grant_id = 1;
+  string principal_id = 2;
+  string capability = 3;
+  repeated string paths = 4;
+  repeated string hosts = 5;
+  ResourceLimits limits = 6;
+  bool requires_approval = 7;
+  string data_classification = 8;
+  int64 granted_at_us = 9;
+  int64 expires_at_us = 10;
+}
+
+// ────────────────────────────────────────────────────────────
+// Checkpoint, Event, Audit
+// ────────────────────────────────────────────────────────────
+
+message Checkpoint {
+  string checkpoint_id = 1;
+  string workload_id = 2;
+  uint64 sequence = 3;
+  bytes state_snapshot = 4;
+  string node_id = 5;
+  int64 created_at_us = 6;
+  bytes sha256 = 7;
+}
+
+message CheckpointRef {
+  string checkpoint_id = 1;
+  uint64 sequence = 2;
+  int64 created_at_us = 3;
+}
+
+message Event {
+  string event_id = 1;
+  string workload_id = 2;
+  uint64 sequence = 3;
+  string event_type = 4;
+  int64 timestamp_us = 5;
+  string actor = 6;
+  bytes payload = 7;
+  string phase = 8;
+  string trace_id = 9;
+}
+
+message AuditRecord {
+  string audit_id = 1;
+  string workload_id = 2;
+  string principal_id = 3;
+  string action = 4;
+  string decision = 5;
+  string reason = 6;
+  bytes context = 7;
+  int64 timestamp_us = 8;
+}
+
+// ────────────────────────────────────────────────────────────
+// Observability
+// ────────────────────────────────────────────────────────────
+
+message PerformanceMetrics {
+  // Latency
+  uint64 queue_time_us = 1;
+  uint64 admission_time_us = 2;
+  uint64 ttft_us = 3;
+  uint64 tpot_us = 4;
+  uint64 total_time_us = 5;
+
+  // Throughput
+  double tokens_per_second = 6;
+  uint64 prefill_tokens = 7;
+  uint64 decode_tokens = 8;
+  uint64 total_tokens = 9;
+
+  // Memory
+  uint64 peak_ram_bytes = 10;
+  uint64 peak_vram_bytes = 11;
+  uint64 kv_cache_used_bytes = 12;
+  double vram_fragmentation = 13;
+
+  // Cache
+  double kv_hit_rate = 14;
+  double prefix_hit_rate = 15;
+  uint64 cache_transfer_bytes = 16;
+
+  // Quality
+  double quality_score = 17;
+  double fallback_rate = 18;
+  uint32 verification_attempts = 19;
+
+  // Energy
+  double energy_joules = 20;
+  bool thermal_throttled = 21;
+
+  // Errors
+  uint32 retry_count = 22;
+  uint32 tool_failures = 23;
+  string failure_reason = 24;
+}
+
+message ErrorInfo {
+  string error_code = 1;
+  string message = 2;
+  string failed_phase = 3;
+  string cause = 4;
+  repeated string stack = 5;
+  bool retryable = 6;
+}
+
+message MetricPoint {
+  string name = 1;
+  map<string, string> labels = 2;
+  double value = 3;
+  int64 timestamp_us = 4;
+}
+
+// ────────────────────────────────────────────────────────────
+// NKI Request/Response envelope
+// ────────────────────────────────────────────────────────────
+
+message NKIRequest {
+  string request_id = 1;
+  string idempotency_key = 2;
+  uint32 nki_version = 3;
+  string principal_id = 4;
+  string namespace = 5;
+  int64 deadline_us = 6;
+  string traceparent = 7;
+  string tracestate = 8;
+  repeated string feature_flags = 9;
+
+  oneof method {
+    SubmitWorkloadRequest submit_workload = 10;
+    GetWorkloadRequest get_workload = 11;
+    ListWorkloadsRequest list_workloads = 12;
+    CancelWorkloadRequest cancel_workload = 13;
+    PauseWorkloadRequest pause_workload = 14;
+    ResumeWorkloadRequest resume_workload = 15;
+    AdmitWorkloadRequest admit_workload = 16;
+    ReserveResourcesRequest reserve_resources = 17;
+    ReleaseResourcesRequest release_resources = 18;
+    RenewLeaseRequest renew_lease = 35;
+    RegisterModelRequest register_model = 19;
+    ValidateModelRequest validate_model = 20;
+    LoadModelRequest load_model = 21;
+    UnloadModelRequest unload_model = 22;
+    RegisterEngineRequest register_engine = 23;
+    ProbeEngineRequest probe_engine = 24;
+    ListEnginesRequest list_engines = 25;
+    RegisterDeviceRequest register_device = 26;
+    ProbeDeviceRequest probe_device = 27;
+    ListDevicesRequest list_devices = 28;
+    CreateCheckpointRequest create_checkpoint = 29;
+    RestoreCheckpointRequest restore_checkpoint = 30;
+    WatchEventsRequest watch_events = 31;
+    GetTraceRequest get_trace = 32;
+    GetMetricsRequest get_metrics = 33;
+    HealthCheckRequest health_check = 34;
+  }
+}
+
+message NKIResponse {
+  string request_id = 1;
+  uint32 nki_version = 2;
+  int64 server_timestamp_us = 3;
+  string trace_id = 4;
+
+  oneof outcome {
+    SubmitWorkloadResponse submit_workload = 10;
+    GetWorkloadResponse get_workload = 11;
+    ListWorkloadsResponse list_workloads = 12;
+    CancelWorkloadResponse cancel_workload = 13;
+    PauseWorkloadResponse pause_workload = 14;
+    ResumeWorkloadResponse resume_workload = 15;
+    AdmitWorkloadResponse admit_workload = 16;
+    ReserveResourcesResponse reserve_resources = 17;
+    ReleaseResourcesResponse release_resources = 18;
+    RenewLeaseResponse renew_lease = 35;
+    RegisterModelResponse register_model = 19;
+    ValidateModelResponse validate_model = 20;
+    LoadModelResponse load_model = 21;
+    UnloadModelResponse unload_model = 22;
+    RegisterEngineResponse register_engine = 23;
+    ProbeEngineResponse probe_engine = 24;
+    ListEnginesResponse list_engines = 25;
+    RegisterDeviceResponse register_device = 26;
+    ProbeDeviceResponse probe_device = 27;
+    ListDevicesResponse list_devices = 28;
+    CreateCheckpointResponse create_checkpoint = 29;
+    RestoreCheckpointResponse restore_checkpoint = 30;
+    WatchEventsResponse watch_events = 31;
+    GetTraceResponse get_trace = 32;
+    GetMetricsResponse get_metrics = 33;
+    HealthCheckResponse health_check = 34;
+    NKIErrorResponse error = 99;
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// NKI API methods — request/response pairs
+// ────────────────────────────────────────────────────────────
+
+message SubmitWorkloadRequest {
+  WorkloadSpec workload = 1;
+}
+
+message SubmitWorkloadResponse {
+  string workload_id = 1;
+  WorkloadPhase phase = 2;
+  string resource_version = 3;
+}
+
+message GetWorkloadRequest {
+  string workload_id = 1;
+}
+
+message GetWorkloadResponse {
+  Workload workload = 1;
+}
+
+message ListWorkloadsRequest {
+  string namespace = 1;
+  repeated LabelSelector filters = 2;
+  uint32 page_size = 3;
+  string page_token = 4;
+}
+
+message LabelSelector {
+  string key = 1;
+  string operator = 2;  // "=", "!=", "in", "notin", "exists", "notexists"
+  repeated string values = 3;
+}
+
+message ListWorkloadsResponse {
+  repeated Workload workloads = 1;
+  string next_page_token = 2;
+}
+
+message CancelWorkloadRequest {
+  string workload_id = 1;
+  string reason = 2;
+  bool force = 3;
+}
+
+message CancelWorkloadResponse {
+  string workload_id = 1;
+  WorkloadPhase phase = 2;
+}
+
+message PauseWorkloadRequest {
+  string workload_id = 1;
+}
+
+message PauseWorkloadResponse {
+  string workload_id = 1;
+  WorkloadPhase phase = 2;
+}
+
+message ResumeWorkloadRequest {
+  string workload_id = 1;
+}
+
+message ResumeWorkloadResponse {
+  string workload_id = 1;
+  WorkloadPhase phase = 2;
+}
+
+message AdmitWorkloadRequest {
+  string workload_id = 1;
+}
+
+message AdmitWorkloadResponse {
+  bool admitted = 1;
+  string rejection_reason = 2;
+  repeated string missing_requirements = 3;
+  ResourceVector available = 4;
+  ResourceVector required = 5;
+}
+
+message ReserveResourcesRequest {
+  string workload_id = 1;
+  ResourceVector resources = 2;
+  string preferred_node_id = 3;
+  string preferred_device_id = 4;
+}
+
+message ReserveResourcesResponse {
+  ResourceLease lease = 1;
+}
+
+message ReleaseResourcesRequest {
+  string lease_id = 1;
+}
+
+message ReleaseResourcesResponse {
+  bool released = 1;
+}
+
+// H3: RenewLease — extend a workload's resource lease before expiry.
+// Long-running workloads (agents, workflows, streaming) must periodically
+// renew their lease or be preempted when it expires.
+message RenewLeaseRequest {
+  string lease_id = 1;
+  uint64 expected_generation = 2;  // CAS: prevent concurrent renewal races
+  uint64 extend_duration_us = 3;   // Additional duration (0 = server default)
+}
+
+message RenewLeaseResponse {
+  ResourceLease lease = 1;         // Updated lease with new expiry
+  uint64 new_generation = 2;
+}
+
+message RegisterModelRequest {
+  ModelPackageSpec model = 1;
+}
+
+message RegisterModelResponse {
+  string model_id = 1;
+  ModelLifecyclePhase phase = 2;
+}
+
+message ValidateModelRequest {
+  string model_id = 1;
+}
+
+message ValidateModelResponse {
+  bool valid = 1;
+  repeated string errors = 2;
+  repeated string warnings = 3;
+}
+
+message LoadModelRequest {
+  string model_id = 1;
+  string engine_id = 2;
+  string device_id = 3;
+  LoadOptions options = 4;
+}
+
+message LoadOptions {
+  string quantization_override = 1;
+  uint64 max_context_override = 2;
+  uint64 kv_cache_bytes_override = 3;
+  bool force_reload = 4;
+}
+
+message LoadModelResponse {
+  string instance_id = 1;
+  ModelLifecyclePhase phase = 2;
+}
+
+message UnloadModelRequest {
+  string instance_id = 1;
+}
+
+message UnloadModelResponse {
+  bool unloaded = 1;
+}
+
+message RegisterEngineRequest {
+  EngineSpec engine = 1;
+  string process_id = 2;
+}
+
+message RegisterEngineResponse {
+  string engine_id = 1;
+}
+
+message ProbeEngineRequest {
+  string engine_id = 1;
+}
+
+message ProbeEngineResponse {
+  EngineStatus status = 1;
+}
+
+message ListEnginesRequest {
+  string namespace = 1;
+}
+
+message ListEnginesResponse {
+  repeated Engine engines = 1;
+}
+
+message RegisterDeviceRequest {
+  DeviceSpec device = 1;
+}
+
+message RegisterDeviceResponse {
+  string device_id = 1;
+}
+
+message ProbeDeviceRequest {
+  string device_id = 1;
+}
+
+message ProbeDeviceResponse {
+  DeviceStatus status = 1;
+}
+
+message ListDevicesRequest {
+  string namespace = 1;
+}
+
+message ListDevicesResponse {
+  repeated Device devices = 1;
+}
+
+message CreateCheckpointRequest {
+  string workload_id = 1;
+  string description = 2;
+}
+
+message CreateCheckpointResponse {
+  Checkpoint checkpoint = 1;
+}
+
+message RestoreCheckpointRequest {
+  string checkpoint_id = 1;
+}
+
+message RestoreCheckpointResponse {
+  string workload_id = 1;
+  WorkloadPhase phase = 2;
+}
+
+message WatchEventsRequest {
+  string namespace = 1;
+  repeated string event_types = 2;
+  string from_resource_version = 3;
+  bool follow = 4;
+}
+
+message WatchEventsResponse {
+  repeated Event events = 1;
+  string resource_version = 2;
+}
+
+message GetTraceRequest {
+  string trace_id = 1;
+}
+
+message ExecutionTimeline {
+  string trace_id = 1;
+  repeated TimelineEntry entries = 2;
+}
+
+message TimelineEntry {
+  string span_id = 1;
+  string parent_span_id = 2;
+  string operation = 3;
+  int64 start_us = 4;
+  int64 end_us = 5;
+  map<string, string> attributes = 6;
+}
+
+message GetTraceResponse {
+  ExecutionTimeline timeline = 1;
+}
+
+message GetMetricsRequest {
+  string namespace = 1;
+  string metric_name = 2;
+  int64 start_us = 3;
+  int64 end_us = 4;
+}
+
+message GetMetricsResponse {
+  repeated MetricPoint points = 1;
+}
+
+message HealthCheckRequest {
+  bool deep = 1;
+}
+
+message HealthCheckResponse {
+  bool healthy = 1;
+  string version = 2;
+  int64 uptime_seconds = 3;
+  map<string, ComponentHealth> components = 4;
+}
+
+message ComponentHealth {
+  bool healthy = 1;
+  string message = 2;
+  int64 last_checked_us = 3;
+}
+
+// ────────────────────────────────────────────────────────────
+// NKI Error
+// ────────────────────────────────────────────────────────────
+
+message NKIErrorResponse {
+  ErrorCode code = 1;
+  string message = 2;
+  string failed_phase = 3;
+  string cause = 4;
+  RetryHint retry = 5;
+}
+
+enum ErrorCode {
+  ERROR_UNKNOWN = 0;
+  ERROR_INVALID_REQUEST = 1;
+  ERROR_NOT_FOUND = 2;
+  ERROR_ALREADY_EXISTS = 3;
+  ERROR_PERMISSION_DENIED = 4;
+  ERROR_UNAUTHENTICATED = 5;
+  ERROR_RESOURCE_EXHAUSTED = 6;
+  ERROR_FAILED_PRECONDITION = 7;
+  ERROR_ABORTED = 8;
+  ERROR_OUT_OF_RANGE = 9;
+  ERROR_NOT_IMPLEMENTED = 10;
+  ERROR_INTERNAL = 11;
+  ERROR_UNAVAILABLE = 12;
+  ERROR_DATA_LOSS = 13;
+  ERROR_DEADLINE_EXCEEDED = 14;
+  ERROR_WORKLOAD_REJECTED = 20;
+  ERROR_WORKLOAD_CANCELLED = 21;
+  ERROR_WORKLOAD_LOST = 22;
+  ERROR_WORKLOAD_QUARANTINED = 23;
+  ERROR_WORKLOAD_CONFLICT = 24;
+  ERROR_RESOURCE_INSUFFICIENT = 30;
+  ERROR_LEASE_EXPIRED = 31;
+  ERROR_LEASE_CONFLICT = 32;
+  ERROR_MODEL_NOT_FOUND = 40;
+  ERROR_MODEL_INCOMPATIBLE = 41;
+  ERROR_MODEL_NOT_LOADED = 42;
+  ERROR_MODEL_VALIDATION_FAILED = 43;
+  ERROR_MODEL_SECURITY_BLOCKED = 44;
+  ERROR_ENGINE_NOT_FOUND = 50;
+  ERROR_ENGINE_INCOMPATIBLE = 51;
+  ERROR_ENGINE_UNHEALTHY = 52;
+  ERROR_ENGINE_TIMEOUT = 53;
+  ERROR_DEVICE_NOT_FOUND = 60;
+  ERROR_DEVICE_INCOMPATIBLE = 61;
+  ERROR_DEVICE_UNHEALTHY = 62;
+  ERROR_DEVICE_OUT_OF_MEMORY = 63;
+  ERROR_BACKEND_UNAVAILABLE = 70;
+  ERROR_BACKEND_INCOMPATIBLE = 71;
+  ERROR_NOT_SUPPORTED = 80;
+  ERROR_SECURITY_POLICY = 90;
+  ERROR_CAPABILITY_DENIED = 91;
+  ERROR_ISOLATION_FAILED = 92;
+}
+
+message RetryHint {
+  bool retryable = 1;
+  uint32 recommended_delay_ms = 2;
+  uint32 max_retries = 3;
+  RetryStrategy strategy = 4;
+}
+
+enum RetryStrategy {
+  RETRY_IMMEDIATE = 0;
+  RETRY_BACKOFF = 1;
+  RETRY_AFTER = 2;
+  RETRY_NEW_IDEMPOTENCY = 3;
+  RETRY_NEVER = 4;
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nous.dev/spec/extensions/v1/nous-extension.schema.json",
+  "title": "Nous Extension IR v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "extension_id",
+    "version",
+    "description",
+    "source_format",
+    "compatibility_level",
+    "kinds"
+  ],
+  "properties": {
+    "schema": {"const": "nous.extension/v1"},
+    "extension_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._/-]{0,127}$"},
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+"},
+    "description": {"type": "string"},
+    "source_format": {"type": "string"},
+    "compatibility_level": {"type": "integer", "minimum": 0, "maximum": 5},
+    "kinds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["skill", "tool", "plugin", "provider", "agent", "template", "pack"]}
+    },
+    "skills": {"type": "array", "items": {"type": "object"}},
+    "tools": {"type": "array", "items": {"type": "object"}},
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["capability", "access", "scope", "required"],
+        "properties": {
+          "capability": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z0-9_-]+)+$"},
+          "access": {"enum": ["read", "write", "execute", "connect", "use"]},
+          "scope": {"type": "array", "items": {"type": "string"}},
+          "reason": {"type": "string"},
+          "required": {"type": "boolean"}
+        }
+      }
+    },
+    "entry_points": {"type": "array", "items": {"type": "object"}},
+    "dependencies": {"type": "object", "additionalProperties": {"type": "string"}},
+    "license": {"type": "string"},
+    "metadata": {"type": "object"},
+    "provenance": {
+      "type": ["object", "null"],
+      "properties": {
+        "source_type": {"type": "string"},
+        "source": {"type": "string"},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "imported_at": {"type": "string"},
+        "adapter": {"type": "string"}
+      }
+    }
+  }
+}

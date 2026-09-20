@@ -1,0 +1,107 @@
+{
+  "name": "nous-runtime-vscode",
+  "displayName": "Nous Runtime",
+  "version": "0.1.0-rc1",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:nous.openRuntime"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "nous.openRuntime",
+        "title": "Nous: Open Runtime"
+      },
+      {
+        "command": "nous.explain",
+        "title": "Nous: Explain Selection"
+      },
+      {
+        "command": "nous.review",
+        "title": "Nous: Review Selection"
+      },
+      {
+        "command": "nous.optimize",
+        "title": "Nous: Optimize Selection"
+      },
+      {
+        "command": "nous.refactor",
+        "title": "Nous: Refactor Selection"
+      },
+      {
+        "command": "nous.generateTests",
+        "title": "Nous: Generate Tests"
+      },
+      {
+        "command": "nous.openTimeline",
+        "title": "Nous: Open Timeline"
+      },
+      {
+        "command": "nous.configureToken",
+        "title": "Nous: Configure Runtime Token"
+      },
+      {
+        "command": "nous.approve",
+        "title": "Nous: Approve Request"
+      },
+      {
+        "command": "nous.reject",
+        "title": "Nous: Reject Request"
+      }
+    ],
+    "configuration": {
+      "title": "Nous Runtime",
+      "properties": {
+        "nous.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:8770",
+          "description": "Authoritative Nous Server Runtime URL"
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "nous.explain",
+          "when": "editorHasSelection",
+          "group": "nous@1"
+        },
+        {
+          "command": "nous.review",
+          "when": "editorHasSelection",
+          "group": "nous@2"
+        },
+        {
+          "command": "nous.optimize",
+          "when": "editorHasSelection",
+          "group": "nous@3"
+        },
+        {
+          "command": "nous.refactor",
+          "when": "editorHasSelection",
+          "group": "nous@4"
+        },
+        {
+          "command": "nous.generateTests",
+          "when": "editorHasSelection",
+          "group": "nous@5"
+        },
+        {
+          "command": "nous.openTimeline",
+          "group": "nous@6"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.3.0"
+  }
+}

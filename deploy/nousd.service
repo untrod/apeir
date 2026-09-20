@@ -1,0 +1,58 @@
+[Unit]
+Description=Nous Runtime Daemon — Open Intelligence Runtime
+Documentation=https://github.com/nous-runtime/nous
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=nous
+Group=nous
+WorkingDirectory=${NOUS_HOME:-/opt/nous}
+EnvironmentFile=${NOUS_HOME:-/opt/nous}/.env
+ExecStart=${NOUS_PYTHON:-/usr/bin/python3} -m nous_runtime.daemon
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=10
+WatchdogSec=30
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nousd
+
+# Environment
+Environment=NOUS_HOME=${NOUS_HOME:-/opt/nous}
+Environment=NOUS_DATA_DIR=${NOUS_DATA_DIR:-%S/nous}
+Environment=NOUS_LOG_DIR=${NOUS_LOG_DIR:-%L/nous}
+Environment=PYTHONUNBUFFERED=1
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryMax=4G
+CPUQuota=200%
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=${NOUS_HOME:-/opt/nous}/data
+ReadWritePaths=${NOUS_DATA_DIR:-%S/nous}
+ReadWritePaths=${NOUS_LOG_DIR:-%L/nous}
+ReadOnlyPaths=${NOUS_HOME:-/opt/nous}
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictRealtime=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Capability bounding set
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_DAC_OVERRIDE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+name: study_pack
+version: 1.0.0
+description: General-purpose learning pack with example subjects and prompts
+
+capabilities:
+  - study.plan.create
+  - study.plan.today
+  - study.review.due
+  - study.session.start
+  - study.session.end
+  - study.progress.report
+
+providers:
+  - study_plan_provider
+  - study_review_provider
+  - study_session_provider
+
+dependencies:
+  runtime: ">=1.0"
+
+config:
+  daily_review_hour: 21
+  max_sessions_per_day: 8

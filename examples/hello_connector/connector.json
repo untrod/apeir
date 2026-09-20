@@ -1,0 +1,12 @@
+{
+  "connector_id": "example.files",
+  "version": "0.1.0",
+  "authentication_type": "none",
+  "granted_scopes": ["workspace.read", "workspace.write"],
+  "actions": [
+    {"name": "read", "risk": "read", "required_scopes": ["workspace.read"]},
+    {"name": "write", "risk": "write", "required_scopes": ["workspace.write"]}
+  ],
+  "data_boundary": "workspace",
+  "audit_behavior": "all"
+}

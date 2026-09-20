@@ -1,0 +1,12 @@
+{
+  "request_id": "req-legacy-002",
+  "nki_version": 1,
+  "server_timestamp_us": 1722760800000000,
+  "trace_id": "trace-legacy-def",
+  "error": {
+    "code": "ERROR_INTERNAL",
+    "message": "Journal append failed",
+    "retryable": true,
+    "recommended_delay_ms": 500
+  }
+}

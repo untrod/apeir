@@ -1,0 +1,35 @@
+version: "3.8"
+services:
+  nous-runtime:
+    build: .
+    container_name: nous-runtime
+    ports:
+      - "9770:9770"
+      - "8080:8080"
+    volumes:
+      - nous_data:/opt/nous/data
+      - ./config:/opt/nous/config:ro
+    environment:
+      - NOUS_HOME=/opt/nous
+      - NOUS_HOST=0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "nous_runtime.cli.main", "doctor"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nous-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: nous-worker
+    volumes:
+      - nous_data:/opt/nous/data
+    environment:
+      - NOUS_HOME=/opt/nous
+      - NOUS_CONTROL_PLANE=nous-runtime:9770
+    restart: unless-stopped
+
+volumes:
+  nous_data:

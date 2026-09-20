@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nous.dev/schemas/extensions/v1/extension-signature.schema.json",
+  "title": "Nous Extension Detached Signature",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "status",
+    "algorithm",
+    "profile",
+    "provider",
+    "payload_digest",
+    "public_key",
+    "signature"
+  ],
+  "properties": {
+    "schema": {"const": "nous.extension-signature/v1"},
+    "status": {"enum": ["Unsigned", "Signed", "Verified", "Invalid", "Unknown"]},
+    "algorithm": {"type": "string"},
+    "profile": {"const": "detached-blob"},
+    "provider": {"enum": ["none", "local-ed25519", "sigstore", "cosign"]},
+    "payload_digest": {"pattern": "^sha256:[0-9a-f]{64}$"},
+    "public_key": {"type": "string"},
+    "signature": {"type": "string"}
+  }
+}

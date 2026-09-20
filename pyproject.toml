@@ -1,0 +1,170 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "apeir-distribution"
+version = "0.1.0-rc1"
+description = "APEIR distribution for governed heterogeneous execution across models, software, nodes, and devices."
+readme = "README.md"
+license = "Apache-2.0"
+authors = [
+    {name = "Mao Yi"}
+]
+keywords = ["ai", "runtime", "llm", "agent", "iot", "edge", "capability"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Environment :: Console",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.9",
+    "pyyaml>=6.0",
+    "jsonschema>=4.20",
+    "pydantic>=2.0,<3",
+    "cryptography>=42,<47; platform_system != 'Windows' or platform_machine != 'ARM64'",
+    "websockets>=14,<18",
+    "python-docx>=1.0,<2",
+    "reportlab>=4.0,<5",
+    "pypdf>=5.0,<7",
+    "cyclonedx-python-lib>=11,<12",
+]
+
+[project.urls]
+Homepage = "https://github.com/untrod/apeir"
+Documentation = "https://github.com/untrod/apeir/tree/main/docs"
+Repository = "https://github.com/untrod/apeir.git"
+Issues = "https://github.com/untrod/apeir/issues"
+Changelog = "https://github.com/untrod/apeir/blob/main/CHANGELOG.md"
+[project.optional-dependencies]
+# Heavy AI (Tier 1 only: amd64, arm64)
+ai-full = [
+    "chromadb>=0.4",
+    "fastembed>=0.2",
+    "faster-whisper>=1.0",
+    "edge-tts>=6.1",
+    "pymupdf>=1.23",
+    "pytesseract>=0.3",
+    "Pillow>=10.0",
+    "PyPDF2>=3.0",
+    "pdfplumber>=0.10",
+    "python-docx>=1.0",
+    "onnxruntime>=1.16",
+]
+# Local LLM (Tier 1: amd64/arm64 with GPU or sufficient RAM)
+local-llm = [
+    "torch>=2.0; platform_machine == 'x86_64' or platform_machine == 'aarch64'",
+    "llama-cpp-python>=0.2; platform_machine == 'x86_64' or platform_machine == 'aarch64'",
+]
+# Desktop UI (Tier 1 only)
+desktop = [
+    "rich>=13.0",
+    "pywebview>=4.0; platform_machine != 'armv7l' and platform_machine != 'armv6l'",
+]
+# Installer (Tier 1 only)
+installer = [
+    "PySide6>=6.7; platform_machine == 'x86_64' or platform_machine == 'aarch64'",
+]
+installer-build = [
+    "PyInstaller>=6.0",
+]
+mcp = [
+    "mcp>=2.0,<3",
+]
+a2a = [
+    "a2a-sdk[http-server]>=1.0,<2",
+]
+scientific = [
+    "numpy>=1.26,<3",
+    "scipy>=1.12,<2",
+    "pandas>=2.1,<4",
+    "sympy>=1.12,<2",
+    "matplotlib>=3.8,<4",
+]
+# ARM64 extras (Jetson, AWS Graviton)
+arm64 = [
+    "onnxruntime>=1.16; platform_machine == 'aarch64'",
+    "numpy>=1.26,<2.5",
+]
+# Lite Node (Tier 2: armv7/armv6) — minimal deps only
+lite = [
+    # No heavy deps. Identity, heartbeat, capability executor only.
+    # All AI/DB/UI packages are excluded.
+]
+# Dev & test
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-timeout>=2.3",
+    "pytest-xdist>=3.5",
+    "tomli>=2.0; python_version < '3.11'",
+    "ruff==0.15.22",
+]
+# Meta-groups
+all = ["apeir-distribution[ai-full,local-llm,desktop,scientific,dev]"]
+tier1 = ["apeir-distribution[ai-full,local-llm,desktop,installer,scientific]"]
+tier2-lite = ["apeir-distribution[lite,dev]"]
+
+# Legacy compat
+ui = ["rich>=13.0"]
+
+[project.scripts]
+apeir = "nous_runtime.cli.main:app"
+apeir-node = "nous_runtime.node_runtime.cli:main"
+apeir-relay = "nous_runtime.node_runtime.relay_cli:main"
+nous = "nous_runtime.cli.main:app"
+nous-node = "nous_runtime.node_runtime.cli:main"
+nous-relay = "nous_runtime.node_runtime.relay_cli:main"
+
+[project.gui-scripts]
+apeir-installer = "nous_runtime.model_distribution.installer_gui:main"
+nous-installer = "nous_runtime.model_distribution.installer_gui:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = [
+    "nous_runtime*",
+    "remote_terminal.nous_core*",
+    "compat*"
+]
+
+[tool.setuptools.package-data]
+"remote_terminal.nous_core" = ["migrations/*.sql"]
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: fast deterministic unit tests",
+    "integration: cross-module integration tests",
+    "runtime: runtime pipeline and CLI tests",
+    "security: governance and security tests",
+    "release: release-gate tests",
+]
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+    # ChromaDB uses asyncio.iscoroutinefunction on Python 3.14. Remove this
+    # exception after the upstream implementation is updated.
+    "ignore:'asyncio.iscoroutinefunction' is deprecated and slated for removal:DeprecationWarning",
+    # Project warnings are release-blocking.
+    "error:::nous_runtime.*",
+]
+
+[tool.ruff]
+extend-exclude = ["remote_terminal/*.py", "artifacts/**"]
+
+[tool.ruff.lint.per-file-ignores]
+# The legacy application is outside the release source set. Compatibility
+# contracts remain in the packaged remote_terminal.nous_core namespace.
+"remote_terminal/**/*.py" = ["E402", "E701", "E702", "E741", "F401", "F601", "F821", "F841"]

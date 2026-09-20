@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExtensionOperationReceipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "receipt_id", "operation_id", "permit_id", "actor", "source", "target", "extension_id", "content_digest", "operation", "capability", "requested_capabilities", "granted_capabilities", "input_digest", "parameter_hash", "success", "result", "policy_version", "executor", "started_at_us", "finished_at_us", "effect_digest", "output_digest", "result_digest", "error_code", "duration_ms", "output_bytes"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "receipt_id": {"type": "string", "minLength": 1},
+    "operation_id": {"type": "string", "minLength": 1},
+    "permit_id": {"type": "string", "minLength": 1},
+    "actor": {"type": "string", "minLength": 1},
+    "source": {"type": "object"},
+    "target": {"type": "object"},
+    "extension_id": {"type": "string", "minLength": 1},
+    "content_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "operation": {"type": "string", "minLength": 1},
+    "capability": {"type": "string", "minLength": 1},
+    "requested_capabilities": {"type": "array", "items": {"type": "string"}},
+    "granted_capabilities": {"type": "array", "items": {"type": "string"}},
+    "input_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "parameter_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "success": {"type": "boolean"},
+    "result": {"enum": ["succeeded", "failed"]},
+    "policy_version": {"type": "string", "minLength": 1},
+    "executor": {"type": "string"},
+    "started_at_us": {"type": "integer", "minimum": 1},
+    "finished_at_us": {"type": "integer", "minimum": 1},
+    "effect_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "output_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "result_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "error_code": {"type": "string"},
+    "duration_ms": {"type": "integer", "minimum": 0},
+    "output_bytes": {"type": "integer", "minimum": 0},
+    "verification_status": {
+      "enum": [
+        "unverified_executor_report",
+        "protocol_and_schema_validated",
+        "independently_verified"
+      ]
+    }
+  }
+}

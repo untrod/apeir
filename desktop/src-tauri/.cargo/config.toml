@@ -1,0 +1,5 @@
+# Windows ARM64 target configuration.
+# CI and supported developer environments provide link.exe on PATH.
+
+[target.aarch64-pc-windows-msvc]
+linker = "link.exe"

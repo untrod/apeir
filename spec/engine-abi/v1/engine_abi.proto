@@ -1,0 +1,371 @@
+// Engine ABI v1 — Interface between Nous Kernel and inference engines.
+// Version: 1.0.0-draft
+// Date: 2026-08-04
+//
+// Engines (vLLM, llama.cpp, SGLang, ONNX Runtime, TensorRT-LLM, etc.)
+// implement this ABI to be managed by the Nous Kernel.
+//
+// Engines run in ISOLATED processes (nous-modeld). The kernel communicates
+// with engines via this ABI over IPC (Unix Domain Socket, Named Pipe, or shared memory).
+
+syntax = "proto3";
+package nous.engine.v1;
+
+// ── Engine Service ──
+
+service EngineService {
+  // Discovery
+  rpc Probe(ProbeRequest) returns (ProbeResponse);
+
+  // Capability negotiation
+  rpc Capabilities(CapabilitiesRequest) returns (CapabilitiesResponse);
+
+  // Model lifecycle
+  rpc ValidateModel(ValidateModelRequest) returns (ValidateModelResponse);
+  rpc EstimateResources(EstimateResourcesRequest) returns (EstimateResourcesResponse);
+  rpc Compile(CompileRequest) returns (CompileResponse);
+  rpc LoadModel(LoadModelRequest) returns (LoadModelResponse);
+  rpc Warmup(WarmupRequest) returns (WarmupResponse);
+
+  // Inference
+  rpc Infer(InferRequest) returns (stream InferResponse);
+  rpc StreamInfer(StreamInferRequest) returns (stream StreamInferResponse);
+
+  // Control
+  rpc Cancel(CancelRequest) returns (CancelResponse);
+  rpc Pause(PauseRequest) returns (PauseResponse);
+  rpc Snapshot(SnapshotRequest) returns (SnapshotResponse);
+  rpc Restore(RestoreRequest) returns (RestoreResponse);
+
+  // Lifecycle
+  rpc Drain(DrainRequest) returns (DrainResponse);
+  rpc UnloadModel(UnloadModelRequest) returns (UnloadModelResponse);
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc Metrics(MetricsRequest) returns (MetricsResponse);
+}
+
+// ── Discovery ──
+
+message ProbeRequest {}
+
+message ProbeResponse {
+  string engine_type = 1;              // "llama.cpp", "vLLM", "SGLang", "ONNX", "TensorRT-LLM"
+  string version = 2;                  // Engine version string
+  uint32 abi_version = 3;             // Engine ABI version supported
+  repeated string capabilities = 4;   // "chat", "completion", "embedding", "vision", etc.
+  repeated string supported_architectures = 5;
+  repeated string supported_quantizations = 6;
+  bool supports_streaming = 7;
+  bool supports_batching = 8;
+  bool supports_pause = 9;
+  bool supports_snapshot = 10;
+  bool supports_structured_output = 11;
+  bool supports_tool_calling = 12;
+  bool supports_logprobs = 13;
+  uint32 max_batch_size = 14;
+  uint64 max_context_length = 15;
+}
+
+message CapabilitiesRequest {}
+
+message CapabilitiesResponse {
+  repeated EngineCapability capabilities = 1;
+}
+
+message EngineCapability {
+  string name = 1;
+  string version = 2;
+  map<string, string> parameters = 3;
+}
+
+// ── Model Lifecycle ──
+
+message ValidateModelRequest {
+  string model_path = 1;
+  string model_format = 2;             // "gguf", "safetensors", "onnx", "pytorch"
+  map<string, string> options = 3;
+}
+
+message ValidateModelResponse {
+  bool valid = 1;
+  repeated string errors = 2;
+  repeated string warnings = 3;
+  uint64 total_parameters = 4;
+  uint64 context_length = 5;
+  repeated string modalities = 6;
+}
+
+message EstimateResourcesRequest {
+  string model_path = 1;
+  uint64 context_length = 2;
+  uint64 max_output_tokens = 3;
+  uint32 batch_size = 4;
+  map<string, string> options = 5;
+}
+
+message EstimateResourcesResponse {
+  uint64 vram_bytes = 1;
+  uint64 ram_bytes = 2;
+  uint64 kv_cache_bytes = 3;
+  uint64 disk_bytes = 4;
+  uint64 time_to_first_token_ms = 5;
+  uint64 tokens_per_second = 6;
+}
+
+message CompileRequest {
+  string model_path = 1;
+  string output_path = 2;
+  string target_device = 3;
+  map<string, string> compile_options = 4;
+}
+
+message CompileResponse {
+  bool success = 1;
+  string compiled_path = 2;
+  uint64 compile_time_ms = 3;
+  repeated string warnings = 4;
+}
+
+message LoadModelRequest {
+  string model_id = 1;
+  string model_path = 2;
+  LoadConfig config = 3;
+}
+
+message LoadConfig {
+  string quantization_override = 1;
+  uint64 max_context_override = 2;
+  uint64 kv_cache_bytes_override = 3;
+  uint64 max_batch_size_override = 4;
+  repeated string lora_adapters = 5;
+  bool use_mmap = 6;
+  bool use_mlock = 7;
+  map<string, string> extra = 8;
+}
+
+message LoadModelResponse {
+  string instance_id = 1;
+  bool loaded = 2;
+  uint64 vram_allocated = 3;
+  uint64 ram_allocated = 4;
+}
+
+message WarmupRequest {
+  string instance_id = 1;
+  uint32 num_runs = 2;
+  repeated string warmup_prompts = 3;
+}
+
+message WarmupResponse {
+  bool warmed_up = 1;
+  uint64 warmup_time_ms = 2;
+}
+
+// ── Inference ──
+
+message InferRequest {
+  string instance_id = 1;
+  string request_id = 2;
+  InferenceInput input = 3;
+  InferenceConfig config = 4;
+}
+
+message InferenceInput {
+  oneof input {
+    string text = 1;
+    TokenizedInput tokens = 2;
+    ChatMessages chat = 3;
+  }
+}
+
+message TokenizedInput {
+  repeated uint32 token_ids = 1;
+}
+
+message ChatMessages {
+  repeated ChatMessage messages = 1;
+}
+
+message ChatMessage {
+  string role = 1;                     // "system", "user", "assistant", "tool"
+  string content = 2;
+  string name = 3;
+  repeated ToolCall tool_calls = 4;
+  string tool_call_id = 5;
+}
+
+message ToolCall {
+  string id = 1;
+  string type = 2;
+  string function_name = 3;
+  string function_arguments = 4;
+}
+
+message InferenceConfig {
+  uint32 max_tokens = 1;
+  float temperature = 2;
+  float top_p = 3;
+  uint32 top_k = 4;
+  float repetition_penalty = 5;
+  float frequency_penalty = 6;
+  float presence_penalty = 7;
+  repeated string stop_sequences = 8;
+  string response_format = 9;          // "text", "json_object", "json_schema"
+  string json_schema = 10;
+  repeated ToolDefinition tools = 11;
+  string tool_choice = 12;             // "auto", "none", "required", or tool name
+  bool stream = 13;
+  bool include_logprobs = 14;
+  uint32 top_logprobs = 15;
+  uint64 seed = 16;
+}
+
+message ToolDefinition {
+  string type = 1;
+  string function_name = 2;
+  string function_description = 3;
+  string function_parameters = 4;      // JSON Schema string
+}
+
+message InferResponse {
+  string request_id = 1;
+  uint32 sequence = 2;
+  oneof result {
+    InferenceToken token = 3;
+    InferenceComplete complete = 4;
+    InferenceError error = 5;
+  }
+}
+
+message InferenceToken {
+  string text = 1;
+  uint32 token_id = 2;
+  float logprob = 3;
+  repeated LogprobToken top_logprobs = 4;
+  bool is_final = 5;
+  string finish_reason = 6;            // "stop", "length", "tool_calls", "content_filter"
+}
+
+message LogprobToken {
+  uint32 token_id = 1;
+  string text = 2;
+  float logprob = 3;
+}
+
+message InferenceComplete {
+  string finish_reason = 1;
+  UsageStats usage = 2;
+}
+
+message UsageStats {
+  uint32 prompt_tokens = 1;
+  uint32 completion_tokens = 2;
+  uint32 total_tokens = 3;
+  uint64 ttft_ms = 4;
+  uint64 total_time_ms = 5;
+  double tokens_per_second = 6;
+}
+
+message InferenceError {
+  string code = 1;
+  string message = 2;
+  bool retryable = 3;
+}
+
+message StreamInferRequest {
+  InferRequest request = 1;
+}
+
+message StreamInferResponse {
+  oneof event {
+    InferenceToken token = 1;
+    InferenceComplete complete = 2;
+    InferenceError error = 3;
+  }
+}
+
+// ── Control ──
+
+message CancelRequest {
+  string request_id = 1;
+}
+
+message CancelResponse {
+  bool cancelled = 1;
+}
+
+message PauseRequest {
+  string instance_id = 1;
+}
+
+message PauseResponse {
+  bool paused = 1;
+}
+
+message SnapshotRequest {
+  string instance_id = 1;
+}
+
+message SnapshotResponse {
+  bytes state_data = 1;
+  uint64 sequence = 2;
+}
+
+message RestoreRequest {
+  string instance_id = 1;
+  bytes state_data = 2;
+}
+
+message RestoreResponse {
+  bool restored = 1;
+}
+
+// ── Lifecycle ──
+
+message DrainRequest {
+  string instance_id = 1;
+  uint32 timeout_seconds = 2;
+}
+
+message DrainResponse {
+  bool drained = 1;
+  uint32 pending_requests = 2;
+}
+
+message UnloadModelRequest {
+  string instance_id = 1;
+}
+
+message UnloadModelResponse {
+  bool unloaded = 1;
+  uint64 vram_freed = 2;
+  uint64 ram_freed = 3;
+}
+
+message HealthRequest {
+  bool deep = 1;
+}
+
+message HealthResponse {
+  bool healthy = 1;
+  string status = 2;                   // "ready", "busy", "draining", "unhealthy"
+  uint32 active_requests = 3;
+  uint32 queued_requests = 4;
+  uint64 uptime_seconds = 5;
+  map<string, string> details = 6;
+}
+
+message MetricsRequest {}
+
+message MetricsResponse {
+  uint64 total_requests = 1;
+  uint64 total_tokens = 2;
+  double avg_tokens_per_second = 3;
+  uint64 avg_ttft_ms = 4;
+  uint64 avg_tpot_ms = 5;
+  uint64 peak_vram_bytes = 6;
+  uint64 current_vram_bytes = 7;
+  double vram_fragmentation = 8;
+  uint64 kv_cache_hit_rate_bps = 9;    // basis points (1/10000)
+  uint32 active_models = 10;
+}

@@ -1,0 +1,24 @@
+{
+  "request_id": "req-golden-001",
+  "nki_version": 2,
+  "server_timestamp_us": 1722760800000000,
+  "trace_id": "trace-golden-abc123",
+  "status": "success",
+  "payload": {
+    "healthy": true,
+    "version": "0.1.0",
+    "uptime_seconds": 3600,
+    "components": {
+      "journal": {
+        "healthy": true,
+        "message": "42 entries",
+        "last_checked_us": 1722760800000000
+      },
+      "leases": {
+        "healthy": true,
+        "message": "3 active leases",
+        "last_checked_us": 1722760800000000
+      }
+    }
+  }
+}

@@ -1,0 +1,1 @@
+# Lite Node test package

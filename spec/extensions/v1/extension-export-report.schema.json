@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nous.dev/schemas/extensions/v1/extension-export-report.schema.json",
+  "title": "Nous Extension Export Loss Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "extension_id",
+    "target_format",
+    "status",
+    "lossy_fields",
+    "unsupported_reasons",
+    "source_authority",
+    "source_granted_capabilities",
+    "target_import_authority"
+  ],
+  "properties": {
+    "schema": {"const": "nous.extension-export-report/v1"},
+    "extension_id": {"type": "string", "minLength": 1},
+    "target_format": {"enum": ["agent-skill", "nous-json-skill", "nous-plugin-v0", "nous-pack-runtime-v0", "nous-pack-kernel-v1", "openapi-3", "mcp-config"]},
+    "status": {"enum": ["lossless", "lossy", "unsupported"]},
+    "lossy_fields": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "unsupported_reasons": {"type": "array", "items": {"type": "string"}},
+    "source_authority": {"type": "string"},
+    "source_granted_capabilities": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "target_import_authority": {"const": "none"}
+  }
+}

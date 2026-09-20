@@ -1,0 +1,11 @@
+{
+  "id": "study_tutor",
+  "name": "学习导师",
+  "description": "Study tutor: planning, explanation, practice, review, error diagnosis, and mastery tracking with spaced repetition.",
+  "tool_profile": "learn",
+  "triggers": ["学习", "复习", "出题", "刷题", "单词", "错题", "掌握", "今日计划", "知识点"],
+  "permissions": ["learn.read", "learn.write", "rag.search"],
+  "tools": ["learn_today_plan", "learn_today_tasks", "learn_catalog", "learn_get", "learn_search_semantic", "learn_ask_document", "learn_practice", "learn_generate_quiz", "learn_record_exercise", "learn_diagnose_mistake", "learn_vocab", "learn_coverage", "learn_checkin", "learn_phase_summary"],
+  "success_criteria": ["先定位知识点或计划", "讲解后给练习", "练习后记录结果或给复习建议"],
+  "instruction": "当前 Skill: 学习导师。目标是提高掌握度,不是只回答一次。优先结合学情快照、今日计划、知识库/RAG、题库和错题;讲解后安排练习,练习后给反馈和下一步。"
+}

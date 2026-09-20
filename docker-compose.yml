@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  nous-brain:
+    build: .
+    container_name: nous-brain
+    ports:
+      - "8770:8770"
+    volumes:
+      - nous_data:/app/data
+      - ./remote_terminal/.env:/app/.env:ro
+    environment:
+      - NOUS_BRAIN_HOST=0.0.0.0
+      - NOUS_BRAIN_PORT=8770
+      - NOUS_DEMO_MODE=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8770/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  nous_data:

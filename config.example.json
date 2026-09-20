@@ -1,0 +1,47 @@
+{
+  "BRAIN_HOST": "",
+  "BRAIN_PORT": "8770",
+  "DEFAULT_DEVICE": "laptop",
+  "AUTH_TOKEN": "change-me-to-a-strong-random-string",
+  "LLM_API_URL": "",
+  "LLM_MODEL": "",
+  "LLM_TIMEOUT": "60",
+  "AGENT_SIGNING_SECRET": "change-me-to-another-strong-random-string",
+  "ALLOWED_IPS": "",
+  "agents": {
+    "agent.coding": {
+      "adapter_type": "command",
+      "executable_reference": "/path/to/coding-agent-executable",
+      "display_name": "Coding Agent",
+      "description": "A general-purpose coding agent for software development tasks.",
+      "workspace_policy": "isolated",
+      "default_timeout_ms": 300000,
+      "output_limit_bytes": 1048576,
+      "environment_allowlist": ["LANG", "LC_ALL", "TMPDIR"],
+      "environment_blocklist": ["HOME", "USERPROFILE", "PATH", "API_KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL"],
+      "approval_policy": "ask_per_command",
+      "capabilities": [
+        {"capability_id": "file.read", "description": "Read files in the workspace", "risk_level": "low", "requires_approval": false, "approval_policy": "always_allow", "allowed_side_effects": ["read_only"]},
+        {"capability_id": "file.write", "description": "Write or modify files in the workspace", "risk_level": "medium", "requires_approval": true, "approval_policy": "ask_per_command", "allowed_side_effects": ["local_write"]},
+        {"capability_id": "test.run", "description": "Run tests in the workspace", "risk_level": "medium", "requires_approval": true, "approval_policy": "ask_once_per_run", "allowed_side_effects": ["local_write"]},
+        {"capability_id": "shell.execute", "description": "Execute shell commands", "risk_level": "high", "requires_approval": true, "approval_policy": "ask_per_command", "allowed_side_effects": ["local_write", "external_write"]},
+        {"capability_id": "package.install", "description": "Install packages in the workspace", "risk_level": "high", "requires_approval": true, "approval_policy": "always_ask", "allowed_side_effects": ["local_write", "external_write"]}
+      ],
+      "metadata": {"provider": "local", "requires_network": false, "supports_batch": true}
+    },
+    "agent.review": {
+      "adapter_type": "command",
+      "executable_reference": "/path/to/review-agent-executable",
+      "display_name": "Code Reviewer",
+      "description": "Reviews code changes and provides feedback.",
+      "workspace_policy": "readonly",
+      "default_timeout_ms": 120000,
+      "output_limit_bytes": 524288,
+      "environment_allowlist": ["LANG"],
+      "approval_policy": "ask_once_per_run",
+      "capabilities": [
+        {"capability_id": "code.review", "description": "Review code changes", "risk_level": "low", "requires_approval": false, "approval_policy": "always_allow", "allowed_side_effects": ["read_only"]}
+      ]
+    }
+  }
+}

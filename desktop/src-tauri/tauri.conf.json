@@ -1,0 +1,67 @@
+{
+    "$schema":  "https://schema.tauri.app/config/2",
+    "productName":  "APEIR",
+    "version":  "0.1.0-rc1",
+    "identifier":  "io.github.untrod.apeir",
+    "build":  {
+                  "beforeDevCommand":  "npm run dev",
+                  "devUrl":  "http://localhost:5173",
+                  "beforeBuildCommand":  "npm run build",
+                  "frontendDist":  "../dist"
+              },
+    "app":  {
+                "windows":  [
+                                {
+                                    "label":  "main",
+                                    "title":  "APEIR",
+                                    "width":  1200,
+                                    "height":  800,
+                                    "minWidth":  900,
+                                    "minHeight":  600,
+                                    "resizable":  true,
+                                    "decorations":  true,
+                                    "center":  true,
+                                    "visible":  true
+                                }
+                            ],
+                "security":  {
+                                 "csp":  "default-src \u0027self\u0027 asset: https://asset.localhost; connect-src \u0027self\u0027 ipc: http://ipc.localhost https://ipc.localhost http://127.0.0.1:8770 http://localhost:8770 ws://127.0.0.1:8770 ws://localhost:8770; img-src \u0027self\u0027 data: blob: asset: https://asset.localhost; style-src \u0027self\u0027 \u0027unsafe-inline\u0027; script-src \u0027self\u0027 \u0027unsafe-inline\u0027; font-src \u0027self\u0027; object-src \u0027none\u0027; frame-src \u0027none\u0027; base-uri \u0027self\u0027; form-action \u0027self\u0027",
+                                 "capabilities":  [
+                                                      "main-capability"
+                                                  ]
+                             }
+            },
+    "bundle":  {
+                   "active":  true,
+                   "targets":  [
+                                   "nsis"
+                               ],
+                   "externalBin":  [
+                                       "binaries/nous-runtime",
+                                       "binaries/nousd",
+                                       "binaries/nous-provider-worker"
+                                   ],
+                   "icon":  [
+                                "icons/32x32.png",
+                                "icons/128x128.png",
+                                "icons/128x128@2x.png",
+                                "icons/icon.ico",
+                                "icons/icon.png",
+                                "icons/icon.icns"
+                            ],
+                   "windows":  {
+                                   "webviewInstallMode":  {
+                                                              "type":  "downloadBootstrapper",
+                                                              "silent":  true
+                                                          },
+                                   "nsis":  {
+                                                "installMode":  "currentUser",
+                                                "displayLanguageSelector":  true,
+                                                "languages":  [
+                                                                  "English",
+                                                                  "SimpChinese"
+                                                              ]
+                                            }
+                               }
+               }
+}

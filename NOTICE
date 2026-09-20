@@ -1,0 +1,6 @@
+APEIR Distribution
+Copyright 2026 Mao Yi
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+This distribution may use third-party dependencies under their respective licenses. Dependency names and version constraints are declared in pyproject.toml and the JavaScript package manifests. No third-party license or attribution notice may be removed when redistributing those components.

@@ -1,0 +1,15 @@
+{
+  "id": "phone_operator",
+  "name": "Phone Operator",
+  "description": "Observe and control Android phone UI through the Nous accessibility bridge, with SSH fallback tools for device info, app list, and screenshots.",
+  "tool_profile": "system",
+  "triggers": ["手机", "安卓", "微信", "通知", "手机截图", "打开手机", "手机应用", "phone", "android"],
+  "permissions": ["phone.info", "phone.screenshot", "phone.app_list", "phone.observe", "phone.act"],
+  "tools": ["phone_observe", "phone_act", "phone_info", "phone_app_list", "phone_screenshot", "image_analyze"],
+  "success_criteria": [
+    "Observe the phone UI before any click/type action.",
+    "Use phone_act only with a clear user intent and after safety confirmation.",
+    "Observe again after each phone action to verify the result."
+  ],
+  "instruction": "Current Skill: Phone Operator. First use phone_observe to inspect the active Android UI tree. Use phone_act for click, long_click, type, scroll, back, and home only when the intent is clear; after every action, call phone_observe again to verify. Use phone_info, phone_app_list, phone_screenshot, and image_analyze as fallback or extra context."
+}

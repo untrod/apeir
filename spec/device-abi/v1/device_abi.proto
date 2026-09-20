@@ -1,0 +1,273 @@
+// Device ABI v1 — Interface between Nous Kernel and hardware devices.
+// Version: 1.0.0-draft
+// Date: 2026-08-04
+//
+// Devices (CPU, CUDA GPU, ROCm GPU, Vulkan, NPU, etc.) implement this ABI
+// to be managed by the Nous Kernel.
+//
+// Device drivers run in ISOLATED processes (nous-driverd). The kernel
+// communicates via this ABI over IPC.
+
+syntax = "proto3";
+package nous.device.v1;
+
+// ── Device Service ──
+
+service DeviceService {
+  rpc Discover(DiscoverRequest) returns (DiscoverResponse);
+  rpc Probe(ProbeRequest) returns (ProbeResponse);
+  rpc Verify(VerifyRequest) returns (VerifyResponse);
+  rpc Bind(BindRequest) returns (BindResponse);
+  rpc Initialize(InitializeRequest) returns (InitializeResponse);
+
+  rpc Allocate(AllocateRequest) returns (AllocateResponse);
+  rpc Free(FreeRequest) returns (FreeResponse);
+
+  rpc Submit(SubmitRequest) returns (SubmitResponse);
+  rpc Synchronize(SynchronizeRequest) returns (SynchronizeResponse);
+
+  rpc Reset(ResetRequest) returns (ResetResponse);
+  rpc Suspend(SuspendRequest) returns (SuspendResponse);
+  rpc Resume(ResumeRequest) returns (ResumeResponse);
+
+  rpc Unbind(UnbindRequest) returns (UnbindResponse);
+
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc Telemetry(TelemetryRequest) returns (TelemetryResponse);
+  rpc Topology(TopologyRequest) returns (TopologyResponse);
+}
+
+// ── Discovery & Initialization ──
+
+message DiscoverRequest {}
+
+message DiscoverResponse {
+  repeated DiscoveredDevice devices = 1;
+}
+
+message DiscoveredDevice {
+  string device_id = 1;
+  string device_type = 2;              // "cpu", "cuda", "rocm", "vulkan", "openvino", "metal", "npu"
+  string vendor = 3;
+  string model = 4;
+  string driver_version = 5;
+  string firmware_version = 6;
+  string pci_bus_id = 7;
+  uint32 numa_node = 8;
+  ResourceCapacity capacity = 9;
+  repeated string capabilities = 10;
+}
+
+message ResourceCapacity {
+  uint64 total_vram_bytes = 1;
+  uint64 total_ram_bytes = 2;
+  uint32 compute_units = 3;
+  uint32 max_frequency_mhz = 4;
+  uint64 memory_bandwidth_bps = 5;
+  uint32 max_power_milliwatts = 6;
+  repeated string supported_precisions = 7;
+  repeated string supported_extensions = 8;
+}
+
+message ProbeRequest {
+  string device_id = 1;
+}
+
+message ProbeResponse {
+  bool present = 1;
+  bool accessible = 2;
+  string error = 3;
+  ResourceCapacity capacity = 4;
+}
+
+message VerifyRequest {
+  string device_id = 1;
+}
+
+message VerifyResponse {
+  bool verified = 1;
+  repeated string errors = 2;
+  repeated string warnings = 3;
+  repeated BenchmarkResult benchmarks = 4;
+}
+
+message BenchmarkResult {
+  string benchmark_name = 1;
+  double score = 2;
+  string unit = 3;
+  uint64 duration_ms = 4;
+}
+
+message BindRequest {
+  string device_id = 1;
+  map<string, string> options = 2;
+}
+
+message BindResponse {
+  bool bound = 1;
+  string handle = 2;
+}
+
+message InitializeRequest {
+  string handle = 1;
+  map<string, string> config = 2;
+}
+
+message InitializeResponse {
+  bool initialized = 1;
+  string device_handle = 2;
+  repeated string enabled_features = 3;
+}
+
+// ── Memory Management ──
+
+message AllocateRequest {
+  string device_handle = 1;
+  uint64 size_bytes = 2;
+  MemoryType memory_type = 3;
+  uint32 alignment = 4;
+  AllocationFlags flags = 5;
+}
+
+enum MemoryType {
+  MEMORY_TYPE_UNSPECIFIED = 0;
+  DEVICE_MEMORY = 1;                   // VRAM / HBM
+  HOST_MEMORY = 2;                     // Pinned/system RAM
+  UNIFIED_MEMORY = 3;                  // Shared CPU/GPU memory
+  KV_CACHE = 4;                        // KV cache pool
+}
+
+enum AllocationFlags {
+  ALLOCATION_DEFAULT = 0;
+  ALLOCATION_PINNED = 1;              // Page-locked
+  ALLOCATION_MAPPABLE = 2;            // Can be mmap'd
+  ALLOCATION_SHAREABLE = 4;           // Cross-process sharing
+  ALLOCATION_READ_ONLY = 8;
+}
+
+message AllocateResponse {
+  bool allocated = 1;
+  string allocation_id = 2;
+  uint64 base_address = 3;            // Opaque handle
+  uint64 allocated_bytes = 4;
+}
+
+message FreeRequest {
+  string allocation_id = 1;
+}
+
+message FreeResponse {
+  bool freed = 1;
+  uint64 freed_bytes = 2;
+}
+
+// ── Execution ──
+
+message SubmitRequest {
+  string device_handle = 1;
+  string queue_id = 2;
+  bytes command_buffer = 3;            // Device-specific command encoding
+  string fence_id = 4;                 // Optional fence for synchronization
+}
+
+message SubmitResponse {
+  bool submitted = 1;
+  string submission_id = 2;
+}
+
+message SynchronizeRequest {
+  string fence_id = 1;
+  uint64 timeout_us = 2;
+}
+
+message SynchronizeResponse {
+  bool completed = 1;
+  bool timed_out = 2;
+}
+
+// ── Lifecycle ──
+
+message ResetRequest {
+  string device_handle = 1;
+}
+
+message ResetResponse {
+  bool reset = 1;
+}
+
+message SuspendRequest {
+  string device_handle = 1;
+}
+
+message SuspendResponse {
+  bool suspended = 1;
+  uint64 vram_saved_bytes = 2;
+}
+
+message ResumeRequest {
+  string device_handle = 1;
+}
+
+message ResumeResponse {
+  bool resumed = 1;
+}
+
+message UnbindRequest {
+  string handle = 1;
+}
+
+message UnbindResponse {
+  bool unbound = 1;
+}
+
+// ── Observability ──
+
+message HealthRequest {
+  bool deep = 1;
+}
+
+message HealthResponse {
+  bool healthy = 1;
+  string status = 2;                   // "ready", "busy", "error", "suspended", "resetting"
+  double temperature_celsius = 3;
+  uint32 power_milliwatts = 4;
+  double utilization_percent = 5;
+  double memory_utilization_percent = 6;
+  uint64 memory_errors = 7;
+  uint64 uptime_seconds = 8;
+  map<string, string> details = 9;
+}
+
+message TelemetryRequest {
+  repeated string metrics = 1;         // Empty = all
+}
+
+message TelemetryResponse {
+  map<string, double> metrics = 1;
+  int64 timestamp_us = 2;
+}
+
+message TopologyRequest {}
+
+message TopologyResponse {
+  repeated TopologyLink links = 1;
+  repeated DeviceNode nodes = 2;
+}
+
+message TopologyLink {
+  string from_device_id = 1;
+  string to_device_id = 2;
+  string link_type = 3;                // "pcie", "nvlink", "rdma", "ethernet", "numa"
+  uint64 bandwidth_bps = 4;
+  uint64 latency_ns = 5;
+  uint32 width = 6;                    // Number of lanes/links
+}
+
+message DeviceNode {
+  string device_id = 1;
+  string device_type = 2;
+  string numa_node = 3;
+  string socket_id = 4;
+  string hostname = 5;
+  repeated string capabilities = 6;
+}

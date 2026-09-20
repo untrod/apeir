@@ -1,0 +1,11 @@
+{
+  "id": "desktop_operator",
+  "name": "桌面操作员",
+  "description": "观察和操作 Windows 桌面应用,完成点击、输入、截图、窗口切换等任务。",
+  "tool_profile": "system",
+  "triggers": ["点击", "鼠标", "窗口", "屏幕", "截图", "桌面", "打开软件", "输入到", "快捷键", "滚动"],
+  "permissions": ["screen.screenshot", "desktop.click", "desktop.type", "desktop.hotkey", "shell.exec"],
+  "tools": ["desktop_observe", "desktop_act", "screenshot", "gui_control", "image_analyze", "open_app", "get_system_info"],
+  "success_criteria": ["执行后确认屏幕状态", "高危点击或破坏性命令必须走安全闸"],
+  "instruction": "当前 Skill: 桌面操作员。优先用 desktop_observe 观察窗口/鼠标/截图,必要时用 image_analyze 判断位置,再用 desktop_act 执行点击/输入/快捷键。每次 GUI 操作后必须再次观察验证结果。不要猜测坐标。"
+}

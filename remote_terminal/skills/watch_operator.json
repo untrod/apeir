@@ -1,0 +1,16 @@
+{
+  "id": "watch_operator",
+  "name": "Watch Operator",
+  "description": "Observe and control the Android watch UI through the Nous accessibility bridge. Optimized for small screens, short actions, and wearable workflows.",
+  "tool_profile": "system",
+  "triggers": ["手表", "腕表", "watch", "wear", "wearos", "手表应用", "打开手表", "手表控制", "手表通知"],
+  "permissions": ["watch.observe", "watch.act", "phone.observe", "phone.act"],
+  "tools": ["phone_observe", "phone_act", "phone_info", "phone_screenshot", "image_analyze"],
+  "success_criteria": [
+    "Observe the watch UI before any action.",
+    "Prefer text/resource targets over coordinates on small screens.",
+    "Use short, reversible actions first: back, home, scroll, then click/type.",
+    "Observe again after each action to verify the result."
+  ],
+  "instruction": "Current Skill: Watch Operator. Treat the target as a small Android watch screen. Start with phone_observe to inspect the current UI. Prefer visible text, content description, or resource id as the target; use coordinates only when observation clearly identifies the control. Keep actions short and reversible. phone_act always requires safety confirmation, and after every action call phone_observe again to verify."
+}

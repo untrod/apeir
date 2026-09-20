@@ -1,0 +1,12 @@
+{
+  "request_id": "req-bad-003",
+  "nki_version": 2,
+  "server_timestamp_us": 1722760800000000,
+  "trace_id": "trace-bad-003",
+  "status": "success",
+  "payload": {},
+  "error": {
+    "code": "ERROR_INTERNAL",
+    "message": "Should not have both payload and error"
+  }
+}
