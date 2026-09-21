@@ -12,11 +12,12 @@ import os
 import platform
 import re
 import shutil
-import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from nous_runtime.capability.sandbox import run_process_strict
 
 
 _TOOL_COMMANDS: dict[str, tuple[tuple[str, ...], ...]] = {
@@ -106,18 +107,16 @@ def _probe_command(candidates: tuple[tuple[str, ...], ...]) -> dict[str, Any]:
 
 def _run_version_command(command: tuple[str, ...]) -> tuple[bool, str]:
     try:
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            check=False,
-            shell=False,
-            text=True,
-            timeout=5,
+        completed = run_process_strict(
+            list(command),
+            cwd=os.getcwd(),
+            timeout_seconds=5,
+            max_output_bytes=4096,
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, RuntimeError, ValueError):
         return False, ""
     output = (completed.stdout or completed.stderr).strip().splitlines()
-    return completed.returncode == 0, (output[0][:512] if output else "")
+    return completed.ok, (output[0][:512] if output else "")
 
 
 def _extract_version(value: str) -> str:
