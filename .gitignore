@@ -4,6 +4,7 @@
 .local-archive/
 
 # Runtime state and local configuration
+.local/
 .apeir/
 .nous/
 workspace.json

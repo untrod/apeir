@@ -26,6 +26,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from nous_runtime.artifact.content_store import ContentAddressedArtifactStore
 from nous_runtime.connectivity.protocol.identity import NodeIdentity
 from nous_runtime.kernel.hardware_discovery import discover_all_devices
+from nous_runtime.node_runtime.execution_host import (
+    collect_execution_host_inventory,
+    evaluate_execution_preflight,
+)
 from nous_runtime.version import __version__
 
 
@@ -70,6 +74,8 @@ class NodeRuntimeService:
         self._stop = threading.Event()
         self._started_at = ""
         self._sequence = 0
+        self._execution_host_inventory: dict[str, Any] | None = None
+        self._execution_host_inventory_at = 0.0
         self._workloads: dict[str, dict[str, Any]] = {}
         self._leases: dict[str, dict[str, Any]] = {}
         self._state_lock = threading.RLock()
@@ -79,6 +85,10 @@ class NodeRuntimeService:
             "node.device-report": lambda _arguments: {
                 "devices": self.probe_devices()
             },
+            "node.execution-host-inventory": lambda _arguments: (
+                self.probe_execution_host()
+            ),
+            "node.execution-preflight": self.preflight_execution,
         }
         self._prepare_state()
         self.identity = self._load_or_create_identity()
@@ -439,6 +449,26 @@ class NodeRuntimeService:
             devices.append(value)
         return devices
 
+    def probe_execution_host(
+        self, resources: dict[str, Any] | None = None, *, refresh: bool = False
+    ) -> dict[str, Any]:
+        """Report host facts without granting or implying authorization."""
+        now = time.monotonic()
+        if (
+            not refresh
+            and self._execution_host_inventory is not None
+            and now - self._execution_host_inventory_at < 300
+        ):
+            return dict(self._execution_host_inventory)
+        inventory = collect_execution_host_inventory(resources or self.probe_resources())
+        self._execution_host_inventory = inventory
+        self._execution_host_inventory_at = now
+        return dict(inventory)
+
+    def preflight_execution(self, requirements: dict[str, Any]) -> dict[str, Any]:
+        """Check whether this host meets declared execution requirements."""
+        return evaluate_execution_preflight(self.probe_execution_host(), requirements)
+
     def execute_workload(
         self,
         workload_id: str,
@@ -518,6 +548,7 @@ class NodeRuntimeService:
         registration = self.register_local()
         resources = self.probe_resources()
         devices = self.probe_devices()
+        execution_host = self.probe_execution_host(resources)
         self._sequence += 1
         cache_files = [path for path in self.artifact_cache.rglob("*") if path.is_file()]
         status = {
@@ -532,6 +563,7 @@ class NodeRuntimeService:
             "registration": registration,
             "resources": resources,
             "devices": devices,
+            "execution_host": execution_host,
             "artifact_cache": {
                 "root": str(self.artifact_cache),
                 "objects": len(cache_files),

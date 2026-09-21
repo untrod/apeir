@@ -54,6 +54,8 @@ def test_run_once_reads_real_host_resources_and_devices_without_llm(
     assert resources["disk_total_bytes"] > 0
     assert isinstance(resources["network_addresses"], list)
     assert resources["measurement_source"] == "host-os"
+    assert status["execution_host"]["tools"]["python"]["available"] is True
+    assert status["execution_host"]["grants_capabilities"] is False
     assert status["devices"]
     assert status["artifact_cache"]["objects"] == 0
     assert status["registration"]["authority"] == "none"
