@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+
 from nous_runtime.node_runtime.execution_host import evaluate_execution_preflight
 
 
@@ -68,3 +71,23 @@ def test_preflight_is_a_bounded_node_workload(tmp_path):
     assert result["state"] == "COMPLETED"
     assert result["output"]["status"] in {"ELIGIBLE", "INELIGIBLE"}
     assert result["output"]["authority"] == "none"
+
+
+def test_execution_host_inventory_becomes_content_addressed_evidence(tmp_path):
+    from nous_runtime.node_runtime.service import NodeRuntimeConfig, NodeRuntimeService
+
+    service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+    result = service.execute_workload(
+        "host-evidence-1", "node.execution-host-evidence", {"refresh": False}
+    )
+
+    assert result["state"] == "COMPLETED"
+    evidence = result["output"]
+    assert evidence["authority"] == "none"
+    assert evidence["grants_capabilities"] is False
+    assert evidence["evidence_ref"] == "sha256:" + evidence["digest"]
+    content = service.artifact_store.resolve(evidence["evidence_ref"]).read_bytes()
+    assert hashlib.sha256(content).hexdigest() == evidence["digest"]
+    inventory = json.loads(content)
+    assert inventory["schema"] == "apeir.execution-host-inventory/v1"
+    assert inventory["authority"] == "none"

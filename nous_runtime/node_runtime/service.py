@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import math
 import os
 import platform
@@ -88,6 +88,7 @@ class NodeRuntimeService:
             "node.execution-host-inventory": lambda _arguments: (
                 self.probe_execution_host()
             ),
+            "node.execution-host-evidence": self.execution_host_evidence,
             "node.execution-preflight": self.preflight_execution,
         }
         self._prepare_state()
@@ -468,6 +469,38 @@ class NodeRuntimeService:
     def preflight_execution(self, requirements: dict[str, Any]) -> dict[str, Any]:
         """Check whether this host meets declared execution requirements."""
         return evaluate_execution_preflight(self.probe_execution_host(), requirements)
+
+    def execution_host_evidence(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Store canonical host facts as content-addressed evidence, never authority."""
+        refresh = arguments.get("refresh", False)
+        if not isinstance(refresh, bool):
+            raise TypeError("refresh must be a boolean")
+        inventory = self.probe_execution_host(refresh=refresh)
+        canonical = json.dumps(
+            inventory, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        stored = self.artifact_store.store_bytes(
+            canonical,
+            artifact_type="verification_result",
+            name="execution-host-inventory.json",
+            media_type="application/vnd.apeir.execution-host-inventory+json",
+            produced_by="node.execution-host-evidence/v1",
+            metadata={
+                "schema": inventory["schema"],
+                "authority": "none",
+                "grants_capabilities": False,
+            },
+        )
+        artifact = stored["artifact"]
+        digest = str(artifact["digest"])
+        return {
+            "schema": "apeir.execution-host-evidence/v1",
+            "evidence_ref": digest,
+            "digest": digest.removeprefix("sha256:"),
+            "artifact": artifact,
+            "authority": "none",
+            "grants_capabilities": False,
+        }
 
     def execute_workload(
         self,
