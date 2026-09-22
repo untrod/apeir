@@ -30,6 +30,7 @@ from nous_runtime.node_runtime.execution_host import (
     collect_execution_host_inventory,
     evaluate_execution_preflight,
 )
+from nous_runtime.node_runtime.protocol import workload_request_digest
 from nous_runtime.version import __version__
 
 
@@ -60,7 +61,9 @@ class NodeRuntimeService:
     def __init__(self, config: NodeRuntimeConfig):
         self.config = config
         self.state_dir = config.state_dir.expanduser().resolve()
-        self.artifact_store = ContentAddressedArtifactStore(self.state_dir / "artifacts")
+        self.artifact_store = ContentAddressedArtifactStore(
+            self.state_dir / "artifacts"
+        )
         self.artifact_cache = self.artifact_store.objects
         self.identity_path = self.state_dir / "identity.json"
         self.private_key_path = self.state_dir / "identity.ed25519.pem"
@@ -82,9 +85,7 @@ class NodeRuntimeService:
         self._handlers: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
             "system.echo": lambda arguments: {"echo": arguments.get("message", "")},
             "node.resource-report": lambda _arguments: self.probe_resources(),
-            "node.device-report": lambda _arguments: {
-                "devices": self.probe_devices()
-            },
+            "node.device-report": lambda _arguments: {"devices": self.probe_devices()},
             "node.execution-host-inventory": lambda _arguments: (
                 self.probe_execution_host()
             ),
@@ -116,10 +117,14 @@ class NodeRuntimeService:
             format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=serialization.NoEncryption(),
         )
-        public = key.public_key().public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
-        ).hex()
+        public = (
+            key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw,
+            )
+            .hex()
+        )
         identity = NodeIdentity.create(
             node_name=self.config.node_name or platform.node() or "nous-node",
             node_role="personal_node",
@@ -152,10 +157,14 @@ class NodeRuntimeService:
             raise ValueError("node identity private key is invalid") from exc
         if not isinstance(key, Ed25519PrivateKey):
             raise ValueError("node identity key must be Ed25519")
-        actual = key.public_key().public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
-        ).hex()
+        actual = (
+            key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw,
+            )
+            .hex()
+        )
         if actual != identity.public_key:
             raise ValueError("node identity does not match private key")
 
@@ -338,7 +347,11 @@ class NodeRuntimeService:
                     os.fsync(handle.fileno())
             received = part.stat().st_size
             if not eof:
-                return {"digest": digest, "state": "RECEIVING", "received_bytes": received}
+                return {
+                    "digest": digest,
+                    "state": "RECEIVING",
+                    "received_bytes": received,
+                }
             if received != total_size:
                 raise ValueError("artifact transfer ended before declared size")
             result = self.artifact_store.store_file(
@@ -346,7 +359,9 @@ class NodeRuntimeService:
                 expected_digest=digest,
                 artifact_type=str(artifact.get("artifact_type") or "binary"),
                 name=str(artifact.get("name") or digest),
-                media_type=str(artifact.get("media_type") or "application/octet-stream"),
+                media_type=str(
+                    artifact.get("media_type") or "application/octet-stream"
+                ),
                 produced_by="node-relay/v1",
                 depends_on=tuple(artifact.get("depends_on") or ()),
                 deployed_to=tuple(artifact.get("deployed_to") or ()),
@@ -370,6 +385,13 @@ class NodeRuntimeService:
         with self._state_lock:
             existing = self._workloads.get(workload_id)
             if existing is not None:
+                if existing.get("state") == "EXECUTING":
+                    return {
+                        **existing,
+                        "state": "RECOVERY_REQUIRED",
+                        "error_code": "NOUS_NODE_UNCERTAIN_EFFECT",
+                        "stop_result": "EFFECT_IN_FLIGHT",
+                    }
                 return {**existing, "stop_result": "ALREADY_TERMINAL"}
             now = _utc_now()
             result = {
@@ -461,7 +483,9 @@ class NodeRuntimeService:
             and now - self._execution_host_inventory_at < 300
         ):
             return dict(self._execution_host_inventory)
-        inventory = collect_execution_host_inventory(resources or self.probe_resources())
+        inventory = collect_execution_host_inventory(
+            resources or self.probe_resources()
+        )
         self._execution_host_inventory = inventory
         self._execution_host_inventory_at = now
         return dict(inventory)
@@ -507,18 +531,73 @@ class NodeRuntimeService:
         workload_id: str,
         capability: str,
         arguments: dict[str, Any] | None = None,
+        *,
+        delivery_semantics: str = "idempotent",
+        binding: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        if not workload_id or any(part in workload_id for part in ("/", "\\", "..", "\0")):
+        if not workload_id or any(
+            part in workload_id for part in ("/", "\\", "..", "\0")
+        ):
             raise ValueError("invalid workload_id")
         canonical_arguments = json.dumps(
             arguments or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
         if len(canonical_arguments) > 262_144:
             raise ValueError("workload arguments exceed 262144 bytes")
-        if workload_id in self._workloads:
-            return dict(self._workloads[workload_id])
-        started = _utc_now()
-        handler = self._handlers.get(capability)
+        if delivery_semantics not in {"idempotent", "at_most_once"}:
+            raise ValueError("unsupported workload delivery semantics")
+        if binding is not None and (
+            not isinstance(binding, dict)
+            or not all(
+                isinstance(key, str) and isinstance(value, str)
+                for key, value in binding.items()
+            )
+        ):
+            raise ValueError("workload binding must contain string fields")
+        if delivery_semantics == "at_most_once" and not all(
+            binding and binding.get(field)
+            for field in ("intent_id", "effect_contract_digest", "target_ref")
+        ):
+            raise ValueError(
+                "at-most-once workload requires intent, effect, and target binding"
+            )
+        request_digest = workload_request_digest(
+            capability, arguments or {}, delivery_semantics, binding or {}
+        )
+        with self._state_lock:
+            if workload_id in self._workloads:
+                existing = self._workloads[workload_id]
+                if delivery_semantics == "at_most_once" and not existing.get(
+                    "request_digest"
+                ):
+                    raise ValueError("workload idempotency binding is unavailable")
+                if (
+                    existing.get("request_digest")
+                    and existing["request_digest"] != request_digest
+                ):
+                    raise ValueError("workload idempotency binding collision")
+                if existing.get("state") == "EXECUTING":
+                    return {
+                        **existing,
+                        "state": "RECOVERY_REQUIRED",
+                        "error_code": "NOUS_NODE_UNCERTAIN_EFFECT",
+                    }
+                return dict(existing)
+            started = _utc_now()
+            handler = self._handlers.get(capability)
+            if delivery_semantics == "at_most_once":
+                executing = {
+                    "workload_id": workload_id,
+                    "capability": capability,
+                    "state": "EXECUTING",
+                    "started_at": started,
+                    "request_digest": request_digest,
+                    "binding": binding,
+                    "delivery_semantics": delivery_semantics,
+                }
+                staged = {**self._workloads, workload_id: executing}
+                _atomic_write_json(self.workloads_path, staged)
+                self._workloads = staged
         if handler is None:
             result = {
                 "workload_id": workload_id,
@@ -549,7 +628,14 @@ class NodeRuntimeService:
                     "started_at": started,
                     "finished_at": _utc_now(),
                 }
-        self._workloads[workload_id] = result
+        if delivery_semantics == "at_most_once":
+            result.update(
+                {
+                    "request_digest": request_digest,
+                    "binding": binding,
+                    "delivery_semantics": delivery_semantics,
+                }
+            )
         output_bytes = json.dumps(
             result, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
@@ -571,7 +657,21 @@ class NodeRuntimeService:
             "executor": "nous-node/bounded-handler",
             "effect_digest": hashlib.sha256(output_bytes).hexdigest(),
         }
-        _atomic_write_json(self.workloads_path, self._workloads)
+        if delivery_semantics == "at_most_once":
+            result["receipt"].update(
+                {
+                    "node_id": self.identity.node_id,
+                    "intent_id": binding["intent_id"],
+                    "effect_contract_digest": binding["effect_contract_digest"],
+                    "target_ref": binding["target_ref"],
+                    "request_digest": request_digest,
+                    "delivery_semantics": delivery_semantics,
+                }
+            )
+        with self._state_lock:
+            staged = {**self._workloads, workload_id: result}
+            _atomic_write_json(self.workloads_path, staged)
+            self._workloads = staged
         self._emit("node.workload.finished", result)
         return dict(result)
 
@@ -583,7 +683,9 @@ class NodeRuntimeService:
         devices = self.probe_devices()
         execution_host = self.probe_execution_host(resources)
         self._sequence += 1
-        cache_files = [path for path in self.artifact_cache.rglob("*") if path.is_file()]
+        cache_files = [
+            path for path in self.artifact_cache.rglob("*") if path.is_file()
+        ]
         status = {
             "schema": "nous.node-status/v1",
             "state": "ONLINE",
@@ -620,7 +722,10 @@ class NodeRuntimeService:
         return status
 
     def run_forever(self, *, install_signal_handlers: bool = True) -> None:
-        if install_signal_handlers and threading.current_thread() is threading.main_thread():
+        if (
+            install_signal_handlers
+            and threading.current_thread() is threading.main_thread()
+        ):
             signal.signal(signal.SIGINT, self._signal_stop)
             signal.signal(signal.SIGTERM, self._signal_stop)
         self._stop.clear()
@@ -655,7 +760,10 @@ class NodeRuntimeService:
         _atomic_write_json(self.status_path, status)
 
     def _emit(self, event_type: str, payload: dict[str, Any]) -> None:
-        if self.telemetry_path.exists() and self.telemetry_path.stat().st_size >= self.config.telemetry_max_bytes:
+        if (
+            self.telemetry_path.exists()
+            and self.telemetry_path.stat().st_size >= self.config.telemetry_max_bytes
+        ):
             rotated = self.telemetry_path.with_suffix(".jsonl.1")
             if rotated.exists():
                 rotated.unlink()
@@ -679,7 +787,9 @@ def _platform_abi() -> str:
 
 
 def _safe_runtime_id(value: str, field: str) -> None:
-    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", value):
+    if not isinstance(value, str) or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", value
+    ):
         raise ValueError(f"invalid {field}")
 
 
@@ -768,7 +878,10 @@ def _atomic_write_json(path: Path, value: dict[str, Any]) -> None:
 def _atomic_write_bytes(path: Path, value: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
-    temporary.write_bytes(value)
+    with temporary.open("wb") as stream:
+        stream.write(value)
+        stream.flush()
+        os.fsync(stream.fileno())
     temporary.replace(path)
 
 

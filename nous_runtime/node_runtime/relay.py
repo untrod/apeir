@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
+import os
 import random
 import secrets
 import ssl
@@ -26,6 +28,7 @@ from .protocol import (
     NodeProtocolEnvelope,
     NodeProtocolError,
     ReplayWindow,
+    workload_request_digest,
 )
 from .service import NodeRuntimeService
 
@@ -33,10 +36,14 @@ CONTROL_PLANE_ID = "control_plane"
 
 
 def public_key_hex(private_key: Ed25519PrivateKey) -> str:
-    return private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PublicFormat.Raw,
-    ).hex()
+    return (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        .hex()
+    )
 
 
 class NodeRelayServer:
@@ -75,6 +82,8 @@ class NodeRelayServer:
         self.pending_artifacts: dict[str, dict[str, dict[str, Any]]] = {}
         self.pending_controls: dict[str, list[dict[str, Any]]] = {}
         self.results: dict[str, dict[str, Any]] = {}
+        self.result_envelopes: dict[str, dict[str, Any]] = {}
+        self._load_workload_state()
         self.artifact_results: dict[str, dict[str, Any]] = {}
         self.lease_results: dict[str, dict[str, Any]] = {}
         self.reports: dict[str, dict[str, Any]] = {}
@@ -112,6 +121,96 @@ class NodeRelayServer:
                 {"schema": "nous.relay-trust/v1", "nodes": self.node_keys},
             )
 
+    def _load_workload_state(self) -> None:
+        if self.state_dir is None:
+            return
+        path = self.state_dir / "workload-state.json"
+        if not path.exists():
+            return
+        value = _read_json(path)
+        if value.get("schema") != "nous.relay-workloads/v1":
+            raise NodeProtocolError("relay workload state is invalid")
+        pending = value.get("pending")
+        results = value.get("results")
+        envelopes = value.get("result_envelopes")
+        controls = value.get("pending_controls", {})
+        if not all(
+            isinstance(item, dict) for item in (pending, results, envelopes, controls)
+        ):
+            raise NodeProtocolError("relay workload state is invalid")
+        for workload_id, raw in envelopes.items():
+            if not isinstance(raw, dict) or not isinstance(
+                results.get(workload_id), dict
+            ):
+                raise NodeProtocolError("relay workload result is invalid")
+            envelope = NodeProtocolEnvelope.from_json(json.dumps(raw), check_time=False)
+            if (
+                envelope.message_type != "WORKLOAD_STATUS"
+                or envelope.idempotency_key != workload_id
+                or envelope.payload != results[workload_id]
+                or not envelope.verify(self.node_keys.get(envelope.source, ""))
+            ):
+                raise NodeProtocolError("relay workload result signature is invalid")
+        if set(results) != set(envelopes):
+            raise NodeProtocolError(
+                "relay workload result is missing signed provenance"
+            )
+        for node_id, assigned in pending.items():
+            if node_id not in self.node_keys or not isinstance(assigned, dict):
+                raise NodeProtocolError("relay pending workload assignment is invalid")
+            for workload_id, request in assigned.items():
+                if (
+                    not isinstance(request, dict)
+                    or request.get("workload_id") != workload_id
+                    or not isinstance(request.get("arguments"), dict)
+                ):
+                    raise NodeProtocolError(
+                        "relay pending workload assignment is invalid"
+                    )
+        for node_id, requests in controls.items():
+            if node_id not in self.node_keys or not isinstance(requests, list):
+                raise NodeProtocolError("relay pending control is invalid")
+            if not all(
+                isinstance(request, dict)
+                and isinstance(request.get("message_type"), str)
+                and isinstance(request.get("payload"), dict)
+                and isinstance(request.get("idempotency_key"), str)
+                for request in requests
+            ):
+                raise NodeProtocolError("relay pending control is invalid")
+        self.pending = pending
+        self.results = results
+        self.result_envelopes = envelopes
+        self.pending_controls = controls
+
+    def _save_workload_state(
+        self,
+        *,
+        pending: dict[str, dict[str, dict[str, Any]]] | None = None,
+        results: dict[str, dict[str, Any]] | None = None,
+        result_envelopes: dict[str, dict[str, Any]] | None = None,
+        pending_controls: dict[str, list[dict[str, Any]]] | None = None,
+    ) -> None:
+        if self.state_dir is not None:
+            _atomic_json(
+                self.state_dir / "workload-state.json",
+                {
+                    "schema": "nous.relay-workloads/v1",
+                    "pending": self.pending if pending is None else pending,
+                    "results": self.results if results is None else results,
+                    "result_envelopes": (
+                        self.result_envelopes
+                        if result_envelopes is None
+                        else result_envelopes
+                    ),
+                    "pending_controls": (
+                        self.pending_controls
+                        if pending_controls is None
+                        else pending_controls
+                    ),
+                },
+            )
+
     async def start(self) -> str:
         self._server = await serve(
             self._handle_connection,
@@ -143,16 +242,57 @@ class NodeRelayServer:
         arguments: dict[str, Any] | None = None,
         *,
         timeout_seconds: float = 30.0,
+        delivery_semantics: str = "idempotent",
+        binding: dict[str, str] | None = None,
     ) -> None:
         if node_id not in self.node_keys:
             raise NodeProtocolError("node is not registered")
+        prior = self.result_envelopes.get(workload_id)
+        if prior is not None and prior.get("source") != node_id:
+            raise NodeProtocolError("workload is already bound to another node")
+        if any(
+            workload_id in assigned and assigned_node != node_id
+            for assigned_node, assigned in self.pending.items()
+        ):
+            raise NodeProtocolError("workload is already assigned to another node")
+        if delivery_semantics not in {"idempotent", "at_most_once"}:
+            raise NodeProtocolError("unsupported workload delivery semantics")
+        if binding is not None and (
+            not isinstance(binding, dict)
+            or not all(
+                isinstance(key, str) and isinstance(value, str)
+                for key, value in binding.items()
+            )
+        ):
+            raise NodeProtocolError("workload binding must contain string fields")
+        if delivery_semantics == "at_most_once" and not all(
+            isinstance((binding or {}).get(field), str) and (binding or {}).get(field)
+            for field in ("intent_id", "effect_contract_digest", "target_ref")
+        ):
+            raise NodeProtocolError("at-most-once workload binding is incomplete")
         request = {
             "workload_id": workload_id,
             "capability": capability,
             "arguments": dict(arguments or {}),
             "timeout_seconds": timeout_seconds,
+            "delivery_semantics": delivery_semantics,
+            "binding": binding or {},
         }
-        self.pending.setdefault(node_id, {})[workload_id] = request
+        if delivery_semantics == "at_most_once":
+            existing = self.pending.get(node_id, {}).get(workload_id)
+            if existing is not None and existing != request:
+                raise NodeProtocolError("at-most-once workload assignment changed")
+            completed = self.results.get(workload_id)
+            if completed is not None:
+                if completed.get("request_digest") != _workload_request_digest(request):
+                    raise NodeProtocolError(
+                        "at-most-once workload result binding changed"
+                    )
+                return
+        staged_pending = {key: dict(value) for key, value in self.pending.items()}
+        staged_pending.setdefault(node_id, {})[workload_id] = request
+        self._save_workload_state(pending=staged_pending)
+        self.pending = staged_pending
         connection = self.connections.get(node_id)
         if connection is not None:
             await self._send_workload(connection, node_id, request)
@@ -179,7 +319,11 @@ class NodeRelayServer:
         await self._queue_control(
             node_id,
             "LEASE_ACQUIRE",
-            {"lease_id": lease_id, "resource_id": resource_id, "ttl_seconds": ttl_seconds},
+            {
+                "lease_id": lease_id,
+                "resource_id": resource_id,
+                "ttl_seconds": ttl_seconds,
+            },
             lease_id,
         )
 
@@ -194,12 +338,12 @@ class NodeRelayServer:
         )
 
     async def queue_workload_stop(self, node_id: str, workload_id: str) -> None:
-        self.pending.get(node_id, {}).pop(workload_id, None)
         await self._queue_control(
             node_id,
             "WORKLOAD_STOP",
             {"workload_id": workload_id},
             workload_id,
+            cancel_workload_id=workload_id,
         )
 
     async def _queue_control(
@@ -208,6 +352,8 @@ class NodeRelayServer:
         message_type: str,
         payload: dict[str, Any],
         idempotency_key: str,
+        *,
+        cancel_workload_id: str | None = None,
     ) -> None:
         if node_id not in self.node_keys:
             raise NodeProtocolError("node is not registered")
@@ -216,13 +362,24 @@ class NodeRelayServer:
             "payload": payload,
             "idempotency_key": idempotency_key,
         }
-        controls = self.pending_controls.setdefault(node_id, [])
+        staged_controls = {
+            key: list(value) for key, value in self.pending_controls.items()
+        }
+        controls = staged_controls.setdefault(node_id, [])
         if not any(
             item.get("message_type") == message_type
             and item.get("idempotency_key") == idempotency_key
             for item in controls
         ):
             controls.append(request)
+        staged_pending = {key: dict(value) for key, value in self.pending.items()}
+        if cancel_workload_id is not None:
+            staged_pending.get(node_id, {}).pop(cancel_workload_id, None)
+        self._save_workload_state(
+            pending=staged_pending, pending_controls=staged_controls
+        )
+        self.pending = staged_pending
+        self.pending_controls = staged_controls
         connection = self.connections.get(node_id)
         if connection is None:
             return
@@ -239,7 +396,10 @@ class NodeRelayServer:
         try:
             raw = await asyncio.wait_for(websocket.recv(), timeout=10.0)
             envelope = NodeProtocolEnvelope.from_json(raw)
-            if envelope.message_type != "REGISTER" or envelope.target != CONTROL_PLANE_ID:
+            if (
+                envelope.message_type != "REGISTER"
+                or envelope.target != CONTROL_PLANE_ID
+            ):
                 raise NodeProtocolError("REGISTER must be the first message")
             node_id = envelope.source
             public_key = self.node_keys.get(node_id, "")
@@ -273,7 +433,9 @@ class NodeRelayServer:
             )
             for request in list(self.pending.get(node_id, {}).values()):
                 await self._send_workload(websocket, node_id, request)
-            for digest, artifact in list(self.pending_artifacts.get(node_id, {}).items()):
+            for digest, artifact in list(
+                self.pending_artifacts.get(node_id, {}).items()
+            ):
                 await self._send_artifact(websocket, node_id, digest, artifact)
             for request in list(self.pending_controls.get(node_id, [])):
                 await self._send(
@@ -287,7 +449,9 @@ class NodeRelayServer:
             async for raw in websocket:
                 envelope = NodeProtocolEnvelope.from_json(raw)
                 if envelope.source != node_id or envelope.target != CONTROL_PLANE_ID:
-                    raise NodeProtocolError("message route changed after authentication")
+                    raise NodeProtocolError(
+                        "message route changed after authentication"
+                    )
                 if not envelope.verify(public_key):
                     raise NodeProtocolError("message signature verification failed")
                 self._replay.accept(envelope)
@@ -313,13 +477,45 @@ class NodeRelayServer:
         self, websocket: Any, node_id: str, envelope: NodeProtocolEnvelope
     ) -> None:
         if envelope.message_type in {"RESOURCE_REPORT", "DEVICE_REPORT", "TELEMETRY"}:
-            self.reports.setdefault(node_id, {})[envelope.message_type] = envelope.payload
+            self.reports.setdefault(node_id, {})[envelope.message_type] = (
+                envelope.payload
+            )
         elif envelope.message_type == "WORKLOAD_STATUS":
             workload_id = str(envelope.payload.get("workload_id", ""))
-            if workload_id:
-                self.results[workload_id] = envelope.payload
-                self.pending.get(node_id, {}).pop(workload_id, None)
-                self._complete_control(node_id, "WORKLOAD_STOP", workload_id)
+            assignment = self.pending.get(node_id, {}).get(workload_id)
+            assigned = assignment is not None
+            stopped = any(
+                item.get("message_type") == "WORKLOAD_STOP"
+                and item.get("idempotency_key") == workload_id
+                for item in self.pending_controls.get(node_id, [])
+            )
+            prior = self.result_envelopes.get(workload_id)
+            if prior is not None and prior.get("source") != node_id:
+                raise NodeProtocolError("workload result is bound to another node")
+            if not (assigned or stopped or (prior and prior.get("source") == node_id)):
+                raise NodeProtocolError(
+                    "workload status has no matching node assignment"
+                )
+            if envelope.idempotency_key != workload_id:
+                raise NodeProtocolError("workload status idempotency key is mismatched")
+            if assignment and assignment.get("delivery_semantics") == "at_most_once":
+                _verify_at_most_once_result(node_id, assignment, envelope.payload)
+            staged_pending = {key: dict(value) for key, value in self.pending.items()}
+            staged_pending.get(node_id, {}).pop(workload_id, None)
+            staged_results = {**self.results, workload_id: envelope.payload}
+            staged_envelopes = {
+                **self.result_envelopes,
+                workload_id: envelope.to_dict(),
+            }
+            self._save_workload_state(
+                pending=staged_pending,
+                results=staged_results,
+                result_envelopes=staged_envelopes,
+            )
+            self.pending = staged_pending
+            self.results = staged_results
+            self.result_envelopes = staged_envelopes
+            self._complete_control(node_id, "WORKLOAD_STOP", workload_id)
         elif envelope.message_type == "ARTIFACT_READY":
             digest = str(envelope.payload.get("digest", ""))
             if digest:
@@ -339,7 +535,10 @@ class NodeRelayServer:
                 websocket,
                 node_id,
                 "ERROR",
-                {"code": "UNSUPPORTED_DIRECTION", "message_type": envelope.message_type},
+                {
+                    "code": "UNSUPPORTED_DIRECTION",
+                    "message_type": envelope.message_type,
+                },
                 reply_to=envelope.message_id,
             )
             return
@@ -366,10 +565,15 @@ class NodeRelayServer:
                 and request.get("idempotency_key") == idempotency_key
             )
         ]
+        staged_controls = {
+            key: list(value) for key, value in self.pending_controls.items()
+        }
         if remaining:
-            self.pending_controls[node_id] = remaining
+            staged_controls[node_id] = remaining
         else:
-            self.pending_controls.pop(node_id, None)
+            staged_controls.pop(node_id, None)
+        self._save_workload_state(pending_controls=staged_controls)
+        self.pending_controls = staged_controls
 
     async def _send_workload(
         self, websocket: Any, node_id: str, request: dict[str, Any]
@@ -498,7 +702,10 @@ class NodeRelayClient:
                 },
             )
             welcome = await self._receive(websocket)
-            if welcome.message_type != "ACK" or welcome.payload.get("acknowledged") != "REGISTER":
+            if (
+                welcome.message_type != "ACK"
+                or welcome.payload.get("acknowledged") != "REGISTER"
+            ):
                 raise NodeProtocolError("relay did not accept node registration")
             self._save_session_id(str(welcome.payload["session_id"]))
             status = self.service.run_once()
@@ -529,15 +736,21 @@ class NodeRelayClient:
                 if envelope.target != self.service.identity.node_id:
                     raise NodeProtocolError("message addressed to another node")
                 if not envelope.verify(self.server_public_key):
-                    raise NodeProtocolError("control-plane signature verification failed")
+                    raise NodeProtocolError(
+                        "control-plane signature verification failed"
+                    )
                 self._replay.accept(envelope)
                 await self._handle_message(websocket, envelope)
 
-    async def _handle_message(self, websocket: Any, envelope: NodeProtocolEnvelope) -> None:
+    async def _handle_message(
+        self, websocket: Any, envelope: NodeProtocolEnvelope
+    ) -> None:
         if envelope.message_type == "WORKLOAD_START":
             workload_id = str(envelope.payload.get("workload_id", ""))
             if not workload_id or envelope.idempotency_key != workload_id:
-                raise NodeProtocolError("workload idempotency key is missing or mismatched")
+                raise NodeProtocolError(
+                    "workload idempotency key is missing or mismatched"
+                )
             await self._send(
                 websocket,
                 "ACK",
@@ -548,6 +761,10 @@ class NodeRelayClient:
                 workload_id,
                 str(envelope.payload.get("capability", "")),
                 envelope.payload.get("arguments", {}),
+                delivery_semantics=str(
+                    envelope.payload.get("delivery_semantics", "idempotent")
+                ),
+                binding=envelope.payload.get("binding"),
             )
             await self._send(
                 websocket,
@@ -663,7 +880,11 @@ class NodeRelayClient:
     def _load_sequence(self) -> int:
         value = _read_json(self.sequence_path)
         sequence = value.get("sequence", 0)
-        return sequence if isinstance(sequence, int) and not isinstance(sequence, bool) else 0
+        return (
+            sequence
+            if isinstance(sequence, int) and not isinstance(sequence, bool)
+            else 0
+        )
 
     def _load_session_id(self) -> str:
         return str(_read_json(self.session_path).get("session_id", ""))
@@ -683,11 +904,59 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _atomic_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(value, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    with temporary.open("w", encoding="utf-8") as stream:
+        stream.write(json.dumps(value, ensure_ascii=False, sort_keys=True) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
     temporary.replace(path)
+
+
+def _workload_request_digest(request: dict[str, Any]) -> str:
+    return workload_request_digest(
+        request["capability"],
+        request["arguments"],
+        request["delivery_semantics"],
+        request["binding"],
+    )
+
+
+def _verify_at_most_once_result(
+    node_id: str, request: dict[str, Any], result: dict[str, Any]
+) -> None:
+    binding = request["binding"]
+    if (
+        result.get("workload_id") != request["workload_id"]
+        or result.get("capability") != request["capability"]
+        or result.get("binding") != binding
+        or result.get("request_digest") != _workload_request_digest(request)
+    ):
+        raise NodeProtocolError("at-most-once result does not match assignment")
+    if result.get("state") == "RECOVERY_REQUIRED":
+        return
+    receipt = result.get("receipt")
+    if not isinstance(receipt, dict) or any(
+        receipt.get(field) != value
+        for field, value in {
+            "operation_id": request["workload_id"],
+            "actor": node_id,
+            "node_id": node_id,
+            "intent_id": binding["intent_id"],
+            "effect_contract_digest": binding["effect_contract_digest"],
+            "target_ref": binding["target_ref"],
+            "request_digest": result["request_digest"],
+            "input_digest": hashlib.sha256(
+                json.dumps(
+                    request["arguments"],
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest(),
+        }.items()
+    ):
+        raise NodeProtocolError("at-most-once receipt does not match assignment")
 
 
 def _validate_relay_url(url: str) -> None:

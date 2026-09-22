@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import secrets
 from collections import deque
 from dataclasses import dataclass, field
@@ -57,7 +58,13 @@ PAYLOAD_REQUIRED = {
 }
 
 IDEMPOTENT_OPERATION_TYPES = frozenset(
-    {"WORKLOAD_START", "WORKLOAD_STOP", "LEASE_ACQUIRE", "LEASE_RELEASE", "ARTIFACT_FETCH"}
+    {
+        "WORKLOAD_START",
+        "WORKLOAD_STOP",
+        "LEASE_ACQUIRE",
+        "LEASE_RELEASE",
+        "ARTIFACT_FETCH",
+    }
 )
 
 
@@ -66,13 +73,33 @@ class NodeProtocolError(ValueError):
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    )
 
 
 def _canonical(value: Any) -> bytes:
     return json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
+
+
+def workload_request_digest(
+    capability: str,
+    arguments: dict[str, Any],
+    delivery_semantics: str,
+    binding: dict[str, str],
+) -> str:
+    return hashlib.sha256(
+        _canonical(
+            {
+                "capability": capability,
+                "arguments": arguments,
+                "delivery_semantics": delivery_semantics,
+                "binding": binding,
+            }
+        )
+    ).hexdigest()
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -125,8 +152,12 @@ class NodeProtocolEnvelope:
 
     def verify(self, public_key_hex: str) -> bool:
         try:
-            public_key = Ed25519PublicKey.from_public_bytes(bytes.fromhex(public_key_hex))
-            public_key.verify(bytes.fromhex(self.signature), _canonical(self.unsigned_dict()))
+            public_key = Ed25519PublicKey.from_public_bytes(
+                bytes.fromhex(public_key_hex)
+            )
+            public_key.verify(
+                bytes.fromhex(self.signature), _canonical(self.unsigned_dict())
+            )
         except (InvalidSignature, ValueError):
             return False
         return True
@@ -140,26 +171,32 @@ class NodeProtocolEnvelope:
             raise NodeProtocolError("unsupported message type")
         if not self.message_id or not self.source or not self.target:
             raise NodeProtocolError("message identity and route are required")
-        if isinstance(self.sequence, bool) or not isinstance(self.sequence, int) or self.sequence < 1:
+        if (
+            isinstance(self.sequence, bool)
+            or not isinstance(self.sequence, int)
+            or self.sequence < 1
+        ):
             raise NodeProtocolError("sequence must be a positive integer")
         if not isinstance(self.payload, dict):
             raise NodeProtocolError("payload must be an object")
-        missing_payload = sorted(PAYLOAD_REQUIRED[self.message_type] - self.payload.keys())
+        missing_payload = sorted(
+            PAYLOAD_REQUIRED[self.message_type] - self.payload.keys()
+        )
         if missing_payload:
             raise NodeProtocolError(
                 f"{self.message_type} payload missing: {', '.join(missing_payload)}"
             )
         if self.message_type in IDEMPOTENT_OPERATION_TYPES and not self.idempotency_key:
-            raise NodeProtocolError(
-                f"{self.message_type} requires an idempotency_key"
-            )
+            raise NodeProtocolError(f"{self.message_type} requires an idempotency_key")
         if not self.signature:
             raise NodeProtocolError("signature is required")
         if check_time:
             created = _parse_time(self.created_at)
             now = datetime.now(timezone.utc)
             if abs((now - created).total_seconds()) > MAX_CLOCK_SKEW_SECONDS:
-                raise NodeProtocolError("message timestamp is outside allowed clock skew")
+                raise NodeProtocolError(
+                    "message timestamp is outside allowed clock skew"
+                )
             if self.expires_at and now >= _parse_time(self.expires_at):
                 raise NodeProtocolError("message has expired")
 
@@ -171,19 +208,31 @@ class NodeProtocolEnvelope:
         return encoded.decode("utf-8")
 
     @classmethod
-    def from_json(cls, raw: str | bytes, *, check_time: bool = True) -> NodeProtocolEnvelope:
+    def from_json(
+        cls, raw: str | bytes, *, check_time: bool = True
+    ) -> NodeProtocolEnvelope:
         encoded = raw.encode("utf-8") if isinstance(raw, str) else raw
         if len(encoded) > MAX_MESSAGE_BYTES:
             raise NodeProtocolError("message exceeds size limit")
         try:
-            value = json.loads(encoded.decode("utf-8"), object_pairs_hook=_reject_duplicate_keys)
+            value = json.loads(
+                encoded.decode("utf-8"), object_pairs_hook=_reject_duplicate_keys
+            )
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise NodeProtocolError("message is not valid UTF-8 JSON") from exc
         if not isinstance(value, dict):
             raise NodeProtocolError("message must be an object")
         required = {
-            "message_type", "source", "target", "sequence", "payload", "message_id",
-            "created_at", "protocol", "protocol_version", "signature",
+            "message_type",
+            "source",
+            "target",
+            "sequence",
+            "payload",
+            "message_id",
+            "created_at",
+            "protocol",
+            "protocol_version",
+            "signature",
         }
         missing = sorted(required - value.keys())
         if missing:

@@ -64,9 +64,7 @@ def test_run_once_reads_real_host_resources_and_devices_without_llm(
 def test_node_workload_is_bounded_and_idempotent(tmp_path: Path):
     service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
 
-    first = service.execute_workload(
-        "work-1", "system.echo", {"message": "真实节点"}
-    )
+    first = service.execute_workload("work-1", "system.echo", {"message": "真实节点"})
     duplicate = service.execute_workload(
         "work-1", "system.echo", {"message": "must-not-reexecute"}
     )
@@ -84,6 +82,132 @@ def test_node_workload_is_bounded_and_idempotent(tmp_path: Path):
         "work-1", "system.echo", {"message": "must-not-reexecute"}
     )
     assert persisted == first
+
+
+def test_at_most_once_workload_fails_closed_after_uncertain_crash(tmp_path: Path):
+    state = tmp_path / "node"
+    service = NodeRuntimeService(NodeRuntimeConfig(state_dir=state))
+    binding = {
+        "intent_id": "intent-1",
+        "effect_contract_digest": "a" * 64,
+        "target_ref": "node://arm64-lab/service/test-api",
+    }
+    calls = 0
+
+    def interrupted(_arguments: dict[str, object]) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        raise SystemExit("simulated process loss after possible effect")
+
+    service._handlers["test.interrupted"] = interrupted
+    with pytest.raises(SystemExit, match="simulated process loss"):
+        service.execute_workload(
+            "effect-1",
+            "test.interrupted",
+            {"version": "B"},
+            delivery_semantics="at_most_once",
+            binding=binding,
+        )
+    restarted = NodeRuntimeService(NodeRuntimeConfig(state_dir=state))
+    restarted._handlers["test.interrupted"] = interrupted
+    recovered = restarted.execute_workload(
+        "effect-1",
+        "test.interrupted",
+        {"version": "B"},
+        delivery_semantics="at_most_once",
+        binding=binding,
+    )
+    assert recovered["state"] == "RECOVERY_REQUIRED"
+    assert recovered["error_code"] == "NOUS_NODE_UNCERTAIN_EFFECT"
+    assert calls == 1
+    with pytest.raises(ValueError, match="binding collision"):
+        restarted.execute_workload(
+            "effect-1",
+            "test.interrupted",
+            {"version": "C"},
+            delivery_semantics="at_most_once",
+            binding=binding,
+        )
+
+
+def test_at_most_once_receipt_binds_signed_node_operation(tmp_path: Path):
+    service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+    binding = {
+        "intent_id": "intent-2",
+        "effect_contract_digest": "b" * 64,
+        "target_ref": "node://arm64-lab/service/test-api",
+    }
+    result = service.execute_workload(
+        "effect-2",
+        "system.echo",
+        {"message": "B"},
+        delivery_semantics="at_most_once",
+        binding=binding,
+    )
+    assert result["state"] == "COMPLETED"
+    assert result["receipt"]["node_id"] == service.identity.node_id
+    assert result["receipt"]["intent_id"] == binding["intent_id"]
+    assert (
+        result["receipt"]["effect_contract_digest"] == binding["effect_contract_digest"]
+    )
+    assert result["receipt"]["target_ref"] == binding["target_ref"]
+    assert result["receipt"]["request_digest"] == result["request_digest"]
+
+
+def test_concurrent_at_most_once_delivery_does_not_call_handler_twice(tmp_path: Path):
+    service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+    binding = {
+        "intent_id": "intent-concurrent",
+        "effect_contract_digest": "d" * 64,
+        "target_ref": "node://arm64-lab/service/test-api",
+    }
+    entered = threading.Event()
+    release = threading.Event()
+    calls = 0
+    result_holder: list[dict[str, object]] = []
+
+    def effect(_arguments: dict[str, object]) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        entered.set()
+        assert release.wait(timeout=5)
+        return {"version": "B"}
+
+    service._handlers["test.concurrent"] = effect
+
+    def first_delivery() -> None:
+        result_holder.append(
+            service.execute_workload(
+                "effect-concurrent",
+                "test.concurrent",
+                {"version": "B"},
+                delivery_semantics="at_most_once",
+                binding=binding,
+            )
+        )
+
+    worker = threading.Thread(target=first_delivery)
+    worker.start()
+    try:
+        assert entered.wait(timeout=5)
+        second = service.execute_workload(
+            "effect-concurrent",
+            "test.concurrent",
+            {"version": "B"},
+            delivery_semantics="at_most_once",
+            binding=binding,
+        )
+        assert second["state"] == "RECOVERY_REQUIRED"
+        assert (
+            service.stop_workload("effect-concurrent")["stop_result"]
+            == "EFFECT_IN_FLIGHT"
+        )
+        assert calls == 1
+    finally:
+        release.set()
+        worker.join(timeout=5)
+    assert result_holder[0]["state"] == "COMPLETED"
+    assert calls == 1
 
 
 def test_resource_leases_are_exclusive_durable_and_fenced(tmp_path: Path):
@@ -118,7 +242,9 @@ def test_node_lease_rejects_invalid_ttl(tmp_path, ttl):
     assert not service.leases_path.exists()
 
 
-@pytest.mark.parametrize("stored", ["broken", "{}", "[]", '{"counter": true}', '{"counter": -1}'])
+@pytest.mark.parametrize(
+    "stored", ["broken", "{}", "[]", '{"counter": true}', '{"counter": -1}']
+)
 def test_corrupt_fencing_counter_cannot_reset_to_one(tmp_path, stored):
     service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
     service.lease_counter_path.write_text(stored, encoding="utf-8")
@@ -134,7 +260,9 @@ def test_workload_stop_is_prestart_idempotent_and_never_claims_to_stop_terminal_
 
     cancelled = service.stop_workload("work-before-start")
     repeated = service.stop_workload("work-before-start")
-    completed = service.execute_workload("work-complete", "system.echo", {"message": "ok"})
+    completed = service.execute_workload(
+        "work-complete", "system.echo", {"message": "ok"}
+    )
     stopped_terminal = service.stop_workload("work-complete")
 
     assert cancelled["state"] == "CANCELLED"
@@ -181,7 +309,14 @@ def test_node_daemon_heartbeats_watchdog_and_graceful_shutdown(tmp_path: Path):
 def test_nous_node_cli_once_emits_machine_readable_status(tmp_path: Path):
     result = CliRunner().invoke(
         node_daemon_app,
-        ["--state-dir", str(tmp_path / "node"), "--name", "cli-node", "--once", "--json"],
+        [
+            "--state-dir",
+            str(tmp_path / "node"),
+            "--name",
+            "cli-node",
+            "--once",
+            "--json",
+        ],
     )
 
     assert result.exit_code == 0, result.output
@@ -193,7 +328,9 @@ def test_nous_node_cli_once_emits_machine_readable_status(tmp_path: Path):
 
 def test_main_node_status_and_list_show_durable_local_node(tmp_path: Path):
     state = tmp_path / "node"
-    service = NodeRuntimeService(NodeRuntimeConfig(state_dir=state, node_name="visible-node"))
+    service = NodeRuntimeService(
+        NodeRuntimeConfig(state_dir=state, node_name="visible-node")
+    )
     service.run_once()
     runner = CliRunner()
 
