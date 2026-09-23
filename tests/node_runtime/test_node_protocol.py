@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from nous_runtime.artifact import ArtifactType, ContentAddressedArtifactStore
 from nous_runtime.node_runtime.protocol import (
     NodeProtocolEnvelope,
     NodeProtocolError,
@@ -18,8 +19,8 @@ from nous_runtime.node_runtime.relay import (
     public_key_hex,
     remote_execution_receipt,
 )
+from nous_runtime.node_runtime.remote_provider import execute_remote_provider
 from nous_runtime.node_runtime.service import NodeRuntimeConfig, NodeRuntimeService
-from nous_runtime.artifact import ArtifactType, ContentAddressedArtifactStore
 
 
 def _signed(sequence: int = 1) -> tuple[NodeProtocolEnvelope, str]:
@@ -258,6 +259,106 @@ def test_stop_and_pending_execution_are_persisted_atomically(tmp_path: Path):
                 "idempotency_key": "work-stop-durable",
             }
         ]
+
+    asyncio.run(scenario())
+
+
+def test_external_provider_spool_reaches_signed_node_protocol(tmp_path: Path):
+    async def scenario() -> None:
+        relay_state = tmp_path / "relay"
+        service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+        server = NodeRelayServer(state_dir=relay_state, heartbeat_seconds=0.05)
+        server.register_node(service.identity.node_id, service.identity.public_key)
+        target = {
+            "schema_version": 1,
+            "target_ref": "node://arm64-lab/service/test-api",
+            "target_kind": "http-service",
+            "node_id": service.identity.node_id,
+            "adapter_id": "apeir.http-service/v1",
+            "adapter_revision": "1",
+            "endpoint_binding": {"address": "127.0.0.1:9010"},
+            "allowed_effect_schemas": ["apeir.service-health/v1"],
+            "revision": "target-1",
+        }
+        reality_config = tmp_path / "reality.json"
+        reality_config.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "artifact_bridge": {
+                        "program": "python",
+                        "root": str(tmp_path / "artifacts"),
+                    },
+                    "targets": [
+                        {"subject": "service:test-api", "target_binding": target}
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        operation = {
+            "operation_id": "effect-provider-1",
+            "workload_id": "workload-provider-1",
+            "step_id": "step-provider-1",
+            "backend": "external-process",
+            "execution_domain": "remote",
+            "model": "system.echo",
+            "endpoint": "",
+            "credential_env": "",
+            "provider_entrypoint": "nous_runtime/node_runtime/remote_provider.py",
+            "input": '{"message":"provider-path"}',
+            "delivery": "AT_MOST_ONCE",
+            "snapshot": {
+                "model_revision": "model-1",
+                "provider_revision": "node-provider-1",
+                "prompt_revision": "prompt-1",
+                "tool_revision": "tool-1",
+                "knowledge_revision": "knowledge-1",
+                "policy_revision": "policy-1",
+                "capability_revision": "capability-1",
+                "context_revision": "context-1",
+            },
+            "timeout_ms": 5_000,
+            "effect_contract": {
+                "schema_version": 1,
+                "effect_id": "effect-provider-1",
+                "target": target["target_ref"],
+                "expectation": {
+                    "schema": "apeir.service-health/v1",
+                    "subject": "service:test-api",
+                    "expected_value": {"version": "B"},
+                    "evidence_requirement": ["http-version"],
+                },
+                "verification": "INDEPENDENT",
+            },
+        }
+        url = await server.start()
+        stop = asyncio.Event()
+        client = NodeRelayClient(
+            service, url, server.public_key, heartbeat_seconds=0.05
+        )
+        task = asyncio.create_task(client.run_forever(stop))
+        try:
+            await _wait_for(lambda: service.identity.node_id in server.connections)
+            response = await asyncio.to_thread(
+                execute_remote_provider,
+                {"schema_version": 2, "type": "execute", "request": operation},
+                {
+                    "APEIR_RELAY_STATE_DIR": str(relay_state),
+                    "APEIR_REALITY_CONFIG": str(reality_config),
+                },
+            )
+            assert response["ok"] is True
+            assert json.loads(response["output"]) == {"echo": "provider-path"}
+            remote = response["remote_execution_receipt"]
+            assert remote["operation_id"] == operation["operation_id"]
+            assert remote["node_id"] == service.identity.node_id
+            assert remote["target_ref"] == target["target_ref"]
+            assert remote["signed_envelope"]["signature"]
+        finally:
+            stop.set()
+            await asyncio.wait_for(task, timeout=2)
+            await server.stop()
 
     asyncio.run(scenario())
 

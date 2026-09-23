@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import hashlib
 import json
 import os
@@ -90,6 +91,13 @@ class NodeRelayServer:
         self._replay = ReplayWindow()
         self._sequence = 0
         self._server: Any = None
+        self._provider_spool_task: asyncio.Task[None] | None = None
+        self.provider_requests = (
+            self.state_dir / "provider-requests" if self.state_dir else None
+        )
+        self.provider_results = (
+            self.state_dir / "provider-results" if self.state_dir else None
+        )
 
     def register_node(self, node_id: str, public_key: str) -> None:
         try:
@@ -107,7 +115,7 @@ class NodeRelayServer:
         value = _read_json(self.state_dir / "trusted-nodes.json")
         nodes = value.get("nodes", {})
         if not isinstance(nodes, dict):
-            raise ValueError("relay trusted-node registry is invalid")
+            raise TypeError("relay trusted-node registry is invalid")
         return {
             str(node_id): str(public_key)
             for node_id, public_key in nodes.items()
@@ -225,9 +233,18 @@ class NodeRelayServer:
         socket = self._server.sockets[0]
         port = socket.getsockname()[1]
         scheme = "wss" if self.ssl_context else "ws"
+        if self.provider_requests is not None and self.provider_results is not None:
+            self.provider_requests.mkdir(parents=True, exist_ok=True)
+            self.provider_results.mkdir(parents=True, exist_ok=True)
+            self._provider_spool_task = asyncio.create_task(self._run_provider_spool())
         return f"{scheme}://{self.host}:{port}"
 
     async def stop(self) -> None:
+        if self._provider_spool_task is not None:
+            self._provider_spool_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._provider_spool_task
+            self._provider_spool_task = None
         if self._server is None:
             return
         self._server.close()
@@ -288,8 +305,10 @@ class NodeRelayServer:
         }
         if delivery_semantics == "at_most_once":
             existing = self.pending.get(node_id, {}).get(workload_id)
-            if existing is not None and existing != request:
-                raise NodeProtocolError("at-most-once workload assignment changed")
+            if existing is not None:
+                if existing != request:
+                    raise NodeProtocolError("at-most-once workload assignment changed")
+                return
             completed = self.results.get(workload_id)
             if completed is not None:
                 if completed.get("request_digest") != _workload_request_digest(request):
@@ -523,6 +542,7 @@ class NodeRelayServer:
             self.pending = staged_pending
             self.results = staged_results
             self.result_envelopes = staged_envelopes
+            self._publish_provider_result(workload_id)
             self._complete_control(node_id, "WORKLOAD_STOP", workload_id)
         elif envelope.message_type == "ARTIFACT_READY":
             digest = str(envelope.payload.get("digest", ""))
@@ -593,6 +613,89 @@ class NodeRelayServer:
             request,
             idempotency_key=request["workload_id"],
         )
+
+    async def _run_provider_spool(self) -> None:
+        assert self.provider_requests is not None
+        while True:
+            for request_path in sorted(self.provider_requests.glob("*.json")):
+                await self._ingest_provider_request(request_path)
+            await asyncio.sleep(0.05)
+
+    async def _ingest_provider_request(self, request_path: Path) -> None:
+        assert self.provider_results is not None
+        try:
+            value = json.loads(request_path.read_text(encoding="utf-8"))
+            if (
+                not isinstance(value, dict)
+                or value.get("schema") != "nous.remote-provider-request/v1"
+            ):
+                raise NodeProtocolError("remote provider request schema is invalid")
+            operation_id = str(value.get("operation_id", ""))
+            node_id = str(value.get("node_id", ""))
+            if request_path.stem != operation_id:
+                raise NodeProtocolError("remote provider request filename is not bound")
+            await self.queue_workload(
+                node_id,
+                operation_id,
+                str(value.get("capability", "")),
+                value.get("arguments"),
+                timeout_seconds=float(value.get("timeout_seconds", 30.0)),
+                delivery_semantics=str(value.get("delivery_semantics", "")),
+                binding=value.get("binding"),
+            )
+            self._publish_provider_result(operation_id)
+        except (KeyError, OSError, TypeError, ValueError, NodeProtocolError) as exc:
+            operation_id = request_path.stem
+            _atomic_json(
+                self.provider_results / f"{operation_id}.json",
+                {
+                    "ok": False,
+                    "error_code": "REMOTE_PROVIDER_REQUEST_REJECTED",
+                    "error_message": f"{type(exc).__name__}: {exc}",
+                },
+            )
+            request_path.unlink(missing_ok=True)
+
+    def _publish_provider_result(self, workload_id: str) -> None:
+        if (
+            self.provider_requests is None
+            or self.provider_results is None
+            or workload_id not in self.result_envelopes
+        ):
+            return
+        request_path = self.provider_requests / f"{workload_id}.json"
+        if not request_path.is_file():
+            return
+        result_path = self.provider_results / f"{workload_id}.json"
+        if result_path.is_file():
+            request_path.unlink(missing_ok=True)
+            return
+        payload = self.results[workload_id]
+        if payload.get("state") == "RECOVERY_REQUIRED":
+            value = {
+                "ok": False,
+                "error_code": "NOUS_NODE_UNCERTAIN_EFFECT",
+                "error_message": "remote effect outcome requires manual recovery",
+            }
+        elif payload.get("state") != "COMPLETED":
+            value = {
+                "ok": False,
+                "error_code": str(
+                    payload.get("error_code") or "REMOTE_EXECUTION_FAILED"
+                ),
+                "error_message": str(payload.get("error") or "remote execution failed"),
+            }
+        else:
+            value = {
+                "ok": True,
+                "output": payload.get("output"),
+                "remote_execution_receipt": remote_execution_receipt(
+                    self.result_envelopes[workload_id],
+                    expected_operation_id=workload_id,
+                ),
+            }
+        _atomic_json(result_path, value)
+        request_path.unlink(missing_ok=True)
 
     async def _send_artifact(
         self,
