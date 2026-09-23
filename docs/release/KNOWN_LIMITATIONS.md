@@ -4,6 +4,12 @@ Version: `0.1.0-rc1`
 
 - Windows 10 x64 is the only desktop certification target for this candidate.
   Linux, macOS, ARM64, Jetson, MCU, and multi-host operation are not certified.
+- M2 production-boundary contracts and local mechanisms exist on
+  `feature/reality-execution-v2`, but x64 Controller to Windows ARM64 real-effect
+  acceptance, independent remote observation, reconnect/fault injection, and
+  malicious/stale-node matrices remain pending. This is not M2 completion.
+- The first Reality Adapter supports only an administrator-bound loopback HTTP
+  service target. It is not an arbitrary remote endpoint or device runtime.
 - Model-backed tasks require a configured Provider account or a local model.
   APEIR cannot correct an exhausted third-party balance.
 - Token limits are enforced before dispatch. If a Provider returns more usage

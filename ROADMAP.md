@@ -15,7 +15,11 @@ of surface features. This document describes direction, not delivery dates.
 
 ## After the first public release
 
-- Qualify Linux x64 and remote two-node execution.
+- Complete the M2 x64 Controller to Windows ARM64 acceptance matrix against the
+  implemented signed receipt, governed target, Artifact evidence, independent
+  verification, and Journal recovery boundaries. Do not substitute mock or
+  same-machine success for that gate.
+- Qualify Linux x64 and remote two-node execution after the M2 matrix passes.
 - Bind device discovery and reservations to Kernel resource leases.
 - Expand OCI, Jetson, and embedded-device backends behind the same contracts.
 - Stabilize extension SDKs and test compatibility with external MCP servers and

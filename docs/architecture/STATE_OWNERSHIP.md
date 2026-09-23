@@ -10,7 +10,9 @@ stores are non-authoritative.
 | Scheduling decisions | Scheduler Core | decision event and journal | policies are stateless inputs |
 | Semantic state | Semantic State Fabric | journal commit | clients use CAS generation |
 | Knowledge assertions | Knowledge Fabric | evidence and assertion records | retrieval is a derived index |
-| Effect lifecycle | Transactional Effect Engine | intent, receipt and commit | effectors cannot self-commit |
+| NKI Reality effect lifecycle | Kernel `DurableExecutor` | Journal Intent, accepted receipt, observation, verification, and commit | Distribution hosts Node transport, Adapter execution, and Artifact bytes but cannot self-commit |
+| Python Runtime service effect | Runtime authorization and service boundary | EventStream and Artifact records | does not claim Kernel execution |
+| Reality evidence bytes | `ContentAddressedArtifactStore` | immutable SHA-256 Artifact plus metadata | Kernel Journal stores only `EvidenceRef`, digest, identities, and verification facts |
 | Credentials | Credential Broker | references and audit metadata only | values stay in scoped leases |
 | Model, engine and device registration | `nousd` registries | journaled registration | SDKs submit through NKI |
 | Learning policy lifecycle | Learning Governance | evidence and promotion records | learning can only propose |
@@ -44,3 +46,8 @@ kernel truth.
 3. The durable journal is written before a materialized view is updated.
 4. External effects require a verified receipt before commit.
 5. Credentials and secret values are never serialized into state or events.
+6. A signed Node result is only a candidate execution fact. Kernel independently
+   validates Node trust and operation, Intent, EffectContract, TargetBinding,
+   request, delivery, provider revision, and protocol bindings.
+7. The Kernel's in-memory `TransactionalEffectEngine` is a domain/test reference,
+   not a second production durability authority.

@@ -19,6 +19,25 @@ NKI request
   -> result, trace and metrics
 ```
 
+Effectful NKI v3 operations extend that same Kernel path. Distribution hosts
+the transport and storage mechanisms but cannot create `StepCommit`:
+
+```text
+Kernel TargetBinding admission
+  -> external `apeir-remote-provider`
+  -> durable Relay spool -> authenticated Node Protocol
+  -> signed Node result -> RemoteExecutionReceipt candidate
+  -> Kernel signature and binding admission -> OperationReceipt fact
+  -> RealityAdapterRegistry observation
+  -> ContentAddressedArtifactStore evidence
+  -> independent verification -> Kernel MATCH-only commit
+```
+
+The remote provider does not observe, verify, or commit. Its spool request
+remains durable until a signed result is materialized. An uncertain at-most-once
+outcome is returned as `NOUS_NODE_UNCERTAIN_EFFECT` for Kernel to journal as
+`RECOVERY_REQUIRED`; it is never automatically replayed.
+
 Compatibility APIs that invoke models must translate to an NKI request. They
 may not write the Kernel journal, grant a Kernel lease, select credentials or
 mark a model workload complete.
@@ -63,8 +82,8 @@ hosted directly by `nousd`; it must never override a kernel journal outcome.
 
 ## Current migration boundary
 
-The Rust daemon is authoritative for model-workload admission, durable state,
-leases and scheduling.
+The Rust daemon is authoritative for model-workload and Reality-effect
+admission, durable state, leases, verification acceptance, recovery, and commit.
 Engine ABI adapters exist for llama.cpp and vLLM. Python ModelGateway remains a
 compatibility client while out-of-process provider execution is moved fully
 behind the provider host. A client-side provider response is not a kernel commit;
