@@ -91,6 +91,10 @@ def test_at_most_once_workload_fails_closed_after_uncertain_crash(tmp_path: Path
         "intent_id": "intent-1",
         "effect_contract_digest": "a" * 64,
         "target_ref": "node://arm64-lab/service/test-api",
+        "target_binding_digest": "1" * 64,
+        "workload_id": "workload-1",
+        "request_digest": "2" * 64,
+        "provider_revision": "provider-1",
     }
     calls = 0
 
@@ -136,6 +140,10 @@ def test_at_most_once_receipt_binds_signed_node_operation(tmp_path: Path):
         "intent_id": "intent-2",
         "effect_contract_digest": "b" * 64,
         "target_ref": "node://arm64-lab/service/test-api",
+        "target_binding_digest": "3" * 64,
+        "workload_id": "workload-2",
+        "request_digest": "4" * 64,
+        "provider_revision": "provider-1",
     }
     result = service.execute_workload(
         "effect-2",
@@ -160,6 +168,10 @@ def test_concurrent_at_most_once_delivery_does_not_call_handler_twice(tmp_path: 
         "intent_id": "intent-concurrent",
         "effect_contract_digest": "d" * 64,
         "target_ref": "node://arm64-lab/service/test-api",
+        "target_binding_digest": "5" * 64,
+        "workload_id": "workload-concurrent",
+        "request_digest": "6" * 64,
+        "provider_revision": "provider-1",
     }
     entered = threading.Event()
     release = threading.Event()

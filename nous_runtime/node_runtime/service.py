@@ -556,7 +556,15 @@ class NodeRuntimeService:
             raise ValueError("workload binding must contain string fields")
         if delivery_semantics == "at_most_once" and not all(
             binding and binding.get(field)
-            for field in ("intent_id", "effect_contract_digest", "target_ref")
+            for field in (
+                "intent_id",
+                "effect_contract_digest",
+                "target_ref",
+                "target_binding_digest",
+                "workload_id",
+                "request_digest",
+                "provider_revision",
+            )
         ):
             raise ValueError(
                 "at-most-once workload requires intent, effect, and target binding"
@@ -664,6 +672,7 @@ class NodeRuntimeService:
                     "intent_id": binding["intent_id"],
                     "effect_contract_digest": binding["effect_contract_digest"],
                     "target_ref": binding["target_ref"],
+                    "target_binding_digest": binding["target_binding_digest"],
                     "request_digest": request_digest,
                     "delivery_semantics": delivery_semantics,
                 }

@@ -267,7 +267,15 @@ class NodeRelayServer:
             raise NodeProtocolError("workload binding must contain string fields")
         if delivery_semantics == "at_most_once" and not all(
             isinstance((binding or {}).get(field), str) and (binding or {}).get(field)
-            for field in ("intent_id", "effect_contract_digest", "target_ref")
+            for field in (
+                "intent_id",
+                "effect_contract_digest",
+                "target_ref",
+                "target_binding_digest",
+                "workload_id",
+                "request_digest",
+                "provider_revision",
+            )
         ):
             raise NodeProtocolError("at-most-once workload binding is incomplete")
         request = {
@@ -945,6 +953,7 @@ def _verify_at_most_once_result(
             "intent_id": binding["intent_id"],
             "effect_contract_digest": binding["effect_contract_digest"],
             "target_ref": binding["target_ref"],
+            "target_binding_digest": binding["target_binding_digest"],
             "request_digest": result["request_digest"],
             "input_digest": hashlib.sha256(
                 json.dumps(
@@ -957,6 +966,81 @@ def _verify_at_most_once_result(
         }.items()
     ):
         raise NodeProtocolError("at-most-once receipt does not match assignment")
+
+
+def remote_execution_receipt(
+    envelope_value: dict[str, Any], *, expected_operation_id: str = ""
+) -> dict[str, Any]:
+    """Project a signed Node result into the Kernel remote-receipt contract."""
+    envelope = NodeProtocolEnvelope.from_json(
+        json.dumps(envelope_value), check_time=False
+    )
+    payload = envelope.payload
+    operation_id = str(payload.get("workload_id", ""))
+    binding = payload.get("binding")
+    receipt = payload.get("receipt")
+    if (
+        envelope.message_type != "WORKLOAD_STATUS"
+        or envelope.idempotency_key != operation_id
+        or (expected_operation_id and operation_id != expected_operation_id)
+        or not isinstance(binding, dict)
+        or not isinstance(receipt, dict)
+        or payload.get("state") != "COMPLETED"
+    ):
+        raise NodeProtocolError("signed node result is not an accepted execution fact")
+    required_binding = (
+        "intent_id",
+        "effect_contract_digest",
+        "target_ref",
+        "target_binding_digest",
+        "workload_id",
+        "request_digest",
+        "provider_revision",
+    )
+    if not all(
+        isinstance(binding.get(field), str) and binding[field]
+        for field in required_binding
+    ):
+        raise NodeProtocolError("signed node result has incomplete Kernel binding")
+    required_receipt = ("node_id", "executor", "effect_digest")
+    if not all(
+        isinstance(receipt.get(field), str) and receipt[field]
+        for field in required_receipt
+    ):
+        raise NodeProtocolError("signed node result has incomplete execution receipt")
+    if (
+        receipt["node_id"] != envelope.source
+        or receipt.get("operation_id") != operation_id
+    ):
+        raise NodeProtocolError("signed node result identity is inconsistent")
+    envelope_digest = hashlib.sha256(
+        json.dumps(
+            envelope.to_dict(),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        "schema_version": 1,
+        "operation_id": operation_id,
+        "workload_id": binding["workload_id"],
+        "node_id": envelope.source,
+        "executor_id": receipt["executor"],
+        "intent_id": binding["intent_id"],
+        "effect_contract_digest": binding["effect_contract_digest"],
+        "target_ref": binding["target_ref"],
+        "target_binding_digest": binding["target_binding_digest"],
+        "request_digest": binding["request_digest"],
+        "output_digest": receipt["effect_digest"],
+        "provider_revision": binding["provider_revision"],
+        "delivery_semantics": "AT_MOST_ONCE",
+        "started_at": str(receipt.get("timestamps", {}).get("started_at", "")),
+        "completed_at": str(receipt.get("timestamps", {}).get("finished_at", "")),
+        "node_protocol_version": envelope.protocol_version,
+        "signed_envelope_digest": envelope_digest,
+        "signed_envelope": envelope.to_dict(),
+    }
 
 
 def _validate_relay_url(url: str) -> None:

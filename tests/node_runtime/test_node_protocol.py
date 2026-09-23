@@ -16,6 +16,7 @@ from nous_runtime.node_runtime.relay import (
     NodeRelayClient,
     NodeRelayServer,
     public_key_hex,
+    remote_execution_receipt,
 )
 from nous_runtime.node_runtime.service import NodeRuntimeConfig, NodeRuntimeService
 from nous_runtime.artifact import ArtifactType, ContentAddressedArtifactStore
@@ -153,6 +154,10 @@ def test_at_most_once_remote_receipt_is_bound_to_assignment(tmp_path: Path):
             "intent_id": "intent-remote-1",
             "effect_contract_digest": "c" * 64,
             "target_ref": "node://arm64-lab/service/test-api",
+            "target_binding_digest": "7" * 64,
+            "workload_id": "workload-remote-1",
+            "request_digest": "8" * 64,
+            "provider_revision": "provider-1",
         }
         await server.queue_workload(
             node_id,
@@ -186,6 +191,15 @@ def test_at_most_once_remote_receipt_is_bound_to_assignment(tmp_path: Path):
         )
         assert signed.verify(service.identity.public_key)
         assert signed.payload == result
+        remote = remote_execution_receipt(
+            server.result_envelopes["effect-remote-1"],
+            expected_operation_id="effect-remote-1",
+        )
+        assert remote["workload_id"] == binding["workload_id"]
+        assert remote["request_digest"] == binding["request_digest"]
+        assert remote["target_binding_digest"] == binding["target_binding_digest"]
+        assert remote["signed_envelope"]["signature"] == signed.signature
+        assert len(remote["signed_envelope_digest"]) == 64
         with pytest.raises(NodeProtocolError, match="result binding changed"):
             await server.queue_workload(
                 node_id,
