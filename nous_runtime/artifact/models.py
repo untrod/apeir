@@ -31,6 +31,7 @@ class ArtifactType(str, Enum):
     ROUTE_DECISION = "route_decision"
     MODEL_METRICS = "model_metrics"
     VERIFICATION_RESULT = "verification_result"
+    EVIDENCE = "evidence"
 
 
 def _artifact_id() -> str:
@@ -38,8 +39,10 @@ def _artifact_id() -> str:
 
 
 def _timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace(
-        "+00:00", "Z"
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
     )
 
 
@@ -57,7 +60,9 @@ class Artifact:
 
     def __post_init__(self) -> None:
         artifact_id = str(self.id or "").strip()
-        artifact_type = str(self.type.value if isinstance(self.type, ArtifactType) else self.type)
+        artifact_type = str(
+            self.type.value if isinstance(self.type, ArtifactType) else self.type
+        )
         artifact_name = str(self.name or "").strip()
         if not artifact_id:
             raise ArtifactError("artifact id is required")
