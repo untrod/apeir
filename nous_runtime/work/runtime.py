@@ -72,6 +72,7 @@ class WorkHarness:
         completion_criteria: tuple[str, ...] | list[str] = (),
         conversation_id: str = "",
         owner_id: str = "local",
+        execution_options: Mapping[str, Any] | None = None,
     ) -> WorkSnapshot:
         objective = str(objective or "").strip()
         if not objective:
@@ -113,6 +114,7 @@ class WorkHarness:
             workspace_root=str(self.root),
             conversation_id=conversation_id,
             plan=plan,
+            execution_options=execution_options,
         )
         self.events.create_run(
             snapshot.run_id,

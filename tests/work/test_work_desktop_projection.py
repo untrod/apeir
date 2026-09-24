@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from nous_runtime.api.desktop_routes import handle_tasks_action, handle_tasks_list
+from nous_runtime.api.desktop_routes import (
+    DESKTOP_ROUTES,
+    handle_tasks_action,
+    handle_tasks_list,
+    handle_work_inspect,
+)
 from nous_runtime.work import DecisionStatus, WorkDecision, WorkHarness
 
 
@@ -83,3 +88,18 @@ def test_desktop_pause_and_cancel_mutate_work_authority(tmp_path, monkeypatch):
     assert cancelled["data"]["work"]["state"] == "CANCELLED"
     restored = WorkHarness(tmp_path).require(created.run_id)
     assert restored.state.value == "CANCELLED"
+
+
+def test_desktop_can_reattach_to_durable_work_without_starting_worker(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(tmp_path))
+    created = WorkHarness(tmp_path).create("Inspect durable Work from Desktop")
+
+    response = handle_work_inspect(created.run_id)
+
+    assert response["ok"] is True
+    assert response["data"]["work"]["run_id"] == created.run_id
+    assert response["data"]["supervisor"]["active"] is False
+    assert ("POST", "/api/v1/work") in DESKTOP_ROUTES
+    assert ("GET", "/api/v1/work/{run_id}") in DESKTOP_ROUTES

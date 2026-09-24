@@ -196,19 +196,40 @@ def handle_tasks_action(body: dict[str, Any]) -> dict[str, Any]:
             return err("NOUS_INVALID_REQUEST", "task_id and action are required")
 
         try:
-            from nous_runtime.work import WorkHarness
+            from nous_runtime.work import WorkHarness, get_work_supervisor
             checkpoint_path = Path(_workspace()) / ".nous" / "checkpoints.db"
             if not checkpoint_path.is_file():
                 raise KeyError(task_id)
             work = WorkHarness(_workspace())
             work.require(task_id)
+            supervisor = get_work_supervisor(_workspace())
             if action == "cancel":
-                snapshot = work.cancel(task_id, reason="cancelled from Desktop")
+                snapshot = supervisor.cancel(
+                    task_id,
+                    reason="cancelled from Desktop",
+                )
             elif action == "pause":
-                snapshot = work.pause(task_id, reason="paused from Desktop")
+                snapshot = supervisor.pause(task_id, reason="paused from Desktop")
+            elif action in {"resume", "recover"}:
+                snapshot = supervisor.resume(task_id)
+            elif action == "steer":
+                snapshot = supervisor.steer(
+                    task_id,
+                    str(body.get("instruction") or ""),
+                    constraints=(
+                        dict(body.get("constraints") or {})
+                        if isinstance(body.get("constraints"), dict)
+                        else None
+                    ),
+                )
             else:
                 return err("NOUS_INVALID_REQUEST", f"Unsupported Work action: {action}")
-            return ok({"work": snapshot.to_dict()})
+            return ok(
+                {
+                    "work": snapshot.to_dict(),
+                    "supervisor": supervisor.inspect(task_id)["supervisor"],
+                }
+            )
         except KeyError:
             pass
 
@@ -226,6 +247,54 @@ def handle_tasks_action(body: dict[str, Any]) -> dict[str, Any]:
             return err("NOUS_INVALID_REQUEST", f"Unsupported task action: {action}")
     except Exception as e:
         return err("TASKS_ACTION_ERROR", str(e))
+
+
+def handle_work_submit(body: dict[str, Any]) -> dict[str, Any]:
+    """Create and dispatch Work in the runtime process, not the UI process."""
+    try:
+        objective = str(body.get("objective") or "").strip()
+        if not objective:
+            return err("NOUS_INVALID_REQUEST", "objective is required")
+        constraints = body.get("constraints") or {}
+        criteria = body.get("completion_criteria") or ()
+        if not isinstance(constraints, dict) or not isinstance(criteria, (list, tuple)):
+            return err(
+                "NOUS_INVALID_REQUEST",
+                "constraints must be an object and completion_criteria an array",
+            )
+        from nous_runtime.work import get_work_supervisor
+
+        supervisor = get_work_supervisor(_workspace())
+        snapshot = supervisor.start(
+            objective,
+            constraints=constraints,
+            completion_criteria=tuple(str(item) for item in criteria),
+            conversation_id=str(body.get("conversation_id") or ""),
+            owner_id=str(body.get("owner_id") or "local"),
+            preferred_model=str(body.get("preferred_model") or ""),
+            read_only=bool(body.get("read_only", False)),
+            max_iterations=int(body.get("max_iterations") or 32),
+        )
+        return ok(
+            {
+                "work": snapshot.to_dict(),
+                "supervisor": supervisor.inspect(snapshot.run_id)["supervisor"],
+            }
+        )
+    except Exception as exc:
+        return err("WORK_SUBMIT_ERROR", str(exc))
+
+
+def handle_work_inspect(run_id: str) -> dict[str, Any]:
+    """Read the complete durable Work projection and process host status."""
+    try:
+        from nous_runtime.work import get_work_supervisor
+
+        return ok(get_work_supervisor(_workspace()).inspect(run_id))
+    except KeyError:
+        return err("WORK_NOT_FOUND", f"Work run not found: {run_id}")
+    except Exception as exc:
+        return err("WORK_INSPECT_ERROR", str(exc))
 
 
 # Devices
@@ -578,6 +647,8 @@ def handle_dashboard_full() -> dict[str, Any]:
 DESKTOP_ROUTES = {
     ("GET", "/api/v1/tasks"): handle_tasks_list,
     ("POST", "/api/v1/tasks/action"): handle_tasks_action,
+    ("POST", "/api/v1/work"): handle_work_submit,
+    ("GET", "/api/v1/work/{run_id}"): handle_work_inspect,
     ("GET", "/api/v1/devices"): handle_devices_list,
     ("POST", "/api/v1/devices/scan"): handle_devices_scan,
     ("GET", "/api/v1/automations"): handle_automations_list,
@@ -592,6 +663,20 @@ DESKTOP_ROUTES = {
 }
 
 
+DESKTOP_GOVERNANCE = {
+    ("POST", "/api/v1/work"): (
+        "runtime.execute",
+        "local_write",
+        "partially_reversible",
+    ),
+    ("POST", "/api/v1/tasks/action"): (
+        "runtime.execute",
+        "local_write",
+        "reversible",
+    ),
+}
+
+
 def register_desktop_routes(routes_dict: dict) -> None:
     """Add desktop-specific routes to the main route table."""
     routes_dict.update(DESKTOP_ROUTES)
@@ -599,9 +684,12 @@ def register_desktop_routes(routes_dict: dict) -> None:
 
 __all__ = [
     "DESKTOP_ROUTES",
+    "DESKTOP_GOVERNANCE",
     "register_desktop_routes",
     "handle_tasks_list",
     "handle_tasks_action",
+    "handle_work_submit",
+    "handle_work_inspect",
     "handle_devices_list",
     "handle_devices_scan",
     "handle_automations_list",

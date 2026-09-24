@@ -142,6 +142,7 @@ class WorkSnapshot:
     artifacts: list[str] = field(default_factory=list)
     loaded_tools: dict[str, dict[str, Any]] = field(default_factory=dict)
     loaded_skills: dict[str, dict[str, Any]] = field(default_factory=dict)
+    execution_options: dict[str, Any] = field(default_factory=dict)
     agent_run_id: str = ""
     agent_checkpoint_id: str = ""
     last_checkpoint_id: str = ""
@@ -162,6 +163,7 @@ class WorkSnapshot:
         workspace_root: str,
         conversation_id: str = "",
         plan: Plan | None = None,
+        execution_options: Mapping[str, Any] | None = None,
     ) -> "WorkSnapshot":
         return cls(
             run_id=f"work_{uuid.uuid4().hex}",
@@ -171,6 +173,7 @@ class WorkSnapshot:
             workspace_root=workspace_root,
             conversation_id=conversation_id,
             plan=plan,
+            execution_options=dict(execution_options or {}),
         )
 
     @property
@@ -202,6 +205,7 @@ class WorkSnapshot:
             "loaded_skills": {
                 str(key): dict(value) for key, value in self.loaded_skills.items()
             },
+            "execution_options": dict(self.execution_options),
             "agent_run_id": self.agent_run_id,
             "agent_checkpoint_id": self.agent_checkpoint_id,
             "last_checkpoint_id": self.last_checkpoint_id,
@@ -250,6 +254,7 @@ class WorkSnapshot:
                 for key, value in dict(data.get("loaded_skills") or {}).items()
                 if isinstance(value, Mapping)
             },
+            execution_options=dict(data.get("execution_options") or {}),
             agent_run_id=str(data.get("agent_run_id") or ""),
             agent_checkpoint_id=str(data.get("agent_checkpoint_id") or ""),
             last_checkpoint_id=str(data.get("last_checkpoint_id") or ""),

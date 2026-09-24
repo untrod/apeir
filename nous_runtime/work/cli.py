@@ -37,41 +37,11 @@ def _echo(value: Any, *, as_json: bool) -> None:
     typer.echo(str(value))
 
 
-def _runtime_components(
-    root: Path, objective: str, preferred_model: str, read_only: bool
-):
-    from nous_runtime.chat.agent_tools import WorkspaceToolRuntime, mutation_is_explicit
-    from nous_runtime.model_runtime import get_gateway_facade
-    from nous_runtime.skills import SkillToolRuntime
-    from nous_runtime.tools import ArtifactToolRuntime, GitToolRuntime, ToolCatalog
-    from nous_runtime.web import WebToolRuntime
-    from nous_runtime.work.deliberation import ModelWorkDeliberator
+def _runtime_components(root: Path, snapshot):
+    from nous_runtime.work.components import build_work_components
 
-    allow_mutations = not read_only and mutation_is_explicit(objective)
-    workspace_tools = WorkspaceToolRuntime(
-        str(root.resolve()),
-        allow_mutations=allow_mutations,
-    )
-    tools = ToolCatalog()
-    tools.register_runtime(workspace_tools)
-    tools.register_runtime(GitToolRuntime(root), provider_id="git-sandbox")
-    tools.register_runtime(
-        ArtifactToolRuntime(root, allow_mutations=allow_mutations),
-        provider_id="artifact-runtime",
-    )
-    tools.register_runtime(
-        SkillToolRuntime(root, allow_mutations=allow_mutations),
-        provider_id="skill-registry",
-    )
-    tools.register_runtime(WebToolRuntime(root), provider_id="web-runtime")
-    facade = get_gateway_facade(required=True)
-    deliberator = ModelWorkDeliberator(
-        facade,
-        tool_specifications=tools.prompt_specifications(),
-        tool_capabilities=tools.categories(),
-        preferred_model=preferred_model,
-    )
-    return tools, deliberator
+    components = build_work_components(root, snapshot)
+    return components.tools, components.deliberator
 
 
 @work_app.command("run")
@@ -87,9 +57,16 @@ def run_work(
     from nous_runtime.work.deliberation import verify_recorded_work
 
     harness = WorkHarness(root)
-    snapshot = harness.create(objective)
+    snapshot = harness.create(
+        objective,
+        execution_options={
+            "preferred_model": model,
+            "read_only": read_only,
+            "max_iterations": max_iterations,
+        },
+    )
     try:
-        tools, deliberator = _runtime_components(root, objective, model, read_only)
+        tools, deliberator = _runtime_components(root, snapshot)
         snapshot = harness.run(
             snapshot.run_id,
             deliberator=deliberator,
@@ -153,12 +130,21 @@ def resume_work(
 
     harness = WorkHarness(root)
     snapshot = harness.require(run_id)
-    tools, deliberator = _runtime_components(
-        root,
-        snapshot.goal.objective,
-        model,
-        read_only,
+    snapshot.execution_options.update(
+        {
+            "preferred_model": model
+            or str(snapshot.execution_options.get("preferred_model") or ""),
+            "read_only": read_only
+            or bool(snapshot.execution_options.get("read_only", False)),
+            "max_iterations": max_iterations,
+        }
     )
+    harness.persist_progress(
+        snapshot,
+        "work.execution.configured",
+        {"source": "cli.resume"},
+    )
+    tools, deliberator = _runtime_components(root, snapshot)
     snapshot = harness.resume(
         run_id,
         deliberator=deliberator,

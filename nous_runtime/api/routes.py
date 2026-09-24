@@ -1841,6 +1841,13 @@ GOVERNED_MUTATION_ROUTES = {
 }
 
 try:
+    from nous_runtime.api.desktop_routes import DESKTOP_GOVERNANCE
+
+    GOVERNED_MUTATION_ROUTES.update(DESKTOP_GOVERNANCE)
+except ImportError:
+    pass
+
+try:
     from nous_runtime.api.developer_routes import DEVELOPER_GOVERNANCE
 
     GOVERNED_MUTATION_ROUTES.update(DEVELOPER_GOVERNANCE)

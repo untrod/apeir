@@ -353,6 +353,18 @@ export const fetchTasks = (state?: string, limit = 50) => {
 export const taskAction = (action: string, taskId: string) =>
   api("/api/v1/tasks/action", { method: "POST", body: JSON.stringify({ action, task_id: taskId }) });
 
+export const submitWork = (data: {
+  objective: string;
+  completion_criteria?: string[];
+  constraints?: Record<string, unknown>;
+  preferred_model?: string;
+  read_only?: boolean;
+  max_iterations?: number;
+}) => api("/api/v1/work", { method: "POST", body: JSON.stringify(data) });
+
+export const inspectWork = (runId: string) =>
+  api(`/api/v1/work/${encodeURIComponent(runId)}`);
+
 // Devices
 export const fetchDevices = () =>
   api<{ devices: DeviceView[]; total: number; online: number }>("/api/v1/devices");

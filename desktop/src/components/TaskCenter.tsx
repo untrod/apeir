@@ -123,7 +123,7 @@ function TaskRow({ task, onTaskClick, onTraceClick }: {
 
   const canCancel = ["created", "queued", "planning", "dispatching", "running", "waiting_for_model", "waiting_for_node", "waiting_user", "blocked", "recovering", "paused"].includes(task.status);
   const canPause = ["planning", "running", "dispatching", "recovering"].includes(task.status);
-  const canResume = task.status === "paused" && task.task_kind !== "work";
+  const canResume = task.status === "paused" && task.recoverable;
   const canRetry = task.status === "failed" && task.recoverable && task.task_kind !== "work";
 
   return (
