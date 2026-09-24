@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from nous_runtime.model_runtime import (
+    GatewayBudget,
     GatewayExecutionContext,
     GatewayOperation,
     GatewayRequest,
@@ -74,15 +75,19 @@ class ModelWorkDeliberator:
         tool_specifications: Sequence[Mapping[str, Any]] = (),
         tool_capabilities: Sequence[Mapping[str, Any]] = (),
         preferred_model: str = "",
+        timeout_s: float = 180.0,
+        max_output_tokens: int = 1024,
     ) -> None:
         self.facade = facade
         self.tools = tuple(dict(item) for item in tool_specifications)
         self.tool_capabilities = tuple(dict(item) for item in tool_capabilities)
         self.preferred_model = str(preferred_model or "")
+        self.timeout_s = float(timeout_s)
+        self.max_output_tokens = int(max_output_tokens)
 
     def __call__(self, context: WorkContext) -> WorkDecision:
         payload = {
-            "work": context.to_dict(),
+            "work": _decision_context(context),
             "tool_capability_catalog": list(self.tool_capabilities),
             "available_tools": [self._tool_summary(item) for item in self.tools],
         }
@@ -113,7 +118,11 @@ class ModelWorkDeliberator:
                         "analysis before retry. On recovery, reassess current workspace "
                         "state and do not replay the previous action. Request approval "
                         "before risky effects. Complete only when the plan and "
-                        "verification evidence support the goal criteria."
+                        "verification evidence support the goal criteria. Do not choose "
+                        "blocked merely because repository details are unknown: expand "
+                        "the files or shell catalog and inspect the local workspace first. "
+                        "Use blocked only when a required external prerequisite cannot be "
+                        "obtained with the available safe tools."
                     ),
                 },
                 {
@@ -132,11 +141,17 @@ class ModelWorkDeliberator:
             routing_mode=(
                 RoutingMode.PREFERRED if self.preferred_model else RoutingMode.AUTO
             ),
+            timeout_s=self.timeout_s,
+            budget=GatewayBudget(max_tokens=self.max_output_tokens),
             trace=GatewayTraceContext(
                 trace_id=context.run_id,
                 correlation_id=context.run_id,
             ),
-            metadata={"source": "work.harness", "work_run_id": context.run_id},
+            metadata={
+                "source": "work.harness",
+                "work_run_id": context.run_id,
+                "temperature": 0.1,
+            },
         )
         response = self.facade.try_invoke_sync(request)
         if not response.ok:
@@ -162,6 +177,71 @@ class ModelWorkDeliberator:
             "description": str(specification.get("description") or ""),
             "parameters": dict(specification.get("input_schema") or {}),
         }
+
+
+def _decision_context(context: WorkContext) -> dict[str, Any]:
+    value = context.to_dict()
+    plan = dict(value.get("plan") or {})
+    tasks = []
+    for raw in plan.get("tasks") or ():
+        task = dict(raw)
+        compact = {
+            key: task.get(key)
+            for key in (
+                "task_id",
+                "description",
+                "capability_id",
+                "status",
+                "depends_on",
+                "retry_count",
+                "max_retries",
+                "error",
+            )
+            if task.get(key) not in (None, "", [], {})
+        }
+        if task.get("result") is not None:
+            compact["result"] = task["result"]
+        tasks.append(compact)
+    if plan:
+        value["plan"] = {
+            key: plan.get(key)
+            for key in ("plan_id", "revision", "status", "progress")
+            if plan.get(key) not in (None, "", [], {})
+        }
+        value["plan"]["tasks"] = tasks
+
+    event_payload_keys = {
+        "state",
+        "reason",
+        "summary",
+        "iteration",
+        "recovering",
+        "trigger",
+        "tool",
+        "step_id",
+        "ok",
+        "error",
+        "decision",
+    }
+    compact_events = []
+    for raw in value.get("recent_events") or ():
+        event = dict(raw)
+        event_payload = dict(event.get("payload") or {})
+        compact_events.append(
+            {
+                "sequence": event.get("sequence"),
+                "timestamp": event.get("timestamp"),
+                "event_type": event.get("event_type"),
+                "actor": event.get("actor"),
+                "payload": {
+                    key: event_payload[key]
+                    for key in event_payload_keys
+                    if key in event_payload
+                },
+            }
+        )
+    value["recent_events"] = compact_events
+    return value
 
 
 def verify_recorded_work(context: WorkContext) -> dict[str, Any]:

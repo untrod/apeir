@@ -51,6 +51,9 @@ def run_work(
     model: str = typer.Option("", "--model", help="Preferred model ID"),
     read_only: bool = typer.Option(False, "--read-only"),
     max_iterations: int = typer.Option(32, "--max-iterations", min=1, max=1000),
+    model_timeout_s: float = typer.Option(
+        180.0, "--model-timeout", min=1.0, max=3600.0
+    ),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Create and execute one durable Work run."""
@@ -63,6 +66,7 @@ def run_work(
             "preferred_model": model,
             "read_only": read_only,
             "max_iterations": max_iterations,
+            "model_timeout_s": model_timeout_s,
         },
     )
     try:
@@ -123,6 +127,9 @@ def resume_work(
     model: str = typer.Option("", "--model", help="Preferred model ID"),
     read_only: bool = typer.Option(False, "--read-only"),
     max_iterations: int = typer.Option(32, "--max-iterations", min=1, max=1000),
+    model_timeout_s: float = typer.Option(
+        180.0, "--model-timeout", min=1.0, max=3600.0
+    ),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Restore a Work checkpoint and reassess before any new action."""
@@ -137,6 +144,7 @@ def resume_work(
             "read_only": read_only
             or bool(snapshot.execution_options.get("read_only", False)),
             "max_iterations": max_iterations,
+            "model_timeout_s": model_timeout_s,
         }
     )
     harness.persist_progress(

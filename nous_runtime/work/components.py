@@ -24,7 +24,9 @@ def build_work_components(
 ) -> WorkExecutionComponents:
     """Assemble existing governed runtimes for one Work checkpoint."""
     from nous_runtime.chat.agent_tools import WorkspaceToolRuntime, mutation_is_explicit
+    from nous_runtime.cli.provider_setup import load_providers_from_config
     from nous_runtime.model_runtime import get_gateway_facade
+    from nous_runtime.model_runtime.factory import gateway_service
     from nous_runtime.skills import SkillToolRuntime
     from nous_runtime.tools import (
         ArtifactToolRuntime,
@@ -64,12 +66,20 @@ def build_work_components(
     )
     tools.register_runtime(WebToolRuntime(workspace), provider_id="web-runtime")
 
-    facade = get_gateway_facade(required=True)
+    provider_count = load_providers_from_config()
+    facade = get_gateway_facade(required=False)
+    if facade is None and provider_count:
+        gateway_service.configure_from_providers()
+        facade = get_gateway_facade(required=True)
+    elif facade is None:
+        facade = get_gateway_facade(required=True)
     deliberator = ModelWorkDeliberator(
         facade,
         tool_specifications=tools.prompt_specifications(),
         tool_capabilities=tools.categories(),
         preferred_model=str(options.get("preferred_model") or ""),
+        timeout_s=float(options.get("model_timeout_s") or 180.0),
+        max_output_tokens=int(options.get("decision_max_output_tokens") or 1024),
     )
     return WorkExecutionComponents(
         tools=tools,

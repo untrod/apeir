@@ -48,9 +48,19 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
     assert request.operation.value == "structured_output"
     assert request.response_schema["properties"]["status"]["enum"]
     assert request.metadata["source"] == "work.harness"
+    assert request.metadata["temperature"] == 0.1
+    assert "Do not choose blocked" in request.messages[0]["content"]
+    assert request.timeout_s == 180.0
+    assert request.budget.max_tokens == 1024
     payload = json.loads(request.messages[1]["content"])
     assert payload["tool_capability_catalog"][0]["category"] == "files"
     assert payload["tool_capability_catalog"][0]["authority"] == "none"
+    assert all(
+        "objective" not in event["payload"]
+        and "plan" not in event["payload"]
+        and "assessment" not in event["payload"]
+        for event in payload["work"]["recent_events"]
+    )
 
 
 def test_recorded_work_verifier_requires_tool_evidence_when_assessed(tmp_path):
