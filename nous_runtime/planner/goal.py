@@ -16,6 +16,9 @@ class GoalStatus(str, Enum):
     UNDERSTANDING = "understanding"
     PLANNING = "planning"
     EXECUTING = "executing"
+    PAUSED = "paused"
+    BLOCKED = "blocked"
+    WAITING_USER = "waiting_user"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -30,6 +33,9 @@ class Goal:
     status: GoalStatus = GoalStatus.CREATED
     constraints: dict[str, Any] = field(default_factory=dict)
     requirements: list[str] = field(default_factory=list)
+    completion_criteria: list[str] = field(default_factory=list)
+    current_plan_revision: int = 0
+    blocker: str = ""
     created_at: str = ""
     updated_at: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -50,10 +56,55 @@ class Goal:
 
     def start_executing(self) -> None:
         self.status = GoalStatus.EXECUTING
+        self.blocker = ""
+        self._touch()
+
+    def pause(self, reason: str = "") -> None:
+        self.status = GoalStatus.PAUSED
+        self.blocker = str(reason or "")
+        self._touch()
+
+    def block(self, reason: str) -> None:
+        self.status = GoalStatus.BLOCKED
+        self.blocker = str(reason or "")
+        self._touch()
+
+    def wait_for_user(self, reason: str) -> None:
+        self.status = GoalStatus.WAITING_USER
+        self.blocker = str(reason or "")
+        self._touch()
+
+    def resume(self) -> None:
+        if self.status not in {
+            GoalStatus.PAUSED,
+            GoalStatus.BLOCKED,
+            GoalStatus.WAITING_USER,
+        }:
+            raise ValueError(f"goal cannot resume from {self.status.value}")
+        self.status = GoalStatus.UNDERSTANDING
+        self.blocker = ""
+        self._touch()
+
+    def steer(
+        self,
+        instruction: str,
+        *,
+        constraints: dict[str, Any] | None = None,
+    ) -> None:
+        text = str(instruction or "").strip()
+        if text:
+            self.requirements.append(text)
+        if constraints:
+            self.constraints.update(dict(constraints))
+        self._touch()
+
+    def bind_plan_revision(self, revision: int) -> None:
+        self.current_plan_revision = max(0, int(revision))
         self._touch()
 
     def complete(self) -> None:
         self.status = GoalStatus.COMPLETED
+        self.blocker = ""
         self._touch()
 
     def fail(self, reason: str = "") -> None:
@@ -75,7 +126,28 @@ class Goal:
             "status": self.status.value,
             "constraints": self.constraints,
             "requirements": self.requirements,
+            "completion_criteria": self.completion_criteria,
+            "current_plan_revision": self.current_plan_revision,
+            "blocker": self.blocker,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "metadata": self.metadata,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Goal":
+        return cls(
+            goal_id=str(data.get("goal_id") or ""),
+            objective=str(data.get("objective") or ""),
+            status=GoalStatus(str(data.get("status") or GoalStatus.CREATED.value)),
+            constraints=dict(data.get("constraints") or {}),
+            requirements=[str(item) for item in data.get("requirements") or ()],
+            completion_criteria=[
+                str(item) for item in data.get("completion_criteria") or ()
+            ],
+            current_plan_revision=int(data.get("current_plan_revision") or 0),
+            blocker=str(data.get("blocker") or ""),
+            created_at=str(data.get("created_at") or ""),
+            updated_at=str(data.get("updated_at") or ""),
+            metadata=dict(data.get("metadata") or {}),
+        )

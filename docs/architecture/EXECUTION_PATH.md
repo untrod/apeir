@@ -80,6 +80,24 @@ Chat request
 The binding is a compatibility materialized view until project lifecycle is
 hosted directly by `nousd`; it must never override a kernel journal outcome.
 
+The Work Harness adds one durable orchestration projection without replacing
+either execution scope:
+
+```text
+Work Goal + Task Assessment
+  -> optional versioned Plan
+  -> structured ModelGateway decision
+  -> AgentExecutionRuntime model/tool boundary
+  -> governed workspace or Runtime capability
+  -> recorded observation
+  -> completion verification
+  -> EventStream projection + workspace checkpoint
+```
+
+Resume restores the latest Goal, Plan, observations, artifacts, and Agent
+checkpoint, then produces a new deliberation against the current workspace.
+The last requested tool action is not replayed automatically.
+
 ## Current migration boundary
 
 The Rust daemon is authoritative for model-workload and Reality-effect

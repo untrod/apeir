@@ -47,6 +47,28 @@ Applications (CLI, Web, Desktop, Mobile)
 - **Job**: A scheduled and tracked execution unit
 - **Trace**: Complete execution record for observability
 
+## Work Harness
+
+`apeir work` is the product-level entry for goal-directed work. The Harness is
+a thin composition layer over existing Runtime owners:
+
+```text
+Work request
+  -> TaskAnalyzer
+  -> Goal + optional versioned Plan
+  -> ModelGateway structured decision
+  -> AgentExecutionRuntime invocation boundary
+  -> existing governed tool/capability runtime
+  -> observation + verification
+  -> EventStream projection + SQLite checkpoint
+```
+
+The Harness is not an authority. Tool availability, model output, plan metadata,
+and skill guidance cannot grant permission or bypass Kernel/Runtime admission.
+Simple tasks may complete without a Plan. Long-running runs persist Goal, Plan
+revision history, observations, artifacts, blockers, and Agent checkpoints in the
+workspace and reassess current state before acting after resume.
+
 ## For Developers
 
 Start here:

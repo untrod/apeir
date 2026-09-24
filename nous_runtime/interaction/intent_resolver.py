@@ -64,8 +64,7 @@ class IntentResolver:
                 confidence=0.76,
                 requires_confirmation=False,
                 reason=(
-                    "Interpreted unmatched natural language as a Runtime "
-                    "task goal."
+                    "Interpreted unmatched natural language as a Runtime task goal."
                 ),
                 route="runtime.execute",
                 metadata={
@@ -87,20 +86,14 @@ class IntentResolver:
     def _analyze(self, request: IntentRequest) -> TaskAnalysis:
         analysis = self.analyzer.analyze(
             request.input_text,
-            task_id=str(
-                request.metadata.get("task_id") or "ad-hoc"
-            ),
+            task_id=str(request.metadata.get("task_id") or "ad-hoc"),
         )
         lowered = request.input_text.casefold()
-        matched = tuple(
-            marker
-            for marker in _ENGINEERING_MARKERS
-            if marker in lowered
-        )
+        matched = tuple(marker for marker in _ENGINEERING_MARKERS if marker in lowered)
         if not matched:
             return analysis
-        return TaskAnalysis(
-            task_id=analysis.task_id,
+        return replace(
+            analysis,
             task_type="engineering_design",
             complexity="high",
             required_capabilities=(
@@ -110,7 +103,12 @@ class IntentResolver:
                 "coding",
                 "documentation",
             ),
-            constraints=dict(analysis.constraints),
+            needs_tools=True,
+            needs_plan=True,
+            needs_workspace=True,
+            needs_environment=True,
+            candidate_skills=("code-engineer", "scientific-compute"),
+            risk_class="medium",
             metadata={
                 **dict(analysis.metadata),
                 "matched_engineering_markers": list(matched),

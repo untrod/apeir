@@ -8,6 +8,11 @@ Version: `0.1.0-rc1`
   `feature/reality-execution-v2`, but x64 Controller to Windows ARM64 real-effect
   acceptance, independent remote observation, reconnect/fault injection, and
   malicious/stale-node matrices remain pending. This is not M2 completion.
+- The R6 Work Harness core now has structured assessment and deliberation,
+  versioned plans, progress events, steering, durable checkpoints, restart
+  recovery, and a CLI entry. Unified Tool/Skill/Web catalogs, background Desktop
+  execution, context compaction, and the Code/Research/Scientific acceptance
+  tasks are still pending. This is not R6 completion.
 - The first Reality Adapter supports only an administrator-bound loopback HTTP
   service target. It is not an arbitrary remote endpoint or device runtime.
 - Model-backed tasks require a configured Provider account or a local model.

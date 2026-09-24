@@ -354,6 +354,7 @@ for _module_name, _register_name in (
     ("nous_runtime.plugins.cli", "register_plugin_commands"),
     ("nous_runtime.knowledge.cli", "register_library_commands"),
     ("nous_runtime.workflow.cli", "register_workflow_commands"),
+    ("nous_runtime.work.cli", "register_work_commands"),
 ):
     try:
         _module = __import__(_module_name, fromlist=[_register_name])

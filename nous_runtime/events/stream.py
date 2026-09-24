@@ -39,11 +39,16 @@ DEFAULT_MAX_LISTENERS = 64
 DEFAULT_CHUNK_BYTES = 16_384
 _COALESCIBLE_EVENTS = {"step.progress", "run.heartbeat", "stream.fragment"}
 _PROTECTED_PREFIXES = (
-    "run.", "approval.", "security.", "artifact.", "network.", "claim.", "error.",
+    "run.",
+    "approval.",
+    "security.",
+    "artifact.",
+    "network.",
+    "claim.",
+    "work.",
+    "error.",
 )
 _PROTECTED_EVENTS = {"command.proposed", "file.changed", "test.completed"}
-
-
 
 
 class EventStreamError(RuntimeError):
@@ -101,13 +106,18 @@ class EventStream:
         run_id = event.run_id
         self._validate_run_id(run_id)
         started = time.perf_counter()
-        with run_lock, runtime_locks.acquire(
-            f"run:{run_id}", owner=event.actor, timeout=5.0
+        with (
+            run_lock,
+            runtime_locks.acquire(f"run:{run_id}", owner=event.actor, timeout=5.0),
         ):
             with file_lock(self._event_lock_path(run_id)):
                 persisted_events = self._load_events_unlocked(run_id)
                 duplicate = next(
-                    (item for item in persisted_events if item.event_id == event.event_id),
+                    (
+                        item
+                        for item in persisted_events
+                        if item.event_id == event.event_id
+                    ),
                     None,
                 )
                 if duplicate is not None:
@@ -130,10 +140,24 @@ class EventStream:
             else:
                 buf.append(event)
             if len(buf) > self._buffer_size:
-                self._buffers[run_id] = buf[-self._buffer_size:]
+                self._buffers[run_id] = buf[-self._buffer_size :]
             if run_id in self._runs:
-                self._runs[run_id].last_sequence = event.sequence
-                self._runs[run_id].updated_at = event.timestamp
+                record = self._runs[run_id]
+                record.last_sequence = event.sequence
+                record.updated_at = event.timestamp
+                payload_state = str(event.payload.get("state") or "")
+                if payload_state:
+                    try:
+                        record.state = RunState(payload_state)
+                    except ValueError:
+                        pass
+                    else:
+                        if record.state in {
+                            RunState.COMPLETED,
+                            RunState.FAILED,
+                            RunState.CANCELLED,
+                        }:
+                            record.completed_at = event.timestamp
             self._metrics["emitted_events"] += 1
             self._metrics["persistence_writes"] += 1
             self._metrics["persistence_latency_ms_total"] += (
@@ -197,11 +221,20 @@ class EventStream:
         """Emit a state-change event."""
         event_type_map = {
             RunState.CREATED: "run.created",
+            RunState.RECEIVED: "work.received",
+            RunState.UNDERSTANDING: "work.analysis",
+            RunState.PREPARING: "work.preparing",
             RunState.PLANNING: "plan.created",
+            RunState.EXECUTING: "work.progress",
+            RunState.OBSERVING: "work.observing",
+            RunState.REPLANNING: "work.plan.updated",
+            RunState.VERIFYING: "work.verifying",
             RunState.WAITING_FOR_NODE: "run.queued",
             RunState.WAITING_FOR_APPROVAL: "approval.requested",
+            RunState.WAITING_USER: "work.waiting_user",
             RunState.RUNNING: "run.started",
             RunState.PAUSED: "run.paused",
+            RunState.BLOCKED: "work.blocked",
             RunState.EVALUATING: "run.completed",
             RunState.RECOVERING: "run.recovering",
             RunState.COMPLETED: "run.completed",
@@ -254,9 +287,7 @@ class EventStream:
             self._buffers[run_id] = events[-self._buffer_size :]
         return record
 
-    def list_runs(
-        self, *, limit: int = 20, offset: int = 0
-    ) -> list[RunRecord]:
+    def list_runs(self, *, limit: int = 20, offset: int = 0) -> list[RunRecord]:
         limit = max(1, min(int(limit), 200))
         offset = max(0, int(offset))
         events_dir = Path(self._workspace) / ".nous" / "events"
@@ -279,7 +310,9 @@ class EventStream:
             )
             return runs[offset : offset + limit]
 
-    def control_run(self, run_id: str, action: str, *, actor: str = "terminal") -> RunRecord:
+    def control_run(
+        self, run_id: str, action: str, *, actor: str = "terminal"
+    ) -> RunRecord:
         """Apply a supported control transition to the canonical RunRecord."""
         action = action.strip().lower()
         target = {
@@ -293,15 +326,34 @@ class EventStream:
         if record is None:
             raise KeyError(run_id)
         allowed = {
-            "pause": {RunState.RUNNING},
+            "pause": {
+                RunState.RUNNING,
+                RunState.RECEIVED,
+                RunState.UNDERSTANDING,
+                RunState.PREPARING,
+                RunState.PLANNING,
+                RunState.EXECUTING,
+                RunState.OBSERVING,
+                RunState.REPLANNING,
+                RunState.VERIFYING,
+            },
             "resume": {RunState.PAUSED, RunState.RECOVERING},
             "cancel": {
                 RunState.CREATED,
+                RunState.RECEIVED,
+                RunState.UNDERSTANDING,
+                RunState.PREPARING,
                 RunState.PLANNING,
+                RunState.EXECUTING,
+                RunState.OBSERVING,
+                RunState.REPLANNING,
+                RunState.VERIFYING,
                 RunState.WAITING_FOR_NODE,
                 RunState.WAITING_FOR_APPROVAL,
+                RunState.WAITING_USER,
                 RunState.RUNNING,
                 RunState.PAUSED,
+                RunState.BLOCKED,
                 RunState.EVALUATING,
                 RunState.RECOVERING,
             },
@@ -313,9 +365,7 @@ class EventStream:
                 RunState.CANCELLED,
             }
             qualifier = "terminal state" if terminal else "state"
-            raise ValueError(
-                f"cannot {action} run in {qualifier} {record.state.value}"
-            )
+            raise ValueError(f"cannot {action} run in {qualifier} {record.state.value}")
         self.emit_state_change(
             run_id,
             target,
@@ -340,7 +390,19 @@ class EventStream:
         terminal = False
         event_states = {
             "run.created": RunState.CREATED,
+            "work.received": RunState.RECEIVED,
+            "work.analysis": RunState.UNDERSTANDING,
+            "work.preparing": RunState.PREPARING,
             "plan.created": RunState.PLANNING,
+            "work.plan.created": RunState.PLANNING,
+            "work.progress": RunState.EXECUTING,
+            "work.observing": RunState.OBSERVING,
+            "work.plan.updated": RunState.REPLANNING,
+            "work.verifying": RunState.VERIFYING,
+            "work.waiting_user": RunState.WAITING_USER,
+            "work.waiting_approval": RunState.WAITING_FOR_APPROVAL,
+            "work.blocked": RunState.BLOCKED,
+            "work.completed": RunState.COMPLETED,
             "run.queued": RunState.WAITING_FOR_NODE,
             "approval.requested": RunState.WAITING_FOR_APPROVAL,
             "run.started": RunState.RUNNING,
@@ -455,12 +517,12 @@ class EventStream:
 
     def _event_lock_path(self, run_id: str) -> Path:
         return Path(self._event_log_path(run_id)).with_suffix(".lock")
+
     def _event_index_path(self, run_id: str) -> Path:
         return Path(self._event_log_path(run_id)).with_suffix(".idx")
 
     def _snapshot_path(self, run_id: str) -> Path:
         return Path(self._event_log_path(run_id)).with_suffix(".snapshot.json")
-
 
     def _last_persisted_sequence_unlocked(self, run_id: str) -> int:
         events = self._load_events_unlocked(run_id)
@@ -476,12 +538,19 @@ class EventStream:
                 offset = handle.tell()
                 handle.flush()
                 os.fsync(handle.fileno())
-            with self._event_index_path(event.run_id).open("a", encoding="utf-8") as index:
+            with self._event_index_path(event.run_id).open(
+                "a", encoding="utf-8"
+            ) as index:
                 index.write(
                     json.dumps(
-                        {"sequence": event.sequence, "offset": offset, "event_id": event.event_id},
+                        {
+                            "sequence": event.sequence,
+                            "offset": offset,
+                            "event_id": event.event_id,
+                        },
                         sort_keys=True,
-                    ) + "\n"
+                    )
+                    + "\n"
                 )
         except Exception as exc:
             raise EventStreamError(f"Failed to persist event: {exc}") from exc
@@ -595,31 +664,23 @@ class EventStream:
         """Persist a deterministic replay snapshot."""
         events = self.load_events(run_id)
         if upto_sequence is not None:
-            events = [
-                event for event in events
-                if event.sequence <= upto_sequence
-            ]
+            events = [event for event in events if event.sequence <= upto_sequence]
         canonical = [
-            event.to_dict()
-            for event in sorted(events, key=lambda item: item.sequence)
+            event.to_dict() for event in sorted(events, key=lambda item: item.sequence)
         ]
-        encoded = json.dumps(
-            canonical, ensure_ascii=False, sort_keys=True
-        ).encode("utf-8")
+        encoded = json.dumps(canonical, ensure_ascii=False, sort_keys=True).encode(
+            "utf-8"
+        )
         snapshot = {
             "run_id": run_id,
-            "last_sequence": max(
-                (event.sequence for event in events), default=0
-            ),
+            "last_sequence": max((event.sequence for event in events), default=0),
             "event_count": len(events),
             "sha256": hashlib.sha256(encoded).hexdigest(),
         }
         path = self._snapshot_path(run_id)
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(path.suffix + ".tmp")
-        temporary.write_text(
-            json.dumps(snapshot, sort_keys=True), encoding="utf-8"
-        )
+        temporary.write_text(json.dumps(snapshot, sort_keys=True), encoding="utf-8")
         os.replace(temporary, path)
         return snapshot
 
@@ -628,11 +689,9 @@ class EventStream:
         if not buffer or event.event_type not in _COALESCIBLE_EVENTS:
             return False
         previous = buffer[-1]
-        return (
-            previous.event_type == event.event_type
-            and previous.payload.get("step_id")
-            == event.payload.get("step_id")
-        )
+        return previous.event_type == event.event_type and previous.payload.get(
+            "step_id"
+        ) == event.payload.get("step_id")
 
     @staticmethod
     def _is_retention_protected(event: RunEvent) -> bool:
@@ -646,27 +705,19 @@ class EventStream:
         events = self._load_events_unlocked(run_id)
         if len(events) <= self._max_persisted:
             return
-        protected = [
-            event for event in events
-            if self._is_retention_protected(event)
-        ]
+        protected = [event for event in events if self._is_retention_protected(event)]
         remaining = max(self._max_persisted - len(protected), 0)
         coalescible = [
-            event for event in events
-            if not self._is_retention_protected(event)
+            event for event in events if not self._is_retention_protected(event)
         ]
-        retained = protected + (
-            coalescible[-remaining:] if remaining else []
-        )
+        retained = protected + (coalescible[-remaining:] if remaining else [])
         retained.sort(key=lambda item: item.sequence)
         path = Path(self._event_log_path(run_id))
         temporary = path.with_suffix(".jsonl.tmp")
         with temporary.open("w", encoding="utf-8") as handle:
             for event in retained:
                 handle.write(
-                    json.dumps(
-                        self._redact(event.to_dict()), ensure_ascii=False
-                    ) + "\n"
+                    json.dumps(self._redact(event.to_dict()), ensure_ascii=False) + "\n"
                 )
         os.replace(temporary, path)
         self._rebuild_index_unlocked(run_id)
@@ -690,7 +741,8 @@ class EventStream:
                                     "event_id": event.event_id,
                                 },
                                 sort_keys=True,
-                            ) + "\n"
+                            )
+                            + "\n"
                         )
                     except (json.JSONDecodeError, TypeError, ValueError):
                         pass
@@ -722,12 +774,11 @@ class EventStream:
             writes = int(self._metrics["persistence_writes"])
             metrics = {
                 **self._metrics,
-                "queue_depth": sum(
-                    len(buffer) for buffer in self._buffers.values()
-                ),
+                "queue_depth": sum(len(buffer) for buffer in self._buffers.values()),
                 "persistence_latency_ms": (
                     float(self._metrics["persistence_latency_ms_total"]) / writes
-                    if writes else 0.0
+                    if writes
+                    else 0.0
                 ),
                 "lock_domains": runtime_locks.snapshot(),
             }

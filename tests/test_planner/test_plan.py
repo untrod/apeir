@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Planner Plan + Task Graph tests."""
 
-from nous_runtime.planner.plan import Plan, TaskStatus
+from nous_runtime.planner.plan import Plan, PlanStatus, TaskStatus
 from nous_runtime.planner.graph import TaskGraph
 
 
@@ -33,6 +33,23 @@ class TestPlan:
         t = plan.add_task("A", capability_id="test.a")
         t.status = TaskStatus.COMPLETED
         assert plan.all_done()
+
+    def test_versioned_plan_mutation_round_trip(self):
+        plan = Plan(goal_id="goal_001")
+        first = plan.add_task("Inspect", capability_id="files.read")
+        second = plan.add_task(
+            "Test", capability_id="shell.exec", depends_on=[first.task_id]
+        )
+        plan.mark_ready()
+
+        plan.mark_skipped(second.task_id, reason="verification moved to CI")
+        restored = Plan.from_dict(plan.to_dict())
+
+        assert restored.status is PlanStatus.READY
+        assert restored.revision == 2
+        assert restored.revision_history[0].revision == 1
+        assert restored.revision_history[0].reason == "verification moved to CI"
+        assert restored.require_task(second.task_id).status is TaskStatus.SKIPPED
 
 
 class TestTaskGraph:

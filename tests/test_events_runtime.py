@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from nous_runtime.events import EventStream, EventStreamError, RunEvent
+from nous_runtime.events import EventStream, EventStreamError, RunEvent, RunState
 from nous_runtime.locking import DomainLockManager, LockTimeoutError
 
 
@@ -27,6 +27,30 @@ def test_event_stream_restores_sequence_after_restart(tmp_path):
 
     assert event.sequence == 2
     assert [item.sequence for item in restarted.load_events("run_1")] == [1, 2]
+
+
+def test_event_payload_state_updates_live_and_reconstructed_projection(tmp_path):
+    stream = EventStream(str(tmp_path))
+    stream.create_run("work_1", task_id="goal_1")
+    stream.emit(
+        RunEvent(
+            run_id="work_1",
+            task_id="goal_1",
+            event_type="work.analysis",
+            payload={"state": "UNDERSTANDING"},
+        )
+    )
+    stream.emit(
+        RunEvent(
+            run_id="work_1",
+            task_id="goal_1",
+            event_type="work.completed",
+            payload={"state": "COMPLETED"},
+        )
+    )
+
+    assert stream.get_run("work_1").state is RunState.COMPLETED
+    assert EventStream(str(tmp_path)).get_run("work_1").state is RunState.COMPLETED
 
 
 def test_event_stream_reuses_duplicate_event_after_restart(tmp_path):
@@ -66,6 +90,7 @@ def test_event_stream_redacts_nested_list_values(tmp_path):
     path = tmp_path / ".nous" / "events" / "run_1.jsonl"
     persisted = json.loads(path.read_text(encoding="utf-8"))
     assert persisted["payload"]["items"][0]["api_token"] == "<REDACTED>"
+
 
 def _emit_many_events(workspace: str, worker_id: int, count: int) -> None:
     stream = EventStream(workspace)
@@ -160,10 +185,7 @@ def test_event_stream_chunks_unicode_without_data_loss(tmp_path):
 
     assert len(chunks) > 1
     assert "".join(chunk.payload["text"] for chunk in chunks) == content
-    assert all(
-        len(chunk.payload["text"].encode("utf-8")) <= 256
-        for chunk in chunks
-    )
+    assert all(len(chunk.payload["text"].encode("utf-8")) <= 256 for chunk in chunks)
 
 
 def test_event_stream_listener_bounds_backpressure_and_failure_metrics(tmp_path):
@@ -212,9 +234,7 @@ def test_runtime_lock_domains_expose_timeout_evidence():
 
     with manager.acquire("workspace:one", owner="writer", timeout=0.1):
         with pytest.raises(LockTimeoutError):
-            with manager.acquire(
-                "workspace:one", owner="contender", timeout=0.01
-            ):
+            with manager.acquire("workspace:one", owner="contender", timeout=0.01):
                 pass
 
     evidence = manager.snapshot()["workspace:one"]

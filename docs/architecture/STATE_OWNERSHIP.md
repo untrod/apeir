@@ -29,6 +29,8 @@ moved behind `nousd`:
 | Conversation execution cursor | Project Execution Service | `connectivity_runtime_bindings` |
 | Project checkpoint | Project Coordinator | `connectivity_checkpoints` |
 | Runtime run and event | EventStream | workspace `.nous/events` journal |
+| Work Harness recovery | Checkpoint Store | workspace `.nous/checkpoints.db`; `work_harness` and existing `agent_execution` checkpoints |
+| Work progress projection | EventStream | `work.*` events; UI and CLI do not own a second lifecycle |
 | Kernel recovery checkpoint | Checkpoint Store | kernel `checkpoints` table |
 
 These records are projections of Runtime activity. Provider responses and UI

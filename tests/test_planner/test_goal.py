@@ -38,3 +38,20 @@ class TestGoal:
         d = g.to_dict()
         assert d["objective"] == "Test"
         assert d["constraints"]["max_steps"] == 5
+
+    def test_long_lived_goal_round_trip_and_steering(self):
+        g = Goal("Fix API", completion_criteria=["tests pass"])
+        g.start_executing()
+        g.steer("Do not change storage", constraints={"scope": "api"})
+        g.bind_plan_revision(2)
+        g.wait_for_user("need fixture")
+
+        restored = Goal.from_dict(g.to_dict())
+
+        assert restored.status == GoalStatus.WAITING_USER
+        assert restored.requirements == ["Do not change storage"]
+        assert restored.completion_criteria == ["tests pass"]
+        assert restored.current_plan_revision == 2
+        assert restored.blocker == "need fixture"
+        restored.resume()
+        assert restored.status == GoalStatus.UNDERSTANDING

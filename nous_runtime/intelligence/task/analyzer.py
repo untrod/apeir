@@ -10,11 +10,42 @@ from nous_runtime.task import Task
 
 
 _RULES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
-    ("privacy", ("offline", "local", "private", "ollama", "本地", "隐私", "离线"), ("reasoning", "local_execution")),
-    ("coding", ("code", "coding", "python", "debug", "refactor", "test", "代码", "编程", "调试", "重构"), ("coding", "reasoning")),
-    ("math", ("math", "calculate", "equation", "proof", "数学", "计算", "方程", "证明"), ("math", "reasoning")),
-    ("computer_vision", ("image", "photo", "vision", "ocr", "图片", "图像", "视觉", "识别"), ("vision", "gpu", "python", "dataset")),
-    ("research", ("research", "compare", "analyze", "report", "调研", "比较", "分析", "报告"), ("reasoning", "retrieval")),
+    (
+        "privacy",
+        ("offline", "local", "private", "ollama", "本地", "隐私", "离线"),
+        ("reasoning", "local_execution"),
+    ),
+    (
+        "coding",
+        (
+            "code",
+            "coding",
+            "python",
+            "debug",
+            "refactor",
+            "test",
+            "代码",
+            "编程",
+            "调试",
+            "重构",
+        ),
+        ("coding", "reasoning"),
+    ),
+    (
+        "math",
+        ("math", "calculate", "equation", "proof", "数学", "计算", "方程", "证明"),
+        ("math", "reasoning"),
+    ),
+    (
+        "computer_vision",
+        ("image", "photo", "vision", "ocr", "图片", "图像", "视觉", "识别"),
+        ("vision", "gpu", "python", "dataset"),
+    ),
+    (
+        "research",
+        ("research", "compare", "analyze", "report", "调研", "比较", "分析", "报告"),
+        ("reasoning", "retrieval"),
+    ),
 )
 
 
@@ -45,12 +76,94 @@ class TaskAnalyzer:
 
         constraints = _constraints(lowered)
         complexity = _complexity(text, source_metadata)
+        action_markers = (
+            "fix",
+            "implement",
+            "modify",
+            "write",
+            "delete",
+            "deploy",
+            "send",
+            "purchase",
+            "修复",
+            "实现",
+            "修改",
+            "写入",
+            "删除",
+            "部署",
+            "发送",
+            "购买",
+        )
+        effect_markers = (
+            "delete",
+            "deploy",
+            "send",
+            "purchase",
+            "flash",
+            "remote",
+            "删除",
+            "部署",
+            "发送",
+            "购买",
+            "烧录",
+            "远程",
+        )
+        needs_web = task_type == "research" or any(
+            item in lowered
+            for item in ("latest", "current", "web", "online", "最新", "联网", "网页")
+        )
+        needs_workspace = task_type in {"coding", "computer_vision"} or any(
+            item in lowered
+            for item in ("repository", "project", "file", "仓库", "项目", "文件")
+        )
+        needs_environment = (
+            task_type in {"math", "computer_vision"} and complexity != "low"
+        )
+        needs_tools = (
+            needs_web
+            or needs_workspace
+            or needs_environment
+            or any(marker in lowered for marker in action_markers)
+        )
+        needs_plan = (
+            complexity in {"medium", "high"}
+            or any(marker in lowered for marker in action_markers)
+            or sum(
+                bool(value) for value in (needs_web, needs_workspace, needs_environment)
+            )
+            >= 2
+        )
+        skill_map = {
+            "coding": ("code-engineer",),
+            "research": ("research",),
+            "math": ("scientific-compute",),
+            "computer_vision": ("scientific-compute",),
+            "privacy": ("system-diagnostics",),
+        }
+        risk_class = (
+            "high"
+            if any(marker in lowered for marker in effect_markers)
+            else "medium"
+            if any(marker in lowered for marker in action_markers)
+            else "low"
+        )
+        missing_context: tuple[str, ...] = ()
+        if needs_workspace and not source_metadata.get("workspace"):
+            missing_context = ("workspace",)
         return TaskAnalysis(
             task_id=resolved_id,
             task_type=task_type,
             complexity=complexity,
             required_capabilities=capabilities,
             constraints=constraints,
+            needs_tools=needs_tools,
+            needs_plan=needs_plan,
+            needs_web=needs_web,
+            needs_workspace=needs_workspace,
+            needs_environment=needs_environment,
+            candidate_skills=skill_map.get(task_type, ()),
+            missing_context=missing_context,
+            risk_class=risk_class,
             metadata={"matched_keywords": matched, "analyzer": "rules-v1"},
         )
 
@@ -67,7 +180,9 @@ def _contains(keyword: str, text: str) -> bool:
 
 def _constraints(text: str) -> dict[str, Any]:
     constraints: dict[str, Any] = {}
-    if any(word in text for word in ("offline", "local", "private", "本地", "隐私", "离线")):
+    if any(
+        word in text for word in ("offline", "local", "private", "本地", "隐私", "离线")
+    ):
         constraints["privacy"] = "local"
     if any(word in text for word in ("fast", "urgent", "quick", "快速", "紧急")):
         constraints["latency"] = "low"
