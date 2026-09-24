@@ -285,6 +285,7 @@ class AgentLoop:
             or decision.tool_name in snapshot.loaded_tools
         )
         captured: dict[str, Any] = {}
+        tool_call_id = ""
         effect_class, capability_id = self._tool_effect(tools, decision.tool_name)
         snapshot.pending_action = {
             "tool": decision.tool_name,
@@ -334,6 +335,7 @@ class AgentLoop:
                 parameters=dict(decision.tool_arguments),
                 handler=invoke,
             )
+            tool_call_id = invocation.invocation_id
             invocation_status = invocation.status.value
             result = captured.get("result")
             if result is None:
@@ -344,6 +346,7 @@ class AgentLoop:
                 }
 
         normalized = self._result_mapping(result)
+        self._bind_change_records(normalized, snapshot.run_id, tool_call_id)
         ok = invocation_status == "completed" and self._result_ok(normalized)
         if decision.tool_name == "catalog_expand" and ok:
             for item in normalized.get("tools") or ():
@@ -417,6 +420,37 @@ class AgentLoop:
             default=str,
         ).encode("utf-8")
         return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
+    def _bind_change_records(
+        result: dict[str, Any],
+        work_id: str,
+        tool_call_id: str,
+    ) -> None:
+        def bind(value: Any) -> Any:
+            if not isinstance(value, Mapping):
+                return value
+            change = dict(value)
+            change["work_id"] = str(change.get("work_id") or work_id)
+            change["tool_call_id"] = str(
+                change.get("tool_call_id") or tool_call_id
+            )
+            return change
+
+        if isinstance(result.get("change"), Mapping):
+            result["change"] = bind(result["change"])
+        if isinstance(result.get("changes"), list):
+            result["changes"] = [bind(item) for item in result["changes"]]
+        if isinstance(result.get("files"), list):
+            files = []
+            for item in result["files"]:
+                file_result = dict(item) if isinstance(item, Mapping) else item
+                if isinstance(file_result, dict) and isinstance(
+                    file_result.get("change"), Mapping
+                ):
+                    file_result["change"] = bind(file_result["change"])
+                files.append(file_result)
+            result["files"] = files
 
     def _verify(self, snapshot: WorkSnapshot, verifier: Verifier | None) -> bool:
         snapshot.state = RunState.VERIFYING

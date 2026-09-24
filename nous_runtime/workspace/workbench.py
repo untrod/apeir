@@ -8,6 +8,7 @@ import os
 import shutil
 import sys
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
@@ -41,6 +42,34 @@ class WorkbenchError(ValueError):
 
 class WorkbenchConflict(WorkbenchError):
     """The file changed after the caller read or previewed it."""
+
+
+@dataclass(frozen=True)
+class FileChange:
+    """Stable projection of one governed workspace mutation."""
+
+    path: str
+    operation: str
+    before_digest: str
+    after_digest: str
+    lines_added: int
+    lines_removed: int
+    work_id: str = ""
+    tool_call_id: str = ""
+    timestamp: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "path": self.path,
+            "operation": self.operation,
+            "before_digest": self.before_digest,
+            "after_digest": self.after_digest,
+            "lines_added": self.lines_added,
+            "lines_removed": self.lines_removed,
+            "work_id": self.work_id,
+            "tool_call_id": self.tool_call_id,
+            "timestamp": self.timestamp or datetime.now(timezone.utc).isoformat(),
+        }
 
 
 class DeveloperWorkbench:
@@ -169,16 +198,191 @@ class DeveloperWorkbench:
         }
 
     def write_file(self, path: str, content: str, *, expected_sha256: str = "") -> dict[str, Any]:
+        return self._write_file(
+            path,
+            content,
+            expected_sha256=expected_sha256,
+            operation="write",
+        )
+
+    def patch_file(
+        self,
+        path: str,
+        expected: str,
+        replacement: str,
+        *,
+        expected_sha256: str = "",
+    ) -> dict[str, Any]:
+        """Replace one exact context block and fail on stale or ambiguous input."""
+        needle = str(expected)
+        if not needle:
+            raise WorkbenchError("Patch expected context cannot be empty.")
+        current = self.read_file(path)
+        if expected_sha256 and expected_sha256 != current["sha256"]:
+            raise WorkbenchConflict(
+                "The file changed after it was loaded; reload it before patching."
+            )
+        current_text = str(current["content"])
+        newline = "\r\n" if "\r\n" in current_text else "\n"
+        normalized = current_text.replace("\r\n", "\n").replace("\r", "\n")
+        normalized_needle = needle.replace("\r\n", "\n").replace("\r", "\n")
+        normalized_replacement = (
+            str(replacement).replace("\r\n", "\n").replace("\r", "\n")
+        )
+        occurrences = normalized.count(normalized_needle)
+        if occurrences != 1:
+            raise WorkbenchConflict(
+                "Patch context must match exactly once; reload and provide exact context."
+            )
+        updated = normalized.replace(normalized_needle, normalized_replacement, 1)
+        if newline == "\r\n":
+            updated = updated.replace("\n", "\r\n")
+        return self._write_file(
+            path,
+            updated,
+            expected_sha256=current["sha256"],
+            operation="patch",
+        )
+
+    def make_directory(self, path: str) -> dict[str, Any]:
+        target = self._mutation_target(path, allow_root=False)
+        run_id = self._new_run_id("mkdir")
+        task_id = f"workspace.mkdir:{self._relative(target)}"
+        self._start_run(
+            run_id,
+            task_id,
+            "workspace.mkdir",
+            {"path": self._relative(target)},
+        )
+        try:
+            if target.exists() and not target.is_dir():
+                raise WorkbenchConflict("The directory target already exists as a file.")
+            changed = not target.exists()
+            target.mkdir(parents=True, exist_ok=True)
+            change = self.change_record(
+                path=self._relative(target),
+                operation="mkdir",
+                before=b"",
+                after=b"",
+            )
+            self._emit_change(run_id, task_id, change, changed=changed)
+            return {"ok": True, "run_id": run_id, "changed": changed, "change": change}
+        except Exception as exc:
+            self.events.emit_state_change(
+                run_id, RunState.FAILED, task_id=task_id, error=str(exc)
+            )
+            raise
+
+    def move_path(self, source: str, destination: str) -> dict[str, Any]:
+        origin = self._mutation_target(source, require_exists=True, allow_root=False)
+        target = self._mutation_target(destination, allow_root=False)
+        if target.exists():
+            raise WorkbenchConflict("The move destination already exists.")
+        relative_origin = self._relative(origin)
+        relative_target = self._relative(target)
+        before = self._read_bytes(origin) if origin.is_file() else b""
+        run_id = self._new_run_id("move")
+        task_id = f"workspace.move:{relative_origin}"
+        self._start_run(
+            run_id,
+            task_id,
+            "workspace.move",
+            {"source": relative_origin, "destination": relative_target},
+        )
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(origin, target)
+            after = self._read_bytes(target) if target.is_file() else b""
+            change = self.change_record(
+                path=relative_target,
+                operation="move",
+                before=before,
+                after=after,
+            )
+            change["source_path"] = relative_origin
+            self._emit_change(run_id, task_id, change, changed=True)
+            return {"ok": True, "run_id": run_id, "changed": True, "change": change}
+        except Exception as exc:
+            self.events.emit_state_change(
+                run_id, RunState.FAILED, task_id=task_id, error=str(exc)
+            )
+            raise
+
+    def remove_path(self, path: str) -> dict[str, Any]:
+        target = self._mutation_target(path, require_exists=True, allow_root=False)
+        relative = self._relative(target)
+        before = self._read_bytes(target) if target.is_file() else b""
+        run_id = self._new_run_id("remove")
+        task_id = f"workspace.remove:{relative}"
+        self._start_run(
+            run_id,
+            task_id,
+            "workspace.remove",
+            {"path": relative, "recovery": "backup"},
+        )
+        backup = self.root / ".nous" / "backups" / "workbench" / run_id / Path(
+            *PurePosixPath(relative).parts
+        )
+        try:
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(target, backup)
+            change = self.change_record(
+                path=relative,
+                operation="remove",
+                before=before,
+                after=b"",
+            )
+            change["backup_path"] = backup.relative_to(self.root).as_posix()
+            self._emit_change(run_id, task_id, change, changed=True)
+            return {
+                "ok": True,
+                "run_id": run_id,
+                "changed": True,
+                "backup_path": change["backup_path"],
+                "change": change,
+            }
+        except Exception as exc:
+            self.events.emit_state_change(
+                run_id, RunState.FAILED, task_id=task_id, error=str(exc)
+            )
+            raise
+
+    def _write_file(
+        self,
+        path: str,
+        content: str,
+        *,
+        expected_sha256: str,
+        operation: str,
+    ) -> dict[str, Any]:
         preview = self.preview_write(path, content, expected_sha256=expected_sha256)
         target = self._write_target(path)
-        run_id = self._new_run_id("write")
-        task_id = f"workspace.write:{preview['path']}"
-        self._start_run(run_id, task_id, "workspace.write", {"path": preview["path"]})
+        run_id = self._new_run_id(operation)
+        task_id = f"workspace.{operation}:{preview['path']}"
+        self._start_run(
+            run_id,
+            task_id,
+            f"workspace.{operation}",
+            {"path": preview["path"]},
+        )
         if not preview["changed"]:
             self.events.emit_state_change(run_id, RunState.COMPLETED, task_id=task_id, changed=False)
-            return {**preview, "ok": True, "run_id": run_id, "backup_path": ""}
+            change = self.change_record(
+                path=preview["path"],
+                operation=operation,
+                before=str(content).encode("utf-8"),
+                after=str(content).encode("utf-8"),
+            )
+            return {
+                **preview,
+                "ok": True,
+                "run_id": run_id,
+                "backup_path": "",
+                "change": change,
+            }
 
         encoded = str(content).encode("utf-8")
+        before_bytes = self._read_bytes(target) if target.is_file() else b""
         backup_path = ""
         try:
             # Recheck immediately before mutation to close the preview/write race.
@@ -204,21 +408,21 @@ class DeveloperWorkbench:
             finally:
                 if os.path.exists(temporary):
                     os.unlink(temporary)
-            self.events.emit(RunEvent(
-                run_id=run_id,
-                task_id=task_id,
-                event_type="file.changed",
-                actor="developer.workbench",
-                payload={
-                    "path": preview["path"],
-                    "before_sha256": preview["before_sha256"],
-                    "after_sha256": preview["after_sha256"],
-                    "size_bytes": preview["size_bytes"],
-                    "backup_path": backup_path,
-                },
-            ))
-            self.events.emit_state_change(run_id, RunState.COMPLETED, task_id=task_id, changed=True)
-            return {**preview, "ok": True, "run_id": run_id, "backup_path": backup_path}
+            change = self.change_record(
+                path=preview["path"],
+                operation=operation,
+                before=before_bytes,
+                after=encoded,
+            )
+            change["backup_path"] = backup_path
+            self._emit_change(run_id, task_id, change, changed=True)
+            return {
+                **preview,
+                "ok": True,
+                "run_id": run_id,
+                "backup_path": backup_path,
+                "change": change,
+            }
         except Exception as exc:
             self.events.emit_state_change(run_id, RunState.FAILED, task_id=task_id, error=str(exc))
             raise
@@ -358,6 +562,81 @@ class DeveloperWorkbench:
         if target.exists() and not target.is_file():
             raise WorkbenchError("The write target is not a file.")
         return target
+
+    def _mutation_target(
+        self,
+        value: str,
+        *,
+        require_exists: bool = False,
+        allow_root: bool = False,
+    ) -> Path:
+        target = self._resolve(value, require_exists=require_exists)
+        relative = PurePosixPath(self._relative(target))
+        if not allow_root and (not relative.parts or relative.as_posix() == "."):
+            raise WorkbenchError("The workspace root cannot be mutated.")
+        if relative.parts[0] in {".git", ".nous"} or relative.as_posix() == "workspace.json":
+            raise WorkbenchError("Git, Nous, and workspace metadata are protected.")
+        return target
+
+    @staticmethod
+    def change_record(
+        *,
+        path: str,
+        operation: str,
+        before: bytes,
+        after: bytes,
+    ) -> dict[str, Any]:
+        before_text = before.decode("utf-8", errors="replace").splitlines()
+        after_text = after.decode("utf-8", errors="replace").splitlines()
+        added = 0
+        removed = 0
+        for tag, before_start, before_end, after_start, after_end in difflib.SequenceMatcher(
+            None, before_text, after_text
+        ).get_opcodes():
+            if tag in {"replace", "delete"}:
+                removed += before_end - before_start
+            if tag in {"replace", "insert"}:
+                added += after_end - after_start
+        return FileChange(
+            path=path,
+            operation=operation,
+            before_digest=("sha256:" + hashlib.sha256(before).hexdigest()) if before else "",
+            after_digest=("sha256:" + hashlib.sha256(after).hexdigest()) if after else "",
+            lines_added=added,
+            lines_removed=removed,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        ).to_dict()
+
+    def _emit_change(
+        self,
+        run_id: str,
+        task_id: str,
+        change: dict[str, Any],
+        *,
+        changed: bool,
+    ) -> None:
+        payload = dict(change)
+        payload["before_sha256"] = str(change.get("before_digest") or "").removeprefix(
+            "sha256:"
+        )
+        payload["after_sha256"] = str(change.get("after_digest") or "").removeprefix(
+            "sha256:"
+        )
+        self.events.emit(
+            RunEvent(
+                run_id=run_id,
+                task_id=task_id,
+                event_type="file.changed",
+                actor="developer.workbench",
+                payload=payload,
+            )
+        )
+        self.events.emit_state_change(
+            run_id,
+            RunState.COMPLETED,
+            task_id=task_id,
+            changed=changed,
+        )
 
     def _iter_files(self, root: Path) -> Iterable[Path]:
         scanned = 0

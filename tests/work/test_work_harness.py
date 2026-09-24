@@ -49,7 +49,18 @@ class DispatchInspectingTools(StubTools):
         durable = self.harness.require(self.run_id)
         assert durable.pending_action["tool"] == name
         assert durable.pending_action["effect_class"] == "write"
-        return super().execute(name, arguments)
+        result = super().execute(name, arguments)
+        result["change"] = {
+            "path": "result.txt",
+            "operation": "write",
+            "before_digest": "",
+            "after_digest": "sha256:" + "a" * 64,
+            "lines_added": 1,
+            "lines_removed": 0,
+            "work_id": "",
+            "tool_call_id": "",
+        }
+        return result
 
 
 def test_simple_work_skips_plan_and_completes(tmp_path):
@@ -352,3 +363,10 @@ def test_tool_dispatch_is_durable_before_invocation_and_closed_by_observation(
     assert event_types.index("work.action.dispatched") < event_types.index(
         "work.observing"
     )
+    change = next(
+        item["result"]["change"]
+        for item in completed.observations
+        if item.get("kind") == "tool"
+    )
+    assert change["work_id"] == created.run_id
+    assert change["tool_call_id"].startswith("invoke_")

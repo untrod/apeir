@@ -79,6 +79,8 @@ def test_workspace_tools_list_read_search_and_write(tmp_path: Path) -> None:
         == "done"
     )
     assert written["receipt_id"].startswith("receipt-")
+    assert written["change"]["operation"] == "write"
+    assert written["change"]["after_digest"].startswith("sha256:")
 
 
 def test_workspace_tools_batch_write_project_files(tmp_path: Path) -> None:
@@ -96,6 +98,60 @@ def test_workspace_tools_batch_write_project_files(tmp_path: Path) -> None:
     assert written["ok"]
     assert written["file_count"] == 2
     assert (tmp_path / "sample" / "main.py").is_file()
+
+
+def test_workspace_tools_patch_mkdir_move_and_remove_with_change_records(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "source.txt"
+    target.write_text("before\n", encoding="utf-8")
+    runtime = WorkspaceToolRuntime(str(tmp_path), allow_mutations=True)
+
+    patched = runtime.execute(
+        "patch_file",
+        {"path": "source.txt", "expected": "before", "replacement": "after"},
+    )
+    made = runtime.execute("make_directory", {"path": "archive"})
+    moved = runtime.execute(
+        "move_path",
+        {"source": "source.txt", "destination": "archive/source.txt"},
+    )
+    removed = runtime.execute("remove_path", {"path": "archive/source.txt"})
+
+    assert patched["ok"] is True
+    assert patched["change"]["operation"] == "patch"
+    assert patched["receipt_id"].startswith("receipt-")
+    assert made["ok"] is True
+    assert moved["ok"] is True
+    assert removed["ok"] is True
+    assert not (tmp_path / "archive" / "source.txt").exists()
+    assert (tmp_path / removed["backup_path"]).is_file()
+
+
+def test_workspace_patch_fails_closed_on_stale_or_ambiguous_context(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "source.txt"
+    target.write_text("same\nsame\n", encoding="utf-8")
+    runtime = WorkspaceToolRuntime(str(tmp_path), allow_mutations=True)
+
+    ambiguous = runtime.execute(
+        "patch_file",
+        {"path": "source.txt", "expected": "same", "replacement": "changed"},
+    )
+    stale = runtime.execute(
+        "patch_file",
+        {
+            "path": "source.txt",
+            "expected": "same\n",
+            "replacement": "changed\n",
+            "expected_sha256": "0" * 64,
+        },
+    )
+
+    assert ambiguous["ok"] is False
+    assert stale["ok"] is False
+    assert target.read_text(encoding="utf-8") == "same\nsame\n"
 
 
 def test_workspace_tools_block_unapproved_mutation_and_escape(tmp_path: Path) -> None:
@@ -186,6 +242,7 @@ def test_text_tool_protocol_is_bounded_to_declared_tools(tmp_path: Path) -> None
 
     assert "list_workspace" in prompt
     assert '"name":"write_file"' in prompt
+    assert "prefer patch_file" in prompt
     assert '"required":["path","content"]' in prompt
     assert '"content":"string"' in prompt
     assert parsed and parsed["name"] == "list_workspace"

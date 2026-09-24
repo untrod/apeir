@@ -306,6 +306,38 @@ class WorkspaceToolRuntime:
                         required=("files",),
                     ),
                     _tool(
+                        "patch_file",
+                        "Atomically replace one exact context block in an existing UTF-8 file; fails if context is stale or ambiguous.",
+                        {
+                            "path": {"type": "string"},
+                            "expected": {"type": "string", "minLength": 1},
+                            "replacement": {"type": "string"},
+                            "expected_sha256": {"type": "string"},
+                        },
+                        required=("path", "expected", "replacement"),
+                    ),
+                    _tool(
+                        "make_directory",
+                        "Create a workspace directory and its missing parents.",
+                        {"path": {"type": "string", "minLength": 1}},
+                        required=("path",),
+                    ),
+                    _tool(
+                        "move_path",
+                        "Move one workspace file or directory without overwriting the destination.",
+                        {
+                            "source": {"type": "string", "minLength": 1},
+                            "destination": {"type": "string", "minLength": 1},
+                        },
+                        required=("source", "destination"),
+                    ),
+                    _tool(
+                        "remove_path",
+                        "Remove a workspace path by moving it to the recoverable Nous backup area.",
+                        {"path": {"type": "string", "minLength": 1}},
+                        required=("path",),
+                    ),
+                    _tool(
                         "run_command",
                         "Run a bounded development command in the active workspace.",
                         {
@@ -331,7 +363,16 @@ class WorkspaceToolRuntime:
     @property
     def mutation_tool_names(self) -> frozenset[str]:
         return frozenset(
-            {"write_file", "write_files", "run_command", *_RUNTIME_TOOL_CAPABILITIES}
+            {
+                "write_file",
+                "write_files",
+                "patch_file",
+                "make_directory",
+                "move_path",
+                "remove_path",
+                "run_command",
+                *_RUNTIME_TOOL_CAPABILITIES,
+            }
         )
 
     def execute(self, name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
@@ -342,6 +383,10 @@ class WorkspaceToolRuntime:
             "find_workspace": self._find_workspace,
             "write_file": self._write_file,
             "write_files": self._write_files,
+            "patch_file": self._patch_file,
+            "make_directory": self._make_directory,
+            "move_path": self._move_path,
+            "remove_path": self._remove_path,
             "run_command": self._run_command,
         }
         if name in _RUNTIME_TOOL_CAPABILITIES:
@@ -355,7 +400,16 @@ class WorkspaceToolRuntime:
         if handler is None:
             return {"ok": False, "error": f"Unknown Nous tool: {name}"}
         if (
-            name in {"write_file", "write_files", "run_command"}
+            name
+            in {
+                "write_file",
+                "write_files",
+                "patch_file",
+                "make_directory",
+                "move_path",
+                "remove_path",
+                "run_command",
+            }
             and not self.allow_mutations
         ):
             return {
@@ -551,7 +605,8 @@ class WorkspaceToolRuntime:
         encoded = content.encode("utf-8")
         if len(encoded) > _MAX_WRITE_BYTES:
             raise ValueError("The write exceeds the 1 MiB agent limit.")
-        before = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else ""
+        before_bytes = path.read_bytes() if path.is_file() else b""
+        before = hashlib.sha256(before_bytes).hexdigest() if path.is_file() else ""
         action, _decision = self.gate.propose_action(
             "file_write",
             relative.as_posix(),
@@ -598,6 +653,15 @@ class WorkspaceToolRuntime:
                 metadata={"receipt_id": receipt.receipt_id},
             )
             artifact_id = artifact.id
+        from nous_runtime.workspace.workbench import DeveloperWorkbench
+
+        after_bytes = path.read_bytes() if receipt.success else before_bytes
+        change = DeveloperWorkbench.change_record(
+            path=relative.as_posix(),
+            operation="write",
+            before=before_bytes,
+            after=after_bytes,
+        )
         return {
             "ok": receipt.success,
             "path": relative.as_posix(),
@@ -608,6 +672,7 @@ class WorkspaceToolRuntime:
             else "",
             "receipt_id": receipt.receipt_id,
             "artifact_id": artifact_id,
+            "change": change,
         }
 
     def _write_files(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -657,8 +722,87 @@ class WorkspaceToolRuntime:
         return {
             "ok": True,
             "files": results,
+            "changes": [dict(item.get("change") or {}) for item in results],
             "file_count": len(results),
             "total_size_bytes": total,
+        }
+
+    def _patch_file(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from nous_runtime.workspace import DeveloperWorkbench
+
+        path = str(arguments.get("path") or "")
+        return self._workbench_effect(
+            "file_patch",
+            path,
+            {
+                "expected_sha256": str(arguments.get("expected_sha256") or ""),
+                "context_sha256": hashlib.sha256(
+                    str(arguments.get("expected") or "").encode("utf-8")
+                ).hexdigest(),
+            },
+            lambda: DeveloperWorkbench(self.root).patch_file(
+                path,
+                str(arguments.get("expected") or ""),
+                str(arguments.get("replacement") or ""),
+                expected_sha256=str(arguments.get("expected_sha256") or ""),
+            ),
+        )
+
+    def _make_directory(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from nous_runtime.workspace import DeveloperWorkbench
+
+        path = str(arguments.get("path") or "")
+        return self._workbench_effect(
+            "directory_create",
+            path,
+            {},
+            lambda: DeveloperWorkbench(self.root).make_directory(path),
+        )
+
+    def _move_path(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from nous_runtime.workspace import DeveloperWorkbench
+
+        source = str(arguments.get("source") or "")
+        destination = str(arguments.get("destination") or "")
+        return self._workbench_effect(
+            "file_move",
+            source,
+            {"destination": destination},
+            lambda: DeveloperWorkbench(self.root).move_path(source, destination),
+        )
+
+    def _remove_path(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from nous_runtime.workspace import DeveloperWorkbench
+
+        path = str(arguments.get("path") or "")
+        return self._workbench_effect(
+            "file_remove",
+            path,
+            {"recovery": "backup"},
+            lambda: DeveloperWorkbench(self.root).remove_path(path),
+        )
+
+    def _workbench_effect(
+        self,
+        action_type: str,
+        target: str,
+        params: dict[str, Any],
+        effect,
+    ) -> dict[str, Any]:
+        action, _decision = self.gate.propose_action(
+            action_type,
+            target,
+            {**params, "attempt": self._next_effect_attempt()},
+        )
+        approval = self.gate.request_approval(
+            action, approver="explicit_workspace_request"
+        )
+        receipt = self.gate.execute(action, approval, lambda _params: effect())
+        result = dict(receipt.result or {})
+        return {
+            "ok": receipt.success and result.get("ok", True),
+            **result,
+            "receipt_id": receipt.receipt_id,
         }
 
     def _run_command(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -853,8 +997,10 @@ def tool_protocol_prompt(specifications: tuple[Mapping[str, Any], ...]) -> str:
         "unavailable, respond with exactly NOUS_TOOL_CALL followed by one "
         "compact JSON object with the shape "
         '{"name":"tool_name","arguments":{...}} and no other text. '
-        "For a project with several substantial files, use one write_file call "
-        "per file so each tool request remains complete and verifiable. "
+        "For an existing source file, prefer patch_file with exact context from a "
+        "fresh read. Use write_file primarily for new files. For a project with "
+        "several new substantial files, use one write_file call per file so each "
+        "tool request remains complete and verifiable. "
         "After Nous returns a tool result, continue the task and use another "
         "tool when necessary."
     )

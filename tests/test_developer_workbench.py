@@ -73,6 +73,48 @@ def test_workbench_compare_and_swap_rejects_stale_and_escaped_paths(tmp_path):
         workbench.write_file(".git/config", "bad")
 
 
+def test_workbench_patch_requires_one_exact_context_and_records_diff(tmp_path):
+    target = tmp_path / "main.py"
+    target.write_text("alpha\nbeta\ngamma\n", encoding="utf-8")
+    workbench = DeveloperWorkbench(tmp_path)
+    digest = workbench.read_file("main.py")["sha256"]
+
+    result = workbench.patch_file(
+        "main.py",
+        "beta\n",
+        "beta = 2\nextra = 3\n",
+        expected_sha256=digest,
+    )
+
+    assert result["ok"] is True
+    assert target.read_text(encoding="utf-8") == "alpha\nbeta = 2\nextra = 3\ngamma\n"
+    assert result["change"]["operation"] == "patch"
+    assert result["change"]["lines_added"] == 2
+    assert result["change"]["lines_removed"] == 1
+    assert result["change"]["before_digest"] == f"sha256:{digest}"
+    with pytest.raises(WorkbenchConflict, match="exactly once"):
+        workbench.patch_file("main.py", "missing", "replacement")
+
+
+def test_workbench_mkdir_move_and_recoverable_remove(tmp_path):
+    workbench = DeveloperWorkbench(tmp_path)
+
+    made = workbench.make_directory("src/generated")
+    (tmp_path / "src" / "generated" / "value.txt").write_text(
+        "value\n", encoding="utf-8"
+    )
+    moved = workbench.move_path("src/generated/value.txt", "src/value.txt")
+    removed = workbench.remove_path("src/generated")
+
+    assert made["change"]["operation"] == "mkdir"
+    assert moved["change"]["operation"] == "move"
+    assert moved["change"]["source_path"] == "src/generated/value.txt"
+    assert (tmp_path / "src" / "value.txt").is_file()
+    assert removed["change"]["operation"] == "remove"
+    assert not (tmp_path / "src" / "generated").exists()
+    assert (tmp_path / removed["backup_path"]).is_dir()
+
+
 def test_workbench_runs_only_fixed_profiles_through_strict_sandbox(tmp_path, monkeypatch):
     script = tmp_path / "hello.py"
     script.write_text("print('hello')\n", encoding="utf-8")
