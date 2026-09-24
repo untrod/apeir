@@ -28,9 +28,9 @@ from urllib.parse import urlsplit
 
 # NKI constants.
 
-# NKI v1alpha2 — tagged enum protocol (status: "success" | "error")
-# Backward compatible with v1alpha1 (error field still at top level via flatten)
-NKI_VERSION = 2
+# NKI v3 — Reality Effect contracts, with v1/v2 envelope compatibility.
+MIN_NKI_VERSION = 1
+NKI_VERSION = 3
 MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 if sys.platform == "win32":
@@ -213,7 +213,10 @@ class NKIClient:
 
         if response.get("request_id") != request.request_id:
             raise NKIError("PROTOCOL_ERROR", "NKI response request_id mismatch")
-        if response.get("nki_version") != NKI_VERSION:
+        response_version = response.get("nki_version")
+        if not isinstance(response_version, int) or not (
+            MIN_NKI_VERSION <= response_version <= NKI_VERSION
+        ):
             raise NKIError("PROTOCOL_ERROR", "NKI response version is unsupported")
 
         # Check for error (tagged enum: status field indicates success/error)

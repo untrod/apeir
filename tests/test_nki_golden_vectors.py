@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, ".")
-from compat.nki_client import NKIError, NKIRequest, NKI_VERSION
+from compat.nki_client import MIN_NKI_VERSION, NKIError, NKIRequest, NKI_VERSION
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "nki"
 
@@ -161,16 +161,15 @@ class TestMalformedAndEdgeCases:
 class TestVersionNegotiation:
     """Verify protocol version negotiation."""
 
-    def test_current_version_is_2(self):
-        """RC4 uses NKI v1alpha2 (version 2)."""
-        assert NKI_VERSION == 2, \
-            f"Expected NKI_VERSION=2 (v1alpha2), got {NKI_VERSION}"
+    def test_current_version_is_3(self):
+        """Current requests use the Reality Effect capable NKI v3 envelope."""
+        assert NKI_VERSION == 3, f"Expected NKI_VERSION=3, got {NKI_VERSION}"
 
-    def test_request_sends_version_2(self):
-        """All new requests must send nki_version=2."""
+    def test_request_sends_version_3(self):
+        """All new requests must send nki_version=3."""
         req = NKIRequest(method="HealthCheck")
         d = req.to_dict()
-        assert d["nki_version"] == 2
+        assert d["nki_version"] == 3
 
     def test_version_1_rejected_by_server(self):
         """v1alpha1 (version 1) should trigger schema incompatible error."""
@@ -178,7 +177,7 @@ class TestVersionNegotiation:
         # checks nki_version < MIN_NKI_VERSION (=1) → reject
         # Version 1 IS the minimum, so it should be ACCEPTED
         # Version 0 would be rejected
-        # Version 3 (future) would be rejected
+        # Versions 1 through 3 are accepted by the current server.
         pass  # Server behavior verified in Rust tests
 
     def test_version_too_high_rejected(self):
@@ -261,10 +260,10 @@ class TestRC4Compliance:
 
     def test_nki_version_in_spec_matches_client(self):
         """NKI version in client must match spec."""
-        # The client sends NKI_VERSION=2
-        # The spec (nki.proto) should document v1alpha2
+        # The client sends NKI_VERSION=3 and retains v1/v2 response compatibility.
         # This test verifies the client constant
-        assert NKI_VERSION == 2
+        assert MIN_NKI_VERSION == 1
+        assert NKI_VERSION == 3
 
 
 if __name__ == "__main__":
