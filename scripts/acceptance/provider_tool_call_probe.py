@@ -6,12 +6,13 @@ limited to protocol metadata and never includes prompts, content, or secrets.
 
 from __future__ import annotations
 
+import argparse
 import json
 
 from nous_runtime.provider.adapters.openai import OpenAIProvider
 
 
-def _invoke(provider: OpenAIProvider, tool_choice: str) -> dict[str, object]:
+def _invoke_tool(provider: OpenAIProvider, tool_choice: str) -> dict[str, object]:
     result = provider.invoke(
         "model.reason",
         messages=(
@@ -51,19 +52,67 @@ def _invoke(provider: OpenAIProvider, tool_choice: str) -> dict[str, object]:
     }
 
 
-def main() -> int:
-    provider = OpenAIProvider(
-        provider_id="deepseek",
-        provider_name="DeepSeek",
-        endpoint="https://api.deepseek.com/v1/chat/completions",
-        model="deepseek-chat",
-        credential_ref="env:DEEPSEEK_API_KEY",
+def _invoke_structured(provider: OpenAIProvider) -> dict[str, object]:
+    result = provider.invoke(
+        "model.reason",
+        messages=(
+            {
+                "role": "system",
+                "content": "Return the requested JSON object and no prose.",
+            },
+            {"role": "user", "content": "Report readiness as true."},
+        ),
+        response_schema={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["ready"],
+            "properties": {"ready": {"type": "boolean"}},
+        },
+        max_tokens=64,
     )
-    safe = {"required": _invoke(provider, "required"), "auto": _invoke(provider, "auto")}
+    content = result.get("content")
+    try:
+        payload = json.loads(content) if isinstance(content, str) else {}
+    except json.JSONDecodeError:
+        payload = {}
+    return {
+        "ok": bool(result.get("ok")),
+        "schema_valid": payload == {"ready": True},
+        "error_code": str(result.get("error_code") or ""),
+        "http_status": result.get("http_status"),
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--endpoint",
+        default="https://api.deepseek.com/v1/chat/completions",
+    )
+    parser.add_argument("--model", default="deepseek-chat")
+    parser.add_argument("--provider-id", default="deepseek")
+    parser.add_argument("--provider-name", default="DeepSeek")
+    parser.add_argument("--credential-ref", default="env:DEEPSEEK_API_KEY")
+    args = parser.parse_args()
+    provider = OpenAIProvider(
+        provider_id=args.provider_id,
+        provider_name=args.provider_name,
+        endpoint=args.endpoint,
+        model=args.model,
+        credential_ref=args.credential_ref,
+    )
+    safe = {
+        "required": _invoke_tool(provider, "required"),
+        "auto": _invoke_tool(provider, "auto"),
+        "structured": _invoke_structured(provider),
+    }
     print(json.dumps(safe, separators=(",", ":")))
-    return 0 if all(
-        item["ok"] and item["tool_call_count"] == 1 for item in safe.values()
-    ) else 1
+    tools_ok = all(
+        item["ok"] and item["tool_call_count"] == 1
+        for item in (safe["required"], safe["auto"])
+    )
+    structured_ok = safe["structured"]["ok"] and safe["structured"]["schema_valid"]
+    return 0 if tools_ok and structured_ok else 1
 
 
 if __name__ == "__main__":
