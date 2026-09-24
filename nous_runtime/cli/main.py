@@ -213,6 +213,7 @@ def scientific_worker_command(ctx: typer.Context):
 
     raise typer.Exit(code=main(list(ctx.args)))
 
+
 # Subcommand groups
 
 app.add_typer(artifact_app, name="artifact")
@@ -357,6 +358,7 @@ for _module_name, _register_name in (
     ("nous_runtime.work.cli", "register_work_commands"),
     ("nous_runtime.tools.cli", "register_tool_commands"),
     ("nous_runtime.skills.cli", "register_skill_commands"),
+    ("nous_runtime.web.cli", "register_web_commands"),
 ):
     try:
         _module = __import__(_module_name, fromlist=[_register_name])

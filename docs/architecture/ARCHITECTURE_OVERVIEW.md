@@ -89,6 +89,14 @@ chain path validates and copies the package, while a deterministic bundle is
 stored and pinned in the existing workspace Artifact Runtime. Declared
 capabilities remain requests with `authority=none`.
 
+`WebRuntime` provides the Work-facing `search` and `fetch` seam. Its default
+executor traverses the existing `network.fetch` capability and
+`ResearchEvidenceService`/`WebGateway`; it does not issue direct HTTP requests.
+Every successful response is classified as untrusted external content and
+closed into the workspace `ContentAddressedArtifactStore` before a successful
+Tool result is returned. The model-facing response is bounded, while the full
+redacted evidence remains available by digest.
+
 ## For Developers
 
 Start here:

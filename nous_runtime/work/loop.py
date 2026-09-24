@@ -588,6 +588,9 @@ class AgentLoop:
         values: list[Any] = [result]
         if isinstance(result.get("files"), list):
             values.extend(result["files"])
+        for key in ("artifact", "evidence_ref"):
+            if isinstance(result.get(key), Mapping):
+                values.append(result[key])
         for item in values:
             if not isinstance(item, Mapping):
                 continue

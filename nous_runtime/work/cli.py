@@ -44,6 +44,7 @@ def _runtime_components(
     from nous_runtime.model_runtime import get_gateway_facade
     from nous_runtime.skills import SkillToolRuntime
     from nous_runtime.tools import ArtifactToolRuntime, GitToolRuntime, ToolCatalog
+    from nous_runtime.web import WebToolRuntime
     from nous_runtime.work.deliberation import ModelWorkDeliberator
 
     allow_mutations = not read_only and mutation_is_explicit(objective)
@@ -62,6 +63,7 @@ def _runtime_components(
         SkillToolRuntime(root, allow_mutations=allow_mutations),
         provider_id="skill-registry",
     )
+    tools.register_runtime(WebToolRuntime(root), provider_id="web-runtime")
     facade = get_gateway_facade(required=True)
     deliberator = ModelWorkDeliberator(
         facade,

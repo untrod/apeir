@@ -20,9 +20,14 @@ Version: `0.1.0-rc1`
   evidence and a pinned Artifact bundle without executing scripts. Remote Skill
   package download/install and Git URL cloning are not yet supported. File
   patch/move/remove, persistent shell control, live MCP catalog attachment, the
-  Web runtime, background Desktop execution, context compaction, and the
-  Code/Research/Scientific acceptance tasks are still pending. This is not R6
-  completion.
+  WebRuntime now exposes governed search/fetch through the existing Network
+  Gateway and writes successful responses to content-addressed evidence before
+  returning them to Work. The first search implementation still uses the
+  existing Bing parser; provider configuration UX and the full cited Research
+  vertical remain pending. File patch/move/remove, persistent shell control,
+  live MCP catalog attachment, background Desktop execution, context compaction,
+  and the Code/Research/Scientific acceptance tasks are still pending. This is
+  not R6 completion.
 - The first Reality Adapter supports only an administrator-bound loopback HTTP
   service target. It is not an arbitrary remote endpoint or device runtime.
 - Model-backed tasks require a configured Provider account or a local model.

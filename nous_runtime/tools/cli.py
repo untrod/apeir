@@ -21,6 +21,7 @@ def _catalog(root: Path, *, allow_mutations: bool) -> ToolCatalog:
     from nous_runtime.chat.agent_tools import WorkspaceToolRuntime
     from nous_runtime.skills import SkillToolRuntime
     from nous_runtime.tools import ArtifactToolRuntime, GitToolRuntime
+    from nous_runtime.web import WebToolRuntime
 
     catalog = ToolCatalog()
     catalog.register_runtime(
@@ -38,6 +39,7 @@ def _catalog(root: Path, *, allow_mutations: bool) -> ToolCatalog:
         SkillToolRuntime(root, allow_mutations=allow_mutations),
         provider_id="skill-registry",
     )
+    catalog.register_runtime(WebToolRuntime(root), provider_id="web-runtime")
     return catalog
 
 

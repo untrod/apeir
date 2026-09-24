@@ -274,6 +274,8 @@ def _runtime_metadata(tool_id: str) -> dict[str, Any]:
         "create_document": ("document", "document.create", "write"),
         "render_document": ("document", "document.render", "execute"),
         "fetch_public_url": ("web", "network.fetch", "network"),
+        "web_search": ("web", "network.fetch", "network"),
+        "web_fetch": ("web", "network.fetch", "network"),
         "create_simulation": ("scientific", "simulation.create", "write"),
         "run_simulation": ("scientific", "simulation.run", "execute"),
         "replay_simulation": ("scientific", "simulation.replay", "execute"),
@@ -313,7 +315,7 @@ def _runtime_metadata(tool_id: str) -> dict[str, Any]:
         "shell",
         "document",
         "environment",
-    }
+    } or tool_id in {"web_search", "web_fetch"}
     requires_network = effect == "network"
     approval = "none" if effect in {"none", "read"} else "runtime_policy"
     return {

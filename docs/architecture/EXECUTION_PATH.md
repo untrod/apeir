@@ -126,6 +126,21 @@ Loading a Skill does not execute its scripts and does not grant its requested
 capabilities. Installed packages retain Extension provenance and a pinned
 Artifact Runtime source-bundle reference.
 
+Web execution uses the existing governed network boundary:
+
+```text
+web_search / web_fetch
+  -> network.fetch capability admission
+  -> ResearchEvidenceService
+  -> SSRF-resistant WebGateway
+  -> normalized untrusted response
+  -> ContentAddressedArtifactStore evidence
+  -> bounded model observation + immutable evidence_ref
+```
+
+If the network request or evidence write fails, the Web Tool returns failure and
+does not publish a successful observation without its evidence artifact.
+
 ## Current migration boundary
 
 The Rust daemon is authoritative for model-workload and Reality-effect
