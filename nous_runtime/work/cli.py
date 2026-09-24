@@ -42,16 +42,26 @@ def _runtime_components(
 ):
     from nous_runtime.chat.agent_tools import WorkspaceToolRuntime, mutation_is_explicit
     from nous_runtime.model_runtime import get_gateway_facade
+    from nous_runtime.tools import ArtifactToolRuntime, GitToolRuntime, ToolCatalog
     from nous_runtime.work.deliberation import ModelWorkDeliberator
 
-    tools = WorkspaceToolRuntime(
+    allow_mutations = not read_only and mutation_is_explicit(objective)
+    workspace_tools = WorkspaceToolRuntime(
         str(root.resolve()),
-        allow_mutations=not read_only and mutation_is_explicit(objective),
+        allow_mutations=allow_mutations,
+    )
+    tools = ToolCatalog()
+    tools.register_runtime(workspace_tools)
+    tools.register_runtime(GitToolRuntime(root), provider_id="git-sandbox")
+    tools.register_runtime(
+        ArtifactToolRuntime(root, allow_mutations=allow_mutations),
+        provider_id="artifact-runtime",
     )
     facade = get_gateway_facade(required=True)
     deliberator = ModelWorkDeliberator(
         facade,
-        tool_specifications=tools.specifications(),
+        tool_specifications=tools.prompt_specifications(),
+        tool_capabilities=tools.categories(),
         preferred_model=preferred_model,
     )
     return tools, deliberator

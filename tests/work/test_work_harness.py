@@ -54,6 +54,25 @@ def test_simple_work_skips_plan_and_completes(tmp_path):
     assert harness.events.get_run(created.run_id).state is RunState.COMPLETED
 
 
+def test_recovery_uses_monotonic_checkpoint_sequence(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Explain checkpoint ordering")
+    completed = harness.run(
+        created.run_id,
+        deliberator=lambda _context: WorkDecision(
+            DecisionStatus.COMPLETE,
+            "The final result is durable",
+            output="latest",
+        ),
+    )
+
+    restored = WorkHarness(tmp_path).require(created.run_id)
+
+    assert restored.result == "latest"
+    assert restored.checkpoint_sequence == completed.checkpoint_sequence
+    assert restored.state is RunState.COMPLETED
+
+
 def test_tool_failure_causes_reanalysis_and_versioned_replan(tmp_path):
     harness = WorkHarness(tmp_path)
     created = harness.create(

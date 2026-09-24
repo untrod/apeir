@@ -300,7 +300,7 @@ class WorkHarness:
             raise KeyError(run_id)
         checkpoint = max(
             candidates,
-            key=lambda item: (item.timestamp, item.checkpoint_id),
+            key=self._checkpoint_order,
         )
         snapshot = WorkSnapshot.from_dict(checkpoint.state)
         snapshot.last_checkpoint_id = checkpoint.checkpoint_id
@@ -313,10 +313,9 @@ class WorkHarness:
                 continue
             run_id = str(checkpoint.metadata.get("run_id") or "")
             current = latest.get(run_id)
-            if current is None or (checkpoint.timestamp, checkpoint.checkpoint_id) > (
-                current.timestamp,
-                current.checkpoint_id,
-            ):
+            if current is None or self._checkpoint_order(
+                checkpoint
+            ) > self._checkpoint_order(current):
                 latest[run_id] = checkpoint
         snapshots = [WorkSnapshot.from_dict(item.state) for item in latest.values()]
         return sorted(
@@ -359,6 +358,7 @@ class WorkHarness:
             conversation=conversation,
             recent_observations=tuple(snapshot.observations[-12:]),
             recent_events=tuple(event.to_dict() for event in events),
+            loaded_tools=tuple(snapshot.loaded_tools.values()),
             reanalysis_reason=snapshot.reanalysis_reason,
             recovering=recovering or snapshot.state is RunState.RECOVERING,
             budget=budget,
@@ -581,6 +581,7 @@ class WorkHarness:
 
     def _save_snapshot(self, snapshot: WorkSnapshot) -> WorkSnapshot:
         snapshot.updated_at = work_timestamp()
+        snapshot.checkpoint_sequence += 1
         provisional = Checkpoint(
             task_id=snapshot.goal.goal_id,
             state={},
@@ -601,6 +602,14 @@ class WorkHarness:
     @staticmethod
     def _json_safe(value: Any) -> Any:
         return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+
+    @staticmethod
+    def _checkpoint_order(checkpoint: Checkpoint) -> tuple[int, str, str]:
+        return (
+            int(checkpoint.state.get("checkpoint_sequence") or 0),
+            checkpoint.timestamp,
+            checkpoint.checkpoint_id,
+        )
 
 
 __all__ = ["Deliberator", "Verifier", "WorkHarness"]

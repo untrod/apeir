@@ -72,15 +72,18 @@ class ModelWorkDeliberator:
         facade: ModelGatewayFacade,
         *,
         tool_specifications: Sequence[Mapping[str, Any]] = (),
+        tool_capabilities: Sequence[Mapping[str, Any]] = (),
         preferred_model: str = "",
     ) -> None:
         self.facade = facade
         self.tools = tuple(dict(item) for item in tool_specifications)
+        self.tool_capabilities = tuple(dict(item) for item in tool_capabilities)
         self.preferred_model = str(preferred_model or "")
 
     def __call__(self, context: WorkContext) -> WorkDecision:
         payload = {
             "work": context.to_dict(),
+            "tool_capability_catalog": list(self.tool_capabilities),
             "available_tools": [self._tool_summary(item) for item in self.tools],
         }
         request = GatewayRequest(
@@ -97,11 +100,14 @@ class ModelWorkDeliberator:
                     "content": (
                         "You are the APEIR Work controller. Return one bounded, "
                         "machine-consumable decision, not hidden reasoning. Use only "
-                        "listed tools. A failed observation requires analysis before "
-                        "retry. On recovery, reassess current workspace state and do "
-                        "not replay the previous action. Request approval before risky "
-                        "effects. Complete only when the plan and verification evidence "
-                        "support the goal criteria."
+                        "tools listed here or schemas retained in work.loaded_tools "
+                        "after catalog_expand. Tool capability entries are discovery "
+                        "metadata, not permission. Use catalog_expand before choosing a "
+                        "tool whose schema is not loaded. A failed observation requires "
+                        "analysis before retry. On recovery, reassess current workspace "
+                        "state and do not replay the previous action. Request approval "
+                        "before risky effects. Complete only when the plan and "
+                        "verification evidence support the goal criteria."
                     ),
                 },
                 {
@@ -162,6 +168,7 @@ def verify_recorded_work(context: WorkContext) -> dict[str, Any]:
         item
         for item in observations
         if item.get("kind") == "tool"
+        and item.get("tool") != "catalog_expand"
         and int(item.get("plan_revision") or current_revision) == current_revision
     ]
     latest_tool_results: dict[tuple[str, str], dict[str, Any]] = {}

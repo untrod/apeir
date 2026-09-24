@@ -10,9 +10,14 @@ Version: `0.1.0-rc1`
   malicious/stale-node matrices remain pending. This is not M2 completion.
 - The R6 Work Harness core now has structured assessment and deliberation,
   versioned plans, progress events, steering, durable checkpoints, restart
-  recovery, and a CLI entry. Unified Tool/Skill/Web catalogs, background Desktop
-  execution, context compaction, and the Code/Research/Scientific acceptance
-  tasks are still pending. This is not R6 completion.
+  recovery, and a CLI entry. ToolCatalog now provides normalized, progressive
+  discovery for the existing Workspace runtime and governed Extension/MCP tool
+  projections, plus fixed read-only Git and ContentAddressedArtifactStore tools.
+  Git tools fail closed and are not advertised when strong process isolation is
+  unavailable. File patch/move/remove, persistent shell control, live MCP catalog
+  attachment, the Skill/Web runtimes, background Desktop execution, context
+  compaction, and the Code/Research/Scientific acceptance tasks are still
+  pending. This is not R6 completion.
 - The first Reality Adapter supports only an administrator-bound loopback HTTP
   service target. It is not an arbitrary remote endpoint or device runtime.
 - Model-backed tasks require a configured Provider account or a local model.

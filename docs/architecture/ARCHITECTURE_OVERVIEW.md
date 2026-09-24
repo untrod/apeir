@@ -69,6 +69,16 @@ Simple tasks may complete without a Plan. Long-running runs persist Goal, Plan
 revision history, observations, artifacts, blockers, and Agent checkpoints in the
 workspace and reassess current state before acting after resume.
 
+`ToolCatalog` is the Work-facing discovery projection over existing tool
+runtimes. It publishes compact capability categories first and exposes full
+schemas only through `catalog_expand`. Invocation is delegated to the original
+Workspace or governed Extension/MCP executor; catalog metadata always carries
+`authority=none` and cannot make an unavailable or unauthorized action legal.
+The first concrete providers expose bounded workspace file discovery, read-only
+Git queries when strong sandboxing is available, and the existing workspace
+ContentAddressedArtifactStore. Catalog inspection itself does not initialize an
+Artifact store or execute a process.
+
 ## For Developers
 
 Start here:

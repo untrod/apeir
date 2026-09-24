@@ -140,9 +140,11 @@ class WorkSnapshot:
     last_decision: WorkDecision | None = None
     observations: list[dict[str, Any]] = field(default_factory=list)
     artifacts: list[str] = field(default_factory=list)
+    loaded_tools: dict[str, dict[str, Any]] = field(default_factory=dict)
     agent_run_id: str = ""
     agent_checkpoint_id: str = ""
     last_checkpoint_id: str = ""
+    checkpoint_sequence: int = 0
     action_sequence: int = 0
     reanalysis_reason: str = ""
     result: Any = None
@@ -193,9 +195,13 @@ class WorkSnapshot:
             else None,
             "observations": [dict(item) for item in self.observations],
             "artifacts": list(self.artifacts),
+            "loaded_tools": {
+                str(key): dict(value) for key, value in self.loaded_tools.items()
+            },
             "agent_run_id": self.agent_run_id,
             "agent_checkpoint_id": self.agent_checkpoint_id,
             "last_checkpoint_id": self.last_checkpoint_id,
+            "checkpoint_sequence": self.checkpoint_sequence,
             "action_sequence": self.action_sequence,
             "reanalysis_reason": self.reanalysis_reason,
             "result": self.result,
@@ -230,9 +236,15 @@ class WorkSnapshot:
                 if isinstance(item, Mapping)
             ],
             artifacts=[str(item) for item in data.get("artifacts") or ()],
+            loaded_tools={
+                str(key): dict(value)
+                for key, value in dict(data.get("loaded_tools") or {}).items()
+                if isinstance(value, Mapping)
+            },
             agent_run_id=str(data.get("agent_run_id") or ""),
             agent_checkpoint_id=str(data.get("agent_checkpoint_id") or ""),
             last_checkpoint_id=str(data.get("last_checkpoint_id") or ""),
+            checkpoint_sequence=max(0, int(data.get("checkpoint_sequence") or 0)),
             action_sequence=max(0, int(data.get("action_sequence") or 0)),
             reanalysis_reason=str(data.get("reanalysis_reason") or ""),
             result=data.get("result"),
@@ -252,6 +264,7 @@ class WorkContext:
     conversation: Mapping[str, Any]
     recent_observations: tuple[Mapping[str, Any], ...]
     recent_events: tuple[Mapping[str, Any], ...]
+    loaded_tools: tuple[Mapping[str, Any], ...] = ()
     reanalysis_reason: str = ""
     recovering: bool = False
     budget: Mapping[str, Any] = field(default_factory=dict)
@@ -266,6 +279,7 @@ class WorkContext:
             "conversation": dict(self.conversation),
             "recent_observations": [dict(item) for item in self.recent_observations],
             "recent_events": [dict(item) for item in self.recent_events],
+            "loaded_tools": [dict(item) for item in self.loaded_tools],
             "reanalysis_reason": self.reanalysis_reason,
             "recovering": self.recovering,
             "budget": dict(self.budget),

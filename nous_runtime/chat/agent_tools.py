@@ -7,6 +7,7 @@ import json
 import os
 import shlex
 import tempfile
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -111,38 +112,95 @@ def _runtime_tool_specifications() -> list[dict[str, Any]]:
     object_value = {"type": "object", "additionalProperties": True}
     identifier = {"type": "string", "minLength": 1}
     specs = [
-        _tool("create_document", "Create a versioned Document IR; approval is required.", {"document": object_value}, required=("document",)),
-        _tool("render_document", "Render and verify a document as DOCX and/or PDF.", {
-            "document_id": identifier,
-            "formats": {"type": "array", "items": {"type": "string", "enum": ["docx", "pdf"]}},
-        }, required=("document_id",)),
-        _tool("create_environment", "Create a bounded execution-environment contract.", {"environment": object_value}, required=("environment",)),
-        _tool("run_environment", "Run an argv array inside a ready governed environment.", {
-            "environment_id": identifier,
-            "argv": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-            "cwd": {"type": "string"},
-            "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 3600},
-            "max_output_bytes": {"type": "integer", "minimum": 1},
-            "env": object_value,
-        }, required=("environment_id", "argv")),
-        _tool("fetch_public_url", "Fetch a public HTTP(S) URL through the governed Network Gateway.", {
-            "url": {"type": "string", "minLength": 1},
-            "method": {"type": "string", "enum": ["GET", "HEAD", "POST"]},
-            "headers": object_value,
-            "body_ref": {"type": "string"},
-        }, required=("url",)),
-        _tool("create_simulation", "Create a reproducible Simulation contract.", {"simulation": object_value}, required=("simulation",)),
-        _tool("run_simulation", "Execute a bounded Simulation through EnvironmentRuntime.", {
-            "simulation_id": identifier, "replay_of": {"type": "string"},
-        }, required=("simulation_id",)),
-        _tool("replay_simulation", "Replay and tolerance-check a Simulation run.", {"run_id": identifier}, required=("run_id",)),
-        _tool("analyze_scientific_run", "Analyze a Simulation run and produce claims plus verified reports.", {"analysis": object_value}, required=("analysis",)),
+        _tool(
+            "create_document",
+            "Create a versioned Document IR; approval is required.",
+            {"document": object_value},
+            required=("document",),
+        ),
+        _tool(
+            "render_document",
+            "Render and verify a document as DOCX and/or PDF.",
+            {
+                "document_id": identifier,
+                "formats": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": ["docx", "pdf"]},
+                },
+            },
+            required=("document_id",),
+        ),
+        _tool(
+            "create_environment",
+            "Create a bounded execution-environment contract.",
+            {"environment": object_value},
+            required=("environment",),
+        ),
+        _tool(
+            "run_environment",
+            "Run an argv array inside a ready governed environment.",
+            {
+                "environment_id": identifier,
+                "argv": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                "cwd": {"type": "string"},
+                "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 3600},
+                "max_output_bytes": {"type": "integer", "minimum": 1},
+                "env": object_value,
+            },
+            required=("environment_id", "argv"),
+        ),
+        _tool(
+            "fetch_public_url",
+            "Fetch a public HTTP(S) URL through the governed Network Gateway.",
+            {
+                "url": {"type": "string", "minLength": 1},
+                "method": {"type": "string", "enum": ["GET", "HEAD", "POST"]},
+                "headers": object_value,
+                "body_ref": {"type": "string"},
+            },
+            required=("url",),
+        ),
+        _tool(
+            "create_simulation",
+            "Create a reproducible Simulation contract.",
+            {"simulation": object_value},
+            required=("simulation",),
+        ),
+        _tool(
+            "run_simulation",
+            "Execute a bounded Simulation through EnvironmentRuntime.",
+            {
+                "simulation_id": identifier,
+                "replay_of": {"type": "string"},
+            },
+            required=("simulation_id",),
+        ),
+        _tool(
+            "replay_simulation",
+            "Replay and tolerance-check a Simulation run.",
+            {"run_id": identifier},
+            required=("run_id",),
+        ),
+        _tool(
+            "analyze_scientific_run",
+            "Analyze a Simulation run and produce claims plus verified reports.",
+            {"analysis": object_value},
+            required=("analysis",),
+        ),
     ]
     for name, description, field in (
         ("start_environment", "Start a governed environment.", "environment_id"),
         ("stop_environment", "Stop a governed environment.", "environment_id"),
-        ("destroy_environment", "Destroy governed environment provider state.", "environment_id"),
-        ("cancel_simulation", "Request cancellation of an active Simulation.", "simulation_id"),
+        (
+            "destroy_environment",
+            "Destroy governed environment provider state.",
+            "environment_id",
+        ),
+        (
+            "cancel_simulation",
+            "Request cancellation of an active Simulation.",
+            "simulation_id",
+        ),
     ):
         specs.append(_tool(name, description, {field: identifier}, required=(field,)))
     return specs
@@ -174,7 +232,10 @@ class WorkspaceToolRuntime:
                 "list_workspace",
                 "List files and directories inside the active workspace.",
                 {
-                    "path": {"type": "string", "description": "Relative directory; default is ."},
+                    "path": {
+                        "type": "string",
+                        "description": "Relative directory; default is .",
+                    },
                     "max_depth": {"type": "integer", "minimum": 0, "maximum": 4},
                 },
             ),
@@ -193,9 +254,24 @@ class WorkspaceToolRuntime:
                 "Search text in workspace files without leaving the workspace.",
                 {
                     "query": {"type": "string"},
-                    "path": {"type": "string", "description": "Relative directory; default is ."},
+                    "path": {
+                        "type": "string",
+                        "description": "Relative directory; default is .",
+                    },
                 },
                 required=("query",),
+            ),
+            _tool(
+                "find_workspace",
+                "Find workspace paths by a bounded glob-style pattern.",
+                {
+                    "pattern": {"type": "string", "minLength": 1},
+                    "path": {
+                        "type": "string",
+                        "description": "Relative directory; default is .",
+                    },
+                },
+                required=("pattern",),
             ),
         ]
         if self.allow_mutations:
@@ -239,7 +315,11 @@ class WorkspaceToolRuntime:
                                     {"type": "string"},
                                 ]
                             },
-                            "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 120},
+                            "timeout_seconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 120,
+                            },
                         },
                         required=("command",),
                     ),
@@ -250,32 +330,46 @@ class WorkspaceToolRuntime:
 
     @property
     def mutation_tool_names(self) -> frozenset[str]:
-        return frozenset({"write_file", "write_files", "run_command", *_RUNTIME_TOOL_CAPABILITIES})
+        return frozenset(
+            {"write_file", "write_files", "run_command", *_RUNTIME_TOOL_CAPABILITIES}
+        )
 
     def execute(self, name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
         handlers = {
             "list_workspace": self._list_workspace,
             "read_file": self._read_file,
             "search_workspace": self._search_workspace,
+            "find_workspace": self._find_workspace,
             "write_file": self._write_file,
             "write_files": self._write_files,
             "run_command": self._run_command,
         }
         if name in _RUNTIME_TOOL_CAPABILITIES:
             if not self.allow_mutations:
-                return {"ok": False, "error": "Runtime effects require an explicit user request."}
+                return {
+                    "ok": False,
+                    "error": "Runtime effects require an explicit user request.",
+                }
             return self._execute_runtime_capability(str(name), dict(arguments))
         handler = handlers.get(str(name))
         if handler is None:
             return {"ok": False, "error": f"Unknown Nous tool: {name}"}
-        if name in {"write_file", "write_files", "run_command"} and not self.allow_mutations:
-            return {"ok": False, "error": "Workspace mutation requires explicit user authorization."}
+        if (
+            name in {"write_file", "write_files", "run_command"}
+            and not self.allow_mutations
+        ):
+            return {
+                "ok": False,
+                "error": "Workspace mutation requires explicit user authorization.",
+            }
         try:
             return dict(handler(dict(arguments)))
         except (OSError, UnicodeError, ValueError) as exc:
             return {"ok": False, "error": str(exc)}
 
-    def _execute_runtime_capability(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    def _execute_runtime_capability(
+        self, name: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
         from nous_runtime.capability.resolver import execute_capability_observation
 
         capability_id = _RUNTIME_TOOL_CAPABILITIES[name]
@@ -300,10 +394,14 @@ class WorkspaceToolRuntime:
                 "ok": False,
                 "capability_id": capability_id,
                 "error": "; ".join(observation.errors) or "Runtime capability failed.",
-                "error_code": str(metadata.get("error_code") or "NOUS_EXECUTION_FAILED"),
+                "error_code": str(
+                    metadata.get("error_code") or "NOUS_EXECUTION_FAILED"
+                ),
                 "approval_required": bool(metadata.get("approval_required")),
                 "approval_request_id": str(metadata.get("approval_request_id") or ""),
-                "execution_scope": str(metadata.get("execution_scope") or "runtime-service"),
+                "execution_scope": str(
+                    metadata.get("execution_scope") or "runtime-service"
+                ),
                 "kernel_traversed": False,
             }
         data = dict(observation.data or {})
@@ -311,7 +409,9 @@ class WorkspaceToolRuntime:
             "ok": True,
             "capability_id": capability_id,
             "result": data.get("result", data),
-            "execution_scope": str(metadata.get("execution_scope") or "runtime-service"),
+            "execution_scope": str(
+                metadata.get("execution_scope") or "runtime-service"
+            ),
             "kernel_traversed": False,
         }
 
@@ -325,11 +425,16 @@ class WorkspaceToolRuntime:
             raise ValueError("The requested workspace path is not a directory.")
         max_depth = max(0, min(int(arguments.get("max_depth") or 2), 4))
         entries: list[dict[str, Any]] = []
-        for item in sorted(root.rglob("*"), key=lambda value: value.as_posix().casefold()):
+        for item in sorted(
+            root.rglob("*"), key=lambda value: value.as_posix().casefold()
+        ):
             relative = item.relative_to(root)
             if len(relative.parts) > max_depth + 1:
                 continue
-            if any(part in {".git", ".nous", "node_modules", "target", "__pycache__"} for part in relative.parts):
+            if any(
+                part in {".git", ".nous", "node_modules", "target", "__pycache__"}
+                for part in relative.parts
+            ):
                 continue
             entries.append(
                 {
@@ -340,7 +445,12 @@ class WorkspaceToolRuntime:
             )
             if len(entries) >= _MAX_LIST_ENTRIES:
                 break
-        return {"ok": True, "workspace": str(self.root), "entries": entries, "truncated": len(entries) >= _MAX_LIST_ENTRIES}
+        return {
+            "ok": True,
+            "workspace": str(self.root),
+            "entries": entries,
+            "truncated": len(entries) >= _MAX_LIST_ENTRIES,
+        }
 
     def _read_file(self, arguments: dict[str, Any]) -> dict[str, Any]:
         path = self._path(arguments.get("path"))
@@ -351,7 +461,9 @@ class WorkspaceToolRuntime:
         text = path.read_text(encoding="utf-8")
         lines = text.splitlines()
         start = max(1, int(arguments.get("start_line") or 1))
-        end = min(len(lines), int(arguments.get("end_line") or min(start + 399, len(lines))))
+        end = min(
+            len(lines), int(arguments.get("end_line") or min(start + 399, len(lines)))
+        )
         selected = lines[start - 1 : end]
         return {
             "ok": True,
@@ -373,16 +485,59 @@ class WorkspaceToolRuntime:
             if not path.is_file() or path.stat().st_size > _MAX_READ_BYTES:
                 continue
             relative = path.relative_to(self.root)
-            if any(part in {".git", ".nous", "node_modules", "target", "__pycache__"} for part in relative.parts):
+            if any(
+                part in {".git", ".nous", "node_modules", "target", "__pycache__"}
+                for part in relative.parts
+            ):
                 continue
             try:
-                for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                for line_number, line in enumerate(
+                    path.read_text(encoding="utf-8").splitlines(), 1
+                ):
                     if query.casefold() in line.casefold():
-                        matches.append({"path": relative.as_posix(), "line": line_number, "text": line[:500]})
+                        matches.append(
+                            {
+                                "path": relative.as_posix(),
+                                "line": line_number,
+                                "text": line[:500],
+                            }
+                        )
                         if len(matches) >= 100:
                             return {"ok": True, "matches": matches, "truncated": True}
             except UnicodeError:
                 continue
+        return {"ok": True, "matches": matches, "truncated": False}
+
+    def _find_workspace(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        pattern = str(arguments.get("pattern") or "").strip()
+        if not pattern or len(pattern) > 200 or "\x00" in pattern:
+            raise ValueError("A bounded path pattern is required.")
+        root = self._path(arguments.get("path") or ".")
+        if not root.is_dir():
+            raise ValueError("The requested workspace path is not a directory.")
+        matches: list[dict[str, Any]] = []
+        for item in sorted(
+            root.rglob("*"), key=lambda value: value.as_posix().casefold()
+        ):
+            relative_to_root = item.relative_to(root).as_posix()
+            relative_to_workspace = item.relative_to(self.root)
+            if any(
+                part in {".git", ".nous", "node_modules", "target", "__pycache__"}
+                for part in relative_to_workspace.parts
+            ):
+                continue
+            if not fnmatch(relative_to_root, pattern) and not fnmatch(
+                item.name, pattern
+            ):
+                continue
+            matches.append(
+                {
+                    "path": relative_to_workspace.as_posix(),
+                    "type": "directory" if item.is_dir() else "file",
+                }
+            )
+            if len(matches) >= 200:
+                return {"ok": True, "matches": matches, "truncated": True}
         return {"ok": True, "matches": matches, "truncated": False}
 
     def _write_file(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -402,11 +557,15 @@ class WorkspaceToolRuntime:
             relative.as_posix(),
             {"size_bytes": len(encoded), "before_sha256": before},
         )
-        approval = self.gate.request_approval(action, approver="explicit_workspace_request")
+        approval = self.gate.request_approval(
+            action, approver="explicit_workspace_request"
+        )
 
         def effect(_params: dict[str, Any]) -> dict[str, Any]:
             path.parent.mkdir(parents=True, exist_ok=True)
-            descriptor, temporary = tempfile.mkstemp(prefix=".nous-write-", dir=path.parent)
+            descriptor, temporary = tempfile.mkstemp(
+                prefix=".nous-write-", dir=path.parent
+            )
             try:
                 with os.fdopen(descriptor, "wb") as stream:
                     stream.write(encoded)
@@ -425,7 +584,8 @@ class WorkspaceToolRuntime:
 
             artifact_type = (
                 ArtifactType.CODE
-                if path.suffix.casefold() in {".py", ".js", ".ts", ".tsx", ".rs", ".c", ".h", ".cpp"}
+                if path.suffix.casefold()
+                in {".py", ".js", ".ts", ".tsx", ".rs", ".c", ".h", ".cpp"}
                 else ArtifactType.REPORT
                 if path.suffix.casefold() in {".md", ".rst"}
                 else ArtifactType.FILE
@@ -443,7 +603,9 @@ class WorkspaceToolRuntime:
             "path": relative.as_posix(),
             "size_bytes": len(encoded),
             "before_sha256": before,
-            "after_sha256": hashlib.sha256(path.read_bytes()).hexdigest() if receipt.success else "",
+            "after_sha256": hashlib.sha256(path.read_bytes()).hexdigest()
+            if receipt.success
+            else "",
             "receipt_id": receipt.receipt_id,
             "artifact_id": artifact_id,
         }
@@ -464,8 +626,13 @@ class WorkspaceToolRuntime:
             relative = path.relative_to(self.root).as_posix()
             if relative in {"", ".", "./"} or relative in seen:
                 raise ValueError("Batch file paths must be non-empty and unique.")
-            if relative == "workspace.json" or relative.split("/", 1)[0] in {".git", ".nous"}:
-                raise ValueError("Nous internal, workspace, and Git metadata are protected.")
+            if relative == "workspace.json" or relative.split("/", 1)[0] in {
+                ".git",
+                ".nous",
+            }:
+                raise ValueError(
+                    "Nous internal, workspace, and Git metadata are protected."
+                )
             content = str(item.get("content") or "")
             size = len(content.encode("utf-8"))
             if size > _MAX_WRITE_BYTES:
@@ -496,7 +663,11 @@ class WorkspaceToolRuntime:
 
     def _run_command(self, arguments: dict[str, Any]) -> dict[str, Any]:
         raw = arguments.get("command")
-        command = [str(item) for item in raw] if isinstance(raw, list) else shlex.split(str(raw or ""), posix=os.name != "nt")
+        command = (
+            [str(item) for item in raw]
+            if isinstance(raw, list)
+            else shlex.split(str(raw or ""), posix=os.name != "nt")
+        )
         self._validate_command(command)
         self._validate_command_paths(command[1:])
         resolved_executable = resolve_executable(command[0])
@@ -513,7 +684,9 @@ class WorkspaceToolRuntime:
                 "attempt": self._next_effect_attempt(),
             },
         )
-        approval = self.gate.request_approval(action, approver="explicit_workspace_request")
+        approval = self.gate.request_approval(
+            action, approver="explicit_workspace_request"
+        )
 
         def effect(_params: dict[str, Any]) -> dict[str, Any]:
             sandbox = ExecutionSandbox(
@@ -539,7 +712,11 @@ class WorkspaceToolRuntime:
 
         receipt = self.gate.execute(action, approval, effect)
         result = dict(receipt.result or {})
-        return {"ok": receipt.success and result.get("exit_code") == 0, **result, "receipt_id": receipt.receipt_id}
+        return {
+            "ok": receipt.success and result.get("exit_code") == 0,
+            **result,
+            "receipt_id": receipt.receipt_id,
+        }
 
     def _next_effect_attempt(self) -> int:
         """Return a per-runtime nonce for an independently approved effect.
@@ -557,34 +734,68 @@ class WorkspaceToolRuntime:
         executable = Path(command[0]).name.casefold().removesuffix(".exe")
         arguments = [item.casefold() for item in command[1:]]
         allowed = False
-        if executable == "git" and arguments and arguments[0] in {"status", "diff", "log", "show"}:
+        if (
+            executable == "git"
+            and arguments
+            and arguments[0] in {"status", "diff", "log", "show"}
+        ):
             allowed = True
         elif executable in {"pytest", "ruff"}:
             allowed = True
-        elif executable == "python" and len(arguments) >= 2 and arguments[:2] in (["-m", "pytest"], ["-m", "compileall"]):
-            allowed = True
-        elif executable == "npm" and arguments and (
-            arguments[0] == "test"
-            or (len(arguments) >= 2 and arguments[:2] in (["run", "test"], ["run", "lint"], ["run", "typecheck"], ["run", "build"]))
+        elif (
+            executable == "python"
+            and len(arguments) >= 2
+            and arguments[:2] in (["-m", "pytest"], ["-m", "compileall"])
         ):
             allowed = True
-        elif executable == "cargo" and arguments and arguments[0] in {"test", "check", "clippy", "fmt"}:
+        elif (
+            executable == "npm"
+            and arguments
+            and (
+                arguments[0] == "test"
+                or (
+                    len(arguments) >= 2
+                    and arguments[:2]
+                    in (
+                        ["run", "test"],
+                        ["run", "lint"],
+                        ["run", "typecheck"],
+                        ["run", "build"],
+                    )
+                )
+            )
+        ):
+            allowed = True
+        elif (
+            executable == "cargo"
+            and arguments
+            and arguments[0] in {"test", "check", "clippy", "fmt"}
+        ):
             allowed = True
         if not allowed:
-            raise ValueError("Command is outside the governed development-command allowlist.")
-        if any(any(marker in item for marker in ("&&", "||", ";", "|", ">", "<")) for item in command):
+            raise ValueError(
+                "Command is outside the governed development-command allowlist."
+            )
+        if any(
+            any(marker in item for marker in ("&&", "||", ";", "|", ">", "<"))
+            for item in command
+        ):
             raise ValueError("Shell operators are not allowed.")
 
     def _validate_command_paths(self, arguments: list[str]) -> None:
         for argument in arguments:
             candidate = argument.split("=", 1)[-1] if "=" in argument else argument
             if ".." in Path(candidate).parts or Path(candidate).is_absolute():
-                raise ValueError("Command paths must remain relative to the active workspace.")
+                raise ValueError(
+                    "Command paths must remain relative to the active workspace."
+                )
         self.guard.validate_command_args(tuple(arguments))
 
 
 def parse_tool_call(call: Mapping[str, Any]) -> tuple[str, str, dict[str, Any]]:
-    function = call.get("function") if isinstance(call.get("function"), Mapping) else call
+    function = (
+        call.get("function") if isinstance(call.get("function"), Mapping) else call
+    )
     name = str(function.get("name") or call.get("name") or "")
     call_id = str(call.get("id") or f"call-{name}")
     raw_arguments = function.get("arguments", call.get("arguments", {}))
@@ -608,7 +819,9 @@ def tool_protocol_prompt(specifications: tuple[Mapping[str, Any], ...]) -> str:
     available = ", ".join(name for name in names if name)
     contracts = []
     for item in specifications:
-        function = item.get("function") if isinstance(item.get("function"), Mapping) else {}
+        function = (
+            item.get("function") if isinstance(item.get("function"), Mapping) else {}
+        )
         parameters = (
             function.get("parameters")
             if isinstance(function.get("parameters"), Mapping)

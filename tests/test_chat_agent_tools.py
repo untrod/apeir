@@ -31,7 +31,9 @@ def test_nous_persona_hides_provider_identity(tmp_path: Path) -> None:
     assert "not as unavailable" in prompt
 
 
-def test_nous_persona_reports_explicit_workspace_effect_authorization(tmp_path: Path) -> None:
+def test_nous_persona_reports_explicit_workspace_effect_authorization(
+    tmp_path: Path,
+) -> None:
     prompt = nous_system_prompt(
         workspace=str(tmp_path),
         agent_mode="agent",
@@ -60,12 +62,22 @@ def test_workspace_tools_list_read_search_and_write(tmp_path: Path) -> None:
     listed = runtime.execute("list_workspace", {"path": ".", "max_depth": 1})
     read = runtime.execute("read_file", {"path": "source.txt"})
     searched = runtime.execute("search_workspace", {"query": "beta"})
-    written = runtime.execute("write_file", {"path": "artifacts/result.txt", "content": "done"})
+    found = runtime.execute("find_workspace", {"pattern": "*.txt"})
+    written = runtime.execute(
+        "write_file", {"path": "artifacts/result.txt", "content": "done"}
+    )
 
-    assert listed["ok"] and any(item["path"] == "source.txt" for item in listed["entries"])
+    assert listed["ok"] and any(
+        item["path"] == "source.txt" for item in listed["entries"]
+    )
     assert read["ok"] and read["content"] == "alpha\nbeta"
     assert searched["ok"] and searched["matches"][0]["line"] == 2
-    assert written["ok"] and (tmp_path / "artifacts" / "result.txt").read_text(encoding="utf-8") == "done"
+    assert found["ok"] and found["matches"][0]["path"] == "source.txt"
+    assert (
+        written["ok"]
+        and (tmp_path / "artifacts" / "result.txt").read_text(encoding="utf-8")
+        == "done"
+    )
     assert written["receipt_id"].startswith("receipt-")
 
 
@@ -98,7 +110,9 @@ def test_workspace_tools_block_unapproved_mutation_and_escape(tmp_path: Path) ->
     assert not (tmp_path / "result.txt").exists()
 
 
-def test_workspace_command_rejects_shell_operators_and_absolute_paths(tmp_path: Path) -> None:
+def test_workspace_command_rejects_shell_operators_and_absolute_paths(
+    tmp_path: Path,
+) -> None:
     runtime = WorkspaceToolRuntime(str(tmp_path), allow_mutations=True)
 
     chained = runtime.execute("run_command", {"command": ["pytest", "&&", "whoami"]})

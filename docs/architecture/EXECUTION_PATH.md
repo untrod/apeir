@@ -98,6 +98,20 @@ Resume restores the latest Goal, Plan, observations, artifacts, and Agent
 checkpoint, then produces a new deliberation against the current workspace.
 The last requested tool action is not replayed automatically.
 
+Tool discovery is progressive:
+
+```text
+ToolCatalog category summary
+  -> catalog_expand(category)
+  -> normalized tool schemas
+  -> AgentExecutionRuntime invocation boundary
+  -> existing governed executor
+```
+
+Discovery and MCP annotations are untrusted metadata. They do not replace the
+capability, Workspace, Extension, or Kernel admission performed by the selected
+executor.
+
 ## Current migration boundary
 
 The Rust daemon is authoritative for model-workload and Reality-effect

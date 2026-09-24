@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from typer.testing import CliRunner
 
 from nous_runtime.model_runtime import GatewayResponse
@@ -34,13 +36,21 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
         }
     )
 
-    decision = ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+    decision = ModelWorkDeliberator(
+        facade,
+        tool_capabilities=(
+            {"category": "files", "tool_count": 3, "authority": "none"},
+        ),
+    )(harness.context_for(snapshot))
 
     assert decision.status.value == "complete"
     request = facade.requests[0]
     assert request.operation.value == "structured_output"
     assert request.response_schema["properties"]["status"]["enum"]
     assert request.metadata["source"] == "work.harness"
+    payload = json.loads(request.messages[1]["content"])
+    assert payload["tool_capability_catalog"][0]["category"] == "files"
+    assert payload["tool_capability_catalog"][0]["authority"] == "none"
 
 
 def test_recorded_work_verifier_requires_tool_evidence_when_assessed(tmp_path):

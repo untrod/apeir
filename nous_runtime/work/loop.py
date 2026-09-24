@@ -260,15 +260,16 @@ class AgentLoop:
         tools: Any,
         agent_run_id: str,
     ) -> None:
+        step_id = "" if decision.tool_name == "catalog_expand" else decision.step_id
         snapshot.state = RunState.EXECUTING
-        snapshot.current_step = decision.step_id
+        snapshot.current_step = step_id
         self.harness.persist_progress(
             snapshot,
             "work.progress",
             {
                 "summary": decision.summary,
                 "tool": decision.tool_name,
-                "step_id": decision.step_id,
+                "step_id": step_id,
             },
         )
         known = self.harness._tool_names(tools)
@@ -305,11 +306,20 @@ class AgentLoop:
 
         normalized = self._result_mapping(result)
         ok = invocation_status == "completed" and self._result_ok(normalized)
+        if decision.tool_name == "catalog_expand" and ok:
+            for item in normalized.get("tools") or ():
+                if not isinstance(item, Mapping):
+                    continue
+                tool_id = str(item.get("tool_id") or "")
+                if tool_id:
+                    snapshot.loaded_tools[tool_id] = dict(item)
+            while len(snapshot.loaded_tools) > 64:
+                snapshot.loaded_tools.pop(next(iter(snapshot.loaded_tools)))
         snapshot.action_sequence += 1
         observation = {
             "kind": "tool",
             "tool": decision.tool_name,
-            "step_id": decision.step_id,
+            "step_id": step_id,
             "ok": ok,
             "action_sequence": snapshot.action_sequence,
             "plan_revision": snapshot.plan.revision if snapshot.plan else 0,
@@ -319,7 +329,7 @@ class AgentLoop:
         snapshot.observations.append(observation)
         snapshot.observations[:] = snapshot.observations[-50:]
         self._collect_artifacts(snapshot, normalized)
-        self._record_task_result(snapshot, decision.step_id, ok, normalized)
+        self._record_task_result(snapshot, step_id, ok, normalized)
         snapshot.state = RunState.OBSERVING
         snapshot.reanalysis_reason = (
             "" if ok else f"tool {decision.tool_name} failed; analyze before retrying"
@@ -329,7 +339,7 @@ class AgentLoop:
             "work.observing",
             {
                 "tool": decision.tool_name,
-                "step_id": decision.step_id,
+                "step_id": step_id,
                 "ok": ok,
                 "error": str(normalized.get("error") or "")[:500],
             },
