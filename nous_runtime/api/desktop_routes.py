@@ -31,6 +31,82 @@ def _workspace() -> str:
 
 # Tasks
 
+_WORK_TASK_STATES = {
+    "RECEIVED": "planning",
+    "UNDERSTANDING": "planning",
+    "PREPARING": "planning",
+    "PLANNING": "planning",
+    "EXECUTING": "running",
+    "OBSERVING": "running",
+    "REPLANNING": "planning",
+    "RUNNING": "running",
+    "VERIFYING": "verifying",
+    "WAITING_FOR_NODE": "waiting_for_node",
+    "WAITING_FOR_APPROVAL": "awaiting_approval",
+    "WAITING_USER": "waiting_user",
+    "PAUSED": "paused",
+    "BLOCKED": "blocked",
+    "RECOVERING": "recovering",
+    "COMPLETED": "completed",
+    "FAILED": "failed",
+    "CANCELLED": "cancelled",
+}
+
+
+def _work_task_projection(snapshot: Any) -> dict[str, Any]:
+    """Project durable Work facts into the existing Desktop Task contract."""
+    state = str(getattr(snapshot.state, "value", snapshot.state))
+    plan = snapshot.plan
+    plan_tasks = list(getattr(plan, "tasks", ()) or ())
+    completed = sum(
+        str(getattr(item.status, "value", item.status)) in {"completed", "skipped"}
+        for item in plan_tasks
+    )
+    progress = round((completed / len(plan_tasks)) * 100) if plan_tasks else 0
+    if state == "COMPLETED":
+        progress = 100
+    result = snapshot.result
+    result_summary = result if isinstance(result, str) else ""
+    if result is not None and not result_summary:
+        result_summary = "Durable Work result recorded"
+    return {
+        "id": snapshot.run_id,
+        "task_id": snapshot.run_id,
+        "run_id": snapshot.run_id,
+        "task_kind": "work",
+        "conversation_id": snapshot.conversation_id,
+        "name": snapshot.goal.objective,
+        "status": _WORK_TASK_STATES.get(state, state.casefold()),
+        "priority": "normal",
+        "model_id": "auto",
+        "plan_id": getattr(plan, "plan_id", "") if plan else "",
+        "trace_id": snapshot.run_id,
+        "steps": [
+            {
+                "step_id": item.task_id,
+                "name": item.description,
+                "status": str(getattr(item.status, "value", item.status)),
+                "started_at": item.started_at or None,
+                "completed_at": item.completed_at or None,
+                "error": item.error or None,
+                "retry_count": item.retry_count,
+                "max_retries": item.max_retries,
+            }
+            for item in plan_tasks
+        ],
+        "progress_pct": progress,
+        "current_step": snapshot.current_step,
+        "plan_revision": getattr(plan, "revision", 0) if plan else 0,
+        "artifact_refs": list(snapshot.artifacts),
+        "cancellation_requested": state == "CANCELLED",
+        "recoverable": not snapshot.terminal,
+        "error": snapshot.error or None,
+        "result_summary": result_summary or None,
+        "schema_version": "1.0.0",
+        "created_at": snapshot.created_at,
+        "updated_at": snapshot.updated_at,
+    }
+
 def handle_tasks_list(state: str = "", limit: int = 50) -> dict[str, Any]:
     """List tasks from the Execution Runtime and connectivity layers."""
     try:
@@ -55,8 +131,17 @@ def handle_tasks_list(state: str = "", limit: int = 50) -> dict[str, Any]:
                 "created_at": getattr(t, "created_at", ""),
             })
 
-        if state and task_list:
-            task_list = [t for t in task_list if t["status"] == state]
+        # Work checkpoints remain the authority; this is only a Desktop view.
+        try:
+            from nous_runtime.work import WorkHarness
+            checkpoint_path = Path(_workspace()) / ".nous" / "checkpoints.db"
+            if checkpoint_path.is_file():
+                task_list.extend(
+                    _work_task_projection(snapshot)
+                    for snapshot in WorkHarness(_workspace()).list()
+                )
+        except Exception:
+            _log.exception("Could not project durable Work runs into Task Center")
 
         # Also include connectivity tasks if available
         try:
@@ -77,10 +162,25 @@ def handle_tasks_list(state: str = "", limit: int = 50) -> dict[str, Any]:
         except Exception:
             pass
 
+        if state and task_list:
+            task_list = [
+                task for task in task_list
+                if str(task.get("status") or "").casefold() == state.casefold()
+            ]
+        task_list.sort(
+            key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""),
+            reverse=True,
+        )
+        task_list = task_list[:max(1, min(int(limit), 200))]
+
         return ok({
             "tasks": task_list,
             "total": len(task_list),
-            "running": sum(1 for t in task_list if t["status"] in ("running", "RUNNING", "RUN")),
+            "running": sum(
+                1 for task in task_list
+                if str(task.get("status") or "").casefold()
+                in {"planning", "running", "recovering", "verifying"}
+            ),
         })
     except Exception as e:
         return err("TASKS_LIST_ERROR", str(e))
@@ -94,6 +194,23 @@ def handle_tasks_action(body: dict[str, Any]) -> dict[str, Any]:
 
         if not task_id or not action:
             return err("NOUS_INVALID_REQUEST", "task_id and action are required")
+
+        try:
+            from nous_runtime.work import WorkHarness
+            checkpoint_path = Path(_workspace()) / ".nous" / "checkpoints.db"
+            if not checkpoint_path.is_file():
+                raise KeyError(task_id)
+            work = WorkHarness(_workspace())
+            work.require(task_id)
+            if action == "cancel":
+                snapshot = work.cancel(task_id, reason="cancelled from Desktop")
+            elif action == "pause":
+                snapshot = work.pause(task_id, reason="paused from Desktop")
+            else:
+                return err("NOUS_INVALID_REQUEST", f"Unsupported Work action: {action}")
+            return ok({"work": snapshot.to_dict()})
+        except KeyError:
+            pass
 
         if action == "cancel":
             from nous_runtime.task.cli import get_task_manager

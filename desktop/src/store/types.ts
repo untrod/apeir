@@ -67,7 +67,7 @@ export interface Message extends EntityBase {
 export type TaskStatus =
   | "created" | "queued" | "planning" | "awaiting_approval"
   | "dispatching" | "running" | "waiting_for_model" | "waiting_for_node"
-  | "paused" | "recovering" | "verifying"
+  | "waiting_user" | "paused" | "blocked" | "recovering" | "verifying"
   | "completed" | "completed_with_warnings"
   | "failed" | "failed_verification" | "cancelled";
 
@@ -76,7 +76,7 @@ export type TaskPriority = "low" | "normal" | "high" | "critical";
 export interface TaskStep {
   step_id: EntityId;
   name: string;
-  status: "pending" | "running" | "completed" | "failed" | "skipped";
+  status: "pending" | "ready" | "running" | "completed" | "failed" | "skipped" | "blocked";
   started_at?: Timestamp;
   completed_at?: Timestamp;
   error?: string;
@@ -103,6 +103,11 @@ export interface Task extends EntityBase {
   result_summary?: string;
   cancellation_requested: boolean;
   recoverable: boolean;
+  task_kind?: "work" | string;
+  run_id?: EntityId;
+  current_step?: EntityId;
+  plan_revision?: number;
+  artifact_refs?: string[];
 }
 
 

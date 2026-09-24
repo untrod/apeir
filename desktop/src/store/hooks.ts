@@ -93,7 +93,7 @@ export function useTask(id: EntityId): Task | null {
 export function useActiveTasks(): Task[] {
   const state = useStore();
   return Object.values(state.tasks).filter((t) =>
-    ["created", "queued", "planning", "awaiting_approval", "dispatching", "running", "waiting_for_model", "waiting_for_node", "paused", "recovering", "verifying"].includes(t.status),
+    ["created", "queued", "planning", "awaiting_approval", "dispatching", "running", "waiting_for_model", "waiting_for_node", "waiting_user", "blocked", "paused", "recovering", "verifying"].includes(t.status),
   );
 }
 

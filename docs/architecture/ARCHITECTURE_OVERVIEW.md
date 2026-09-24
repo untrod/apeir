@@ -69,6 +69,12 @@ Simple tasks may complete without a Plan. Long-running runs persist Goal, Plan
 revision history, observations, artifacts, blockers, and Agent checkpoints in the
 workspace and reassess current state before acting after resume.
 
+The Desktop Task Center reads those same Work checkpoints through a bounded
+projection: state, current step, versioned Plan tasks, progress, and Artifact
+references remain owned by `WorkHarness`. Desktop pause and cancel requests
+write back through `WorkHarness`; the UI does not maintain a competing Work
+state machine.
+
 `ToolCatalog` is the Work-facing discovery projection over existing tool
 runtimes. It publishes compact capability categories first and exposes full
 schemas only through `catalog_expand`. Invocation is delegated to the original

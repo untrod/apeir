@@ -32,12 +32,16 @@ export function TaskCenter({ onTaskClick, onTraceClick }: TaskCenterProps) {
   const tabs = [
     { key: "all", label: "All", count: allTasks.length },
     { key: "running", label: "Active", count: allTasks.filter((t) => ["running", "queued", "dispatching", "planning", "verifying"].includes(t.status)).length },
-    { key: "awaiting_approval", label: "Awaiting Approval", count: allTasks.filter((t) => t.status === "awaiting_approval").length },
+    { key: "needs_input", label: "Needs Input", count: allTasks.filter((t) => ["awaiting_approval", "waiting_user", "blocked"].includes(t.status)).length },
     { key: "completed", label: "Completed", count: allTasks.filter((t) => t.status === "completed" || t.status === "completed_with_warnings").length },
     { key: "failed", label: "Failed", count: allTasks.filter((t) => t.status === "failed" || t.status === "failed_verification").length },
   ];
 
-  const filtered = filter === "all" ? allTasks : allTasks.filter((t) => t.status === filter);
+  const filtered = filter === "all"
+    ? allTasks
+    : filter === "needs_input"
+      ? allTasks.filter((t) => ["awaiting_approval", "waiting_user", "blocked"].includes(t.status))
+      : allTasks.filter((t) => t.status === filter);
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: colors.bg }}>
@@ -117,10 +121,10 @@ function TaskRow({ task, onTaskClick, onTraceClick }: {
     }
   };
 
-  const canCancel = ["created", "queued", "planning", "dispatching", "running", "waiting_for_model", "waiting_for_node", "paused"].includes(task.status);
-  const canPause = ["running", "dispatching"].includes(task.status);
-  const canResume = task.status === "paused";
-  const canRetry = task.status === "failed" && task.recoverable;
+  const canCancel = ["created", "queued", "planning", "dispatching", "running", "waiting_for_model", "waiting_for_node", "waiting_user", "blocked", "recovering", "paused"].includes(task.status);
+  const canPause = ["planning", "running", "dispatching", "recovering"].includes(task.status);
+  const canResume = task.status === "paused" && task.task_kind !== "work";
+  const canRetry = task.status === "failed" && task.recoverable && task.task_kind !== "work";
 
   return (
     <div style={{ ...cardStyle, marginBottom: space.md }}>
@@ -135,6 +139,9 @@ function TaskRow({ task, onTaskClick, onTraceClick }: {
             <span style={{ fontSize: typo.base, fontWeight: typo.semibold, color: colors.text }}>
               {task.name || task.id.slice(0, 12)}
             </span>
+            {task.task_kind === "work" && (
+              <span style={{ fontSize: typo.xs, color: colors.accent }}>Work</span>
+            )}
             <span style={{ padding: `1px ${space.sm}`, borderRadius: radius.full, fontSize: typo.xs, fontWeight: typo.medium, background: st.bg, color: st.text }}>
               {task.status}
             </span>
@@ -143,7 +150,10 @@ function TaskRow({ task, onTaskClick, onTraceClick }: {
             )}
           </div>
           <div style={{ fontSize: typo.xs, color: colors.textSecondary, marginTop: 2 }}>
-            {task.model_id || "auto"} · {task.steps.length} steps · {new Date(task.created_at).toLocaleString()}
+            {task.model_id || "auto"} · {task.steps.length} steps
+            {task.plan_revision ? ` · plan v${task.plan_revision}` : ""}
+            {task.artifact_refs?.length ? ` · ${task.artifact_refs.length} artifacts` : ""}
+            {` · ${new Date(task.created_at).toLocaleString()}`}
             {task.conversation_id && " · from conversation"}
           </div>
         </div>
@@ -189,6 +199,12 @@ function TaskRow({ task, onTaskClick, onTraceClick }: {
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {task.current_step && (
+            <div style={{ marginBottom: space.md, fontSize: typo.sm, color: colors.textSecondary }}>
+              Current: <span style={{ color: colors.text }}>{task.current_step}</span>
             </div>
           )}
 
