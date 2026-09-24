@@ -41,6 +41,7 @@ class RunState(str, Enum):
     BLOCKED = "BLOCKED"
     EVALUATING = "EVALUATING"
     RECOVERING = "RECOVERING"
+    RECOVERY_REQUIRED = "RECOVERY_REQUIRED"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
@@ -118,6 +119,8 @@ class EventType(str, Enum):
     WORK_BLOCKED = "work.blocked"
     WORK_WAITING_USER = "work.waiting_user"
     WORK_WAITING_APPROVAL = "work.waiting_approval"
+    WORK_ACTION_DISPATCHED = "work.action.dispatched"
+    WORK_RECOVERY_REQUIRED = "work.recovery.required"
     WORK_VERIFYING = "work.verifying"
     WORK_COMPLETED = "work.completed"
 

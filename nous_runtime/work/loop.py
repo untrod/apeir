@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable, Mapping
 from typing import Any, TYPE_CHECKING
 
@@ -59,6 +61,7 @@ class AgentLoop:
                 RunState.WAITING_USER,
                 RunState.WAITING_FOR_APPROVAL,
                 RunState.BLOCKED,
+                RunState.RECOVERY_REQUIRED,
             }:
                 self.harness.checkpoint_agent(snapshot, resume=False)
                 return snapshot
@@ -109,6 +112,7 @@ class AgentLoop:
                     RunState.WAITING_USER,
                     RunState.WAITING_FOR_APPROVAL,
                     RunState.BLOCKED,
+                    RunState.RECOVERY_REQUIRED,
                 }:
                     self.harness.checkpoint_agent(snapshot, resume=False)
                     return snapshot
@@ -281,6 +285,26 @@ class AgentLoop:
             or decision.tool_name in snapshot.loaded_tools
         )
         captured: dict[str, Any] = {}
+        effect_class, capability_id = self._tool_effect(tools, decision.tool_name)
+        snapshot.pending_action = {
+            "tool": decision.tool_name,
+            "step_id": step_id,
+            "arguments_digest": self._arguments_digest(decision.tool_arguments),
+            "effect_class": effect_class,
+            "capability_id": capability_id,
+            "action_sequence": snapshot.action_sequence + 1,
+            "dispatched_at": work_timestamp(),
+            "recovery_policy": (
+                "reassess_then_reissue"
+                if effect_class in {"none", "read"}
+                else "kernel_or_manual"
+            ),
+        }
+        self.harness.persist_progress(
+            snapshot,
+            "work.action.dispatched",
+            {"action": dict(snapshot.pending_action)},
+        )
         if decision.tool_name not in known or not callable(execute):
             result: Any = {
                 "ok": False,
@@ -351,6 +375,7 @@ class AgentLoop:
         }
         snapshot.observations.append(observation)
         snapshot.observations[:] = snapshot.observations[-50:]
+        snapshot.pending_action.clear()
         self._collect_artifacts(snapshot, normalized)
         self._record_task_result(snapshot, step_id, ok, normalized)
         snapshot.state = RunState.OBSERVING
@@ -367,6 +392,31 @@ class AgentLoop:
                 "error": str(normalized.get("error") or "")[:500],
             },
         )
+
+    @staticmethod
+    def _tool_effect(tools: Any, tool_name: str) -> tuple[str, str]:
+        require = getattr(tools, "require", None)
+        if not callable(require):
+            return "unknown", tool_name
+        try:
+            definition = require(tool_name)
+        except (KeyError, ValueError):
+            return "unknown", tool_name
+        return (
+            str(getattr(definition, "effect_class", "unknown") or "unknown"),
+            str(getattr(definition, "capability_id", tool_name) or tool_name),
+        )
+
+    @staticmethod
+    def _arguments_digest(arguments: Mapping[str, Any]) -> str:
+        encoded = json.dumps(
+            dict(arguments),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+        return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
     def _verify(self, snapshot: WorkSnapshot, verifier: Verifier | None) -> bool:
         snapshot.state = RunState.VERIFYING

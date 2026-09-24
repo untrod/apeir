@@ -47,6 +47,7 @@ _WORK_TASK_STATES = {
     "PAUSED": "paused",
     "BLOCKED": "blocked",
     "RECOVERING": "recovering",
+    "RECOVERY_REQUIRED": "blocked",
     "COMPLETED": "completed",
     "FAILED": "failed",
     "CANCELLED": "cancelled",

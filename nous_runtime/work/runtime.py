@@ -195,18 +195,49 @@ class WorkHarness:
         snapshot = self.require(run_id)
         if snapshot.terminal:
             return snapshot
+        if snapshot.pending_action and str(
+            snapshot.pending_action.get("recovery_policy") or ""
+        ) == "kernel_or_manual":
+            reason = (
+                "an effectful tool call has an uncertain outcome; "
+                "Kernel or manual recovery evidence is required"
+            )
+            if snapshot.goal.status.value != "blocked":
+                snapshot.goal.block(reason)
+            snapshot.state = RunState.RECOVERY_REQUIRED
+            snapshot.reanalysis_reason = reason
+            return self._persist(
+                snapshot,
+                "work.recovery.required",
+                {
+                    "reason": reason,
+                    "pending_action": dict(snapshot.pending_action),
+                    "automatic_replay": False,
+                },
+            )
         if snapshot.goal.status.value in {"paused", "blocked", "waiting_user"}:
             snapshot.goal.resume()
         else:
             snapshot.goal.start_understanding()
         snapshot.state = RunState.RECOVERING
+        pending = dict(snapshot.pending_action)
+        snapshot.pending_action.clear()
         snapshot.reanalysis_reason = (
             "runtime resumed; re-evaluate workspace and external state before acting"
+            + (
+                "; the interrupted read-only action may be issued again only after "
+                "this reassessment"
+                if pending
+                else ""
+            )
         )
         self._persist(
             snapshot,
             "run.recovering",
-            {"resume_policy": "reassess_before_action"},
+            {
+                "resume_policy": "reassess_before_action",
+                "interrupted_action": pending,
+            },
         )
         return self.run(
             run_id,

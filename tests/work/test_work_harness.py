@@ -32,6 +32,26 @@ class StubTools:
         return self.results.pop(0) if self.results else {"ok": True}
 
 
+class DispatchInspectingTools(StubTools):
+    def __init__(self, harness, run_id):
+        super().__init__()
+        self.harness = harness
+        self.run_id = run_id
+
+    def require(self, _name):
+        return type(
+            "Definition",
+            (),
+            {"effect_class": "write", "capability_id": "filesystem.write"},
+        )()
+
+    def execute(self, name, arguments):
+        durable = self.harness.require(self.run_id)
+        assert durable.pending_action["tool"] == name
+        assert durable.pending_action["effect_class"] == "write"
+        return super().execute(name, arguments)
+
+
 def test_simple_work_skips_plan_and_completes(tmp_path):
     harness = WorkHarness(tmp_path)
     created = harness.create("Explain recursion clearly")
@@ -296,3 +316,39 @@ def test_completion_reverifies_after_a_later_action(tmp_path):
     assert completed.state is RunState.COMPLETED
     assert completed.action_sequence == 2
     assert len(verification_calls) == 2
+
+
+def test_tool_dispatch_is_durable_before_invocation_and_closed_by_observation(
+    tmp_path,
+):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Perform one durable workspace action")
+    tools = DispatchInspectingTools(harness, created.run_id)
+    decisions = iter(
+        (
+            WorkDecision(
+                DecisionStatus.CONTINUE,
+                "Apply one bounded change",
+                tool_name="workspace_action",
+            ),
+            WorkDecision(
+                DecisionStatus.COMPLETE,
+                "The observed action is complete",
+                output="done",
+            ),
+        )
+    )
+
+    completed = harness.run(
+        created.run_id,
+        deliberator=lambda _context: next(decisions),
+        tools=tools,
+    )
+
+    assert completed.pending_action == {}
+    event_types = [
+        event.event_type for event in harness.events.load_events(created.run_id)
+    ]
+    assert event_types.index("work.action.dispatched") < event_types.index(
+        "work.observing"
+    )

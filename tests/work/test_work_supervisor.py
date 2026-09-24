@@ -170,3 +170,84 @@ def test_supervisor_rejects_two_workers_for_same_run(tmp_path):
         release.set()
         supervisor.wait(created.run_id, timeout=5)
         supervisor.close()
+
+
+def test_uncertain_effect_requires_external_recovery_and_is_not_replayed(tmp_path):
+    from nous_runtime.work import WorkHarness
+
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Recover an uncertain deployment")
+    created.pending_action = {
+        "tool": "deploy_release",
+        "arguments_digest": "sha256:" + "a" * 64,
+        "effect_class": "execute",
+        "capability_id": "deployment.execute",
+        "recovery_policy": "kernel_or_manual",
+    }
+    harness.persist_progress(
+        created,
+        "work.action.dispatched",
+        {"action": dict(created.pending_action)},
+    )
+    deliberations = []
+    supervisor = WorkSupervisor(
+        tmp_path,
+        component_factory=lambda _root, _snapshot: _components(
+            lambda context: deliberations.append(context)
+        ),
+    )
+    try:
+        supervisor.resume(created.run_id)
+        recovered = supervisor.wait(created.run_id, timeout=5)
+
+        assert recovered.state is RunState.RECOVERY_REQUIRED
+        assert recovered.pending_action["tool"] == "deploy_release"
+        assert deliberations == []
+        events = harness.events.load_events(created.run_id)
+        assert events[-1].event_type == "work.recovery.required"
+        assert events[-1].payload["automatic_replay"] is False
+    finally:
+        supervisor.close()
+
+
+def test_interrupted_read_is_reassessed_before_safe_reissue(tmp_path):
+    from nous_runtime.work import WorkHarness
+
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Recover an interrupted workspace read")
+    created.pending_action = {
+        "tool": "read_file",
+        "arguments_digest": "sha256:" + "b" * 64,
+        "effect_class": "read",
+        "capability_id": "filesystem.read",
+        "recovery_policy": "reassess_then_reissue",
+    }
+    harness.persist_progress(
+        created,
+        "work.action.dispatched",
+        {"action": dict(created.pending_action)},
+    )
+    contexts = []
+
+    def deliberate(context):
+        contexts.append(context)
+        return WorkDecision(
+            DecisionStatus.COMPLETE,
+            "Read state was reassessed",
+            output="safe",
+        )
+
+    supervisor = WorkSupervisor(
+        tmp_path,
+        component_factory=lambda _root, _snapshot: _components(deliberate),
+    )
+    try:
+        supervisor.resume(created.run_id)
+        recovered = supervisor.wait(created.run_id, timeout=5)
+
+        assert recovered.state is RunState.COMPLETED
+        assert recovered.pending_action == {}
+        assert contexts[0].recovering is True
+        assert "interrupted read-only action" in contexts[0].reanalysis_reason
+    finally:
+        supervisor.close()
