@@ -73,6 +73,7 @@ class BalanceExhaustedProvider(ReasoningProvider):
         GatewayOperation.REASONING,
         GatewayOperation.PLANNER,
         GatewayOperation.REVIEWER,
+        GatewayOperation.STRUCTURED_OUTPUT,
         GatewayOperation.VERIFICATION,
     ),
 )
@@ -96,6 +97,60 @@ def test_reasoning_provider_supports_gateway_text_operations(operation) -> None:
     assert response.content == "hello"
     assert provider.invocations == ["model.reason"]
     assert provider.models == ["reasoner"]
+
+
+def test_reasoning_provider_receives_structured_output_schema() -> None:
+    provider = ReasoningProvider()
+    facade = ModelGatewayFacade(
+        build_gateway_from_providers([provider], allow_direct=True)
+    )
+    schema = {
+        "type": "object",
+        "properties": {"ready": {"type": "boolean"}},
+        "required": ["ready"],
+        "additionalProperties": False,
+    }
+    try:
+        response = facade.invoke_sync(
+            GatewayRequest(
+                operation=GatewayOperation.STRUCTURED_OUTPUT,
+                execution=GatewayExecutionContext(task_id="structured-output"),
+                input='{"ready": true}',
+                response_schema=schema,
+            )
+        )
+    finally:
+        facade.gateway.close_sync_bridge()
+
+    assert response.ok
+    assert response.structured_output == {"ready": True}
+    assert provider.invocations == ["model.reason"]
+    assert provider.params[0]["response_schema"] == schema
+
+
+def test_structured_output_accepts_fenced_provider_json() -> None:
+    provider = ReasoningProvider()
+
+    def invoke(capability_id: str, **params):
+        return {"ok": True, "content": '```json\n{"ready": true}\n```'}
+
+    provider.invoke = invoke
+    facade = ModelGatewayFacade(
+        build_gateway_from_providers([provider], allow_direct=True)
+    )
+    try:
+        response = facade.invoke_sync(
+            GatewayRequest(
+                operation=GatewayOperation.STRUCTURED_OUTPUT,
+                execution=GatewayExecutionContext(task_id="fenced-json"),
+                input="return json",
+                response_schema={"type": "object"},
+            )
+        )
+    finally:
+        facade.gateway.close_sync_bridge()
+
+    assert response.structured_output == {"ready": True}
 
 
 def test_runtime_defaults_to_strict_kernel_gateway(monkeypatch) -> None:

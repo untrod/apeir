@@ -660,6 +660,7 @@ def _register_provider_runtime(
             endpoint=str(values.get("endpoint") or endpoint),
             model=str(values.get("model") or model),
             credential_ref=reference,
+            authentication_required=values.get("authentication_required"),
             capabilities=capabilities,
             capability_endpoints=dict(values.get("capability_endpoints") or {}),
             capability_models=dict(values.get("capability_models") or {}),

@@ -35,6 +35,7 @@ class OpenAIProvider(Provider):
         endpoint: str = "",
         model: str = "",
         credential_ref: str = "",
+        authentication_required: bool | None = None,
         capabilities: Iterable[str] = ("model.reason", "model.code"),
         capability_endpoints: dict[str, str] | None = None,
         capability_models: dict[str, str] | None = None,
@@ -45,6 +46,11 @@ class OpenAIProvider(Provider):
         self.endpoint = endpoint
         self.model = model
         self.credential_ref = credential_ref
+        self.authentication_required = (
+            bool(credential_ref)
+            if authentication_required is None
+            else bool(authentication_required)
+        )
         self.max_concurrency = max(1, min(int(max_concurrency), 8))
         self.capabilities = tuple(
             capability for capability in capabilities if capability in _SUPPORTED
@@ -75,7 +81,7 @@ class OpenAIProvider(Provider):
                 "error_code": "NOUS_PROVIDER_CONFIG_INCOMPLETE",
             }
         api_key = self._credential()
-        if self.credential_ref and not api_key:
+        if self.authentication_required and not api_key:
             return {
                 "ok": False,
                 "error": "Configured credential reference is unavailable",
@@ -122,7 +128,7 @@ class OpenAIProvider(Provider):
     def health(self) -> dict[str, Any]:
         if not (self.model or os.environ.get("NOUS_LLM_MODEL")):
             return {"status": "degraded", "error": "Default model is not configured"}
-        if self.credential_ref and not self._credential():
+        if self.authentication_required and not self._credential():
             return {"status": "degraded", "error": "Credential reference is unavailable"}
         return {
             "status": "ok",

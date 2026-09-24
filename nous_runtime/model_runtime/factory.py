@@ -34,6 +34,7 @@ _LEGACY_GATEWAY_CAPABILITIES: dict[str, frozenset[str]] = {
             "reasoning",
             "planning",
             "review",
+            "structured_output",
             "verification",
         }
     ),

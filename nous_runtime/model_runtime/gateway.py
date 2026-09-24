@@ -715,13 +715,23 @@ class ModelGateway:
         capability = (
             "embedding" if "embedding" in request.required_capabilities else "chat"
         )
+        response_format = request.metadata.get("response_format")
+        response_schema = dict(request.metadata.get("response_schema") or {})
+        if response_format is None and response_schema:
+            response_format = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "nous_response",
+                    "schema": response_schema,
+                },
+            }
         model_input = {
             "schema_version": 1,
             "capability": capability,
             "messages": [dict(message) for message in request.messages],
             "input": request.metadata.get("input"),
             "tools": list(request.metadata.get("tools") or ()),
-            "response_format": request.metadata.get("response_format"),
+            "response_format": response_format,
             "max_output_tokens": request.metadata.get("max_tokens"),
             "temperature": request.metadata.get("temperature"),
         }
@@ -832,10 +842,17 @@ class ModelGateway:
     @staticmethod
     def _kernel_backend(provider_id: str, endpoint: str) -> str:
         normalized = f"{provider_id} {endpoint}".lower()
-        if "ollama" in normalized or ":11434" in normalized:
-            return "ollama"
         parsed = urlsplit(endpoint)
         hostname = (parsed.hostname or "").casefold()
+        if parsed.path.rstrip("/").endswith("/v1"):
+            try:
+                if hostname and ipaddress.ip_address(hostname).is_loopback:
+                    return "edge-openai-compatible"
+            except ValueError:
+                if hostname == "localhost":
+                    return "edge-openai-compatible"
+        if "ollama" in normalized or ":11434" in normalized:
+            return "ollama"
         if hostname == "localhost":
             return "edge-openai-compatible"
         try:
@@ -851,7 +868,10 @@ class ModelGateway:
         if reference.startswith("env:"):
             reference = reference[4:]
         if not reference:
-            if backend == "ollama":
+            if backend == "ollama" or (
+                backend == "edge-openai-compatible"
+                and getattr(provider, "authentication_required", None) is False
+            ):
                 return ""
             reference = "NOUS_LLM_API_KEY"
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", reference):

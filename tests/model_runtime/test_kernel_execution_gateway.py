@@ -44,6 +44,13 @@ class MultiModelRemoteProvider(RemoteProvider):
         self.capability_models = {"model.code": "deepseek-coder"}
 
 
+class LocalOpenAIProvider(RemoteProvider):
+    provider_id = "ollama"
+    endpoint = "http://127.0.0.1:11434/v1/chat/completions"
+    credential_ref = ""
+    authentication_required = False
+
+
 class FakeKernelClient:
     def __init__(
         self,
@@ -134,6 +141,10 @@ def test_model_execution_uses_kernel_operation(monkeypatch) -> None:
                     "temperature": 0.2,
                     "tools": [{"type": "function", "function": {"name": "lookup"}}],
                     "tool_choice": "required",
+                    "response_schema": {
+                        "type": "object",
+                        "properties": {"ready": {"type": "boolean"}},
+                    },
                 },
             )
         )
@@ -151,6 +162,11 @@ def test_model_execution_uses_kernel_operation(monkeypatch) -> None:
     assert model_input["messages"][0]["content"] == "hello"
     assert model_input["max_output_tokens"] == 128
     assert model_input["tools"][0]["function"]["name"] == "lookup"
+    assert model_input["response_format"]["type"] == "json_schema"
+    assert model_input["response_format"]["json_schema"]["schema"] == {
+        "type": "object",
+        "properties": {"ready": {"type": "boolean"}},
+    }
 
 
 def test_kernel_operation_uses_the_routed_provider_model(monkeypatch) -> None:
@@ -287,6 +303,24 @@ def test_loopback_openai_endpoint_uses_edge_backend() -> None:
             "local", "http://127.0.0.1:8080/v1"
         )
         == "edge-openai-compatible"
+    )
+
+
+def test_ollama_openai_endpoint_uses_edge_backend() -> None:
+    gateway = build_gateway_from_providers([RemoteProvider()])
+    assert (
+        gateway._kernel_backend("ollama", "http://127.0.0.1:11434/v1")
+        == "edge-openai-compatible"
+    )
+    assert gateway._kernel_backend("ollama", "http://127.0.0.1:11434") == "ollama"
+
+
+def test_loopback_openai_provider_can_explicitly_disable_authentication() -> None:
+    gateway = build_gateway_from_providers([LocalOpenAIProvider()])
+    provider = LocalOpenAIProvider()
+    assert gateway._kernel_credential_reference(provider, "edge-openai-compatible") == ""
+    assert gateway._kernel_credential_reference(RemoteProvider(), "openai-compatible") == (
+        "DEEPSEEK_API_KEY"
     )
 
 

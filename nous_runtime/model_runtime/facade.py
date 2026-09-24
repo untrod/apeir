@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
@@ -523,7 +524,7 @@ def _content_parts(
     response_schema: Mapping[str, Any],
 ) -> tuple[Any, Any, tuple[Mapping[str, Any], ...]]:
     if not isinstance(raw, Mapping):
-        return raw, raw if response_schema else None, ()
+        return raw, _decode_structured(raw) if response_schema else None, ()
     tool_calls = tuple(
         dict(item) for item in raw.get("tool_calls") or ()
     )
@@ -532,6 +533,20 @@ def _content_parts(
         structured = raw.get("content", raw)
     content = raw.get("content", raw.get("text", raw))
     return content, structured, tool_calls
+
+
+def _decode_structured(raw: Any) -> Any:
+    if not isinstance(raw, str):
+        return raw
+    candidate = raw.strip()
+    if candidate.startswith("```") and candidate.endswith("```"):
+        lines = candidate.splitlines()
+        if len(lines) >= 3:
+            candidate = "\n".join(lines[1:-1]).strip()
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError:
+        return raw
 
 
 def _error_response(
