@@ -195,9 +195,90 @@ class WorkHarness:
         snapshot = self.require(run_id)
         if snapshot.terminal:
             return snapshot
-        if snapshot.pending_action and str(
-            snapshot.pending_action.get("recovery_policy") or ""
-        ) == "kernel_or_manual":
+        if (
+            snapshot.pending_action
+            and str(snapshot.pending_action.get("tool") or "") == "shell_start"
+            and tools is not None
+        ):
+            execute = getattr(tools, "execute", None)
+            pending_shell = dict(snapshot.pending_action)
+            recovered = (
+                execute(
+                    "shell_recover",
+                    {
+                        "work_id": snapshot.run_id,
+                        "action_sequence": int(
+                            pending_shell.get("action_sequence") or 0
+                        ),
+                    },
+                )
+                if callable(execute)
+                else {}
+            )
+            if (
+                isinstance(recovered, Mapping)
+                and recovered.get("found")
+                and not recovered.get("recovery_required")
+            ):
+                snapshot.pending_action.clear()
+                snapshot.action_sequence = max(
+                    snapshot.action_sequence,
+                    int(pending_shell.get("action_sequence") or 0),
+                )
+                snapshot.observations.append(
+                    {
+                        "kind": "tool",
+                        "tool": "shell_start",
+                        "step_id": str(pending_shell.get("step_id") or ""),
+                        "ok": True,
+                        "action_sequence": snapshot.action_sequence,
+                        "plan_revision": (
+                            snapshot.plan.revision if snapshot.plan else 0
+                        ),
+                        "result": dict(recovered),
+                        "observed_at": work_timestamp(),
+                        "recovered": True,
+                    }
+                )
+                snapshot.observations[:] = snapshot.observations[-50:]
+                for artifact_ref in dict(recovered.get("artifacts") or {}).values():
+                    reference = str(artifact_ref or "")
+                    if reference and reference not in snapshot.artifacts:
+                        snapshot.artifacts.append(reference)
+                if snapshot.goal.status.value in {
+                    "paused",
+                    "blocked",
+                    "waiting_user",
+                }:
+                    snapshot.goal.resume()
+                else:
+                    snapshot.goal.start_understanding()
+                snapshot.state = RunState.RECOVERING
+                snapshot.reanalysis_reason = (
+                    "persistent process session recovered without replay; "
+                    "inspect its current state and output before continuing"
+                )
+                self._persist(
+                    snapshot,
+                    "run.recovering",
+                    {
+                        "resume_policy": "reattach_without_replay",
+                        "interrupted_action": pending_shell,
+                        "process_session": dict(recovered),
+                    },
+                )
+                return self.run(
+                    run_id,
+                    deliberator=deliberator,
+                    tools=tools,
+                    verifier=verifier,
+                    max_iterations=max_iterations,
+                )
+        if (
+            snapshot.pending_action
+            and str(snapshot.pending_action.get("recovery_policy") or "")
+            == "kernel_or_manual"
+        ):
             reason = (
                 "an effectful tool call has an uncertain outcome; "
                 "Kernel or manual recovery evidence is required"

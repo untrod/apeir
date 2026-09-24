@@ -227,6 +227,68 @@ def test_restart_resume_reassesses_without_replaying_last_tool(tmp_path):
     assert "re-evaluate" in seen_contexts[0].reanalysis_reason
 
 
+def test_resume_reattaches_persistent_shell_without_replaying_start(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Run a persistent targeted test")
+    created.pending_action = {
+        "tool": "shell_start",
+        "step_id": "run-tests",
+        "arguments_digest": "sha256:" + "c" * 64,
+        "effect_class": "execute",
+        "capability_id": "process.session.start",
+        "action_sequence": 1,
+        "recovery_policy": "kernel_or_manual",
+    }
+    harness.persist_progress(
+        created,
+        "work.action.dispatched",
+        {"action": dict(created.pending_action)},
+    )
+
+    class RecoveringShellTools(StubTools):
+        def execute(self, name, arguments):
+            self.calls.append((name, dict(arguments)))
+            assert name == "shell_recover"
+            return {
+                "ok": True,
+                "found": True,
+                "recovery_required": False,
+                "automatic_replay": False,
+                "session_id": "ps_existing",
+                "state": "RUNNING",
+                "artifacts": {},
+            }
+
+    tools = RecoveringShellTools()
+    contexts = []
+
+    def finish(context):
+        contexts.append(context)
+        return WorkDecision(
+            DecisionStatus.COMPLETE,
+            "The existing process was inspected without replay",
+            output="reattached",
+        )
+
+    completed = WorkHarness(tmp_path).resume(
+        created.run_id,
+        deliberator=finish,
+        tools=tools,
+    )
+
+    assert completed.state is RunState.COMPLETED
+    assert completed.pending_action == {}
+    assert tools.calls == [
+        (
+            "shell_recover",
+            {"work_id": created.run_id, "action_sequence": 1},
+        )
+    ]
+    assert contexts[0].recovering is True
+    assert "without replay" in contexts[0].reanalysis_reason
+    assert any(item.get("recovered") for item in completed.observations)
+
+
 def test_steering_updates_same_goal_and_plan_revision_durably(tmp_path):
     harness = WorkHarness(tmp_path)
     created = harness.create("Fix the code in this repository")

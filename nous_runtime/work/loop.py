@@ -324,7 +324,18 @@ class AgentLoop:
         else:
 
             def invoke(_request: Any) -> Any:
-                value = execute(decision.tool_name, dict(decision.tool_arguments))
+                arguments = dict(decision.tool_arguments)
+                if decision.tool_name == "shell_start":
+                    arguments.update(
+                        {
+                            "_work_id": snapshot.run_id,
+                            "_tool_call_id": str(
+                                getattr(_request, "invocation_id", "") or ""
+                            ),
+                            "_action_sequence": snapshot.action_sequence + 1,
+                        }
+                    )
+                value = execute(decision.tool_name, arguments)
                 captured["result"] = value
                 return value
 
@@ -432,9 +443,7 @@ class AgentLoop:
                 return value
             change = dict(value)
             change["work_id"] = str(change.get("work_id") or work_id)
-            change["tool_call_id"] = str(
-                change.get("tool_call_id") or tool_call_id
-            )
+            change["tool_call_id"] = str(change.get("tool_call_id") or tool_call_id)
             return change
 
         if isinstance(result.get("change"), Mapping):
@@ -675,6 +684,12 @@ class AgentLoop:
         for key in ("artifact", "evidence_ref"):
             if isinstance(result.get(key), Mapping):
                 values.append(result[key])
+        session_artifacts = result.get("artifacts")
+        if isinstance(session_artifacts, Mapping):
+            for artifact_ref in session_artifacts.values():
+                value = str(artifact_ref or "")
+                if value and value not in snapshot.artifacts:
+                    snapshot.artifacts.append(value)
         for item in values:
             if not isinstance(item, Mapping):
                 continue
