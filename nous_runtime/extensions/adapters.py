@@ -66,14 +66,28 @@ class AgentSkillAdapter:
         metadata, instructions = _skill_markdown(path)
         name = str(metadata.get("name") or "").strip()
         if path.parent == root and root.name.lower() != name.lower():
-            raise ValueError(f"SKILL.md name '{name}' must match directory '{root.name}'")
+            raise ValueError(
+                f"SKILL.md name '{name}' must match directory '{root.name}'"
+            )
         allowed_raw = metadata.get("allowed-tools", ())
         if isinstance(allowed_raw, str):
             allowed_tools = tuple(value for value in allowed_raw.split() if value)
-        elif isinstance(allowed_raw, list):
-            allowed_tools = tuple(str(value) for value in allowed_raw if str(value).strip())
+        elif isinstance(allowed_raw, (list, tuple)):
+            allowed_tools = tuple(
+                str(value) for value in allowed_raw if str(value).strip()
+            )
         else:
             raise ValueError("SKILL.md allowed-tools must be a string or array")
+        suggested_raw = metadata.get("suggested_tools") or ()
+        if isinstance(suggested_raw, str):
+            suggested_tools = tuple(value for value in suggested_raw.split() if value)
+        elif isinstance(suggested_raw, (list, tuple)):
+            suggested_tools = tuple(
+                str(value) for value in suggested_raw if str(value).strip()
+            )
+        else:
+            raise ValueError("SKILL.md suggested_tools must be a string or array")
+        allowed_tools = tuple(dict.fromkeys((*allowed_tools, *suggested_tools)))
         resources = _skill_resources(path.parent)
         capabilities: list[CapabilityRequest] = []
         if resources:
@@ -90,7 +104,11 @@ class AgentSkillAdapter:
                 CapabilityRequest(
                     "process.execute",
                     "execute",
-                    tuple(resource for resource in resources if resource.startswith("scripts/")),
+                    tuple(
+                        resource
+                        for resource in resources
+                        if resource.startswith("scripts/")
+                    ),
                     "The package contains scripts; import does not authorize execution",
                 )
             )
@@ -103,10 +121,49 @@ class AgentSkillAdapter:
                     "Tools requested by SKILL.md allowed-tools",
                 )
             )
+        requested = metadata.get("required_capabilities") or ()
+        if isinstance(requested, str):
+            requested = [requested]
+        if not isinstance(requested, (list, tuple)):
+            raise ValueError("SKILL.md required_capabilities must be a string or array")
+        for value in requested:
+            capability = str(value or "").strip()
+            if capability:
+                capabilities.append(_permission_request(capability))
+        if metadata.get("network") is True:
+            capabilities.append(
+                CapabilityRequest(
+                    "network.connect",
+                    "connect",
+                    (),
+                    "SKILL.md requests network access; this is not authorization",
+                )
+            )
+        if metadata.get("filesystem") is True and not any(
+            item.capability == "filesystem.read" for item in capabilities
+        ):
+            capabilities.append(
+                CapabilityRequest(
+                    "filesystem.read",
+                    "read",
+                    (),
+                    "SKILL.md requests filesystem access; this is not authorization",
+                )
+            )
         raw_metadata = metadata.get("metadata") or {}
         if not isinstance(raw_metadata, dict):
             raise ValueError("SKILL.md metadata must be a mapping")
-        version = str(raw_metadata.get("version") or "0.0.0+imported")
+        version = str(
+            metadata.get("version") or raw_metadata.get("version") or "0.0.0+imported"
+        )
+        annotations = {
+            "version": version,
+            "risk": str(metadata.get("risk") or raw_metadata.get("risk") or "unknown"),
+        }
+        for field in ("tags", "verification"):
+            value = metadata.get(field, raw_metadata.get(field))
+            if value is not None:
+                annotations[field] = json.dumps(value, ensure_ascii=False)
         skill = SkillSpec(
             name=name,
             description=str(metadata.get("description") or "").strip(),
@@ -115,7 +172,10 @@ class AgentSkillAdapter:
             compatibility=str(metadata.get("compatibility") or ""),
             allowed_tools=allowed_tools,
             resources=resources,
-            metadata={str(key): str(value) for key, value in raw_metadata.items()},
+            metadata={
+                **{str(key): str(value) for key, value in raw_metadata.items()},
+                **annotations,
+            },
         )
         return ExtensionManifest(
             extension_id=f"skills/{name}",
@@ -135,19 +195,29 @@ class LegacySkillAdapter:
     name = "nous-json-skill-v1"
 
     def supports(self, root: Path, preferred_file: Path | None) -> bool:
-        path = preferred_file if preferred_file and preferred_file.suffix.lower() == ".json" else None
+        path = (
+            preferred_file
+            if preferred_file and preferred_file.suffix.lower() == ".json"
+            else None
+        )
         if path is None:
             return False
         try:
             value = _load_json(path)
         except (OSError, ValueError):
             return False
-        return isinstance(value, dict) and "instruction" in value and ("id" in value or "name" in value)
+        return (
+            isinstance(value, dict)
+            and "instruction" in value
+            and ("id" in value or "name" in value)
+        )
 
     def load(self, root: Path, preferred_file: Path | None) -> ExtensionManifest:
         assert preferred_file is not None
         data = _load_json(preferred_file)
-        skill_id = _slug(str(data.get("id") or data.get("name") or "skill"), hyphen=True)
+        skill_id = _slug(
+            str(data.get("id") or data.get("name") or "skill"), hyphen=True
+        )
         permissions = tuple(str(value) for value in data.get("permissions") or ())
         tools = tuple(str(value) for value in data.get("tools") or ())
         skill = SkillSpec(
@@ -159,7 +229,9 @@ class LegacySkillAdapter:
         )
         capabilities = tuple(_permission_request(value) for value in permissions)
         if tools:
-            capabilities += (CapabilityRequest("tool.invoke", "use", tools, "Legacy skill tools"),)
+            capabilities += (
+                CapabilityRequest("tool.invoke", "use", tools, "Legacy skill tools"),
+            )
         return ExtensionManifest(
             extension_id=f"legacy-skills/{skill_id}",
             version="0.0.0+legacy",
@@ -205,7 +277,10 @@ class PluginAdapter:
             source_format="nous-plugin-v0",
             compatibility_level=CompatibilityLevel.IMPORT,
             kinds=("plugin", "tool"),
-            tools=tuple(ToolSpec(name=value, protocol="python-plugin", effect="unknown") for value in plugin.capabilities),
+            tools=tuple(
+                ToolSpec(name=value, protocol="python-plugin", effect="unknown")
+                for value in plugin.capabilities
+            ),
             capabilities=tuple(capabilities),
             entry_points=(EntryPoint("python", plugin.entry_point, "nous-plugin-v0"),),
             dependencies={value: "declared" for value in plugin.dependencies},
@@ -244,13 +319,18 @@ class PackAdapter:
             extension_id=f"packs/{name}",
             version=str(data.get("version") or ""),
             description=str(data.get("description") or name),
-            source_format="nous-pack-kernel-v1" if "schema_version" in data else "nous-pack-runtime-v0",
+            source_format="nous-pack-kernel-v1"
+            if "schema_version" in data
+            else "nous-pack-runtime-v0",
             compatibility_level=CompatibilityLevel.IMPORT,
             kinds=("pack",),
             capabilities=capabilities,
             dependencies=dependencies,
             license=str(data.get("license") or ""),
-            metadata={"references": references, "legacy_config": data.get("config") or {}},
+            metadata={
+                "references": references,
+                "legacy_config": data.get("config") or {},
+            },
         ).require_valid()
 
 
@@ -263,12 +343,18 @@ class OpenApiAdapter:
                 data = _load_data(path)
             except (OSError, ValueError):
                 continue
-            if isinstance(data, dict) and str(data.get("openapi") or "").startswith("3."):
+            if isinstance(data, dict) and str(data.get("openapi") or "").startswith(
+                "3."
+            ):
                 return True
         return False
 
     def load(self, root: Path, preferred_file: Path | None) -> ExtensionManifest:
-        path, data = _find_data(root, preferred_file, lambda value: str(value.get("openapi") or "").startswith("3."))
+        path, data = _find_data(
+            root,
+            preferred_file,
+            lambda value: str(value.get("openapi") or "").startswith("3."),
+        )
         info = data.get("info") or {}
         title = str(info.get("title") or path.stem)
         version = str(info.get("version") or "0.0.0+imported")
@@ -282,15 +368,23 @@ class OpenApiAdapter:
                 operation = path_item.get(method)
                 if not isinstance(operation, dict):
                     continue
-                operation_id = str(operation.get("operationId") or f"{method}_{_slug(str(route))}")
+                operation_id = str(
+                    operation.get("operationId") or f"{method}_{_slug(str(route))}"
+                )
                 name = re.sub(r"[^A-Za-z0-9_.:-]+", "_", operation_id).strip("_")[:128]
                 tools.append(
                     ToolSpec(
                         name=name,
-                        description=str(operation.get("summary") or operation.get("description") or ""),
+                        description=str(
+                            operation.get("summary")
+                            or operation.get("description")
+                            or ""
+                        ),
                         input_schema=_openapi_input_schema(path_item, operation),
                         output_schema={},
-                        effect="read" if method in {"get", "head", "options"} else "write",
+                        effect="read"
+                        if method in {"get", "head", "options"}
+                        else "write",
                         protocol="openapi",
                         operation=f"{method.upper()} {route}",
                     )
@@ -308,10 +402,20 @@ class OpenApiAdapter:
             compatibility_level=CompatibilityLevel.IMPORT,
             kinds=("tool",),
             tools=tuple(tools),
-            capabilities=(CapabilityRequest("network.connect", "connect", scopes, "Call the imported OpenAPI service"),),
+            capabilities=(
+                CapabilityRequest(
+                    "network.connect",
+                    "connect",
+                    scopes,
+                    "Call the imported OpenAPI service",
+                ),
+            ),
             entry_points=(EntryPoint("openapi", path.name, "openapi-3"),),
             license=str((info.get("license") or {}).get("name") or ""),
-            metadata={"openapi_version": str(data.get("openapi")), "tool_count": len(tools)},
+            metadata={
+                "openapi_version": str(data.get("openapi")),
+                "tool_count": len(tools),
+            },
         ).require_valid()
 
 
@@ -322,25 +426,61 @@ class McpConfigAdapter:
 
     def supports(self, root: Path, preferred_file: Path | None) -> bool:
         try:
-            _find_data(root, preferred_file, lambda value: isinstance(value.get("mcpServers"), dict))
+            _find_data(
+                root,
+                preferred_file,
+                lambda value: isinstance(value.get("mcpServers"), dict),
+            )
             return True
         except (FileNotFoundError, ValueError):
             return False
 
     def load(self, root: Path, preferred_file: Path | None) -> ExtensionManifest:
-        _, data = _find_data(root, preferred_file, lambda value: isinstance(value.get("mcpServers"), dict))
+        _, data = _find_data(
+            root,
+            preferred_file,
+            lambda value: isinstance(value.get("mcpServers"), dict),
+        )
         servers = data["mcpServers"]
         entries: list[EntryPoint] = []
         capabilities: list[CapabilityRequest] = []
         for name, raw in sorted(servers.items()):
             config = raw if isinstance(raw, dict) else {}
             if config.get("command"):
-                entries.append(EntryPoint("process", str(config["command"]), "mcp-stdio", _redact_mcp_config(config)))
-                capabilities.append(CapabilityRequest("process.execute", "execute", (str(config["command"]),), f"Start MCP server {name}"))
+                entries.append(
+                    EntryPoint(
+                        "process",
+                        str(config["command"]),
+                        "mcp-stdio",
+                        _redact_mcp_config(config),
+                    )
+                )
+                capabilities.append(
+                    CapabilityRequest(
+                        "process.execute",
+                        "execute",
+                        (str(config["command"]),),
+                        f"Start MCP server {name}",
+                    )
+                )
             elif config.get("url"):
-                entries.append(EntryPoint("remote", str(config["url"]), "mcp-http", _redact_mcp_config(config)))
+                entries.append(
+                    EntryPoint(
+                        "remote",
+                        str(config["url"]),
+                        "mcp-http",
+                        _redact_mcp_config(config),
+                    )
+                )
                 scope = _server_scope({"url": str(config["url"])})
-                capabilities.append(CapabilityRequest("network.connect", "connect", (scope,) if scope else (), f"Connect to MCP server {name}"))
+                capabilities.append(
+                    CapabilityRequest(
+                        "network.connect",
+                        "connect",
+                        (scope,) if scope else (),
+                        f"Connect to MCP server {name}",
+                    )
+                )
             else:
                 raise ValueError(f"MCP server {name} requires command or url")
         bundle = next(iter(servers)) if len(servers) == 1 else "bundle"
@@ -378,7 +518,9 @@ class ExtensionInspector:
                     continue
                 manifest = adapter.load(resolved.root, resolved.preferred_file)
                 provenance = Provenance(
-                    source_type="zip" if resolved.source.suffix.lower() == ".zip" else "local",
+                    source_type="zip"
+                    if resolved.source.suffix.lower() == ".zip"
+                    else "local",
                     source=str(resolved.source),
                     digest=(
                         package_digest(resolved.root)
@@ -408,7 +550,11 @@ def _skill_markdown(path: Path) -> tuple[dict[str, Any], str]:
     if not lines or lines[0].strip() != "---":
         raise ValueError("SKILL.md must begin with YAML frontmatter")
     try:
-        end = next(index for index, line in enumerate(lines[1:], start=1) if line.strip() == "---")
+        end = next(
+            index
+            for index, line in enumerate(lines[1:], start=1)
+            if line.strip() == "---"
+        )
     except StopIteration as exc:
         raise ValueError("SKILL.md frontmatter is not closed") from exc
     metadata = yaml.safe_load("\n".join(lines[1:end]))
@@ -419,15 +565,19 @@ def _skill_markdown(path: Path) -> tuple[dict[str, Any], str]:
 
 def _skill_resources(root: Path) -> tuple[str, ...]:
     resources: list[str] = []
-    for directory in ("scripts", "references", "assets"):
+    for directory in ("scripts", "references", "templates", "examples", "assets"):
         base = root / directory
         if not base.exists():
             continue
         if base.is_symlink() or not base.is_dir():
-            raise ValueError(f"skill resource directory must be a real directory: {directory}")
+            raise ValueError(
+                f"skill resource directory must be a real directory: {directory}"
+            )
         for path in base.rglob("*"):
             if path.is_symlink():
-                raise ValueError(f"skill resources may not contain symbolic links: {path}")
+                raise ValueError(
+                    f"skill resources may not contain symbolic links: {path}"
+                )
             if path.is_file():
                 resources.append(path.relative_to(root).as_posix())
     return tuple(sorted(resources))
@@ -440,8 +590,20 @@ def _permission_request(permission: str) -> CapabilityRequest:
         "connector": ("connector.use", "use"),
         "model": ("model.use", "use"),
     }
-    capability, access = mapping.get(permission, (permission, "write" if permission.endswith(".write") else "read" if permission.endswith(".read") else "use"))
-    return CapabilityRequest(capability, access, (), f"Imported permission: {permission}")
+    capability, access = mapping.get(
+        permission,
+        (
+            permission,
+            "write"
+            if permission.endswith(".write")
+            else "read"
+            if permission.endswith(".read")
+            else "use",
+        ),
+    )
+    return CapabilityRequest(
+        capability, access, (), f"Imported permission: {permission}"
+    )
 
 
 def _candidate_data_files(root: Path, preferred: Path | None) -> tuple[Path, ...]:
@@ -451,7 +613,9 @@ def _candidate_data_files(root: Path, preferred: Path | None) -> tuple[Path, ...
     return tuple(path for name in names if (path := root / name).is_file())
 
 
-def _find_data(root: Path, preferred: Path | None, predicate) -> tuple[Path, dict[str, Any]]:
+def _find_data(
+    root: Path, preferred: Path | None, predicate
+) -> tuple[Path, dict[str, Any]]:
     for path in _candidate_data_files(root, preferred):
         data = _load_data(path)
         if isinstance(data, dict) and predicate(data):
@@ -484,10 +648,14 @@ def _server_scope(server: Any) -> str:
     return parsed.netloc.lower()
 
 
-def _openapi_input_schema(path_item: dict[str, Any], operation: dict[str, Any]) -> dict[str, Any]:
+def _openapi_input_schema(
+    path_item: dict[str, Any], operation: dict[str, Any]
+) -> dict[str, Any]:
     properties: dict[str, Any] = {}
     required: list[str] = []
-    parameters = list(path_item.get("parameters") or ()) + list(operation.get("parameters") or ())
+    parameters = list(path_item.get("parameters") or ()) + list(
+        operation.get("parameters") or ()
+    )
     for parameter in parameters:
         if not isinstance(parameter, dict) or "$ref" in parameter:
             continue
@@ -505,7 +673,11 @@ def _openapi_input_schema(path_item: dict[str, Any], operation: dict[str, Any]) 
             properties["body"] = dict(media.get("schema") or {"type": "object"})
             if body.get("required"):
                 required.append("body")
-    result: dict[str, Any] = {"type": "object", "properties": properties, "additionalProperties": False}
+    result: dict[str, Any] = {
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": False,
+    }
     if required:
         result["required"] = sorted(set(required))
     return result

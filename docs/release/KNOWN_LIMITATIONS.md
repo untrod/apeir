@@ -14,10 +14,15 @@ Version: `0.1.0-rc1`
   discovery for the existing Workspace runtime and governed Extension/MCP tool
   projections, plus fixed read-only Git and ContentAddressedArtifactStore tools.
   Git tools fail closed and are not advertised when strong process isolation is
-  unavailable. File patch/move/remove, persistent shell control, live MCP catalog
-  attachment, the Skill/Web runtimes, background Desktop execution, context
-  compaction, and the Code/Research/Scientific acceptance tasks are still
-  pending. This is not R6 completion.
+  unavailable. SkillRegistry now provides progressive discovery/loading for
+  legacy JSON, project/user `SKILL.md`, installed Extension packages, and local
+  or HTTPS catalog summaries; installation produces Extension supply-chain
+  evidence and a pinned Artifact bundle without executing scripts. Remote Skill
+  package download/install and Git URL cloning are not yet supported. File
+  patch/move/remove, persistent shell control, live MCP catalog attachment, the
+  Web runtime, background Desktop execution, context compaction, and the
+  Code/Research/Scientific acceptance tasks are still pending. This is not R6
+  completion.
 - The first Reality Adapter supports only an administrator-bound loopback HTTP
   service target. It is not an arbitrary remote endpoint or device runtime.
 - Model-backed tasks require a configured Provider account or a local model.

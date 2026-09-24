@@ -112,6 +112,20 @@ Discovery and MCP annotations are untrusted metadata. They do not replace the
 capability, Workspace, Extension, or Kernel admission performed by the selected
 executor.
 
+Skill disclosure follows the same boundary:
+
+```text
+SkillRegistry summary
+  -> skill_search / skill_list
+  -> skill_load(skill_id)
+  -> instructions + packaged resource names in durable Work context
+  -> governed Tool or Environment execution
+```
+
+Loading a Skill does not execute its scripts and does not grant its requested
+capabilities. Installed packages retain Extension provenance and a pinned
+Artifact Runtime source-bundle reference.
+
 ## Current migration boundary
 
 The Rust daemon is authoritative for model-workload and Reality-effect

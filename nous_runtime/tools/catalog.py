@@ -297,6 +297,10 @@ def _runtime_metadata(tool_id: str) -> dict[str, Any]:
         "artifact_inspect": ("artifact", "artifact.read", "read"),
         "artifact_get": ("artifact", "artifact.read", "read"),
         "artifact_put": ("artifact", "artifact.store", "write"),
+        "skill_list": ("skill", "skill.read", "read"),
+        "skill_search": ("skill", "skill.read", "read"),
+        "skill_load": ("skill", "skill.read", "read"),
+        "skill_install": ("skill", "skill.install", "write"),
     }
     category, capability, effect = explicit.get(
         tool_id,

@@ -141,6 +141,7 @@ class WorkSnapshot:
     observations: list[dict[str, Any]] = field(default_factory=list)
     artifacts: list[str] = field(default_factory=list)
     loaded_tools: dict[str, dict[str, Any]] = field(default_factory=dict)
+    loaded_skills: dict[str, dict[str, Any]] = field(default_factory=dict)
     agent_run_id: str = ""
     agent_checkpoint_id: str = ""
     last_checkpoint_id: str = ""
@@ -198,6 +199,9 @@ class WorkSnapshot:
             "loaded_tools": {
                 str(key): dict(value) for key, value in self.loaded_tools.items()
             },
+            "loaded_skills": {
+                str(key): dict(value) for key, value in self.loaded_skills.items()
+            },
             "agent_run_id": self.agent_run_id,
             "agent_checkpoint_id": self.agent_checkpoint_id,
             "last_checkpoint_id": self.last_checkpoint_id,
@@ -241,6 +245,11 @@ class WorkSnapshot:
                 for key, value in dict(data.get("loaded_tools") or {}).items()
                 if isinstance(value, Mapping)
             },
+            loaded_skills={
+                str(key): dict(value)
+                for key, value in dict(data.get("loaded_skills") or {}).items()
+                if isinstance(value, Mapping)
+            },
             agent_run_id=str(data.get("agent_run_id") or ""),
             agent_checkpoint_id=str(data.get("agent_checkpoint_id") or ""),
             last_checkpoint_id=str(data.get("last_checkpoint_id") or ""),
@@ -265,6 +274,7 @@ class WorkContext:
     recent_observations: tuple[Mapping[str, Any], ...]
     recent_events: tuple[Mapping[str, Any], ...]
     loaded_tools: tuple[Mapping[str, Any], ...] = ()
+    loaded_skills: tuple[Mapping[str, Any], ...] = ()
     reanalysis_reason: str = ""
     recovering: bool = False
     budget: Mapping[str, Any] = field(default_factory=dict)
@@ -280,6 +290,7 @@ class WorkContext:
             "recent_observations": [dict(item) for item in self.recent_observations],
             "recent_events": [dict(item) for item in self.recent_events],
             "loaded_tools": [dict(item) for item in self.loaded_tools],
+            "loaded_skills": [dict(item) for item in self.loaded_skills],
             "reanalysis_reason": self.reanalysis_reason,
             "recovering": self.recovering,
             "budget": dict(self.budget),

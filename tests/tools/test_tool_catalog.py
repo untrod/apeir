@@ -194,6 +194,35 @@ def test_catalog_expansion_cannot_complete_a_plan_step(tmp_path):
     assert blocked.observations[0]["step_id"] == ""
 
 
+def test_work_loop_rejects_undisclosed_catalog_tool(tmp_path):
+    runtime = StubRuntime()
+    catalog = ToolCatalog()
+    catalog.register_runtime(runtime)
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Inspect a file")
+    decisions = iter(
+        (
+            WorkDecision(
+                DecisionStatus.CONTINUE,
+                "Attempt an undisclosed tool",
+                tool_name="read_file",
+                tool_arguments={"path": "README.md"},
+            ),
+            WorkDecision(DecisionStatus.BLOCKED, "Stop after disclosure check"),
+        )
+    )
+
+    blocked = harness.run(
+        created.run_id,
+        deliberator=lambda _context: next(decisions),
+        tools=catalog,
+    )
+
+    assert blocked.observations[0]["ok"] is False
+    assert "catalog_expand" in blocked.observations[0]["result"]["error"]
+    assert runtime.calls == []
+
+
 def test_tools_cli_lists_capability_categories(tmp_path):
     result = CliRunner().invoke(
         tools_app,

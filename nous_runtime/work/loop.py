@@ -260,7 +260,8 @@ class AgentLoop:
         tools: Any,
         agent_run_id: str,
     ) -> None:
-        step_id = "" if decision.tool_name == "catalog_expand" else decision.step_id
+        discovery_tools = {"catalog_expand", "skill_list", "skill_search", "skill_load"}
+        step_id = "" if decision.tool_name in discovery_tools else decision.step_id
         snapshot.state = RunState.EXECUTING
         snapshot.current_step = step_id
         self.harness.persist_progress(
@@ -274,11 +275,25 @@ class AgentLoop:
         )
         known = self.harness._tool_names(tools)
         execute = getattr(tools, "execute", None) if tools is not None else None
+        progressive = callable(getattr(tools, "prompt_specifications", None))
+        disclosed = (
+            decision.tool_name == "catalog_expand"
+            or decision.tool_name in snapshot.loaded_tools
+        )
         captured: dict[str, Any] = {}
         if decision.tool_name not in known or not callable(execute):
             result: Any = {
                 "ok": False,
                 "error": f"tool is unavailable: {decision.tool_name}",
+            }
+            invocation_status = "denied"
+        elif progressive and not disclosed:
+            result = {
+                "ok": False,
+                "error": (
+                    f"tool schema is not loaded: {decision.tool_name}; "
+                    "use catalog_expand first"
+                ),
             }
             invocation_status = "denied"
         else:
@@ -315,6 +330,14 @@ class AgentLoop:
                     snapshot.loaded_tools[tool_id] = dict(item)
             while len(snapshot.loaded_tools) > 64:
                 snapshot.loaded_tools.pop(next(iter(snapshot.loaded_tools)))
+        if decision.tool_name == "skill_load" and ok:
+            skill = normalized.get("skill")
+            if isinstance(skill, Mapping):
+                skill_id = str(skill.get("skill_id") or "")
+                if skill_id:
+                    snapshot.loaded_skills[skill_id] = dict(skill)
+            while len(snapshot.loaded_skills) > 16:
+                snapshot.loaded_skills.pop(next(iter(snapshot.loaded_skills)))
         snapshot.action_sequence += 1
         observation = {
             "kind": "tool",

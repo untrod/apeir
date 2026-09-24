@@ -359,6 +359,7 @@ class WorkHarness:
             recent_observations=tuple(snapshot.observations[-12:]),
             recent_events=tuple(event.to_dict() for event in events),
             loaded_tools=tuple(snapshot.loaded_tools.values()),
+            loaded_skills=tuple(snapshot.loaded_skills.values()),
             reanalysis_reason=snapshot.reanalysis_reason,
             recovering=recovering or snapshot.state is RunState.RECOVERING,
             budget=budget,

@@ -42,6 +42,7 @@ def _runtime_components(
 ):
     from nous_runtime.chat.agent_tools import WorkspaceToolRuntime, mutation_is_explicit
     from nous_runtime.model_runtime import get_gateway_facade
+    from nous_runtime.skills import SkillToolRuntime
     from nous_runtime.tools import ArtifactToolRuntime, GitToolRuntime, ToolCatalog
     from nous_runtime.work.deliberation import ModelWorkDeliberator
 
@@ -56,6 +57,10 @@ def _runtime_components(
     tools.register_runtime(
         ArtifactToolRuntime(root, allow_mutations=allow_mutations),
         provider_id="artifact-runtime",
+    )
+    tools.register_runtime(
+        SkillToolRuntime(root, allow_mutations=allow_mutations),
+        provider_id="skill-registry",
     )
     facade = get_gateway_facade(required=True)
     deliberator = ModelWorkDeliberator(

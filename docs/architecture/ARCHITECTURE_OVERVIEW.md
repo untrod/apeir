@@ -79,6 +79,16 @@ Git queries when strong sandboxing is available, and the existing workspace
 ContentAddressedArtifactStore. Catalog inspection itself does not initialize an
 Artifact store or execute a process.
 
+`SkillRegistry` is the corresponding progressive Skill projection. It reads
+legacy JSON Skills through the existing Extension adapters, discovers project
+and user `SKILL.md` packages, verifies installed packages through
+`ExtensionRegistry`, and exposes catalog entries as untrusted summaries. Full
+instructions and resource names enter Work context only after `skill_load`.
+Installation never executes packaged scripts: the existing Extension supply
+chain path validates and copies the package, while a deterministic bundle is
+stored and pinned in the existing workspace Artifact Runtime. Declared
+capabilities remain requests with `authority=none`.
+
 ## For Developers
 
 Start here:
