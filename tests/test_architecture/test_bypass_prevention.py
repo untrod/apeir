@@ -68,6 +68,8 @@ SHELL_BOUNDARY_PATHS = {
         "nous_runtime/update/manager.py",
         # The sole host-side launcher for the disposable VM strong backend.
         "nous_runtime/kernel/windows_sandbox.py",
+        # The sole detached host for reconnectable governed ProcessSessions.
+        "nous_runtime/kernel/process_session_host.py",
     )
 }
 

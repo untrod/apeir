@@ -20,16 +20,24 @@ tools_app = typer.Typer(
 def _catalog(root: Path, *, allow_mutations: bool) -> ToolCatalog:
     from nous_runtime.chat.agent_tools import WorkspaceToolRuntime
     from nous_runtime.skills import SkillToolRuntime
-    from nous_runtime.tools import ArtifactToolRuntime, GitToolRuntime
+    from nous_runtime.tools import (
+        ArtifactToolRuntime,
+        GitToolRuntime,
+        ProcessSessionToolRuntime,
+    )
     from nous_runtime.web import WebToolRuntime
 
     catalog = ToolCatalog()
-    catalog.register_runtime(
-        WorkspaceToolRuntime(
-            str(root.resolve()),
-            allow_mutations=allow_mutations,
-        )
+    workspace_tools = WorkspaceToolRuntime(
+        str(root.resolve()),
+        allow_mutations=allow_mutations,
     )
+    catalog.register_runtime(workspace_tools)
+    if allow_mutations:
+        catalog.register_runtime(
+            ProcessSessionToolRuntime(workspace_tools),
+            provider_id="process-session",
+        )
     catalog.register_runtime(GitToolRuntime(root), provider_id="git-sandbox")
     catalog.register_runtime(
         ArtifactToolRuntime(root, allow_mutations=allow_mutations),

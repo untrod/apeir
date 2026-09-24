@@ -26,7 +26,12 @@ def build_work_components(
     from nous_runtime.chat.agent_tools import WorkspaceToolRuntime, mutation_is_explicit
     from nous_runtime.model_runtime import get_gateway_facade
     from nous_runtime.skills import SkillToolRuntime
-    from nous_runtime.tools import ArtifactToolRuntime, GitToolRuntime, ToolCatalog
+    from nous_runtime.tools import (
+        ArtifactToolRuntime,
+        GitToolRuntime,
+        ProcessSessionToolRuntime,
+        ToolCatalog,
+    )
     from nous_runtime.web import WebToolRuntime
     from nous_runtime.work.deliberation import (
         ModelWorkDeliberator,
@@ -39,9 +44,15 @@ def build_work_components(
     allow_mutations = not read_only and mutation_is_explicit(snapshot.goal.objective)
 
     tools = ToolCatalog()
-    tools.register_runtime(
-        WorkspaceToolRuntime(str(workspace), allow_mutations=allow_mutations)
+    workspace_tools = WorkspaceToolRuntime(
+        str(workspace), allow_mutations=allow_mutations
     )
+    tools.register_runtime(workspace_tools)
+    if allow_mutations:
+        tools.register_runtime(
+            ProcessSessionToolRuntime(workspace_tools),
+            provider_id="process-session",
+        )
     tools.register_runtime(GitToolRuntime(workspace), provider_id="git-sandbox")
     tools.register_runtime(
         ArtifactToolRuntime(workspace, allow_mutations=allow_mutations),

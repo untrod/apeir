@@ -806,18 +806,7 @@ class WorkspaceToolRuntime:
         }
 
     def _run_command(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        raw = arguments.get("command")
-        command = (
-            [str(item) for item in raw]
-            if isinstance(raw, list)
-            else shlex.split(str(raw or ""), posix=os.name != "nt")
-        )
-        self._validate_command(command)
-        self._validate_command_paths(command[1:])
-        resolved_executable = resolve_executable(command[0])
-        if not resolved_executable:
-            raise ValueError(f"Command executable was not found: {command[0]}")
-        command[0] = resolved_executable
+        command = self.prepare_development_command(arguments.get("command"))
         timeout = max(1, min(int(arguments.get("timeout_seconds") or 60), 120))
         action, _decision = self.gate.propose_action(
             "shell_exec",
@@ -846,7 +835,7 @@ class WorkspaceToolRuntime:
             completed = sandbox.run(
                 shlex.join(command),
                 cwd=str(self.root),
-                env=_safe_environment(),
+                env=self.safe_process_environment(),
             )
             return {
                 "exit_code": completed.returncode,
@@ -861,6 +850,34 @@ class WorkspaceToolRuntime:
             **result,
             "receipt_id": receipt.receipt_id,
         }
+
+    def prepare_development_command(self, raw: Any) -> list[str]:
+        """Validate and resolve one command for either shell execution path."""
+        command = (
+            [str(item) for item in raw]
+            if isinstance(raw, list)
+            else shlex.split(str(raw or ""), posix=os.name != "nt")
+        )
+        self._validate_command(command)
+        self._validate_command_paths(command[1:])
+        resolved_executable = resolve_executable(command[0])
+        if not resolved_executable:
+            raise ValueError(f"Command executable was not found: {command[0]}")
+        command[0] = resolved_executable
+        return command
+
+    def prepare_process_cwd(self, value: Any) -> Path:
+        path = self._path(value or ".")
+        if not path.is_dir():
+            raise ValueError("Process cwd must be an existing workspace directory.")
+        return path
+
+    @staticmethod
+    def safe_process_environment() -> dict[str, str]:
+        return _safe_environment()
+
+    def next_effect_attempt(self) -> int:
+        return self._next_effect_attempt()
 
     def _next_effect_attempt(self) -> int:
         """Return a per-runtime nonce for an independently approved effect.
