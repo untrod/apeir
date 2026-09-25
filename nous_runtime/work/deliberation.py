@@ -122,7 +122,11 @@ class ModelWorkDeliberator:
                         "blocked merely because repository details are unknown: expand "
                         "the files or shell catalog and inspect the local workspace first. "
                         "Use blocked only when a required external prerequisite cannot be "
-                        "obtained with the available safe tools."
+                        "obtained with the available safe tools. When work.assessment."
+                        "needs_tools is true, work.loaded_tools is empty, and "
+                        "catalog_expand is available, the next decision must be continue "
+                        "with catalog_expand for the files or shell category; complete and "
+                        "blocked are invalid before that safe discovery step."
                     ),
                 },
                 {

@@ -50,6 +50,7 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
     assert request.metadata["source"] == "work.harness"
     assert request.metadata["temperature"] == 0.1
     assert "Do not choose blocked" in request.messages[0]["content"]
+    assert "complete and blocked are invalid" in request.messages[0]["content"]
     assert request.timeout_s == 180.0
     assert request.budget.max_tokens == 1024
     payload = json.loads(request.messages[1]["content"])
