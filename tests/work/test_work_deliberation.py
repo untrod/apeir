@@ -4,6 +4,7 @@ import json
 
 from typer.testing import CliRunner
 
+from nous_runtime.events import RunEvent
 from nous_runtime.model_runtime import GatewayResponse
 from nous_runtime.planner.plan import TaskStatus
 from nous_runtime.work import ModelWorkDeliberator, WorkHarness
@@ -52,7 +53,7 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
     assert "Do not choose blocked" in request.messages[0]["content"]
     assert "complete and blocked are invalid" in request.messages[0]["content"]
     assert request.timeout_s == 180.0
-    assert request.budget.max_tokens == 1024
+    assert request.budget.max_tokens == 384
     payload = json.loads(request.messages[1]["content"])
     assert payload["tool_capability_catalog"][0]["category"] == "files"
     assert payload["tool_capability_catalog"][0]["authority"] == "none"
@@ -62,6 +63,32 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
         and "assessment" not in event["payload"]
         for event in payload["work"]["recent_events"]
     )
+
+
+def test_model_deliberator_bounds_event_history_and_failure_text(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix the code in this repository")
+    for index in range(12):
+        harness.events.emit(
+            RunEvent(
+                run_id=snapshot.run_id,
+                task_id=snapshot.goal.goal_id,
+                event_type="run.failed",
+                actor="test",
+                payload={"reason": f"failure-{index}-" + ("x" * 600)},
+            )
+        )
+    facade = StubFacade(
+        {"status": "blocked", "summary": "done", "confidence": "high"}
+    )
+
+    ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+
+    payload = json.loads(facade.requests[0].messages[1]["content"])
+    events = payload["work"]["recent_events"]
+    assert len(events) == 8
+    assert events[-1]["payload"]["reason"].endswith("…")
+    assert len(events[-1]["payload"]["reason"]) == 321
 
 
 def test_recorded_work_verifier_requires_tool_evidence_when_assessed(tmp_path):

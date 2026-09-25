@@ -19,6 +19,10 @@ from nous_runtime.model_runtime import (
 from nous_runtime.work.models import WorkContext, WorkDecision
 
 
+_DECISION_EVENT_LIMIT = 8
+_DECISION_EVENT_TEXT_LIMIT = 320
+
+
 _DECISION_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
@@ -76,7 +80,7 @@ class ModelWorkDeliberator:
         tool_capabilities: Sequence[Mapping[str, Any]] = (),
         preferred_model: str = "",
         timeout_s: float = 180.0,
-        max_output_tokens: int = 1024,
+        max_output_tokens: int = 384,
     ) -> None:
         self.facade = facade
         self.tools = tuple(dict(item) for item in tool_specifications)
@@ -228,7 +232,8 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
         "decision",
     }
     compact_events = []
-    for raw in value.get("recent_events") or ():
+    recent_events = list(value.get("recent_events") or ())[-_DECISION_EVENT_LIMIT:]
+    for raw in recent_events:
         event = dict(raw)
         event_payload = dict(event.get("payload") or {})
         compact_events.append(
@@ -238,7 +243,7 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
                 "event_type": event.get("event_type"),
                 "actor": event.get("actor"),
                 "payload": {
-                    key: event_payload[key]
+                    key: _bounded_event_value(event_payload[key])
                     for key in event_payload_keys
                     if key in event_payload
                 },
@@ -246,6 +251,12 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
         )
     value["recent_events"] = compact_events
     return value
+
+
+def _bounded_event_value(value: Any) -> Any:
+    if not isinstance(value, str) or len(value) <= _DECISION_EVENT_TEXT_LIMIT:
+        return value
+    return f"{value[:_DECISION_EVENT_TEXT_LIMIT]}…"
 
 
 def verify_recorded_work(context: WorkContext) -> dict[str, Any]:
