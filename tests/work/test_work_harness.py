@@ -144,6 +144,10 @@ def test_provider_transport_failure_is_recoverable() -> None:
         "provider process error: error sending request for url "
         "(http://127.0.0.1:11434/v1/chat/completions)"
     )
+    assert WorkHarness.is_recoverable_runtime_failure(
+        "all safe model routes failed: local/model: invocation timed out; "
+        "overall request timed out"
+    )
 
 
 def test_recovery_uses_monotonic_checkpoint_sequence(tmp_path):

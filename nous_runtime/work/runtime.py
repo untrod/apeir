@@ -45,6 +45,8 @@ _RECOVERABLE_RUNTIME_FAILURE_MARKERS = (
     "connectionrefusederror",
     "connection refused",
     "error sending request for url",
+    "invocation timed out",
+    "overall request timed out",
 )
 
 
