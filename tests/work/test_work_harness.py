@@ -82,6 +82,22 @@ class ProgressiveTools(StubTools):
                     "parameters": {"type": "object"},
                 },
             },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_workspace",
+                    "description": "search workspace files",
+                    "parameters": {"type": "object"},
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "description": "read one workspace file",
+                    "parameters": {"type": "object"},
+                },
+            },
             *super().specifications(),
         )
 
@@ -104,8 +120,25 @@ class ProgressiveTools(StubTools):
                         "category": "files",
                         "effect_class": "read",
                     },
+                    {
+                        "tool_id": "search_workspace",
+                        "category": "files",
+                        "effect_class": "read",
+                    },
+                    {
+                        "tool_id": "read_file",
+                        "category": "files",
+                        "effect_class": "read",
+                    },
                 ],
             }
+        if name == "search_workspace":
+            return {
+                "ok": True,
+                "matches": [{"path": "src/example.py", "line": 12, "text": "max_age"}],
+            }
+        if name == "read_file":
+            return {"ok": True, "path": arguments["path"], "content": "source"}
         return {"ok": True}
 
 
@@ -224,7 +257,17 @@ def test_tool_work_requires_safe_discovery_before_terminal_decision(tmp_path):
             ),
             WorkDecision(
                 DecisionStatus.BLOCKED,
-                "A real external prerequisite is missing",
+                "Source has not been searched",
+                reason="More local inspection is required",
+            ),
+            WorkDecision(
+                DecisionStatus.COMPLETE,
+                "A matching source path is enough",
+                output="unsupported",
+            ),
+            WorkDecision(
+                DecisionStatus.BLOCKED,
+                "A real external prerequisite is missing after source inspection",
                 reason="The required external input is unavailable",
             ),
         )
@@ -239,6 +282,11 @@ def test_tool_work_requires_safe_discovery_before_terminal_decision(tmp_path):
     assert tools.calls == [
         ("catalog_expand", {"category": "files"}),
         ("list_workspace", {"path": ".", "max_depth": 2}),
+        ("search_workspace", {"query": "targeted", "path": "."}),
+        (
+            "read_file",
+            {"path": "src/example.py", "start_line": 1, "end_line": 92},
+        ),
     ]
     assert "workspace_action" in blocked.loaded_tools
     assert blocked.state is RunState.BLOCKED

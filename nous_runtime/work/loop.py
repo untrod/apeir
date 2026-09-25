@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Callable, Mapping
 from typing import Any, TYPE_CHECKING
 
@@ -171,6 +172,36 @@ class AgentLoop:
                     tool_name="list_workspace",
                     tool_arguments={"path": ".", "max_depth": 2},
                 )
+            elif self._needs_safe_inspection(snapshot, decision):
+                search_path = self._latest_search_match(snapshot)
+                if search_path and "read_file" in snapshot.loaded_tools:
+                    path, line = search_path
+                    decision = WorkDecision(
+                        status=DecisionStatus.CONTINUE,
+                        summary="Read a relevant source match before deciding",
+                        next_action="Inspect the matched source context",
+                        confidence="high",
+                        tool_name="read_file",
+                        tool_arguments={
+                            "path": path,
+                            "start_line": max(1, line - 20),
+                            "end_line": line + 80,
+                        },
+                    )
+                elif "search_workspace" in snapshot.loaded_tools:
+                    decision = WorkDecision(
+                        status=DecisionStatus.CONTINUE,
+                        summary="Search the workspace before deciding",
+                        next_action="Locate code related to the goal",
+                        confidence="high",
+                        tool_name="search_workspace",
+                        tool_arguments={
+                            "query": self._workspace_search_query(
+                                snapshot.goal.objective
+                            ),
+                            "path": ".",
+                        },
+                    )
 
             snapshot.last_decision = decision
             snapshot.reanalysis_reason = ""
@@ -301,6 +332,54 @@ class AgentLoop:
             "work.blocked",
             {"reason": snapshot.reanalysis_reason, "max_iterations": maximum},
         )
+
+    @staticmethod
+    def _needs_safe_inspection(
+        snapshot: WorkSnapshot, decision: WorkDecision
+    ) -> bool:
+        if not bool(snapshot.analysis.needs_tools):
+            return False
+        if decision.status not in {
+            DecisionStatus.BLOCKED,
+            DecisionStatus.COMPLETE,
+            DecisionStatus.CONTINUE,
+        }:
+            return False
+        if decision.status is DecisionStatus.CONTINUE and (
+            decision.tool_name or decision.step_id
+        ):
+            return False
+        return not any(
+            item.get("kind") == "tool"
+            and item.get("ok") is True
+            and item.get("tool") == "read_file"
+            for item in snapshot.observations
+        )
+
+    @staticmethod
+    def _latest_search_match(snapshot: WorkSnapshot) -> tuple[str, int] | None:
+        for item in reversed(snapshot.observations):
+            if item.get("tool") != "search_workspace" or item.get("ok") is not True:
+                continue
+            result = item.get("result")
+            if not isinstance(result, Mapping):
+                continue
+            for match in result.get("matches") or ():
+                if not isinstance(match, Mapping) or not match.get("path"):
+                    continue
+                return str(match["path"]), max(1, int(match.get("line") or 1))
+        return None
+
+    @staticmethod
+    def _workspace_search_query(objective: str) -> str:
+        tokens = re.findall(r"[A-Za-z][A-Za-z0-9_.]{2,}", str(objective or ""))
+        underscored = [item.strip(".") for item in tokens if "_" in item]
+        if underscored:
+            return underscored[-1]
+        dotted = [item.strip(".") for item in tokens if "." in item]
+        if dotted:
+            return dotted[-1].rsplit(".", 1)[-1]
+        return max(tokens, key=len, default="source")
 
     def _execute_tool(
         self,
