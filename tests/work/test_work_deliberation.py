@@ -126,6 +126,43 @@ def test_model_deliberator_deduplicates_catalog_observation_schemas(tmp_path):
     assert "output_schema" not in work["loaded_tools"][0]
 
 
+def test_model_deliberator_compacts_workspace_listing_and_verification_history(
+    tmp_path,
+):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix the code in this repository")
+    snapshot.observations.extend(
+        (
+            {"kind": "verification", "ok": False, "result": {"error": "old"}},
+            {
+                "kind": "tool",
+                "tool": "list_workspace",
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "entries": [
+                        {"path": "src/example.py", "type": "file", "size_bytes": 10}
+                    ],
+                },
+            },
+            {"kind": "verification", "ok": False, "result": {"error": "new"}},
+        )
+    )
+    facade = StubFacade(
+        {"status": "blocked", "summary": "done", "confidence": "high"}
+    )
+
+    ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+
+    observations = json.loads(facade.requests[0].messages[1]["content"])["work"][
+        "recent_observations"
+    ]
+    assert [item["kind"] for item in observations].count("verification") == 1
+    listing = next(item for item in observations if item.get("tool") == "list_workspace")
+    assert listing["result"]["paths"] == ["src/example.py"]
+    assert "entries" not in listing["result"]
+
+
 def test_recorded_work_verifier_requires_tool_evidence_when_assessed(tmp_path):
     harness = WorkHarness(tmp_path)
     snapshot = harness.create("Fix the code in this repository")

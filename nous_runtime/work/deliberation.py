@@ -278,8 +278,19 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
             }
         )
     value["recent_events"] = compact_events
+    recent_observations = list(value.get("recent_observations") or ())
+    selected_observations = []
+    verification_selected = False
+    for raw in reversed(recent_observations):
+        if raw.get("kind") == "verification":
+            if verification_selected:
+                continue
+            verification_selected = True
+        selected_observations.append(raw)
+        if len(selected_observations) >= 6:
+            break
     observations = []
-    for raw in list(value.get("recent_observations") or ())[-6:]:
+    for raw in reversed(selected_observations):
         observation = dict(raw)
         compact_observation = {
             key: observation.get(key)
@@ -305,6 +316,17 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
                         for item in result.get("tools") or ()
                         if isinstance(item, Mapping) and item.get("tool_id")
                     ],
+                    "error": str(result.get("error") or ""),
+                }
+            elif observation.get("tool") == "list_workspace":
+                compact_observation["result"] = {
+                    "ok": bool(result.get("ok")),
+                    "paths": [
+                        str(item.get("path") or "")
+                        for item in result.get("entries") or ()
+                        if isinstance(item, Mapping) and item.get("path")
+                    ][:120],
+                    "truncated": bool(result.get("truncated")),
                     "error": str(result.get("error") or ""),
                 }
             else:
