@@ -27,7 +27,7 @@ class StubFacade:
 
 def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
     harness = WorkHarness(tmp_path)
-    snapshot = harness.create("Explain this behavior")
+    snapshot = harness.create("Fix this behavior")
     facade = StubFacade(
         {
             "status": "complete",
@@ -52,6 +52,9 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
     assert request.metadata["temperature"] == 0.1
     assert "Do not choose blocked" in request.messages[0]["content"]
     assert "complete and blocked are invalid" in request.messages[0]["content"]
+    assert "Never call coding, reasoning, or evaluation as tools" in (
+        request.messages[0]["content"]
+    )
     assert request.timeout_s == 180.0
     assert request.budget.max_tokens == 384
     payload = json.loads(request.messages[1]["content"])
@@ -59,6 +62,11 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
     assert payload["tool_capability_catalog"][0]["authority"] == "none"
     assert payload["work"]["conversation"] == {}
     assert "created_at" not in payload["work"]["goal"]
+    assert payload["work"]["plan"]["tasks"]
+    assert all(
+        "capability_id" not in task
+        for task in payload["work"]["plan"]["tasks"]
+    )
     assert all(
         "objective" not in event["payload"]
         and "plan" not in event["payload"]
