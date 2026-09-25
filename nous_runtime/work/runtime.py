@@ -44,6 +44,7 @@ _RECOVERABLE_RUNTIME_FAILURE_MARKERS = (
     "connection_failed",
     "connectionrefusederror",
     "connection refused",
+    "error sending request for url",
 )
 
 

@@ -139,6 +139,13 @@ def test_resume_migrates_recoverable_terminal_runtime_failure(tmp_path):
     assert any(event.event_type == "work.recovery.required" for event in events)
 
 
+def test_provider_transport_failure_is_recoverable() -> None:
+    assert WorkHarness.is_recoverable_runtime_failure(
+        "provider process error: error sending request for url "
+        "(http://127.0.0.1:11434/v1/chat/completions)"
+    )
+
+
 def test_recovery_uses_monotonic_checkpoint_sequence(tmp_path):
     harness = WorkHarness(tmp_path)
     created = harness.create("Explain checkpoint ordering")
