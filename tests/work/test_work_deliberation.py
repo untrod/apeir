@@ -93,6 +93,39 @@ def test_model_deliberator_bounds_event_history_and_failure_text(tmp_path):
     assert len(events[-1]["payload"]["reason"]) == 201
 
 
+def test_model_deliberator_deduplicates_catalog_observation_schemas(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix the code in this repository")
+    tool = {
+        "tool_id": "read_file",
+        "description": "Read one file",
+        "effect_class": "read",
+        "approval_policy": "none",
+        "input_schema": {"type": "object"},
+        "output_schema": {"type": "object", "description": "large duplicate"},
+        "metadata": {"provider": "workspace"},
+    }
+    snapshot.loaded_tools["read_file"] = tool
+    snapshot.observations.append(
+        {
+            "kind": "tool",
+            "tool": "catalog_expand",
+            "ok": True,
+            "result": {"ok": True, "category": "files", "tools": [tool]},
+        }
+    )
+    facade = StubFacade(
+        {"status": "blocked", "summary": "done", "confidence": "high"}
+    )
+
+    ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+
+    work = json.loads(facade.requests[0].messages[1]["content"])["work"]
+    assert work["recent_observations"][-1]["result"]["tool_ids"] == ["read_file"]
+    assert "tools" not in work["recent_observations"][-1]["result"]
+    assert "output_schema" not in work["loaded_tools"][0]
+
+
 def test_recorded_work_verifier_requires_tool_evidence_when_assessed(tmp_path):
     harness = WorkHarness(tmp_path)
     snapshot = harness.create("Fix the code in this repository")

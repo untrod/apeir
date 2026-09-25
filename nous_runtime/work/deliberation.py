@@ -278,6 +278,54 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
             }
         )
     value["recent_events"] = compact_events
+    observations = []
+    for raw in list(value.get("recent_observations") or ())[-6:]:
+        observation = dict(raw)
+        compact_observation = {
+            key: observation.get(key)
+            for key in (
+                "kind",
+                "tool",
+                "step_id",
+                "ok",
+                "action_sequence",
+                "plan_revision",
+            )
+            if observation.get(key) not in (None, "", [], {})
+        }
+        result = observation.get("result")
+        if isinstance(result, Mapping):
+            result = dict(result)
+            if observation.get("tool") == "catalog_expand":
+                compact_observation["result"] = {
+                    "ok": bool(result.get("ok")),
+                    "category": str(result.get("category") or ""),
+                    "tool_ids": [
+                        str(item.get("tool_id") or "")
+                        for item in result.get("tools") or ()
+                        if isinstance(item, Mapping) and item.get("tool_id")
+                    ],
+                    "error": str(result.get("error") or ""),
+                }
+            else:
+                compact_observation["result"] = result
+        observations.append(compact_observation)
+    value["recent_observations"] = observations
+    value["loaded_tools"] = [
+        {
+            key: tool.get(key)
+            for key in (
+                "tool_id",
+                "description",
+                "effect_class",
+                "approval_policy",
+                "input_schema",
+            )
+            if tool.get(key) not in (None, "", [], {})
+        }
+        for tool in value.get("loaded_tools") or ()
+        if isinstance(tool, Mapping)
+    ]
     conversation = dict(value.get("conversation") or {})
     objective = str(value["goal"].get("objective") or "").strip()
     messages = []
