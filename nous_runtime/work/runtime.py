@@ -38,6 +38,14 @@ from nous_runtime.work.models import (
 Deliberator = Callable[[WorkContext], Any]
 Verifier = Callable[[WorkContext], Any]
 
+_RECOVERABLE_RUNTIME_FAILURE_MARKERS = (
+    "apeir kernel is unavailable",
+    "nki client is unavailable",
+    "connection_failed",
+    "connectionrefusederror",
+    "connection refused",
+)
+
 
 class WorkHarness:
     """Compose existing Runtime services into one recoverable Work entry point."""
@@ -194,7 +202,11 @@ class WorkHarness:
     ) -> WorkSnapshot:
         snapshot = self.require(run_id)
         if snapshot.terminal:
-            return snapshot
+            if snapshot.state is not RunState.FAILED or not (
+                self.is_recoverable_runtime_failure(snapshot.error)
+            ):
+                return snapshot
+            snapshot = self.require_runtime_recovery(snapshot, reason=snapshot.error)
         if (
             snapshot.pending_action
             and str(snapshot.pending_action.get("tool") or "") == "shell_start"
@@ -300,7 +312,9 @@ class WorkHarness:
             snapshot.goal.resume()
         else:
             snapshot.goal.start_understanding()
+        snapshot.goal.metadata.pop("failure_reason", None)
         snapshot.state = RunState.RECOVERING
+        snapshot.error = ""
         pending = dict(snapshot.pending_action)
         snapshot.pending_action.clear()
         snapshot.reanalysis_reason = (
@@ -326,6 +340,40 @@ class WorkHarness:
             tools=tools,
             verifier=verifier,
             max_iterations=max_iterations,
+        )
+
+    @staticmethod
+    def is_recoverable_runtime_failure(reason: str) -> bool:
+        normalized = str(reason or "").casefold()
+        return any(
+            marker in normalized for marker in _RECOVERABLE_RUNTIME_FAILURE_MARKERS
+        )
+
+    def require_runtime_recovery(
+        self,
+        snapshot: WorkSnapshot,
+        *,
+        reason: str,
+    ) -> WorkSnapshot:
+        previous_agent_run_id = snapshot.agent_run_id
+        snapshot.goal.block(reason)
+        snapshot.state = RunState.RECOVERY_REQUIRED
+        snapshot.error = str(reason or "runtime recovery required")
+        snapshot.reanalysis_reason = (
+            "runtime dependency unavailable; restart it and reassess before issuing "
+            "a new model request"
+        )
+        snapshot.agent_run_id = ""
+        snapshot.agent_checkpoint_id = ""
+        return self._persist(
+            snapshot,
+            "work.recovery.required",
+            {
+                "reason": snapshot.error,
+                "previous_agent_run_id": previous_agent_run_id,
+                "resume_policy": "reassess_with_new_agent_execution",
+                "automatic_replay": False,
+            },
         )
 
     def steer(

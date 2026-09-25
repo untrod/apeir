@@ -97,10 +97,13 @@ class AgentLoop:
                 handler=deliberate,
             )
             if invocation.status is not InvocationStatus.COMPLETED:
-                return self._fail(
-                    snapshot,
-                    invocation.message or "work deliberation failed",
-                )
+                reason = invocation.message or "work deliberation failed"
+                if self.harness.is_recoverable_runtime_failure(reason):
+                    return self.harness.require_runtime_recovery(
+                        snapshot,
+                        reason=reason,
+                    )
+                return self._fail(snapshot, reason)
 
             latest = self.harness.require(snapshot.run_id)
             if latest.last_checkpoint_id != decision_checkpoint_id:

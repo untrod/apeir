@@ -85,6 +85,60 @@ def test_simple_work_skips_plan_and_completes(tmp_path):
     assert harness.events.get_run(created.run_id).state is RunState.COMPLETED
 
 
+def test_kernel_unavailable_requires_recovery_and_resumes_same_work(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Explain one local module")
+
+    def unavailable(_context):
+        raise RuntimeError(
+            "APEIR Kernel is unavailable; direct provider execution is disabled"
+        )
+
+    interrupted = harness.run(created.run_id, deliberator=unavailable)
+
+    assert interrupted.state is RunState.RECOVERY_REQUIRED
+    assert interrupted.terminal is False
+    assert interrupted.agent_run_id == ""
+    assert harness.events.load_events(created.run_id)[-1].event_type == (
+        "work.recovery.required"
+    )
+
+    recovered = harness.resume(
+        created.run_id,
+        deliberator=lambda _context: WorkDecision(
+            DecisionStatus.COMPLETE,
+            "Runtime recovered and the explanation is complete",
+            output="done",
+        ),
+    )
+
+    assert recovered.run_id == created.run_id
+    assert recovered.state is RunState.COMPLETED
+
+
+def test_resume_migrates_recoverable_terminal_runtime_failure(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Explain one local module")
+    harness.fail(
+        created.run_id,
+        reason="APEIR Kernel is unavailable; direct provider execution is disabled",
+    )
+
+    recovered = harness.resume(
+        created.run_id,
+        deliberator=lambda _context: WorkDecision(
+            DecisionStatus.COMPLETE,
+            "Recovered the previously terminal runtime failure",
+            output="done",
+        ),
+    )
+
+    assert recovered.run_id == created.run_id
+    assert recovered.state is RunState.COMPLETED
+    events = harness.events.load_events(created.run_id)
+    assert any(event.event_type == "work.recovery.required" for event in events)
+
+
 def test_recovery_uses_monotonic_checkpoint_sequence(tmp_path):
     harness = WorkHarness(tmp_path)
     created = harness.create("Explain checkpoint ordering")
