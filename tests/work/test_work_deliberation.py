@@ -288,6 +288,40 @@ def test_recorded_work_verifier_uses_latest_result_for_current_plan(tmp_path):
     assert result["failed_tool_observations"] == 0
 
 
+def test_recorded_work_verifier_ignores_denied_unregistered_tool_name(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix the code in this repository")
+    revision = snapshot.plan.revision
+    snapshot.loaded_tools["workspace_action"] = {"tool_id": "workspace_action"}
+    snapshot.observations.extend(
+        (
+            {
+                "kind": "tool",
+                "tool": "reasoning",
+                "ok": False,
+                "plan_revision": revision,
+                "result": {"error": "tool is unavailable: reasoning"},
+            },
+            {
+                "kind": "tool",
+                "tool": "workspace_action",
+                "ok": True,
+                "plan_revision": revision,
+                "result": {"ok": True},
+            },
+        )
+    )
+    for task in snapshot.plan.tasks:
+        if task.task_id != "verify":
+            task.status = TaskStatus.COMPLETED
+
+    result = verify_recorded_work(harness.context_for(snapshot))
+
+    assert result["ok"] is True
+    assert result["failed_tool_observations"] == 0
+    assert result["successful_tool_observations"] == 1
+
+
 def test_work_cli_lists_durable_runs_without_loading_a_model(tmp_path):
     harness = WorkHarness(tmp_path)
     created = harness.create("Explain one function")

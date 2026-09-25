@@ -446,12 +446,21 @@ def verify_recorded_work(context: WorkContext) -> dict[str, Any]:
     observations = [dict(item) for item in context.recent_observations]
     plan = dict(context.plan or {})
     current_revision = int(plan.get("revision") or 0)
+    loaded_tool_ids = {
+        str(item.get("tool_id") or item.get("name") or "")
+        for item in context.loaded_tools
+        if isinstance(item, Mapping)
+    }
     tool_observations = [
         item
         for item in observations
         if item.get("kind") == "tool"
         and item.get("tool")
         not in {"catalog_expand", "skill_list", "skill_search", "skill_load"}
+        and (
+            not loaded_tool_ids
+            or str(item.get("tool") or "") in loaded_tool_ids
+        )
         and int(item.get("plan_revision") or current_revision) == current_revision
     ]
     latest_tool_results: dict[tuple[str, str], dict[str, Any]] = {}
