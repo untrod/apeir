@@ -353,7 +353,11 @@ class AgentLoop:
             item.get("kind") == "tool"
             and item.get("ok") is True
             and item.get("tool") == "read_file"
+            and AgentLoop._is_source_path(
+                str((item.get("result") or {}).get("path") or "")
+            )
             for item in snapshot.observations
+            if isinstance(item.get("result"), Mapping)
         )
 
     @staticmethod
@@ -364,11 +368,53 @@ class AgentLoop:
             result = item.get("result")
             if not isinstance(result, Mapping):
                 continue
-            for match in result.get("matches") or ():
-                if not isinstance(match, Mapping) or not match.get("path"):
-                    continue
-                return str(match["path"]), max(1, int(match.get("line") or 1))
+            matches = [
+                match
+                for match in result.get("matches") or ()
+                if isinstance(match, Mapping) and match.get("path")
+            ]
+            if not matches:
+                continue
+            path_counts: dict[str, int] = {}
+            for match in matches:
+                path = str(match["path"])
+                path_counts[path] = path_counts.get(path, 0) + 1
+            ranked = sorted(
+                enumerate(matches),
+                key=lambda indexed: (
+                    AgentLoop._source_path_rank(str(indexed[1]["path"])),
+                    -path_counts[str(indexed[1]["path"])],
+                    indexed[0],
+                ),
+            )
+            match = ranked[0][1]
+            return str(match["path"]), max(1, int(match.get("line") or 1))
         return None
+
+    @staticmethod
+    def _is_source_path(path: str) -> bool:
+        return AgentLoop._source_path_rank(path) < 3
+
+    @staticmethod
+    def _source_path_rank(path: str) -> int:
+        normalized = str(path or "").replace("\\", "/").lstrip("./").casefold()
+        parts = tuple(part for part in normalized.split("/") if part)
+        if not parts or any(
+            part in {".venv", "venv", "site-packages", "node_modules"}
+            for part in parts
+        ):
+            return 4
+        if parts[0] in {"src", "lib", "app", "crates"}:
+            return 0
+        if parts[0] in {"tests", "test"}:
+            return 1
+        if parts[0] in {"docs", "doc"} or parts[-1] in {
+            "readme.md",
+            "changelog.md",
+            "changes.rst",
+        }:
+            return 3
+        return 2
 
     @staticmethod
     def _workspace_search_query(objective: str) -> str:

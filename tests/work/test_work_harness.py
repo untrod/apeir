@@ -8,6 +8,7 @@ from nous_runtime.work import (
     WorkDecision,
     WorkHarness,
 )
+from nous_runtime.work.loop import AgentLoop
 
 
 class StubTools:
@@ -290,6 +291,48 @@ def test_tool_work_requires_safe_discovery_before_terminal_decision(tmp_path):
     ]
     assert "workspace_action" in blocked.loaded_tools
     assert blocked.state is RunState.BLOCKED
+
+
+def test_safe_inspection_prefers_relevant_source_over_docs_and_dependencies(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix URLSafeSerializer.loads max_age handling")
+    snapshot.observations.append(
+        {
+            "kind": "tool",
+            "tool": "search_workspace",
+            "ok": True,
+            "result": {
+                "matches": [
+                    {"path": "docs/timed.rst", "line": 19},
+                    {"path": ".venv/Lib/site-packages/vendor.py", "line": 4},
+                    {"path": "src/pkg/exc.py", "line": 61},
+                    {"path": "src/pkg/timed.py", "line": 60},
+                    {"path": "src/pkg/timed.py", "line": 137},
+                    {"path": "tests/test_timed.py", "line": 101},
+                ]
+            },
+        }
+    )
+
+    assert AgentLoop._latest_search_match(snapshot) == ("src/pkg/timed.py", 60)
+
+
+def test_document_read_does_not_satisfy_source_inspection_gate(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix code and run targeted tests")
+    snapshot.observations.append(
+        {
+            "kind": "tool",
+            "tool": "read_file",
+            "ok": True,
+            "result": {"path": "docs/guide.rst", "content": "example"},
+        }
+    )
+
+    assert AgentLoop._needs_safe_inspection(
+        snapshot,
+        WorkDecision(DecisionStatus.BLOCKED, "The requested change remains"),
+    )
 
 
 def test_recovery_uses_monotonic_checkpoint_sequence(tmp_path):
