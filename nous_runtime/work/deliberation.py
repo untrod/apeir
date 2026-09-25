@@ -21,6 +21,7 @@ from nous_runtime.work.models import WorkContext, WorkDecision
 
 _DECISION_EVENT_LIMIT = 6
 _DECISION_EVENT_TEXT_LIMIT = 200
+_DECISION_OBSERVATION_LIMIT = 4
 
 
 _DECISION_SCHEMA: dict[str, Any] = {
@@ -287,10 +288,20 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
                 continue
             verification_selected = True
         selected_observations.append(raw)
-        if len(selected_observations) >= 6:
+        if len(selected_observations) >= _DECISION_OBSERVATION_LIMIT:
             break
     observations = []
-    for raw in reversed(selected_observations):
+    chronological_observations = list(reversed(selected_observations))
+    latest_read_position = next(
+        (
+            position
+            for position in range(len(chronological_observations) - 1, -1, -1)
+            if chronological_observations[position].get("tool") == "read_file"
+            and chronological_observations[position].get("ok") is True
+        ),
+        -1,
+    )
+    for position, raw in enumerate(chronological_observations):
         observation = dict(raw)
         compact_observation = {
             key: observation.get(key)
@@ -325,9 +336,32 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
                         str(item.get("path") or "")
                         for item in result.get("entries") or ()
                         if isinstance(item, Mapping) and item.get("path")
-                    ][:120],
+                    ][:40],
                     "truncated": bool(result.get("truncated")),
                     "error": str(result.get("error") or ""),
+                }
+            elif observation.get("tool") == "search_workspace":
+                compact_observation["result"] = {
+                    "ok": bool(result.get("ok")),
+                    "matches": _compact_search_matches(result.get("matches") or ()),
+                    "truncated": bool(result.get("truncated")),
+                    "error": str(result.get("error") or ""),
+                }
+            elif (
+                observation.get("tool") == "read_file"
+                and position != latest_read_position
+            ):
+                compact_observation["result"] = {
+                    key: result.get(key)
+                    for key in (
+                        "ok",
+                        "path",
+                        "start_line",
+                        "end_line",
+                        "sha256",
+                        "error",
+                    )
+                    if result.get(key) not in (None, "", [], {})
                 }
             else:
                 compact_observation["result"] = result
@@ -376,6 +410,30 @@ def _bounded_event_value(value: Any) -> Any:
     if not isinstance(value, str) or len(value) <= _DECISION_EVENT_TEXT_LIMIT:
         return value
     return f"{value[:_DECISION_EVENT_TEXT_LIMIT]}…"
+
+
+def _compact_search_matches(matches: Sequence[Any]) -> list[dict[str, Any]]:
+    compact: list[dict[str, Any]] = []
+    for raw in matches:
+        if not isinstance(raw, Mapping) or not raw.get("path"):
+            continue
+        path = str(raw["path"])
+        normalized = path.replace("\\", "/").casefold()
+        if any(
+            part in {".venv", "venv", "site-packages", "node_modules"}
+            for part in normalized.split("/")
+        ):
+            continue
+        compact.append(
+            {
+                "path": path,
+                "line": max(1, int(raw.get("line") or 1)),
+                "text": str(raw.get("text") or "")[:160],
+            }
+        )
+        if len(compact) >= 12:
+            break
+    return compact
 
 
 def verify_recorded_work(context: WorkContext) -> dict[str, Any]:

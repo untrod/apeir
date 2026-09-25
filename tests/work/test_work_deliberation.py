@@ -163,6 +163,74 @@ def test_model_deliberator_compacts_workspace_listing_and_verification_history(
     assert "entries" not in listing["result"]
 
 
+def test_model_deliberator_keeps_only_latest_read_content_and_safe_searches(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix the code in this repository")
+    snapshot.observations.extend(
+        (
+            {
+                "kind": "tool",
+                "tool": "search_workspace",
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "matches": [
+                        {
+                            "path": ".venv/Lib/site-packages/vendor.py",
+                            "line": 1,
+                            "text": "dependency",
+                        },
+                        {
+                            "path": "src/example.py",
+                            "line": 5,
+                            "text": "relevant " + ("x" * 300),
+                        },
+                    ],
+                },
+            },
+            {
+                "kind": "tool",
+                "tool": "read_file",
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "path": "docs/example.rst",
+                    "content": "old documentation body",
+                    "sha256": "old",
+                },
+            },
+            {
+                "kind": "tool",
+                "tool": "read_file",
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "path": "src/example.py",
+                    "content": "latest source body",
+                    "sha256": "new",
+                },
+            },
+        )
+    )
+    facade = StubFacade(
+        {"status": "blocked", "summary": "done", "confidence": "high"}
+    )
+
+    ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+
+    observations = json.loads(facade.requests[0].messages[1]["content"])["work"][
+        "recent_observations"
+    ]
+    search = next(item for item in observations if item.get("tool") == "search_workspace")
+    assert [match["path"] for match in search["result"]["matches"]] == [
+        "src/example.py"
+    ]
+    assert len(search["result"]["matches"][0]["text"]) == 160
+    reads = [item for item in observations if item.get("tool") == "read_file"]
+    assert "content" not in reads[0]["result"]
+    assert reads[1]["result"]["content"] == "latest source body"
+
+
 def test_recorded_work_verifier_requires_tool_evidence_when_assessed(tmp_path):
     harness = WorkHarness(tmp_path)
     snapshot = harness.create("Fix the code in this repository")
