@@ -74,6 +74,14 @@ class ProgressiveTools(StubTools):
                     "parameters": {"type": "object"},
                 },
             },
+            {
+                "type": "function",
+                "function": {
+                    "name": "list_workspace",
+                    "description": "list workspace files",
+                    "parameters": {"type": "object"},
+                },
+            },
             *super().specifications(),
         )
 
@@ -90,7 +98,12 @@ class ProgressiveTools(StubTools):
                         "tool_id": "workspace_action",
                         "category": "files",
                         "effect_class": "read",
-                    }
+                    },
+                    {
+                        "tool_id": "list_workspace",
+                        "category": "files",
+                        "effect_class": "read",
+                    },
                 ],
             }
         return {"ok": True}
@@ -205,6 +218,11 @@ def test_tool_work_requires_safe_discovery_before_terminal_decision(tmp_path):
                 reason="No source files are visible yet",
             ),
             WorkDecision(
+                DecisionStatus.COMPLETE,
+                "The task is complete without inspecting the workspace",
+                output="unsupported",
+            ),
+            WorkDecision(
                 DecisionStatus.BLOCKED,
                 "A real external prerequisite is missing",
                 reason="The required external input is unavailable",
@@ -218,7 +236,10 @@ def test_tool_work_requires_safe_discovery_before_terminal_decision(tmp_path):
         tools=tools,
     )
 
-    assert tools.calls == [("catalog_expand", {"category": "files"})]
+    assert tools.calls == [
+        ("catalog_expand", {"category": "files"}),
+        ("list_workspace", {"path": ".", "max_depth": 2}),
+    ]
     assert "workspace_action" in blocked.loaded_tools
     assert blocked.state is RunState.BLOCKED
 

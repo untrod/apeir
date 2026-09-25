@@ -145,6 +145,32 @@ class AgentLoop:
                     tool_name="catalog_expand",
                     tool_arguments={"category": "files"},
                 )
+            elif (
+                bool(snapshot.analysis.needs_tools)
+                and "list_workspace" in snapshot.loaded_tools
+                and decision.status
+                in {DecisionStatus.BLOCKED, DecisionStatus.COMPLETE}
+                and not any(
+                    item.get("kind") == "tool"
+                    and item.get("ok") is True
+                    and item.get("tool")
+                    not in {
+                        "catalog_expand",
+                        "skill_list",
+                        "skill_search",
+                        "skill_load",
+                    }
+                    for item in snapshot.observations
+                )
+            ):
+                decision = WorkDecision(
+                    status=DecisionStatus.CONTINUE,
+                    summary="Inspect the workspace before making a terminal decision",
+                    next_action="List the governed workspace root",
+                    confidence="high",
+                    tool_name="list_workspace",
+                    tool_arguments={"path": ".", "max_depth": 2},
+                )
 
             snapshot.last_decision = decision
             snapshot.reanalysis_reason = ""
