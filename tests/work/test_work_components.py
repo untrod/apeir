@@ -32,3 +32,4 @@ def test_work_components_load_workspace_providers_before_gateway(tmp_path, monke
     assert configured == [True]
     assert components.deliberator.facade is facade
     assert components.deliberator.timeout_s == 321.0
+    assert components.deliberator.max_output_tokens == 384

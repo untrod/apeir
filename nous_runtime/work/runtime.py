@@ -499,9 +499,13 @@ class WorkHarness:
     def context_for(
         self, snapshot: WorkSnapshot, *, recovering: bool = False
     ) -> WorkContext:
-        workspace = snapshot_workspace(
+        workspace_snapshot = snapshot_workspace(
             snapshot.workspace_root, root=snapshot.workspace_root
         )
+        workspace = workspace_snapshot.to_dict()
+        workspace["path"] = snapshot.workspace_root
+        workspace["execution_root"] = snapshot.workspace_root
+        workspace["source"] = "work.execution_root"
         conversation: dict[str, Any] = {}
         if snapshot.conversation_id:
             conversation = self.conversations.context_window(snapshot.conversation_id)
@@ -519,7 +523,7 @@ class WorkHarness:
             goal=snapshot.goal.to_dict(),
             assessment=snapshot.analysis.to_dict(),
             plan=snapshot.plan.to_dict() if snapshot.plan else None,
-            workspace=workspace.to_dict(),
+            workspace=workspace,
             conversation=conversation,
             recent_observations=tuple(snapshot.observations[-12:]),
             recent_events=tuple(event.to_dict() for event in events),

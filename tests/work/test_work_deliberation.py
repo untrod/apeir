@@ -57,6 +57,8 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
     payload = json.loads(request.messages[1]["content"])
     assert payload["tool_capability_catalog"][0]["category"] == "files"
     assert payload["tool_capability_catalog"][0]["authority"] == "none"
+    assert payload["work"]["conversation"] == {}
+    assert "created_at" not in payload["work"]["goal"]
     assert all(
         "objective" not in event["payload"]
         and "plan" not in event["payload"]
@@ -86,9 +88,9 @@ def test_model_deliberator_bounds_event_history_and_failure_text(tmp_path):
 
     payload = json.loads(facade.requests[0].messages[1]["content"])
     events = payload["work"]["recent_events"]
-    assert len(events) == 8
+    assert len(events) == 6
     assert events[-1]["payload"]["reason"].endswith("…")
-    assert len(events[-1]["payload"]["reason"]) == 321
+    assert len(events[-1]["payload"]["reason"]) == 201
 
 
 def test_recorded_work_verifier_requires_tool_evidence_when_assessed(tmp_path):

@@ -79,7 +79,7 @@ def build_work_components(
         tool_capabilities=tools.categories(),
         preferred_model=str(options.get("preferred_model") or ""),
         timeout_s=float(options.get("model_timeout_s") or 180.0),
-        max_output_tokens=int(options.get("decision_max_output_tokens") or 1024),
+        max_output_tokens=int(options.get("decision_max_output_tokens") or 384),
     )
     return WorkExecutionComponents(
         tools=tools,

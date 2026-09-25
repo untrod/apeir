@@ -130,6 +130,22 @@ class AgentLoop:
             except (TypeError, ValueError) as exc:
                 return self._fail(snapshot, f"invalid work decision: {exc}")
 
+            if (
+                bool(snapshot.analysis.needs_tools)
+                and not snapshot.loaded_tools
+                and decision.status
+                in {DecisionStatus.BLOCKED, DecisionStatus.COMPLETE}
+                and "catalog_expand" in self.harness._tool_names(tools)
+            ):
+                decision = WorkDecision(
+                    status=DecisionStatus.CONTINUE,
+                    summary="Load workspace file tools before making a terminal decision",
+                    next_action="Discover the governed workspace file tools",
+                    confidence="high",
+                    tool_name="catalog_expand",
+                    tool_arguments={"category": "files"},
+                )
+
             snapshot.last_decision = decision
             snapshot.reanalysis_reason = ""
             self._complete_analysis_step(snapshot, decision)

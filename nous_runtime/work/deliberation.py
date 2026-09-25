@@ -19,8 +19,8 @@ from nous_runtime.model_runtime import (
 from nous_runtime.work.models import WorkContext, WorkDecision
 
 
-_DECISION_EVENT_LIMIT = 8
-_DECISION_EVENT_TEXT_LIMIT = 320
+_DECISION_EVENT_LIMIT = 6
+_DECISION_EVENT_TEXT_LIMIT = 200
 
 
 _DECISION_SCHEMA: dict[str, Any] = {
@@ -189,6 +189,36 @@ class ModelWorkDeliberator:
 
 def _decision_context(context: WorkContext) -> dict[str, Any]:
     value = context.to_dict()
+    goal = dict(value.get("goal") or {})
+    value["goal"] = {
+        key: goal.get(key)
+        for key in (
+            "goal_id",
+            "objective",
+            "status",
+            "constraints",
+            "requirements",
+            "completion_criteria",
+            "blocker",
+        )
+        if goal.get(key) not in (None, "", [], {})
+    }
+    assessment = dict(value.get("assessment") or {})
+    value["assessment"] = {
+        key: assessment.get(key)
+        for key in (
+            "task_type",
+            "complexity",
+            "needs_tools",
+            "needs_plan",
+            "needs_web",
+            "needs_workspace",
+            "needs_environment",
+            "missing_context",
+            "risk_class",
+        )
+        if assessment.get(key) not in (None, "", [], {})
+    }
     plan = dict(value.get("plan") or {})
     tasks = []
     for raw in plan.get("tasks") or ():
@@ -239,9 +269,7 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
         compact_events.append(
             {
                 "sequence": event.get("sequence"),
-                "timestamp": event.get("timestamp"),
                 "event_type": event.get("event_type"),
-                "actor": event.get("actor"),
                 "payload": {
                     key: _bounded_event_value(event_payload[key])
                     for key in event_payload_keys
@@ -250,6 +278,27 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
             }
         )
     value["recent_events"] = compact_events
+    conversation = dict(value.get("conversation") or {})
+    objective = str(value["goal"].get("objective") or "").strip()
+    messages = []
+    for raw in conversation.get("messages") or ():
+        message = dict(raw)
+        content = str(message.get("content") or "").strip()
+        if content and content != objective:
+            messages.append(
+                {
+                    "role": str(message.get("role") or ""),
+                    "content": content[-2_000:],
+                }
+            )
+    value["conversation"] = {
+        key: item
+        for key, item in {
+            "summary": str(conversation.get("summary") or "").strip(),
+            "messages": messages[-4:],
+        }.items()
+        if item
+    }
     return value
 
 

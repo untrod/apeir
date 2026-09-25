@@ -63,6 +63,39 @@ class DispatchInspectingTools(StubTools):
         return result
 
 
+class ProgressiveTools(StubTools):
+    def specifications(self):
+        return (
+            {
+                "type": "function",
+                "function": {
+                    "name": "catalog_expand",
+                    "description": "load tool schemas",
+                    "parameters": {"type": "object"},
+                },
+            },
+            *super().specifications(),
+        )
+
+    def prompt_specifications(self):
+        return self.specifications()[:1]
+
+    def execute(self, name, arguments):
+        self.calls.append((name, dict(arguments)))
+        if name == "catalog_expand":
+            return {
+                "ok": True,
+                "tools": [
+                    {
+                        "tool_id": "workspace_action",
+                        "category": "files",
+                        "effect_class": "read",
+                    }
+                ],
+            }
+        return {"ok": True}
+
+
 def test_simple_work_skips_plan_and_completes(tmp_path):
     harness = WorkHarness(tmp_path)
     created = harness.create("Explain recursion clearly")
@@ -148,6 +181,46 @@ def test_provider_transport_failure_is_recoverable() -> None:
         "all safe model routes failed: local/model: invocation timed out; "
         "overall request timed out"
     )
+
+
+def test_context_exposes_execution_root_instead_of_metadata_workspace(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Inspect this workspace")
+
+    context = harness.context_for(created)
+
+    assert context.workspace["path"] == str(tmp_path.resolve())
+    assert context.workspace["execution_root"] == str(tmp_path.resolve())
+
+
+def test_tool_work_requires_safe_discovery_before_terminal_decision(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Fix code and run targeted tests")
+    tools = ProgressiveTools()
+    decisions = iter(
+        (
+            WorkDecision(
+                DecisionStatus.BLOCKED,
+                "Repository details are unknown",
+                reason="No source files are visible yet",
+            ),
+            WorkDecision(
+                DecisionStatus.BLOCKED,
+                "A real external prerequisite is missing",
+                reason="The required external input is unavailable",
+            ),
+        )
+    )
+
+    blocked = harness.run(
+        created.run_id,
+        deliberator=lambda _context: next(decisions),
+        tools=tools,
+    )
+
+    assert tools.calls == [("catalog_expand", {"category": "files"})]
+    assert "workspace_action" in blocked.loaded_tools
+    assert blocked.state is RunState.BLOCKED
 
 
 def test_recovery_uses_monotonic_checkpoint_sequence(tmp_path):
