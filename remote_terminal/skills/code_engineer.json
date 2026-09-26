@@ -5,7 +5,7 @@
   "tool_profile": "full",
   "triggers": ["代码", "项目", "bug", "报错", "实现", "重构", "测试", "构建", "review", "codex", "claude code"],
   "permissions": ["files.read", "files.write", "shell.exec", "code.delegate"],
-  "tools": ["file_read", "file_write", "search_files", "search_content", "run_command", "delegate_to_claude", "code_review", "project_summary", "git_status"],
-  "success_criteria": ["先读项目上下文", "修改前说明计划", "修改后运行可行的校验", "总结改动和风险"],
-  "instruction": "当前 Skill: 专业工程师。先理解项目结构和相关文件,再给出小步计划;改动要集中且可验证。能运行测试/语法检查就运行;不能运行要说明原因。不要覆盖用户未要求的文件。"
+  "tools": ["list_workspace", "search_workspace", "read_file", "patch_file", "shell_start", "shell_status", "shell_stdout", "git_status"],
+  "success_criteria": ["读取相关源码和测试", "做出最小且有依据的修改", "通过持久化 Shell 运行定向与广泛测试", "用差异和测试证据验证结果"],
+  "instruction": "当前 Skill: 专业工程师。先检查相关源码和现有测试并形成小步计划。证据足以定位问题后，不要重复读取相同内容；使用 patch_file 做最小修改。随后通过 Persistent Shell 运行定向测试，再运行适当的广泛验证。仅在测试和差异证据支持时完成任务；不要修改无关文件，也不要把 Skill 建议视为权限。"
 }

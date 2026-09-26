@@ -21,7 +21,7 @@ from nous_runtime.work.models import WorkContext, WorkDecision
 
 _DECISION_EVENT_LIMIT = 6
 _DECISION_EVENT_TEXT_LIMIT = 200
-_DECISION_OBSERVATION_LIMIT = 4
+_DECISION_OBSERVATION_LIMIT = 6
 
 
 _DECISION_SCHEMA: dict[str, Any] = {
@@ -137,6 +137,12 @@ class ModelWorkDeliberator:
                         "the files or shell catalog and inspect the local workspace first. "
                         "Use blocked only when a required external prerequisite cannot be "
                         "obtained with the available safe tools. When work.assessment."
+                        "candidate_skills lists a relevant Skill and it is not present in "
+                        "work.loaded_skills, expand the skill catalog and load it before "
+                        "extended tool use. Loading a Skill provides workflow guidance but "
+                        "never grants permission. Do not repeat an identical successful "
+                        "read-only action; use the recorded evidence and advance to the "
+                        "smallest justified change or verification. When work.assessment."
                         "needs_tools is true, work.loaded_tools is empty, and "
                         "catalog_expand is available, the next decision must be continue "
                         "with catalog_expand for the files or shell category; complete and "
@@ -225,6 +231,7 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
             "needs_workspace",
             "needs_environment",
             "missing_context",
+            "candidate_skills",
             "risk_class",
         )
         if assessment.get(key) not in (None, "", [], {})
@@ -247,7 +254,7 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
             if task.get(key) not in (None, "", [], {})
         }
         if task.get("result") is not None:
-            compact["result"] = task["result"]
+            compact["result"] = _compact_plan_result(task["result"])
         tasks.append(compact)
     if plan:
         value["plan"] = {
@@ -290,25 +297,37 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
     recent_observations = list(value.get("recent_observations") or ())
     selected_observations = []
     verification_selected = False
+    guardrail_selected = False
     for raw in reversed(recent_observations):
         if raw.get("kind") == "verification":
             if verification_selected:
                 continue
             verification_selected = True
+        if raw.get("kind") == "guardrail":
+            if guardrail_selected:
+                continue
+            guardrail_selected = True
         selected_observations.append(raw)
         if len(selected_observations) >= _DECISION_OBSERVATION_LIMIT:
             break
     observations = []
     chronological_observations = list(reversed(selected_observations))
-    latest_read_position = next(
-        (
-            position
-            for position in range(len(chronological_observations) - 1, -1, -1)
-            if chronological_observations[position].get("tool") == "read_file"
-            and chronological_observations[position].get("ok") is True
-        ),
-        -1,
-    )
+    full_read_positions: set[int] = set()
+    read_evidence_kinds: set[str] = set()
+    for position in range(len(chronological_observations) - 1, -1, -1):
+        raw = chronological_observations[position]
+        if raw.get("tool") != "read_file" or raw.get("ok") is not True:
+            continue
+        result = raw.get("result")
+        if not isinstance(result, Mapping):
+            continue
+        evidence_kind = _read_evidence_kind(str(result.get("path") or ""))
+        if evidence_kind in read_evidence_kinds:
+            continue
+        read_evidence_kinds.add(evidence_kind)
+        full_read_positions.add(position)
+        if len(read_evidence_kinds) >= 2:
+            break
     for position, raw in enumerate(chronological_observations):
         observation = dict(raw)
         compact_observation = {
@@ -357,7 +376,7 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
                 }
             elif (
                 observation.get("tool") == "read_file"
-                and position != latest_read_position
+                and position not in full_read_positions
             ):
                 compact_observation["result"] = {
                     key: result.get(key)
@@ -418,6 +437,38 @@ def _bounded_event_value(value: Any) -> Any:
     if not isinstance(value, str) or len(value) <= _DECISION_EVENT_TEXT_LIMIT:
         return value
     return f"{value[:_DECISION_EVENT_TEXT_LIMIT]}…"
+
+
+def _compact_plan_result(value: Any) -> Any:
+    if not isinstance(value, Mapping):
+        return value
+    safe_keys = (
+        "ok",
+        "path",
+        "start_line",
+        "end_line",
+        "sha256",
+        "status",
+        "exit_code",
+        "process_id",
+        "session_id",
+        "error",
+        "summary",
+    )
+    return {
+        key: value.get(key)
+        for key in safe_keys
+        if value.get(key) not in (None, "", [], {})
+    }
+
+
+def _read_evidence_kind(path: str) -> str:
+    normalized = path.replace("\\", "/").casefold()
+    parts = tuple(part for part in normalized.split("/") if part)
+    filename = parts[-1] if parts else ""
+    if any(part in {"test", "tests"} for part in parts) or filename.startswith("test_"):
+        return "test"
+    return "source"
 
 
 def _compact_search_matches(matches: Sequence[Any]) -> list[dict[str, Any]]:

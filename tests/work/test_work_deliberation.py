@@ -167,7 +167,7 @@ def test_model_deliberator_compacts_workspace_listing_and_verification_history(
     assert "entries" not in listing["result"]
 
 
-def test_model_deliberator_keeps_only_latest_read_content_and_safe_searches(tmp_path):
+def test_model_deliberator_keeps_latest_source_and_test_content(tmp_path):
     harness = WorkHarness(tmp_path)
     snapshot = harness.create("Fix the code in this repository")
     snapshot.observations.extend(
@@ -214,6 +214,17 @@ def test_model_deliberator_keeps_only_latest_read_content_and_safe_searches(tmp_
                     "sha256": "new",
                 },
             },
+            {
+                "kind": "tool",
+                "tool": "read_file",
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "path": "tests/test_example.py",
+                    "content": "focused regression body",
+                    "sha256": "test",
+                },
+            },
         )
     )
     facade = StubFacade({"status": "blocked", "summary": "done", "confidence": "high"})
@@ -233,6 +244,36 @@ def test_model_deliberator_keeps_only_latest_read_content_and_safe_searches(tmp_
     reads = [item for item in observations if item.get("tool") == "read_file"]
     assert "content" not in reads[0]["result"]
     assert reads[1]["result"]["content"] == "latest source body"
+    assert reads[2]["result"]["content"] == "focused regression body"
+
+
+def test_model_deliberator_compacts_plan_tool_results(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix the code in this repository")
+    snapshot.plan.tasks[0].result = {
+        "ok": True,
+        "path": "src/example.py",
+        "sha256": "digest",
+        "content": "large source body that must not be repeated in the plan",
+    }
+    facade = StubFacade({"status": "blocked", "summary": "done", "confidence": "high"})
+
+    ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+
+    plan = json.loads(facade.requests[0].messages[1]["content"])["work"]["plan"]
+    result = plan["tasks"][0]["result"]
+    assert result == {"ok": True, "path": "src/example.py", "sha256": "digest"}
+
+
+def test_model_deliberator_exposes_recommended_skills(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix the code in this repository")
+    facade = StubFacade({"status": "blocked", "summary": "done", "confidence": "high"})
+
+    ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+
+    work = json.loads(facade.requests[0].messages[1]["content"])["work"]
+    assert work["assessment"]["candidate_skills"] == ["code-engineer"]
 
 
 def test_recorded_work_verifier_requires_tool_evidence_when_assessed(tmp_path):

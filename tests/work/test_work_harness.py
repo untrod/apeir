@@ -64,6 +64,19 @@ class DispatchInspectingTools(StubTools):
         return result
 
 
+class EffectTools(StubTools):
+    def __init__(self, effect_class):
+        super().__init__()
+        self.effect_class = effect_class
+
+    def require(self, name):
+        return type(
+            "Definition",
+            (),
+            {"effect_class": self.effect_class, "capability_id": name},
+        )()
+
+
 class ProgressiveTools(StubTools):
     def specifications(self):
         return (
@@ -163,6 +176,94 @@ def test_simple_work_skips_plan_and_completes(tmp_path):
     assert completed.goal.status is GoalStatus.COMPLETED
     assert harness.require(created.run_id).result.startswith("Recursion")
     assert harness.events.get_run(created.run_id).state is RunState.COMPLETED
+
+
+def test_identical_successful_read_is_suppressed_without_reexecution(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Explain one workspace value")
+    tools = EffectTools("read")
+    decision = WorkDecision(
+        DecisionStatus.CONTINUE,
+        "Read the value",
+        tool_name="workspace_action",
+        tool_arguments={"path": "value.txt"},
+    )
+
+    blocked = harness.run(
+        created.run_id,
+        deliberator=lambda _context: decision,
+        tools=tools,
+        max_iterations=2,
+    )
+
+    assert tools.calls == [("workspace_action", {"path": "value.txt"})]
+    assert blocked.action_sequence == 1
+    assert blocked.observations[-1]["kind"] == "guardrail"
+    assert blocked.observations[-1]["result"]["duplicate"] is True
+    assert any(
+        event.event_type == "work.action.suppressed"
+        for event in harness.events.load_events(created.run_id)
+    )
+
+
+def test_identical_effectful_action_is_not_suppressed(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Write one workspace value")
+    tools = EffectTools("write")
+    decision = WorkDecision(
+        DecisionStatus.CONTINUE,
+        "Write the value",
+        tool_name="workspace_action",
+        tool_arguments={"path": "value.txt"},
+    )
+
+    blocked = harness.run(
+        created.run_id,
+        deliberator=lambda _context: decision,
+        tools=tools,
+        max_iterations=2,
+    )
+
+    assert tools.calls == [
+        ("workspace_action", {"path": "value.txt"}),
+        ("workspace_action", {"path": "value.txt"}),
+    ]
+    assert blocked.action_sequence == 2
+    assert not any(
+        event.event_type == "work.action.suppressed"
+        for event in harness.events.load_events(created.run_id)
+    )
+
+
+def test_repeated_identical_read_loop_stops_at_cost_guardrail(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Explain one workspace value")
+    tools = EffectTools("read")
+    decision = WorkDecision(
+        DecisionStatus.CONTINUE,
+        "Read the value",
+        tool_name="workspace_action",
+        tool_arguments={"path": "value.txt"},
+    )
+    deliberations = 0
+
+    def deliberate(_context):
+        nonlocal deliberations
+        deliberations += 1
+        return decision
+
+    blocked = harness.run(
+        created.run_id,
+        deliberator=deliberate,
+        tools=tools,
+        max_iterations=20,
+    )
+
+    assert blocked.state is RunState.BLOCKED
+    assert "protect the model budget" in blocked.goal.blocker
+    assert deliberations == 4
+    assert tools.calls == [("workspace_action", {"path": "value.txt"})]
+    assert blocked.observations[-1]["result"]["suppression_count"] == 3
 
 
 def test_kernel_unavailable_requires_recovery_and_resumes_same_work(tmp_path):

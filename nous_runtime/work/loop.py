@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 Deliberator = Callable[[WorkContext], WorkDecision | Mapping[str, Any]]
 Verifier = Callable[[WorkContext], bool | Mapping[str, Any]]
+_MAX_IDENTICAL_READ_SUPPRESSIONS = 3
 
 
 class AgentLoop:
@@ -134,8 +135,7 @@ class AgentLoop:
             if (
                 bool(snapshot.analysis.needs_tools)
                 and not snapshot.loaded_tools
-                and decision.status
-                in {DecisionStatus.BLOCKED, DecisionStatus.COMPLETE}
+                and decision.status in {DecisionStatus.BLOCKED, DecisionStatus.COMPLETE}
                 and "catalog_expand" in self.harness._tool_names(tools)
             ):
                 decision = WorkDecision(
@@ -149,8 +149,7 @@ class AgentLoop:
             elif (
                 bool(snapshot.analysis.needs_tools)
                 and "list_workspace" in snapshot.loaded_tools
-                and decision.status
-                in {DecisionStatus.BLOCKED, DecisionStatus.COMPLETE}
+                and decision.status in {DecisionStatus.BLOCKED, DecisionStatus.COMPLETE}
                 and not any(
                     item.get("kind") == "tool"
                     and item.get("ok") is True
@@ -217,6 +216,80 @@ class AgentLoop:
                     "iteration": iteration,
                 },
             )
+
+            duplicate = self._successful_read_action(snapshot, decision, tools)
+            if duplicate is not None:
+                arguments_digest = self._arguments_digest(decision.tool_arguments)
+                suppression_count = 1 + sum(
+                    1
+                    for observation in snapshot.observations
+                    if observation.get("kind") == "guardrail"
+                    and observation.get("tool") == decision.tool_name
+                    and observation.get("arguments_digest") == arguments_digest
+                    and int(observation.get("plan_revision") or 0)
+                    == (snapshot.plan.revision if snapshot.plan else 0)
+                )
+                snapshot.reanalysis_reason = (
+                    "identical read-only action already succeeded; use the recorded "
+                    "observation and choose a different action"
+                )
+                snapshot.observations.append(
+                    {
+                        "kind": "guardrail",
+                        "tool": decision.tool_name,
+                        "step_id": decision.step_id,
+                        "ok": False,
+                        "action_sequence": snapshot.action_sequence,
+                        "plan_revision": snapshot.plan.revision if snapshot.plan else 0,
+                        "arguments_digest": arguments_digest,
+                        "result": {
+                            "ok": False,
+                            "duplicate": True,
+                            "suppression_count": suppression_count,
+                            "reused_action_sequence": int(
+                                duplicate.get("action_sequence") or 0
+                            ),
+                            "error": snapshot.reanalysis_reason,
+                        },
+                        "observed_at": work_timestamp(),
+                    }
+                )
+                snapshot.observations[:] = snapshot.observations[-50:]
+                self.harness.persist_progress(
+                    snapshot,
+                    "work.action.suppressed",
+                    {
+                        "tool": decision.tool_name,
+                        "arguments_digest": arguments_digest,
+                        "reason": snapshot.reanalysis_reason,
+                        "suppression_count": suppression_count,
+                        "reused_action_sequence": int(
+                            duplicate.get("action_sequence") or 0
+                        ),
+                    },
+                )
+                if suppression_count >= _MAX_IDENTICAL_READ_SUPPRESSIONS:
+                    reason = (
+                        "repeated identical read-only decision loop detected; "
+                        "automatic execution stopped to protect the model budget"
+                    )
+                    snapshot.goal.block(reason)
+                    snapshot.state = RunState.BLOCKED
+                    snapshot.reanalysis_reason = reason
+                    self.harness.checkpoint_agent(snapshot, resume=False)
+                    return self.harness.persist_progress(
+                        snapshot,
+                        "work.blocked",
+                        {
+                            "reason": reason,
+                            "tool": decision.tool_name,
+                            "arguments_digest": arguments_digest,
+                            "suppression_count": suppression_count,
+                        },
+                    )
+                self.harness.checkpoint_agent(snapshot, resume=True)
+                recovering = False
+                continue
 
             if decision.plan_revision_required:
                 self.harness.replace_plan(
@@ -334,9 +407,7 @@ class AgentLoop:
         )
 
     @staticmethod
-    def _needs_safe_inspection(
-        snapshot: WorkSnapshot, decision: WorkDecision
-    ) -> bool:
+    def _needs_safe_inspection(snapshot: WorkSnapshot, decision: WorkDecision) -> bool:
         if not bool(snapshot.analysis.needs_tools):
             return False
         if decision.status not in {
@@ -400,8 +471,7 @@ class AgentLoop:
         normalized = str(path or "").replace("\\", "/").lstrip("./").casefold()
         parts = tuple(part for part in normalized.split("/") if part)
         if not parts or any(
-            part in {".venv", "venv", "site-packages", "node_modules"}
-            for part in parts
+            part in {".venv", "venv", "site-packages", "node_modules"} for part in parts
         ):
             return 4
         if parts[0] in {"src", "lib", "app", "crates"}:
@@ -554,6 +624,7 @@ class AgentLoop:
             "ok": ok,
             "action_sequence": snapshot.action_sequence,
             "plan_revision": snapshot.plan.revision if snapshot.plan else 0,
+            "arguments_digest": self._arguments_digest(decision.tool_arguments),
             "result": normalized,
             "observed_at": work_timestamp(),
         }
@@ -601,6 +672,31 @@ class AgentLoop:
             default=str,
         ).encode("utf-8")
         return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+    @classmethod
+    def _successful_read_action(
+        cls,
+        snapshot: WorkSnapshot,
+        decision: WorkDecision,
+        tools: Any,
+    ) -> Mapping[str, Any] | None:
+        if not decision.tool_name:
+            return None
+        effect_class, _ = cls._tool_effect(tools, decision.tool_name)
+        if effect_class not in {"none", "read"}:
+            return None
+        arguments_digest = cls._arguments_digest(decision.tool_arguments)
+        plan_revision = snapshot.plan.revision if snapshot.plan else 0
+        for observation in reversed(snapshot.observations):
+            if (
+                observation.get("kind") == "tool"
+                and observation.get("ok") is True
+                and observation.get("tool") == decision.tool_name
+                and int(observation.get("plan_revision") or 0) == plan_revision
+                and observation.get("arguments_digest") == arguments_digest
+            ):
+                return observation
+        return None
 
     @staticmethod
     def _bind_change_records(
