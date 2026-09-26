@@ -718,13 +718,18 @@ class ModelGateway:
         response_format = request.metadata.get("response_format")
         response_schema = dict(request.metadata.get("response_schema") or {})
         if response_format is None and response_schema:
-            response_format = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "nous_response",
-                    "schema": response_schema,
-                },
-            }
+            if getattr(provider, "structured_output_mode", "json_schema") == (
+                "json_object"
+            ):
+                response_format = {"type": "json_object"}
+            else:
+                response_format = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "nous_response",
+                        "schema": response_schema,
+                    },
+                }
         model_input = {
             "schema_version": 1,
             "capability": capability,
@@ -1312,9 +1317,7 @@ class ModelGateway:
             "category": failure.category,
             "retryable": failure.retryable,
             "http_status": failure.evidence.get("http_status"),
-            "provider_error_code": failure.evidence.get(
-                "provider_error_code", ""
-            ),
+            "provider_error_code": failure.evidence.get("provider_error_code", ""),
             "message": failure.explanation,
         }
         for record in self.registry.list():

@@ -93,6 +93,11 @@ def main() -> int:
     parser.add_argument("--provider-id", default="deepseek")
     parser.add_argument("--provider-name", default="DeepSeek")
     parser.add_argument("--credential-ref", default="env:DEEPSEEK_API_KEY")
+    parser.add_argument(
+        "--structured-output-mode",
+        choices=("json_schema", "json_object"),
+        default="json_object",
+    )
     args = parser.parse_args()
     provider = OpenAIProvider(
         provider_id=args.provider_id,
@@ -100,6 +105,7 @@ def main() -> int:
         endpoint=args.endpoint,
         model=args.model,
         credential_ref=args.credential_ref,
+        structured_output_mode=args.structured_output_mode,
     )
     safe = {
         "required": _invoke_tool(provider, "required"),

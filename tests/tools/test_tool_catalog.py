@@ -67,6 +67,19 @@ def test_catalog_delegates_execution_without_becoming_authority():
     assert catalog.require("read_file").metadata["authority"] == "none"
 
 
+def test_catalog_can_exclude_legacy_runtime_tools():
+    runtime = StubRuntime()
+    catalog = ToolCatalog()
+    catalog.register_runtime(runtime, excluded_tool_ids={"read_file"})
+
+    assert catalog.discover() == ()
+    result = catalog.execute("read_file", {"path": "README.md"})
+
+    assert result["ok"] is False
+    assert "unknown catalog tool" in result["error"]
+    assert runtime.calls == []
+
+
 def test_tool_metadata_cannot_claim_authority():
     definition = ToolDefinition(
         tool_id="untrusted_tool",

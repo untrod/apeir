@@ -484,7 +484,7 @@ class NodeRuntimeService:
         ):
             return dict(self._execution_host_inventory)
         inventory = collect_execution_host_inventory(
-            resources or self.probe_resources()
+            resources or self.probe_resources(), refresh_tools=refresh
         )
         self._execution_host_inventory = inventory
         self._execution_host_inventory_at = now

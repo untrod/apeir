@@ -44,6 +44,12 @@ _RUNTIME_TOOL_CAPABILITIES = {
 def mutation_is_explicit(text: str) -> bool:
     """Return whether the user explicitly requested a governed effect."""
     value = text.casefold()
+    denial_scope = value
+    for scoped_constraint in (
+        "do not modify unrelated",
+        "don't modify unrelated",
+    ):
+        denial_scope = denial_scope.replace(scoped_constraint, "")
     denied = (
         "do not modify",
         "don't modify",
@@ -53,7 +59,7 @@ def mutation_is_explicit(text: str) -> bool:
         "不要写入",
         "仅查看",
     )
-    if any(marker in value for marker in denied):
+    if any(marker in denial_scope for marker in denied):
         return False
     requested = (
         "create ",
@@ -63,6 +69,7 @@ def mutation_is_explicit(text: str) -> bool:
         "update ",
         "fix ",
         "implement ",
+        "make the smallest correct change",
         "run tests",
         "render document",
         "create environment",
@@ -935,7 +942,13 @@ class WorkspaceToolRuntime:
             allowed = True
         if not allowed:
             raise ValueError(
-                "Command is outside the governed development-command allowlist."
+                "Command is outside the governed development-command allowlist. "
+                "Use git status/diff/log/show, pytest, ruff, python -m "
+                "pytest/compileall, npm test or npm run "
+                "test/lint/typecheck/build, or cargo test/check/clippy/fmt. "
+                "Inline interpreters such as python -c and standalone Python scripts are "
+                "intentionally forbidden. Write a bounded pytest reproduction and run it "
+                "with python -m pytest."
             )
         if any(
             any(marker in item for marker in ("&&", "||", ";", "|", ">", "<"))

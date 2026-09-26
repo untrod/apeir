@@ -24,6 +24,49 @@ except ImportError:  # MCP is an optional runtime dependency.
 _AsyncTransportBase = _httpx2.AsyncBaseTransport if _httpx2 else object
 _AsyncStreamBase = _httpx2.AsyncByteStream if _httpx2 else object
 
+_SANDBOX_PYTHON_BOOTSTRAP = (
+    "import os,runpy,sys;"
+    "packages=os.environ['APEIR_SANDBOX_PACKAGES'];"
+    "sys.path[:0]=[packages,os.path.join(packages,'win32'),"
+    "os.path.join(packages,'win32','lib'),os.path.join(packages,'Pythonwin')];"
+    "dll_dir=os.path.join(packages,'pywin32_system32');"
+    "dll_handle=os.add_dll_directory(dll_dir) if os.path.isdir(dll_dir) else None;"
+    "mode=sys.argv.pop(1);target=sys.argv.pop(1);"
+    "runpy.run_module(target,run_name='__main__',alter_sys=True) "
+    "if mode=='module' else runpy.run_path(target,run_name='__main__')"
+)
+
+
+def _isolated_python_command(
+    command: str, arguments: list[str]
+) -> tuple[str, list[str]]:
+    """Use base Python plus an explicit read-only package path inside the VM."""
+    if Path(command).resolve() != Path(sys.executable).resolve():
+        return command, arguments
+    remaining = list(arguments)
+    if remaining and remaining[0] == "-I":
+        remaining.pop(0)
+    if len(remaining) >= 2 and remaining[0] == "-m":
+        mode = "module"
+        target = remaining[1]
+        trailing = remaining[2:]
+    elif remaining and not remaining[0].startswith("-"):
+        mode = "path"
+        target = remaining[0]
+        trailing = remaining[1:]
+    else:
+        return command, arguments
+    base_command = str((Path(sys.base_prefix) / Path(sys.executable).name).resolve())
+    return base_command, [
+        "-I",
+        "-S",
+        "-c",
+        _SANDBOX_PYTHON_BOOTSTRAP,
+        mode,
+        target,
+        *trailing,
+    ]
+
 
 class McpSdkExecutionError(RuntimeError):
     pass
@@ -110,7 +153,9 @@ class McpSdkExecutionAdapter:
                     target_url,
                     max_response_bytes=self.max_response_bytes,
                     resolver=self.resolver,
-                    inner=(self.transport_factory() if self.transport_factory else None),
+                    inner=(
+                        self.transport_factory() if self.transport_factory else None
+                    ),
                 )
                 async with httpx2.AsyncClient(
                     transport=transport,
@@ -147,6 +192,7 @@ class McpSdkExecutionAdapter:
             return AdapterResult(False, error_code="MCP_CREDENTIALS_UNAVAILABLE")
         command = _resolve_stdio_command(declared_command, invocation.package_root)
         server_args = [str(item) for item in configuration.get("args") or ()]
+        command, server_args = _isolated_python_command(command, server_args)
         bridge = Path(__file__).with_name("mcp_stdio_bridge.py").resolve()
         read_paths = {
             str(invocation.package_root.resolve()),
@@ -168,7 +214,16 @@ class McpSdkExecutionAdapter:
             executable=str(Path(sys.executable).resolve()),
             # Isolated mode prevents adjacent mcp.py and user-site packages
             # from shadowing the official SDK in the standalone bridge.
-            args=["-I", str(bridge), command, *server_args],
+            args=[
+                "-I",
+                "-S",
+                "-c",
+                _SANDBOX_PYTHON_BOOTSTRAP,
+                "path",
+                str(bridge),
+                command,
+                *server_args,
+            ],
             working_dir=str(invocation.package_root.resolve()),
             env={},
             max_memory_bytes=512 * 1024 * 1024,
@@ -217,7 +272,9 @@ class McpSdkExecutionAdapter:
                 output_bytes=_encoded_size(output),
             )
         return AdapterResult(
-            True, output, output_bytes=_encoded_size(output),
+            True,
+            output,
+            output_bytes=_encoded_size(output),
             verification_status="protocol_and_schema_validated",
         )
 
@@ -246,7 +303,9 @@ class McpSdkExecutionAdapter:
                 f"unsupported MCP operation: {invocation.operation}"
             )
         return AdapterResult(
-            True, output, output_bytes=_encoded_size(output),
+            True,
+            output,
+            output_bytes=_encoded_size(output),
             verification_status="protocol_and_schema_validated",
         )
 
@@ -290,7 +349,11 @@ def _server_target(package_root: Path) -> tuple[str, str, dict[str, Any]]:
     kind = str(entry.get("kind") or "")
     value = str(entry.get("target") or "")
     configuration = entry.get("configuration") or {}
-    if kind not in {"remote", "process"} or not value or not isinstance(configuration, dict):
+    if (
+        kind not in {"remote", "process"}
+        or not value
+        or not isinstance(configuration, dict)
+    ):
         raise McpSdkExecutionError("normalized MCP server definition is invalid")
     return value, kind, dict(configuration)
 
@@ -318,9 +381,7 @@ def _resolve_addresses(host: str, port: int) -> tuple[str, ...]:
     try:
         records = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except OSError as exc:
-        raise McpTransportSecurityError(
-            f"MCP host resolution failed: {host}"
-        ) from exc
+        raise McpTransportSecurityError(f"MCP host resolution failed: {host}") from exc
     return tuple(dict.fromkeys(record[4][0] for record in records))
 
 
@@ -332,10 +393,17 @@ def _validated_public_addresses(addresses: Iterable[str]) -> tuple[str, ...]:
                 raise ValueError("scoped IPv6 is forbidden")
             address = ipaddress.ip_address(str(raw))
         except ValueError as exc:
-            raise McpTransportSecurityError("MCP resolver returned an invalid IP") from exc
-        if (not address.is_global or address.is_multicast
-                or (isinstance(address, ipaddress.IPv6Address)
-                    and (address.sixtofour is not None or address.teredo is not None))):
+            raise McpTransportSecurityError(
+                "MCP resolver returned an invalid IP"
+            ) from exc
+        if (
+            not address.is_global
+            or address.is_multicast
+            or (
+                isinstance(address, ipaddress.IPv6Address)
+                and (address.sixtofour is not None or address.teredo is not None)
+            )
+        ):
             raise McpTransportSecurityError(
                 f"MCP destination is not a public IP: {address}"
             )
@@ -361,8 +429,14 @@ class _PinnedHttpsTransport(_AsyncTransportBase):
         parsed = urlsplit(target_url)
         if parsed.scheme.lower() != "https" or not parsed.hostname:
             raise McpTransportSecurityError("MCP transport requires an HTTPS origin")
-        if parsed.username is not None or parsed.password is not None or parsed.fragment:
-            raise McpTransportSecurityError("MCP URL credentials and fragments are forbidden")
+        if (
+            parsed.username is not None
+            or parsed.password is not None
+            or parsed.fragment
+        ):
+            raise McpTransportSecurityError(
+                "MCP URL credentials and fragments are forbidden"
+            )
         self._host = parsed.hostname.rstrip(".").lower()
         self._port = parsed.port or 443
         self._origin_path = parsed.path or "/"
@@ -425,7 +499,9 @@ class _PinnedHttpsTransport(_AsyncTransportBase):
                 ) from exc
             if declared_size < 0:
                 await response.aclose()
-                raise McpTransportSecurityError("MCP response has an invalid Content-Length")
+                raise McpTransportSecurityError(
+                    "MCP response has an invalid Content-Length"
+                )
             if declared_size > self._max_response_bytes:
                 await response.aclose()
                 raise McpTransportSecurityError("MCP response exceeds size limit")
@@ -461,7 +537,9 @@ class _LimitedResponseStream(_AsyncStreamBase):
                 async for chunk in self.response.aiter_raw():
                     used += len(chunk)
                     if used > self.limit:
-                        raise McpTransportSecurityError("MCP response exceeds size limit")
+                        raise McpTransportSecurityError(
+                            "MCP response exceeds size limit"
+                        )
                     yield chunk
         finally:
             await self.response.aclose()
@@ -472,7 +550,9 @@ class _LimitedResponseStream(_AsyncStreamBase):
 
 def _tool_result(result: Any) -> dict[str, Any]:
     return {
-        "content": [_model_value(item) for item in (getattr(result, "content", None) or ())],
+        "content": [
+            _model_value(item) for item in (getattr(result, "content", None) or ())
+        ],
         "structured_content": getattr(result, "structured_content", None),
         "is_error": bool(getattr(result, "is_error", False)),
     }
@@ -488,7 +568,7 @@ def _model_value(value: Any) -> Any:
 
 def _encoded_size(value: Any) -> int:
     return len(
-        json.dumps(value, ensure_ascii=False, default=str, separators=(",", ":")).encode(
-            "utf-8"
-        )
+        json.dumps(
+            value, ensure_ascii=False, default=str, separators=(",", ":")
+        ).encode("utf-8")
     )

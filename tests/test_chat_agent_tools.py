@@ -47,10 +47,17 @@ def test_nous_persona_reports_explicit_workspace_effect_authorization(
 def test_mutation_requires_an_explicit_request() -> None:
     assert mutation_is_explicit("请创建 report.txt")
     assert mutation_is_explicit("fix the failing tests")
+    assert mutation_is_explicit(
+        "Find the bug, make the smallest correct change, and run the relevant test."
+    )
+    assert mutation_is_explicit(
+        "Make the smallest correct change. Do not modify unrelated code."
+    )
     assert mutation_is_explicit("请联网搜索最新资料")
     assert mutation_is_explicit("run simulation sim-1")
     assert mutation_is_explicit("渲染文档 doc-1")
     assert not mutation_is_explicit("只读查看代码，不要修改")
+    assert not mutation_is_explicit("Do not modify code.")
     assert not mutation_is_explicit("what files are here?")
     assert not mutation_is_explicit("现在不能联网吗？")
 

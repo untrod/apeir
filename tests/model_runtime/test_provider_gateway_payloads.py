@@ -73,6 +73,23 @@ def test_openai_provider_preserves_batch_embeddings():
     assert parsed["embeddings"] == [[1, 2], [3, 4]]
 
 
+def test_openai_provider_supports_json_object_compatibility_mode():
+    body = OpenAIProvider._request_body(
+        "model.reason",
+        "example-model",
+        {
+            "messages": [{"role": "user", "content": "return json"}],
+            "response_schema": {
+                "type": "object",
+                "properties": {"ready": {"type": "boolean"}},
+            },
+        },
+        structured_output_mode="json_object",
+    )
+
+    assert body["response_format"] == {"type": "json_object"}
+
+
 def test_anthropic_provider_normalizes_tools_messages_and_response():
     system, messages = AnthropicProvider._normalize_messages(
         [

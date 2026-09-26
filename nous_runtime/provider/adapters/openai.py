@@ -40,6 +40,7 @@ class OpenAIProvider(Provider):
         capability_endpoints: dict[str, str] | None = None,
         capability_models: dict[str, str] | None = None,
         max_concurrency: int = 3,
+        structured_output_mode: str = "json_schema",
     ) -> None:
         self.provider_id = provider_id
         self.provider_name = provider_name
@@ -52,6 +53,12 @@ class OpenAIProvider(Provider):
             else bool(authentication_required)
         )
         self.max_concurrency = max(1, min(int(max_concurrency), 8))
+        output_mode = str(structured_output_mode or "json_schema").strip()
+        if output_mode not in {"json_schema", "json_object"}:
+            raise ValueError(
+                "structured_output_mode must be json_schema or json_object"
+            )
+        self.structured_output_mode = output_mode
         self.capabilities = tuple(
             capability for capability in capabilities if capability in _SUPPORTED
         ) or ("model.reason", "model.code")
@@ -72,7 +79,9 @@ class OpenAIProvider(Provider):
                 "error": f"Capability '{capability_id}' is not configured",
                 "error_code": "NOUS_PROVIDER_CAPABILITY_UNAVAILABLE",
             }
-        model = str(params.get("model") or self.model or os.environ.get("NOUS_LLM_MODEL") or "")
+        model = str(
+            params.get("model") or self.model or os.environ.get("NOUS_LLM_MODEL") or ""
+        )
         endpoint = self._endpoint(capability_id)
         if not endpoint or not model:
             return {
@@ -87,7 +96,12 @@ class OpenAIProvider(Provider):
                 "error": "Configured credential reference is unavailable",
                 "error_code": "NOUS_PROVIDER_CREDENTIAL_UNAVAILABLE",
             }
-        body = self._request_body(capability_id, model, params)
+        body = self._request_body(
+            capability_id,
+            model,
+            params,
+            structured_output_mode=self.structured_output_mode,
+        )
         if capability_id in ("model.reason", "model.code", "model.vision"):
             body = self._with_persona(body, params)
         headers = {"Content-Type": "application/json"}
@@ -129,14 +143,21 @@ class OpenAIProvider(Provider):
         if not (self.model or os.environ.get("NOUS_LLM_MODEL")):
             return {"status": "degraded", "error": "Default model is not configured"}
         if self.authentication_required and not self._credential():
-            return {"status": "degraded", "error": "Credential reference is unavailable"}
+            return {
+                "status": "degraded",
+                "error": "Credential reference is unavailable",
+            }
         return {
             "status": "ok",
             "model": self.model or os.environ.get("NOUS_LLM_MODEL", ""),
-            "endpoint_configured": bool(self.endpoint or os.environ.get("NOUS_LLM_API_URL")),
+            "endpoint_configured": bool(
+                self.endpoint or os.environ.get("NOUS_LLM_API_URL")
+            ),
         }
 
-    def _with_persona(self, body: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
+    def _with_persona(
+        self, body: dict[str, Any], params: dict[str, Any]
+    ) -> dict[str, Any]:
         """Inject the Nous Runtime system prompt; degrades to a no-op."""
         try:
             from nous_runtime.persona.system_prompt import apply_persona_openai
@@ -176,9 +197,14 @@ class OpenAIProvider(Provider):
         capability_id: str,
         model: str,
         params: dict[str, Any],
+        *,
+        structured_output_mode: str = "json_schema",
     ) -> dict[str, Any]:
         if capability_id == "model.embed":
-            return {"model": model, "input": params.get("text") or params.get("input") or ""}
+            return {
+                "model": model,
+                "input": params.get("text") or params.get("input") or "",
+            }
         if capability_id == "model.rerank":
             return {
                 "model": model,
@@ -188,12 +214,16 @@ class OpenAIProvider(Provider):
         content: Any = params.get("prompt", "")
         if capability_id == "model.vision" and params.get("image_url"):
             content = [
-                {"type": "text", "text": str(params.get("prompt") or "Describe the image")},
+                {
+                    "type": "text",
+                    "text": str(params.get("prompt") or "Describe the image"),
+                },
                 {"type": "image_url", "image_url": {"url": str(params["image_url"])}},
             ]
         body = {
             "model": model,
-            "messages": params.get("messages") or [{"role": "user", "content": content}],
+            "messages": params.get("messages")
+            or [{"role": "user", "content": content}],
             "max_tokens": int(params.get("max_tokens") or 1024),
         }
         tools = params.get("tools") or ()
@@ -203,13 +233,16 @@ class OpenAIProvider(Provider):
                 body["tool_choice"] = str(params["tool_choice"])
         response_schema = params.get("response_schema") or {}
         if response_schema:
-            body["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "nous_response",
-                    "schema": response_schema,
-                },
-            }
+            if structured_output_mode == "json_object":
+                body["response_format"] = {"type": "json_object"}
+            else:
+                body["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "nous_response",
+                        "schema": response_schema,
+                    },
+                }
         return body
 
     @staticmethod

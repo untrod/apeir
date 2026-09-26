@@ -13,6 +13,9 @@ import platform
 import re
 import shutil
 import sys
+import threading
+import time
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -35,6 +38,10 @@ _TOOL_COMMANDS: dict[str, tuple[tuple[str, ...], ...]] = {
     "openocd": (("openocd", "--version"),),
     "kicad-cli": (("kicad-cli", "--version"),),
 }
+_TOOL_INVENTORY_CACHE_SECONDS = 300.0
+_TOOL_INVENTORY_CACHE: dict[str, dict[str, Any]] | None = None
+_TOOL_INVENTORY_CACHE_AT = 0.0
+_TOOL_INVENTORY_CACHE_LOCK = threading.Lock()
 
 
 def _utc_now() -> str:
@@ -52,15 +59,26 @@ def _normalize_architecture(value: str) -> str:
     return normalized
 
 
-def collect_tool_inventory() -> dict[str, dict[str, Any]]:
+def collect_tool_inventory(*, refresh: bool = False) -> dict[str, dict[str, Any]]:
     """Probe required and optional engineering tools without invoking a shell."""
-    inventory = {
-        "python": _probe_python(),
-        "pip": _probe_pip(),
-    }
-    for name, candidates in _TOOL_COMMANDS.items():
-        inventory[name] = _probe_command(candidates)
-    return inventory
+    global _TOOL_INVENTORY_CACHE, _TOOL_INVENTORY_CACHE_AT
+    now = time.monotonic()
+    with _TOOL_INVENTORY_CACHE_LOCK:
+        if (
+            not refresh
+            and _TOOL_INVENTORY_CACHE is not None
+            and now - _TOOL_INVENTORY_CACHE_AT < _TOOL_INVENTORY_CACHE_SECONDS
+        ):
+            return deepcopy(_TOOL_INVENTORY_CACHE)
+        inventory = {
+            "python": _probe_python(),
+            "pip": _probe_pip(),
+        }
+        for name, candidates in _TOOL_COMMANDS.items():
+            inventory[name] = _probe_command(candidates)
+        _TOOL_INVENTORY_CACHE = deepcopy(inventory)
+        _TOOL_INVENTORY_CACHE_AT = time.monotonic()
+        return inventory
 
 
 def _probe_python() -> dict[str, Any]:
@@ -126,6 +144,8 @@ def _extract_version(value: str) -> str:
 
 def collect_execution_host_inventory(
     resources: dict[str, Any] | None = None,
+    *,
+    refresh_tools: bool = False,
 ) -> dict[str, Any]:
     """Collect a machine-readable inventory of facts about this execution host."""
     resources = dict(resources or {})
@@ -144,8 +164,7 @@ def collect_execution_host_inventory(
             "os_version": resources.get("os_version") or platform.version(),
             "architecture": physical_arch,
             "process_architecture": process_arch,
-            "cpu": platform.processor()
-            or os.environ.get("PROCESSOR_IDENTIFIER", ""),
+            "cpu": platform.processor() or os.environ.get("PROCESSOR_IDENTIFIER", ""),
             "cpu_logical": resources.get("cpu_logical") or os.cpu_count() or 1,
             "memory_total_bytes": resources.get("memory_total_bytes", 0),
             "memory_available_bytes": resources.get("memory_available_bytes", 0),
@@ -153,7 +172,7 @@ def collect_execution_host_inventory(
             "storage_free_bytes": resources.get("disk_free_bytes", 0),
             "network_addresses": list(resources.get("network_addresses") or []),
         },
-        "tools": collect_tool_inventory(),
+        "tools": collect_tool_inventory(refresh=refresh_tools),
         "physical_io": io,
     }
 
@@ -250,7 +269,9 @@ def _probe_windows_usb_devices() -> tuple[list[dict[str, Any]], str]:
                 if not enumerate_device(devices_handle, index, ctypes.byref(device)):
                     if ctypes.get_last_error() == 259:
                         break
-                    raise OSError(ctypes.get_last_error(), "SetupDiEnumDeviceInfo failed")
+                    raise OSError(
+                        ctypes.get_last_error(), "SetupDiEnumDeviceInfo failed"
+                    )
                 index += 1
                 buffer = ctypes.create_unicode_buffer(1024)
                 required = wintypes.DWORD()
@@ -404,7 +425,9 @@ def _parse_tool_requirements(
         match = pattern.fullmatch(item.strip())
         if match is None:
             raise ValueError(f"invalid tool requirement: {item}")
-        parsed.append((match.group(1).lower(), match.group(2) or "", match.group(3) or ""))
+        parsed.append(
+            (match.group(1).lower(), match.group(2) or "", match.group(3) or "")
+        )
     return parsed
 
 

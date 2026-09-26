@@ -81,7 +81,7 @@ class ModelWorkDeliberator:
         tool_capabilities: Sequence[Mapping[str, Any]] = (),
         preferred_model: str = "",
         timeout_s: float = 180.0,
-        max_output_tokens: int = 384,
+        max_output_tokens: int = 1024,
     ) -> None:
         self.facade = facade
         self.tools = tuple(dict(item) for item in tool_specifications)
@@ -95,6 +95,7 @@ class ModelWorkDeliberator:
             "work": _decision_context(context),
             "tool_capability_catalog": list(self.tool_capabilities),
             "available_tools": [self._tool_summary(item) for item in self.tools],
+            "decision_schema": _DECISION_SCHEMA,
         }
         request = GatewayRequest(
             operation=GatewayOperation.STRUCTURED_OUTPUT,
@@ -108,8 +109,11 @@ class ModelWorkDeliberator:
                 {
                     "role": "system",
                     "content": (
-                        "You are the APEIR Work controller. Return one bounded, "
-                        "machine-consumable decision, not hidden reasoning. Use only "
+                        "You are the APEIR Work controller. Return one bounded JSON "
+                        "object that conforms to the supplied decision schema; do not "
+                        "return prose or hidden reasoning. Return only the top-level "
+                        "decision fields defined by decision_schema; do not copy the "
+                        "input work, catalogs, or schema into the response. Use only "
                         "tools listed here or schemas retained in work.loaded_tools "
                         "after catalog_expand. Skill summaries are discovery metadata; "
                         "use skill_load before following a Skill's instructions. Loaded "
@@ -457,10 +461,7 @@ def verify_recorded_work(context: WorkContext) -> dict[str, Any]:
         if item.get("kind") == "tool"
         and item.get("tool")
         not in {"catalog_expand", "skill_list", "skill_search", "skill_load"}
-        and (
-            not loaded_tool_ids
-            or str(item.get("tool") or "") in loaded_tool_ids
-        )
+        and (not loaded_tool_ids or str(item.get("tool") or "") in loaded_tool_ids)
         and int(item.get("plan_revision") or current_revision) == current_revision
     ]
     latest_tool_results: dict[tuple[str, str], dict[str, Any]] = {}

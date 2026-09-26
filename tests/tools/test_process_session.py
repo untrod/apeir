@@ -259,6 +259,9 @@ def test_tool_runtime_reuses_governed_command_allowlist(tmp_path: Path) -> None:
     runtime = ProcessSessionToolRuntime(workspace)
     denied = runtime.execute("shell_start", {"command": [sys.executable, "-c", "pass"]})
     assert denied["ok"] is False
+    assert "python -m pytest/compileall" in denied["error"]
+    assert "python -c" in denied["error"]
+    assert "bounded pytest reproduction" in denied["error"]
     assert "allowlist" in denied["error"]
     names = {item["function"]["name"] for item in runtime.specifications()}
     assert {

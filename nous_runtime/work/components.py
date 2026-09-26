@@ -49,7 +49,7 @@ def build_work_components(
     workspace_tools = WorkspaceToolRuntime(
         str(workspace), allow_mutations=allow_mutations
     )
-    tools.register_runtime(workspace_tools)
+    tools.register_runtime(workspace_tools, excluded_tool_ids={"run_command"})
     if allow_mutations:
         tools.register_runtime(
             ProcessSessionToolRuntime(workspace_tools),
@@ -66,7 +66,9 @@ def build_work_components(
     )
     tools.register_runtime(WebToolRuntime(workspace), provider_id="web-runtime")
 
-    provider_count = load_providers_from_config()
+    provider_count = load_providers_from_config(workspace)
+    if not provider_count:
+        provider_count = load_providers_from_config()
     facade = get_gateway_facade(required=False)
     if facade is None and provider_count:
         gateway_service.configure_from_providers()
@@ -79,7 +81,7 @@ def build_work_components(
         tool_capabilities=tools.categories(),
         preferred_model=str(options.get("preferred_model") or ""),
         timeout_s=float(options.get("model_timeout_s") or 180.0),
-        max_output_tokens=int(options.get("decision_max_output_tokens") or 384),
+        max_output_tokens=int(options.get("decision_max_output_tokens") or 1024),
     )
     return WorkExecutionComponents(
         tools=tools,

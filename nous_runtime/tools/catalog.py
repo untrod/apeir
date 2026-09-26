@@ -49,15 +49,19 @@ class ToolCatalog:
         runtime: Any,
         *,
         provider_id: str = "workspace-runtime",
+        excluded_tool_ids: Iterable[str] = (),
     ) -> None:
         specifications = getattr(runtime, "specifications", None)
         execute = getattr(runtime, "execute", None)
         if not callable(specifications) or not callable(execute):
             raise TypeError("runtime tools require specifications() and execute()")
+        excluded = {str(tool_id) for tool_id in excluded_tool_ids}
         for raw in specifications() or ():
             if not isinstance(raw, Mapping):
                 raise TypeError("runtime tool specification must be an object")
             definition = _runtime_definition(raw, provider_id=provider_id)
+            if definition.tool_id in excluded:
+                continue
             self.register(definition, executor=execute)
 
     def register_extension_tools(

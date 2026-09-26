@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 
+import nous_runtime.node_runtime.execution_host as execution_host
+
 from nous_runtime.node_runtime.execution_host import evaluate_execution_preflight
 
 
@@ -42,6 +44,26 @@ def test_preflight_reports_each_missing_or_incompatible_fact():
         "tool python 3.11.9 does not satisfy >= 3.12",
         "tool cargo missing",
     ]
+
+
+def test_tool_inventory_cache_is_shared_but_refreshable(monkeypatch):
+    calls = []
+
+    def probe(candidates):
+        calls.append(candidates)
+        return {"available": False}
+
+    monkeypatch.setattr(execution_host, "_TOOL_INVENTORY_CACHE", None)
+    monkeypatch.setattr(execution_host, "_TOOL_INVENTORY_CACHE_AT", 0.0)
+    monkeypatch.setattr(execution_host, "_probe_command", probe)
+    monkeypatch.setattr(execution_host, "_probe_pip", lambda: {"available": True})
+
+    first = execution_host.collect_tool_inventory()
+    second = execution_host.collect_tool_inventory()
+    refreshed = execution_host.collect_tool_inventory(refresh=True)
+
+    assert first == second == refreshed
+    assert len(calls) == len(execution_host._TOOL_COMMANDS) * 2
 
 
 def test_execution_host_inventory_is_in_node_status(tmp_path):

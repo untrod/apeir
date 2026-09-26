@@ -59,9 +59,7 @@ def run(
     """Serialize disposable VM sessions and allow the host to finish teardown."""
     global _last_run_finished_at
     with _SANDBOX_RUN_LOCK:
-        remaining = (
-            _last_run_finished_at + _RELAUNCH_GRACE_SECONDS - time.monotonic()
-        )
+        remaining = _last_run_finished_at + _RELAUNCH_GRACE_SECONDS - time.monotonic()
         if remaining > 0:
             time.sleep(remaining)
         try:
@@ -89,7 +87,9 @@ def _run_locked(
         )
 
     if policy.cancel_file and Path(policy.cancel_file).is_file():
-        return WindowsSandboxExecution(exit_code=130, stderr="Execution cancelled before VM startup")
+        return WindowsSandboxExecution(
+            exit_code=130, stderr="Execution cancelled before VM startup"
+        )
 
     task_root = Path(tempfile.mkdtemp(prefix="nous-wsb-"))
     control_root = task_root / "control"
@@ -101,13 +101,32 @@ def _run_locked(
         mappings, translations = _build_mappings(policy, control_root)
         mappings, commits = _stage_mappings(mappings, task_root / "staged", policy)
         mappings.append((output_root, r"C:\NousOutput", False))
+        request_environment = _safe_environment(policy.env)
+        venv_root = _venv_runtime_root(Path(policy.executable).resolve())
+        if venv_root is not None:
+            base_runtime = _venv_base_runtime(venv_root)
+            assert base_runtime is not None
+            base_executable = base_runtime / Path(policy.executable).name
+            if not base_executable.is_file():
+                raise ValueError(
+                    f"virtual environment base executable does not exist: {base_executable}"
+                )
+            request_executable = _translate_path(str(base_executable), translations)
+            python_paths = [r"C:\NousPackages"]
+            workspace_src = Path(policy.working_dir).resolve() / "src"
+            if workspace_src.is_dir():
+                python_paths.insert(0, _translate_path(workspace_src, translations))
+            request_environment["PYTHONPATH"] = ";".join(python_paths)
+            request_environment["APEIR_SANDBOX_PACKAGES"] = r"C:\NousPackages"
+        else:
+            request_executable = _translate_path(policy.executable, translations)
         request = {
-            "executable": _translate_path(policy.executable, translations),
+            "executable": request_executable,
             "arguments": subprocess.list2cmdline(
                 [_translate_argument(item, translations) for item in policy.args]
             ),
             "working_dir": _translate_path(policy.working_dir, translations),
-            "environment": _safe_environment(policy.env),
+            "environment": request_environment,
             "stdin_base64": base64.b64encode(input_bytes or b"").decode("ascii"),
             "timeout_ms": max(1, int(policy.timeout_seconds * 1000)),
             "max_output_bytes": policy.max_output_bytes,
@@ -118,7 +137,9 @@ def _run_locked(
         (control_root / "request.json").write_text(
             json.dumps(request, ensure_ascii=False), encoding="utf-8"
         )
-        (control_root / "launcher.ps1").write_text(_LAUNCHER_SCRIPT, encoding="utf-8-sig")
+        (control_root / "launcher.ps1").write_text(
+            _LAUNCHER_SCRIPT, encoding="utf-8-sig"
+        )
         config_path = task_root / "sandbox.wsb"
         config_path.write_text(
             _configuration_xml(mappings, policy.max_memory_bytes), encoding="utf-8"
@@ -140,14 +161,14 @@ def _run_locked(
         # The guest enforces the workload timeout after its process starts.
         # Keep VM cold-start/teardown latency in a separate host-side budget.
         deadline = (
-            time.monotonic()
-            + policy.timeout_seconds
-            + _HOST_STARTUP_GRACE_SECONDS
+            time.monotonic() + policy.timeout_seconds + _HOST_STARTUP_GRACE_SECONDS
         )
         while time.monotonic() < deadline:
             if policy.cancel_file and Path(policy.cancel_file).is_file():
                 _stop(process)
-                return WindowsSandboxExecution(exit_code=130, stderr="Execution cancelled by host")
+                return WindowsSandboxExecution(
+                    exit_code=130, stderr="Execution cancelled by host"
+                )
             if result_path.is_file():
                 break
             if process.poll() is not None:
@@ -157,8 +178,11 @@ def _run_locked(
             timed_out = time.monotonic() >= deadline
             _stop(process)
             return WindowsSandboxExecution(
-                stderr=("Windows Sandbox execution timed out" if timed_out
-                        else f"Windows Sandbox exited without a result (launcher={process.returncode})"),
+                stderr=(
+                    "Windows Sandbox execution timed out"
+                    if timed_out
+                    else f"Windows Sandbox exited without a result (launcher={process.returncode})"
+                ),
                 timed_out=timed_out,
             )
 
@@ -177,7 +201,9 @@ def _run_locked(
                 stderr=f"Windows Sandbox returned an invalid result: {exc}"
             )
         _stop(process)
-        if int(payload.get("exit_code", -1)) == 0 and not bool(payload.get("timed_out")):
+        if int(payload.get("exit_code", -1)) == 0 and not bool(
+            payload.get("timed_out")
+        ):
             try:
                 _commit_writable_mappings(commits, policy.deny_paths)
             except (OSError, ValueError) as exc:
@@ -196,7 +222,9 @@ def _run_locked(
             stdout=stdout,
             stderr=stderr,
             timed_out=bool(payload.get("timed_out", False)),
-            output_truncated=stdout_cut or stderr_cut or bool(payload.get("output_truncated")),
+            output_truncated=stdout_cut
+            or stderr_cut
+            or bool(payload.get("output_truncated")),
             memory_limit_hit=bool(payload.get("memory_limit_hit", False)),
             peak_memory_bytes=max(0, int(payload.get("peak_memory_bytes", 0))),
         )
@@ -225,8 +253,18 @@ def _safe_environment(values: dict[str, str]) -> dict[str, str]:
     safe = {}
     for key, value in values.items():
         upper = str(key).upper()
-        if upper.startswith(("NOUS_SECRET", "NOUS_TOKEN", "NOUS_KEY", "NOUS_CREDENTIAL",
-                             "APEIR_SECRET", "APEIR_TOKEN", "APEIR_KEY", "APEIR_CREDENTIAL")):
+        if upper.startswith(
+            (
+                "NOUS_SECRET",
+                "NOUS_TOKEN",
+                "NOUS_KEY",
+                "NOUS_CREDENTIAL",
+                "APEIR_SECRET",
+                "APEIR_TOKEN",
+                "APEIR_KEY",
+                "APEIR_CREDENTIAL",
+            )
+        ):
             continue
         if upper in {"LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES"}:
             continue
@@ -237,22 +275,28 @@ def _safe_environment(values: dict[str, str]) -> dict[str, str]:
 def _build_mappings(
     policy: SandboxPolicy, task_root: Path
 ) -> tuple[list[tuple[Path, str, bool]], list[tuple[Path, str]]]:
-    for raw in [str(task_root), policy.working_dir, policy.executable,
-                *policy.read_allowed_paths, *policy.write_allowed_paths]:
+    for raw in [
+        str(task_root),
+        policy.working_dir,
+        policy.executable,
+        *policy.read_allowed_paths,
+        *policy.write_allowed_paths,
+    ]:
         path = Path(os.path.abspath(raw))
         for ancestor in (path, *path.parents):
             info = ancestor.lstat()
             if getattr(info, "st_file_attributes", 0) & 0x400 or ancestor.is_symlink():
-                raise ValueError("reparse points are unsupported in sandbox mapping roots")
-    entries: list[tuple[Path, bool, str | None]] = [(task_root.resolve(), True, "Control")]
+                raise ValueError(
+                    "reparse points are unsupported in sandbox mapping roots"
+                )
+    entries: list[tuple[Path, bool, str | None]] = [
+        (task_root.resolve(), True, "Control")
+    ]
     working_dir = Path(policy.working_dir).resolve()
     if not working_dir.is_dir():
         raise ValueError(f"working directory does not exist: {working_dir}")
     writable_roots = [Path(raw).resolve() for raw in policy.write_allowed_paths]
-    working_readonly = not any(
-        _is_within(working_dir, root)
-        for root in writable_roots
-    )
+    working_readonly = not any(_is_within(working_dir, root) for root in writable_roots)
     entries.append((working_dir, working_readonly, "Workspace"))
 
     executable = Path(policy.executable).resolve()
@@ -260,7 +304,20 @@ def _build_mappings(
         raise ValueError(f"executable does not exist: {executable}")
     system_root = Path(os.environ.get("SystemRoot", r"C:\Windows")).resolve()
     if not _is_within(executable, system_root):
-        entries.append((executable.parent, True, "Runtime"))
+        runtime_root = executable.parent
+        if (
+            runtime_root.name.casefold() == "scripts"
+            and (runtime_root.parent / "pyvenv.cfg").is_file()
+        ):
+            runtime_root = runtime_root.parent
+        base_runtime = _venv_base_runtime(runtime_root)
+        if base_runtime is not None:
+            entries.append((base_runtime, True, "BaseRuntime"))
+            site_packages = runtime_root / "Lib" / "site-packages"
+            if site_packages.is_dir():
+                entries.append((site_packages, True, "Packages"))
+        else:
+            entries.append((runtime_root, True, "Runtime"))
 
     for raw in policy.read_allowed_paths:
         path = Path(raw).resolve()
@@ -339,13 +396,17 @@ def _stage_mappings(
     staging_root: Path,
     policy: SandboxPolicy,
 ) -> tuple[list[tuple[Path, str, bool]], list[tuple[Path, Path, str]]]:
-    """Snapshot every policy mapping except trusted runtime/control folders."""
+    """Snapshot untrusted policy mappings, not trusted runtime/control folders."""
     staged: list[tuple[Path, str, bool]] = []
     commits: list[tuple[Path, Path, str]] = []
     total_files = 0
     total_bytes = 0
     for index, (host, guest, readonly) in enumerate(mappings):
-        if guest in {r"C:\NousControl", r"C:\NousRuntime"}:
+        if guest in {
+            r"C:\NousControl",
+            r"C:\NousBaseRuntime",
+            r"C:\NousPackages",
+        }:
             staged.append((host, guest, readonly))
             continue
         destination = staging_root / f"input-{index}"
@@ -353,21 +414,51 @@ def _stage_mappings(
         _, files, size = source_before
         total_files += files
         total_bytes += size
-        if (total_files > policy.max_staging_files
-                or total_bytes > policy.max_staging_bytes):
+        if (
+            total_files > policy.max_staging_files
+            or total_bytes > policy.max_staging_bytes
+        ):
             raise ValueError("read-only input snapshot exceeds staging limits")
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(host, destination, copy_function=shutil.copy2, ignore=_ignore_host_state)
+        shutil.copytree(
+            host, destination, copy_function=shutil.copy2, ignore=_ignore_host_state
+        )
         staged_digest, staged_files, staged_size = _tree_digest(destination)
         source_after = _tree_digest(host)
         if source_before != source_after or source_before != (
-            staged_digest, staged_files, staged_size
+            staged_digest,
+            staged_files,
+            staged_size,
         ):
             raise ValueError("read-only input changed while its snapshot was created")
         staged.append((destination, guest, readonly))
         if not readonly:
             commits.append((destination, host, source_before[0]))
     return staged, commits
+
+
+def _venv_base_runtime(runtime_root: Path) -> Path | None:
+    config = runtime_root / "pyvenv.cfg"
+    if not config.is_file():
+        return None
+    for line in config.read_text(encoding="utf-8").splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key.strip().casefold() == "home":
+            base_runtime = Path(value.strip()).resolve()
+            if not base_runtime.is_dir():
+                raise ValueError(
+                    f"virtual environment base runtime does not exist: {base_runtime}"
+                )
+            return base_runtime
+    raise ValueError(f"virtual environment has no home entry: {config}")
+
+
+def _venv_runtime_root(executable: Path) -> Path | None:
+    scripts = executable.parent
+    runtime_root = scripts.parent
+    if scripts.name.casefold() == "scripts" and (runtime_root / "pyvenv.cfg").is_file():
+        return runtime_root
+    return None
 
 
 def _commit_writable_mappings(
@@ -378,7 +469,9 @@ def _commit_writable_mappings(
         _validate_mapping_root(host, deny_paths)
         # Reject attempts to create protected metadata through task output.
         for _current, directories, files in os.walk(staged, followlinks=False):
-            if any(name.casefold() in _HOST_STATE_NAMES for name in directories + files):
+            if any(
+                name.casefold() in _HOST_STATE_NAMES for name in directories + files
+            ):
                 raise ValueError("sandbox output contains protected host state")
         current_digest, _, _ = _tree_digest(host)
         if current_digest != expected_digest:
@@ -387,15 +480,22 @@ def _commit_writable_mappings(
         if staged_digest is None:
             raise ValueError("invalid staged output")
         for current, directories, files in os.walk(host, followlinks=False):
-            directories[:] = [name for name in directories if name.casefold() not in _HOST_STATE_NAMES]
+            directories[:] = [
+                name for name in directories if name.casefold() not in _HOST_STATE_NAMES
+            ]
             for name in files:
                 if name.casefold() in _HOST_STATE_NAMES:
                     continue
                 target = staged / Path(current).relative_to(host) / name
                 if not target.is_file():
                     (Path(current) / name).unlink()
-        shutil.copytree(staged, host, dirs_exist_ok=True, copy_function=shutil.copy2,
-                        ignore=_ignore_host_state)
+        shutil.copytree(
+            staged,
+            host,
+            dirs_exist_ok=True,
+            copy_function=shutil.copy2,
+            ignore=_ignore_host_state,
+        )
         _validate_mapping_root(host, deny_paths)
 
 
@@ -405,9 +505,14 @@ def _tree_digest(root: Path) -> tuple[str, int, int]:
     size = 0
     paths = []
     for current, directories, files in os.walk(root, followlinks=False):
-        directories[:] = [name for name in directories if name.casefold() not in _HOST_STATE_NAMES]
-        paths.extend(Path(current) / name for name in directories + files
-                     if name.casefold() not in _HOST_STATE_NAMES)
+        directories[:] = [
+            name for name in directories if name.casefold() not in _HOST_STATE_NAMES
+        ]
+        paths.extend(
+            Path(current) / name
+            for name in directories + files
+            if name.casefold() not in _HOST_STATE_NAMES
+        )
     for path in sorted(paths, key=lambda item: item.relative_to(root).as_posix()):
         relative = path.relative_to(root).as_posix().encode("utf-8")
         info = path.lstat()
@@ -500,11 +605,16 @@ def _stop(process: subprocess.Popen, graceful_seconds: float = 0.0) -> None:
             return
         except subprocess.TimeoutExpired:
             pass
-    taskkill = str(Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/taskkill.exe")
+    taskkill = str(
+        Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/taskkill.exe"
+    )
     subprocess.run(
         [taskkill, "/PID", str(process.pid), "/T", "/F"],
-        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        timeout=10, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=10,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         check=False,
     )
     try:
@@ -514,7 +624,7 @@ def _stop(process: subprocess.Popen, graceful_seconds: float = 0.0) -> None:
         process.wait(timeout=5)
 
 
-_LAUNCHER_SCRIPT = r'''$ErrorActionPreference = "Stop"
+_LAUNCHER_SCRIPT = r"""$ErrorActionPreference = "Stop"
 $control = "C:\NousControl"
 $request = Get-Content -LiteralPath "$control\request.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 $result = [ordered]@{ exit_code = -1; stdout = ""; stderr = ""; timed_out = $false; memory_limit_hit = $false; peak_memory_bytes = 0 }
@@ -697,7 +807,7 @@ Move-Item -LiteralPath $temporary -Destination "C:\NousOutput\result.json" -Forc
 # recursively terminates any descendant that survived the requested timeout.
 [NousJobLimits]::Close($job)
 # The host terminates this exact launcher/client tree after reading the result.
-'''
+"""
 
 
 __all__ = ["WindowsSandboxExecution", "executable_path", "run"]

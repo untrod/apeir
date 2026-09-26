@@ -50,23 +50,23 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
     assert request.response_schema["properties"]["status"]["enum"]
     assert request.metadata["source"] == "work.harness"
     assert request.metadata["temperature"] == 0.1
+    assert "JSON object" in request.messages[0]["content"]
     assert "Do not choose blocked" in request.messages[0]["content"]
     assert "complete and blocked are invalid" in request.messages[0]["content"]
-    assert "Never call coding, reasoning, or evaluation as tools" in (
-        request.messages[0]["content"]
+    assert (
+        "Never call coding, reasoning, or evaluation as tools"
+        in (request.messages[0]["content"])
     )
     assert request.timeout_s == 180.0
-    assert request.budget.max_tokens == 384
+    assert request.budget.max_tokens == 1024
     payload = json.loads(request.messages[1]["content"])
+    assert payload["decision_schema"] == request.response_schema
     assert payload["tool_capability_catalog"][0]["category"] == "files"
     assert payload["tool_capability_catalog"][0]["authority"] == "none"
     assert payload["work"]["conversation"] == {}
     assert "created_at" not in payload["work"]["goal"]
     assert payload["work"]["plan"]["tasks"]
-    assert all(
-        "capability_id" not in task
-        for task in payload["work"]["plan"]["tasks"]
-    )
+    assert all("capability_id" not in task for task in payload["work"]["plan"]["tasks"])
     assert all(
         "objective" not in event["payload"]
         and "plan" not in event["payload"]
@@ -88,9 +88,7 @@ def test_model_deliberator_bounds_event_history_and_failure_text(tmp_path):
                 payload={"reason": f"failure-{index}-" + ("x" * 600)},
             )
         )
-    facade = StubFacade(
-        {"status": "blocked", "summary": "done", "confidence": "high"}
-    )
+    facade = StubFacade({"status": "blocked", "summary": "done", "confidence": "high"})
 
     ModelWorkDeliberator(facade)(harness.context_for(snapshot))
 
@@ -122,9 +120,7 @@ def test_model_deliberator_deduplicates_catalog_observation_schemas(tmp_path):
             "result": {"ok": True, "category": "files", "tools": [tool]},
         }
     )
-    facade = StubFacade(
-        {"status": "blocked", "summary": "done", "confidence": "high"}
-    )
+    facade = StubFacade({"status": "blocked", "summary": "done", "confidence": "high"})
 
     ModelWorkDeliberator(facade)(harness.context_for(snapshot))
 
@@ -156,9 +152,7 @@ def test_model_deliberator_compacts_workspace_listing_and_verification_history(
             {"kind": "verification", "ok": False, "result": {"error": "new"}},
         )
     )
-    facade = StubFacade(
-        {"status": "blocked", "summary": "done", "confidence": "high"}
-    )
+    facade = StubFacade({"status": "blocked", "summary": "done", "confidence": "high"})
 
     ModelWorkDeliberator(facade)(harness.context_for(snapshot))
 
@@ -166,7 +160,9 @@ def test_model_deliberator_compacts_workspace_listing_and_verification_history(
         "recent_observations"
     ]
     assert [item["kind"] for item in observations].count("verification") == 1
-    listing = next(item for item in observations if item.get("tool") == "list_workspace")
+    listing = next(
+        item for item in observations if item.get("tool") == "list_workspace"
+    )
     assert listing["result"]["paths"] == ["src/example.py"]
     assert "entries" not in listing["result"]
 
@@ -220,16 +216,16 @@ def test_model_deliberator_keeps_only_latest_read_content_and_safe_searches(tmp_
             },
         )
     )
-    facade = StubFacade(
-        {"status": "blocked", "summary": "done", "confidence": "high"}
-    )
+    facade = StubFacade({"status": "blocked", "summary": "done", "confidence": "high"})
 
     ModelWorkDeliberator(facade)(harness.context_for(snapshot))
 
     observations = json.loads(facade.requests[0].messages[1]["content"])["work"][
         "recent_observations"
     ]
-    search = next(item for item in observations if item.get("tool") == "search_workspace")
+    search = next(
+        item for item in observations if item.get("tool") == "search_workspace"
+    )
     assert [match["path"] for match in search["result"]["matches"]] == [
         "src/example.py"
     ]

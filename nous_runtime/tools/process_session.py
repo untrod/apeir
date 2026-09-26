@@ -623,7 +623,15 @@ class ProcessSessionToolRuntime:
         return (
             self._tool(
                 "shell_start",
-                "Start a governed persistent development process and return its session id.",
+                (
+                    "Start a governed persistent development process and return its session "
+                    "id. Commands are argv arrays and must use the development allowlist: "
+                    "git status/diff/log/show, pytest, ruff, python -m pytest/compileall, "
+                    "npm test or npm run test/lint/typecheck/build, and cargo "
+                    "test/check/clippy/fmt. Inline interpreters such as python -c and shell "
+                    "operators are intentionally forbidden. For a Python reproduction, "
+                    "write a bounded pytest test and run it with python -m pytest."
+                ),
                 {
                     "command": {
                         "oneOf": [

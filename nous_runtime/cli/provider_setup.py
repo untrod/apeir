@@ -43,6 +43,7 @@ SERVICE_PRESETS: dict[str, dict[str, Any]] = {
         "fallback_models": ("deepseek-chat", "deepseek-reasoner"),
         "env_key": "DEEPSEEK_API_KEY",
         "protocol": "openai",
+        "structured_output_mode": "json_object",
         "capabilities": ("Reasoning", "Coding"),
     },
     "claude": {
@@ -192,9 +193,7 @@ def _run_provider_setup(*, quick: bool = False) -> str:
     print("\nProvider Wizard\n")
     print("Choose a service\n")
     services = (
-        ("openai", "deepseek", "claude", "ollama")
-        if quick
-        else tuple(SERVICE_PRESETS)
+        ("openai", "deepseek", "claude", "ollama") if quick else tuple(SERVICE_PRESETS)
     )
     for index, service_key in enumerate(services, 1):
         if not quick and index == 9:
@@ -290,7 +289,9 @@ def _setup_service(service: str, *, quick: bool = False) -> str:
             "model": model,
             "context_window": "Not declared",
             "capability_mapping": list(capabilities),
-            "executable_capabilities": list(executable_capabilities(kind, capabilities)),
+            "executable_capabilities": list(
+                executable_capabilities(kind, capabilities)
+            ),
             "credential_scope": _credential_scope(credential_ref),
         }
     )
@@ -377,9 +378,11 @@ def _configure_quick_credential(default_env: str, provider_id: str) -> str | Non
 
 
 def _configure_session_credential(provider_id: str) -> str:
-    env_name = "NOUS_SESSION_PROVIDER_" + "".join(
-        char if char.isalnum() else "_" for char in provider_id.upper()
-    ) + "_KEY"
+    env_name = (
+        "NOUS_SESSION_PROVIDER_"
+        + "".join(char if char.isalnum() else "_" for char in provider_id.upper())
+        + "_KEY"
+    )
     value = _prompt_secret("API key")
     if value:
         os.environ[env_name] = value
@@ -498,7 +501,9 @@ def build_provider_config(
     """Build a validated, secret-free Provider configuration."""
     provider_id = provider_id.strip()
     if not _valid_provider_id(provider_id):
-        raise ValueError("provider_id may contain letters, numbers, '.', '_', and '-' only")
+        raise ValueError(
+            "provider_id may contain letters, numbers, '.', '_', and '-' only"
+        )
 
     reference = str(credential_ref or "").strip()
     if reference.startswith("env:"):
@@ -535,6 +540,9 @@ def build_provider_config(
         "capability_mapping": list(configured),
         "executable_capabilities": list(executable_capabilities(kind, configured)),
         "credential_scope": _credential_scope(reference),
+        "structured_output_mode": str(
+            preset.get("structured_output_mode") or "json_schema"
+        ),
     }
     if preset.get("credential_header"):
         config["credential_header"] = preset["credential_header"]
@@ -565,6 +573,7 @@ def validate_provider_from_config(
     )
     return probe_provider_config(provider_id, config, "test")
 
+
 def _save_provider_config(provider_id: str, config: dict[str, Any]) -> None:
     """Persist only non-secret Provider configuration."""
     from nous_runtime.project.workspace import find_workspace, init_workspace
@@ -593,7 +602,7 @@ def _save_provider_config(provider_id: str, config: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
-def load_providers_from_config() -> int:
+def load_providers_from_config(workspace: str | Path | None = None) -> int:
     """Register saved Providers while resolving credentials only at invocation."""
     from nous_runtime.runtime.no_intelligence import no_intelligence_enabled
 
@@ -605,7 +614,7 @@ def load_providers_from_config() -> int:
     from nous_runtime.cli.provider_experience import read_provider_configs
 
     count = 0
-    for provider_id, config in read_provider_configs().items():
+    for provider_id, config in read_provider_configs(workspace).items():
         try:
             _register_provider_runtime(provider_id, config=config)
         except (TypeError, ValueError):
@@ -635,9 +644,11 @@ def _register_provider_runtime(
     reference = str(values.get("credential_ref") or "")
     if not reference and values.get("api_key_env"):
         reference = f"env:{values['api_key_env']}"
-    configured = values.get("executable_capabilities") or values.get(
-        "capability_mapping"
-    ) or ("model.reason", "model.code")
+    configured = (
+        values.get("executable_capabilities")
+        or values.get("capability_mapping")
+        or ("model.reason", "model.code")
+    )
     capabilities = executable_capabilities(kind, configured)
     if kind == "anthropic-compatible":
         from nous_runtime.provider.adapters.anthropic import AnthropicProvider
@@ -665,6 +676,9 @@ def _register_provider_runtime(
             capability_endpoints=dict(values.get("capability_endpoints") or {}),
             capability_models=dict(values.get("capability_models") or {}),
             max_concurrency=int(values.get("max_concurrency") or 3),
+            structured_output_mode=str(
+                values.get("structured_output_mode") or "json_schema"
+            ),
         )
     register_adapter(provider)
 

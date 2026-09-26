@@ -51,6 +51,10 @@ class LocalOpenAIProvider(RemoteProvider):
     authentication_required = False
 
 
+class JsonObjectRemoteProvider(RemoteProvider):
+    structured_output_mode = "json_object"
+
+
 class FakeKernelClient:
     def __init__(
         self,
@@ -75,7 +79,9 @@ class FakeKernelClient:
                     "finish_reason": "stop",
                     "metadata": {
                         "backend": "openai-compatible",
-                        "tool_calls": self.tool_calls if self.metadata_tool_calls else [],
+                        "tool_calls": self.tool_calls
+                        if self.metadata_tool_calls
+                        else [],
                     },
                 }
             ),
@@ -198,6 +204,40 @@ def test_kernel_operation_uses_the_routed_provider_model(monkeypatch) -> None:
     assert client.operation["model"] == "deepseek-reasoner"
 
 
+def test_kernel_operation_uses_provider_structured_output_mode(monkeypatch) -> None:
+    monkeypatch.setenv("NOUS_KERNEL_ENDPOINT", "tcp://127.0.0.1:8771")
+    gateway = build_gateway_from_providers([JsonObjectRemoteProvider()])
+    client = FakeKernelClient()
+
+    async def available() -> bool:
+        return True
+
+    async def new_client():
+        return client
+
+    gateway._ensure_nki_available = available
+    gateway._new_nki_client = new_client
+
+    asyncio.run(
+        gateway.invoke(
+            ModelRequest(
+                task_id="json-object-task",
+                messages=({"role": "user", "content": "return json"},),
+                metadata={
+                    "response_schema": {
+                        "type": "object",
+                        "properties": {"ready": {"type": "boolean"}},
+                    }
+                },
+            )
+        )
+    )
+
+    assert client.operation is not None
+    model_input = json.loads(client.operation["input"])
+    assert model_input["response_format"] == {"type": "json_object"}
+
+
 def test_kernel_402_stops_same_provider_model_retries(monkeypatch) -> None:
     monkeypatch.setenv("NOUS_KERNEL_ENDPOINT", "tcp://127.0.0.1:8771")
     gateway = build_gateway_from_providers([MultiModelRemoteProvider()])
@@ -225,9 +265,9 @@ def test_kernel_402_stops_same_provider_model_retries(monkeypatch) -> None:
     assert getattr(caught.value, "http_status", None) == 402
     assert getattr(caught.value, "retryable", None) is False
     assert client.calls == 1
-    assert {
-        record.health.get("category") for record in gateway.registry.list()
-    } == {"budget_exceeded"}
+    assert {record.health.get("category") for record in gateway.registry.list()} == {
+        "budget_exceeded"
+    }
 
 
 def test_kernel_execution_preserves_provider_tool_calls(monkeypatch) -> None:
@@ -318,10 +358,12 @@ def test_ollama_openai_endpoint_uses_edge_backend() -> None:
 def test_loopback_openai_provider_can_explicitly_disable_authentication() -> None:
     gateway = build_gateway_from_providers([LocalOpenAIProvider()])
     provider = LocalOpenAIProvider()
-    assert gateway._kernel_credential_reference(provider, "edge-openai-compatible") == ""
-    assert gateway._kernel_credential_reference(RemoteProvider(), "openai-compatible") == (
-        "DEEPSEEK_API_KEY"
+    assert (
+        gateway._kernel_credential_reference(provider, "edge-openai-compatible") == ""
     )
+    assert gateway._kernel_credential_reference(
+        RemoteProvider(), "openai-compatible"
+    ) == ("DEEPSEEK_API_KEY")
 
 
 def test_strict_kernel_gateway_refuses_direct_fallback(monkeypatch) -> None:

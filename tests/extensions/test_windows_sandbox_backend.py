@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import threading
 import time
@@ -46,10 +47,102 @@ def test_windows_sandbox_maps_only_explicit_roots(tmp_path: Path):
         workspace.resolve(),
         runtime.resolve(),
     }
-    assert next(readonly for path, _, readonly in mappings if path == workspace) is False
+    assert (
+        next(readonly for path, _, readonly in mappings if path == workspace) is False
+    )
     assert _translate_argument(str(workspace / "out.txt"), translations).startswith(
         r"C:\NousWorkspace"
     )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows path semantics")
+def test_windows_sandbox_maps_virtual_environment_root(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    runtime = tmp_path / "venv"
+    base_runtime = tmp_path / "base-python"
+    scripts = runtime / "Scripts"
+    site_packages = runtime / "Lib" / "site-packages"
+    control = tmp_path / "control"
+    workspace.mkdir()
+    base_runtime.mkdir()
+    scripts.mkdir(parents=True)
+    site_packages.mkdir(parents=True)
+    control.mkdir()
+    config = runtime / "pyvenv.cfg"
+    config.write_text(f"home = {base_runtime}\n", encoding="utf-8")
+    executable = scripts / "python.exe"
+    executable.write_bytes(b"fixture")
+    policy = SandboxPolicy(
+        executable=str(executable),
+        working_dir=str(workspace),
+        write_allowed_paths=[str(workspace)],
+        network_allowed=False,
+    )
+
+    mappings, translations = _build_mappings(policy, control)
+
+    assert all(item[0] != runtime.resolve() for item in mappings)
+    base_mapping = next(item for item in mappings if item[1] == r"C:\NousBaseRuntime")
+    assert base_mapping == (base_runtime.resolve(), r"C:\NousBaseRuntime", True)
+    package_mapping = next(item for item in mappings if item[1] == r"C:\NousPackages")
+    assert package_mapping == (site_packages.resolve(), r"C:\NousPackages", True)
+    assert all(host != runtime.resolve() for host, _guest in translations)
+
+    staged, _ = _stage_mappings(mappings, tmp_path / "staged", policy)
+    mapped_packages = next(
+        path for path, guest, _ in staged if guest == r"C:\NousPackages"
+    )
+    assert mapped_packages == site_packages.resolve()
+    assert config.read_text(encoding="utf-8") == f"home = {base_runtime}\n"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows path semantics")
+def test_windows_sandbox_adds_src_layout_to_pythonpath(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = tmp_path / "workspace"
+    (workspace / "src").mkdir(parents=True)
+    runtime = tmp_path / "venv"
+    base_runtime = tmp_path / "base-python"
+    scripts = runtime / "Scripts"
+    site_packages = runtime / "Lib" / "site-packages"
+    base_runtime.mkdir()
+    scripts.mkdir(parents=True)
+    site_packages.mkdir(parents=True)
+    (runtime / "pyvenv.cfg").write_text(f"home = {base_runtime}\n", encoding="utf-8")
+    executable = scripts / "python.exe"
+    executable.write_bytes(b"fixture")
+    (base_runtime / "python.exe").write_bytes(b"fixture")
+    policy = SandboxPolicy(
+        executable=str(executable),
+        args=["-m", "pytest"],
+        working_dir=str(workspace),
+        write_allowed_paths=[str(workspace)],
+        network_allowed=False,
+    )
+    captured: dict[str, object] = {}
+
+    def fake_popen(*_args, **_kwargs):
+        request = json.loads(
+            (tmp_path / "task" / "control" / "request.json").read_text()
+        )
+        captured.update(request)
+        raise OSError("capture after request creation")
+
+    def fake_mkdtemp(**_kwargs):
+        task = tmp_path / "task"
+        task.mkdir()
+        return str(task)
+
+    monkeypatch.setattr(windows_sandbox.tempfile, "mkdtemp", fake_mkdtemp)
+    monkeypatch.setattr(windows_sandbox.subprocess, "Popen", fake_popen)
+    result = windows_sandbox.run(policy)
+
+    assert "capture after request creation" in result.stderr
+    assert captured["environment"]["PYTHONPATH"] == (
+        r"C:\NousWorkspace\src;C:\NousPackages"
+    )
+    assert captured["environment"]["APEIR_SANDBOX_PACKAGES"] == (r"C:\NousPackages")
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows path semantics")
@@ -126,7 +219,9 @@ def test_security_report_labels_ready_windows_vm_strong(monkeypatch):
     assert "job_process_limit" in report["enforced_controls"]
     assert report["unenforced_controls"] == ()
     assert "host_os_and_local_user_trusted" in report["trust_assumptions"]
-    assert "business_result_requires_independent_verifier" in report["trust_assumptions"]
+    assert (
+        "business_result_requires_independent_verifier" in report["trust_assumptions"]
+    )
     assert "result_verification_label" in report["enforced_controls"]
     assert "network_disabled" in report["enforced_controls"]
 
@@ -237,7 +332,9 @@ def test_writable_mapping_is_staged_and_guarded_commit(tmp_path):
         (workspace.resolve(), r"C:\NousWorkspace", False),
     ]
     staged, commits = _stage_mappings(mappings, staged_root, policy)
-    staged_workspace = next(root for root, guest, _ in staged if guest == r"C:\NousWorkspace")
+    staged_workspace = next(
+        root for root, guest, _ in staged if guest == r"C:\NousWorkspace"
+    )
     staged_workspace.joinpath("after.txt").write_text("after", encoding="utf-8")
     _commit_writable_mappings(commits, [])
     assert (workspace / "after.txt").read_text(encoding="utf-8") == "after"

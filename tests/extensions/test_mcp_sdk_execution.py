@@ -41,11 +41,7 @@ from nous_runtime.kernel.sandbox import SandboxResult as ProcessSandboxResult
 def make_config(path: Path) -> None:
     path.write_text(
         json.dumps(
-            {
-                "mcpServers": {
-                    "fixture": {"url": "https://mcp.example.test/mcp"}
-                }
-            }
+            {"mcpServers": {"fixture": {"url": "https://mcp.example.test/mcp"}}}
         ),
         encoding="utf-8",
     )
@@ -55,9 +51,7 @@ def make_process_config(path: Path, *, with_credentials: bool = False) -> None:
     server = {"command": sys.executable, "args": ["-m", "fixture_server"]}
     if with_credentials:
         server["env"] = {"API_TOKEN": "env:API_TOKEN"}
-    path.write_text(
-        json.dumps({"mcpServers": {"fixture": server}}), encoding="utf-8"
-    )
+    path.write_text(json.dumps({"mcpServers": {"fixture": server}}), encoding="utf-8")
 
 
 def decision(request, grants=(), receipt="mcp-admission"):
@@ -72,8 +66,7 @@ def decision(request, grants=(), receipt="mcp-admission"):
         "approval_required": len(grants) != len(requested),
         "executor_constraints": {"executor": request["executor"]},
         "scope_constraints": {
-            item["capability"]: item["scope"]
-            for item in request["capability_requests"]
+            item["capability"]: item["scope"] for item in request["capability_requests"]
         },
         "policy_version": "fixture",
         "decision_reason": "fixture",
@@ -314,9 +307,13 @@ def test_remote_transport_rejects_path_escape():
             inner=httpx2.MockTransport(lambda request: httpx2.Response(200)),
         )
         async with httpx2.AsyncClient(transport=transport) as client:
-            with pytest.raises(McpTransportSecurityError, match="authorized HTTPS origin"):
+            with pytest.raises(
+                McpTransportSecurityError, match="authorized HTTPS origin"
+            ):
                 await client.get("https://mcp.example.test/admin")
-            with pytest.raises(McpTransportSecurityError, match="authorized HTTPS origin"):
+            with pytest.raises(
+                McpTransportSecurityError, match="authorized HTTPS origin"
+            ):
                 await client.get("https://mcp.example.test/mcp-evil")
 
     asyncio.run(run())
@@ -377,10 +374,14 @@ def test_stdio_bridge_runs_only_through_strong_policy_without_permit_egress(
     assert policy.require_strong_isolation is True
     assert policy.network_allowed is False
     assert policy.write_allowed_paths == []
-    assert policy.args[0] == "-I"
-    assert Path(policy.args[1]).name == "mcp_stdio_bridge.py"
-    assert Path(policy.args[2]).samefile(sys.executable)
-    assert policy.args[3:] == ["-m", "fixture_server"]
+    assert policy.args[:3] == ["-I", "-S", "-c"]
+    assert policy.args[4] == "path"
+    assert Path(policy.args[5]).name == "mcp_stdio_bridge.py"
+    assert Path(policy.args[6]).samefile(
+        Path(sys.base_prefix) / Path(sys.executable).name
+    )
+    assert policy.args[7:10] == ["-I", "-S", "-c"]
+    assert policy.args[11:] == ["module", "fixture_server"]
 
 
 def test_stdio_credentials_fail_closed_without_local_provider(tmp_path: Path):
@@ -413,7 +414,9 @@ def test_stdio_credentials_fail_closed_without_local_provider(tmp_path: Path):
     assert result.error_code == "MCP_CREDENTIALS_UNAVAILABLE"
 
 
-def test_full_official_streamable_http_protocol_through_pinned_transport(tmp_path: Path):
+def test_full_official_streamable_http_protocol_through_pinned_transport(
+    tmp_path: Path,
+):
     server = MCPServer("Nous pinned remote MCP fixture")
 
     @server.tool()
@@ -460,17 +463,13 @@ def test_full_official_streamable_http_protocol_through_pinned_transport(tmp_pat
                 invocation("tools/list", {}), permit_id="local-only-permit"
             )
             assert listed.success, listed.error_code
-            assert [tool["name"] for tool in listed.output["tools"]] == [
-                "remote_echo"
-            ]
+            assert [tool["name"] for tool in listed.output["tools"]] == ["remote_echo"]
             called = await adapter.execute(
                 invocation("tools/call:remote_echo", {"value": "固定地址 HTTPS"}),
                 permit_id="local-only-permit",
             )
             assert called.success, called.error_code
-            assert called.output["structured_content"] == {
-                "echo": "固定地址 HTTPS"
-            }
+            assert called.output["structured_content"] == {"echo": "固定地址 HTTPS"}
             assert called.verification_status == "protocol_and_schema_validated"
 
     asyncio.run(scenario())

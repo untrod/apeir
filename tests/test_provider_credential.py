@@ -205,6 +205,7 @@ def test_provider_status_command(monkeypatch, tmp_path):
 
 # DeepSeek credential reference regression tests
 
+
 def test_deepseek_credential_available_when_env_set(monkeypatch):
     """DeepSeek env:NOUS_SESSION_PROVIDER_DEEPSEEK_KEY → Available."""
     monkeypatch.setenv("NOUS_SESSION_PROVIDER_DEEPSEEK_KEY", "deepseek-session-key")
@@ -355,11 +356,14 @@ def test_register_provider_from_config_persists_reference_only(tmp_path, monkeyp
     saved = payload["deepseek"]
     assert saved["credential_ref"] == "env:DEEPSEEK_API_KEY"
     assert saved["api_key_env"] == "DEEPSEEK_API_KEY"
+    assert saved["structured_output_mode"] == "json_object"
     assert "api_key" not in saved
     assert registered[0][0] == "deepseek"
 
 
-def test_register_provider_from_config_rejects_secret_as_env_name(tmp_path, monkeypatch):
+def test_register_provider_from_config_rejects_secret_as_env_name(
+    tmp_path, monkeypatch
+):
     import pytest
     from nous_runtime.cli.provider_setup import register_provider_from_config
 
