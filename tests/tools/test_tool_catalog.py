@@ -210,16 +210,25 @@ def test_catalog_expansion_cannot_complete_a_plan_step(tmp_path):
 def test_work_loop_rejects_undisclosed_catalog_tool(tmp_path):
     runtime = StubRuntime()
     catalog = ToolCatalog()
-    catalog.register_runtime(runtime)
+    catalog.register(
+        ToolDefinition(
+            tool_id="custom_action",
+            description="Run one custom action",
+            input_schema={"type": "object"},
+            category="other",
+            effect_class="read",
+        ),
+        executor=runtime.execute,
+    )
     harness = WorkHarness(tmp_path)
-    created = harness.create("Inspect a file")
+    created = harness.create("Inspect one custom value")
     decisions = iter(
         (
             WorkDecision(
                 DecisionStatus.CONTINUE,
                 "Attempt an undisclosed tool",
-                tool_name="read_file",
-                tool_arguments={"path": "README.md"},
+                tool_name="custom_action",
+                tool_arguments={"key": "value"},
             ),
             WorkDecision(DecisionStatus.BLOCKED, "Stop after disclosure check"),
         )
@@ -231,8 +240,11 @@ def test_work_loop_rejects_undisclosed_catalog_tool(tmp_path):
         tools=catalog,
     )
 
-    assert blocked.observations[0]["ok"] is False
-    assert "catalog_expand" in blocked.observations[0]["result"]["error"]
+    rejected = next(
+        item for item in blocked.observations if item.get("tool") == "custom_action"
+    )
+    assert rejected["ok"] is False
+    assert "catalog_expand" in rejected["result"]["error"]
     assert runtime.calls == []
 
 

@@ -196,6 +196,9 @@ def test_work_records_web_evidence_artifact_after_progressive_disclosure(
         tools=tools,
     )
 
-    digest = blocked.observations[1]["result"]["evidence_ref"]["digest"]
+    search_observation = next(
+        item for item in blocked.observations if item.get("tool") == "web_search"
+    )
+    digest = search_observation["result"]["evidence_ref"]["digest"]
     assert blocked.artifacts == [digest]
     assert WorkHarness(tmp_path).require(created.run_id).artifacts == [digest]
