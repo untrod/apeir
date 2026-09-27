@@ -53,6 +53,9 @@ class AgentLoop:
             tools=tools,
             max_iterations=maximum,
         )
+        snapshot = self._prepare_governed_context(snapshot, tools, agent_run_id)
+        if snapshot.terminal:
+            return snapshot
 
         for iteration in range(1, maximum + 1):
             snapshot = self.harness.refresh(snapshot)
@@ -407,6 +410,96 @@ class AgentLoop:
             snapshot,
             "work.blocked",
             {"reason": snapshot.reanalysis_reason, "max_iterations": maximum},
+        )
+
+    def _prepare_governed_context(
+        self,
+        snapshot: WorkSnapshot,
+        tools: Any,
+        agent_run_id: str,
+    ) -> WorkSnapshot:
+        """Load deterministic, read-only prerequisites without model calls.
+
+        Catalog discovery and a recommended Skill are controller prerequisites, not
+        reasoning decisions. They still travel through AgentRuntime, create normal
+        observations, and are checkpointed; only the provider round trip is removed.
+        """
+
+        known = self.harness._tool_names(tools)
+        if "catalog_expand" not in known:
+            return snapshot
+
+        categories: list[str] = []
+        if snapshot.analysis.needs_workspace:
+            categories.append("files")
+        if snapshot.analysis.task_type == "coding":
+            categories.append("shell")
+        if snapshot.analysis.needs_web:
+            categories.append("web")
+
+        for category in categories:
+            if self._category_is_loaded(snapshot, category):
+                continue
+            self._execute_tool(
+                snapshot,
+                WorkDecision(
+                    status=DecisionStatus.CONTINUE,
+                    summary=f"Prepare governed {category} tools",
+                    next_action=f"Load the {category} tool catalog",
+                    confidence="high",
+                    tool_name="catalog_expand",
+                    tool_arguments={"category": category},
+                ),
+                tools,
+                agent_run_id,
+            )
+            self.harness.checkpoint_agent(snapshot, resume=True)
+
+        candidates = tuple(
+            str(item)
+            for item in snapshot.analysis.candidate_skills
+            if str(item) and str(item) not in snapshot.loaded_skills
+        )
+        if not candidates or "skill_load" not in known:
+            return snapshot
+        if not self._category_is_loaded(snapshot, "skill"):
+            self._execute_tool(
+                snapshot,
+                WorkDecision(
+                    status=DecisionStatus.CONTINUE,
+                    summary="Prepare governed Skill discovery",
+                    next_action="Load the Skill catalog",
+                    confidence="high",
+                    tool_name="catalog_expand",
+                    tool_arguments={"category": "skill"},
+                ),
+                tools,
+                agent_run_id,
+            )
+            self.harness.checkpoint_agent(snapshot, resume=True)
+        if "skill_load" not in snapshot.loaded_tools:
+            return snapshot
+        self._execute_tool(
+            snapshot,
+            WorkDecision(
+                status=DecisionStatus.CONTINUE,
+                summary="Load the recommended Skill",
+                next_action=f"Load Skill {candidates[0]}",
+                confidence="high",
+                tool_name="skill_load",
+                tool_arguments={"skill_id": candidates[0]},
+            ),
+            tools,
+            agent_run_id,
+        )
+        self.harness.checkpoint_agent(snapshot, resume=True)
+        return snapshot
+
+    @staticmethod
+    def _category_is_loaded(snapshot: WorkSnapshot, category: str) -> bool:
+        return any(
+            str(item.get("category") or "") == category
+            for item in snapshot.loaded_tools.values()
         )
 
     @staticmethod

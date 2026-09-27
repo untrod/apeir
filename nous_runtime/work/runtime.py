@@ -525,7 +525,7 @@ class WorkHarness:
             plan=snapshot.plan.to_dict() if snapshot.plan else None,
             workspace=workspace,
             conversation=conversation,
-            recent_observations=tuple(snapshot.observations[-12:]),
+            recent_observations=tuple(snapshot.observations[-50:]),
             recent_events=tuple(event.to_dict() for event in events),
             loaded_tools=tuple(snapshot.loaded_tools.values()),
             loaded_skills=tuple(snapshot.loaded_skills.values()),
@@ -565,11 +565,11 @@ class WorkHarness:
             budget=AgentBudget(
                 max_tokens=2_000_000,
                 max_runtime_ms=24 * 60 * 60 * 1000,
-                max_invocations=max_iterations * 3,
-                max_tool_invocations=max_iterations,
+                max_invocations=max_iterations * 3 + 8,
+                max_tool_invocations=max_iterations + 8,
                 max_model_invocations=max_iterations * 2,
-                max_checkpoints=max_iterations * 2,
-                max_steps=max_iterations * 3,
+                max_checkpoints=max_iterations * 2 + 8,
+                max_steps=max_iterations * 3 + 8,
             ),
         )
         return AgentProfile(manifest=manifest, state=AgentState.READY)

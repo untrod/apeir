@@ -41,3 +41,13 @@ def test_analyzer_recognizes_visual_model_training_as_complex() -> None:
     assert analysis.task_type == "computer_vision"
     assert analysis.complexity == "high"
     assert analysis.required_capabilities == ("vision", "gpu", "python", "dataset")
+
+
+def test_analyzer_treats_explicit_http_url_as_web_evidence() -> None:
+    analysis = analyze_task(
+        "Fix the code described by https://github.com/example/project/issues/42"
+    )
+
+    assert analysis.task_type == "coding"
+    assert analysis.needs_workspace is True
+    assert analysis.needs_web is True

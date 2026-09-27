@@ -48,6 +48,8 @@ _RULES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ),
 )
 
+_PUBLIC_URL = re.compile(r"https?://[^\s<>()]+", re.IGNORECASE)
+
 
 class TaskAnalyzer:
     """Classify tasks using stable keyword and size rules."""
@@ -108,9 +110,21 @@ class TaskAnalyzer:
             "烧录",
             "远程",
         )
-        needs_web = task_type == "research" or any(
-            item in lowered
-            for item in ("latest", "current", "web", "online", "最新", "联网", "网页")
+        needs_web = (
+            task_type == "research"
+            or _PUBLIC_URL.search(text) is not None
+            or any(
+                item in lowered
+                for item in (
+                    "latest",
+                    "current",
+                    "web",
+                    "online",
+                    "最新",
+                    "联网",
+                    "网页",
+                )
+            )
         )
         needs_workspace = task_type in {"coding", "computer_vision"} or any(
             item in lowered

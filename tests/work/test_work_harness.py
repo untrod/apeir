@@ -436,6 +436,7 @@ def test_tool_work_requires_safe_discovery_before_terminal_decision(tmp_path):
 
     assert tools.calls == [
         ("catalog_expand", {"category": "files"}),
+        ("catalog_expand", {"category": "shell"}),
         ("list_workspace", {"path": ".", "max_depth": 2}),
         ("search_workspace", {"query": "targeted", "path": "."}),
         (
@@ -455,18 +456,6 @@ def test_recommended_skill_loads_before_extended_tool_use(tmp_path):
         (
             WorkDecision(
                 DecisionStatus.CONTINUE,
-                "Load file tools",
-                tool_name="catalog_expand",
-                tool_arguments={"category": "files"},
-            ),
-            WorkDecision(
-                DecisionStatus.CONTINUE,
-                "Inspect the workspace",
-                tool_name="list_workspace",
-                tool_arguments={"path": ".", "max_depth": 2},
-            ),
-            WorkDecision(
-                DecisionStatus.CONTINUE,
                 "Inspect the workspace",
                 tool_name="list_workspace",
                 tool_arguments={"path": ".", "max_depth": 2},
@@ -483,11 +472,12 @@ def test_recommended_skill_loads_before_extended_tool_use(tmp_path):
         created.run_id,
         deliberator=lambda _context: next(decisions),
         tools=tools,
-        max_iterations=4,
+        max_iterations=2,
     )
 
-    assert tools.calls[:3] == [
+    assert tools.calls[:4] == [
         ("catalog_expand", {"category": "files"}),
+        ("catalog_expand", {"category": "shell"}),
         ("catalog_expand", {"category": "skill"}),
         ("skill_load", {"skill_id": "code-engineer"}),
     ]

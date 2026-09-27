@@ -284,6 +284,74 @@ def test_model_deliberator_keeps_latest_source_and_test_content(tmp_path):
     assert reads[2]["result"]["content"] == "focused regression body"
 
 
+def test_model_deliberator_preserves_web_source_and_read_evidence(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create(
+        "Fix the report at https://github.com/example/project/issues/42"
+    )
+    snapshot.observations.extend(
+        (
+            {
+                "kind": "tool",
+                "tool": "web_fetch",
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "url": "https://github.com/example/project/issues/42",
+                    "content": "issue body " + ("x" * 20_000),
+                    "content_hash": "web-digest",
+                },
+            },
+            {
+                "kind": "tool",
+                "tool": "read_file",
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "path": "src/example.py",
+                    "content": "source body",
+                    "sha256": "source-digest",
+                },
+            },
+            {
+                "kind": "tool",
+                "tool": "read_file",
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "path": "tests/test_example.py",
+                    "content": "test body",
+                    "sha256": "test-digest",
+                },
+            },
+            *(
+                {
+                    "kind": "tool",
+                    "tool": "list_workspace",
+                    "ok": True,
+                    "result": {"ok": True, "entries": [{"path": f"later-{index}"}]},
+                }
+                for index in range(8)
+            ),
+        )
+    )
+    facade = StubFacade({"status": "blocked", "summary": "done", "confidence": "high"})
+
+    ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+
+    observations = json.loads(facade.requests[0].messages[1]["content"])["work"][
+        "recent_observations"
+    ]
+    web = next(item for item in observations if item.get("tool") == "web_fetch")
+    assert web["result"]["content"].startswith("issue body")
+    assert len(web["result"]["content"]) == 12_000
+    reads = [item for item in observations if item.get("tool") == "read_file"]
+    assert {item["result"]["content"] for item in reads} == {
+        "source body",
+        "test body",
+    }
+
+
 def test_model_deliberator_compacts_plan_tool_results(tmp_path):
     harness = WorkHarness(tmp_path)
     snapshot = harness.create("Fix the code in this repository")

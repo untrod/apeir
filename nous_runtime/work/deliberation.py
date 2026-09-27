@@ -148,7 +148,10 @@ class ModelWorkDeliberator:
                         "needs_tools is true, work.loaded_tools is empty, and "
                         "catalog_expand is available, the next decision must be continue "
                         "with catalog_expand for the files or shell category; complete and "
-                        "blocked are invalid before that safe discovery step."
+                        "blocked are invalid before that safe discovery step. When "
+                        "work.assessment.needs_web is true and the objective contains an "
+                        "explicit URL, use the governed web_fetch tool before inferring "
+                        "the external report's contents."
                     ),
                 },
                 {
@@ -315,23 +318,53 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
         )
     value["recent_events"] = compact_events
     recent_observations = list(value.get("recent_observations") or ())
-    selected_observations = []
-    verification_selected = False
-    guardrail_selected = False
-    for raw in reversed(recent_observations):
-        if raw.get("kind") == "verification":
-            if verification_selected:
-                continue
-            verification_selected = True
-        if raw.get("kind") == "guardrail":
-            if guardrail_selected:
-                continue
-            guardrail_selected = True
-        selected_observations.append(raw)
-        if len(selected_observations) >= _DECISION_OBSERVATION_LIMIT:
+    selected_indexes: set[int] = set()
+
+    def select_latest(predicate: Any) -> None:
+        for index in range(len(recent_observations) - 1, -1, -1):
+            if index not in selected_indexes and predicate(recent_observations[index]):
+                selected_indexes.add(index)
+                return
+
+    select_latest(lambda item: item.get("kind") == "verification")
+    select_latest(lambda item: item.get("kind") == "guardrail")
+    select_latest(lambda item: item.get("kind") == "tool" and item.get("ok") is False)
+    select_latest(
+        lambda item: (
+            item.get("tool") in {"web_fetch", "web_search"} and item.get("ok") is True
+        )
+    )
+    select_latest(
+        lambda item: (
+            item.get("tool") == "read_file"
+            and item.get("ok") is True
+            and isinstance(item.get("result"), Mapping)
+            and _read_evidence_kind(str(item["result"].get("path") or "")) == "source"
+        )
+    )
+    select_latest(
+        lambda item: (
+            item.get("tool") == "read_file"
+            and item.get("ok") is True
+            and isinstance(item.get("result"), Mapping)
+            and _read_evidence_kind(str(item["result"].get("path") or "")) == "test"
+        )
+    )
+    for index in range(len(recent_observations) - 1, -1, -1):
+        if len(selected_indexes) >= _DECISION_OBSERVATION_LIMIT:
             break
+        kind = recent_observations[index].get("kind")
+        if kind in {"verification", "guardrail"} and any(
+            recent_observations[selected].get("kind") == kind
+            for selected in selected_indexes
+        ):
+            continue
+        selected_indexes.add(index)
+    selected_observations = [
+        recent_observations[index] for index in sorted(selected_indexes)
+    ]
     observations = []
-    chronological_observations = list(reversed(selected_observations))
+    chronological_observations = selected_observations
     full_read_positions: set[int] = set()
     read_evidence_kinds: set[str] = set()
     for position in range(len(chronological_observations) - 1, -1, -1):
@@ -394,6 +427,23 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
                     "truncated": bool(result.get("truncated")),
                     "error": str(result.get("error") or ""),
                 }
+            elif observation.get("tool") == "web_fetch":
+                compact_observation["result"] = {
+                    key: result.get(key)
+                    for key in (
+                        "ok",
+                        "url",
+                        "content_type",
+                        "content_hash",
+                        "citation",
+                        "evidence_ref",
+                        "error",
+                    )
+                    if result.get(key) not in (None, "", [], {})
+                }
+                compact_observation["result"]["content"] = str(
+                    result.get("content") or ""
+                )[:12_000]
             elif (
                 observation.get("tool") == "read_file"
                 and position not in full_read_positions
