@@ -134,6 +134,11 @@ def test_windows_sandbox_adds_src_layout_to_pythonpath(
         task.mkdir()
         return str(task)
 
+    monkeypatch.setattr(
+        windows_sandbox,
+        "executable_path",
+        lambda: r"C:\Windows\System32\WindowsSandbox.exe",
+    )
     monkeypatch.setattr(windows_sandbox.tempfile, "mkdtemp", fake_mkdtemp)
     monkeypatch.setattr(windows_sandbox.subprocess, "Popen", fake_popen)
     result = windows_sandbox.run(policy)

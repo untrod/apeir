@@ -259,14 +259,29 @@ class ProcessSandboxHost:
                             continue
                         control = _read_json(control_path)
                         action = str(control.get("action") or "")
+                        terminal_control = action in {"interrupt", "terminate", "kill"}
                         try:
                             if str(control.get("session_id") or "") != session_id:
                                 raise ValueError(
                                     "process control session binding mismatch"
                                 )
-                            ProcessSandboxHost._apply_control(process, action, control)
-                            if action in {"interrupt", "terminate", "kill"}:
+                            if terminal_control:
+                                # A terminal signal can stop the target before the
+                                # Windows console API returns. Persist receipt of
+                                # the validated request first so acknowledgement
+                                # does not race the effect it initiated. The host
+                                # state remains the authoritative effect result.
                                 last_control = action
+                                _atomic_json(
+                                    ack_path,
+                                    {
+                                        "ok": True,
+                                        "accepted": True,
+                                        "action": action,
+                                        "at": _utc_now(),
+                                    },
+                                )
+                            ProcessSandboxHost._apply_control(process, action, control)
                             result = {"ok": True, "action": action, "at": _utc_now()}
                         except (
                             OSError,
@@ -280,7 +295,10 @@ class ProcessSandboxHost:
                                 "error": str(exc),
                                 "at": _utc_now(),
                             }
-                        _atomic_json(ack_path, result)
+                            if terminal_control:
+                                last_control = ""
+                        if not terminal_control or not bool(result.get("ok")):
+                            _atomic_json(ack_path, result)
                     state.update(
                         updated_at=_utc_now(),
                         stdout_cursor=stdout_path.stat().st_size,

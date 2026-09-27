@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from click import unstyle
 from typer.testing import CliRunner
 
 from nous_runtime.artifact.content_store import ContentAddressedArtifactStore
@@ -150,7 +151,7 @@ def test_web_cli_help_is_available_without_starting_network(tmp_path: Path):
     result = CliRunner().invoke(web_app, ["search", "--help"])
 
     assert result.exit_code == 0
-    assert "--max-results" in result.stdout
+    assert "--max-results" in unstyle(result.stdout)
 
 
 def test_work_records_web_evidence_artifact_after_progressive_disclosure(
