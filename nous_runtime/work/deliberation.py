@@ -327,6 +327,7 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
                 return
 
     select_latest(lambda item: item.get("kind") == "verification")
+    select_latest(lambda item: item.get("kind") == "evidence_reuse")
     select_latest(lambda item: item.get("kind") == "guardrail")
     select_latest(lambda item: item.get("kind") == "tool" and item.get("ok") is False)
     select_latest(
@@ -398,7 +399,23 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
         result = observation.get("result")
         if isinstance(result, Mapping):
             result = dict(result)
-            if observation.get("tool") == "catalog_expand":
+            if observation.get("kind") == "evidence_reuse":
+                compact_observation["result"] = {
+                    key: result.get(key)
+                    for key in (
+                        "ok",
+                        "already_covered",
+                        "new_evidence",
+                        "path",
+                        "requested_range",
+                        "covered_range",
+                        "sha256",
+                        "reused_action_sequence",
+                        "progress_delta",
+                    )
+                    if result.get(key) not in (None, "", [], {})
+                }
+            elif observation.get("tool") == "catalog_expand":
                 compact_observation["result"] = {
                     "ok": bool(result.get("ok")),
                     "category": str(result.get("category") or ""),

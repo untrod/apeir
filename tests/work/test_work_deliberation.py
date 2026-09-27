@@ -352,6 +352,43 @@ def test_model_deliberator_preserves_web_source_and_read_evidence(tmp_path):
     }
 
 
+def test_model_deliberator_injects_minimal_evidence_reuse_delta(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix the code in this repository")
+    snapshot.observations.append(
+        {
+            "kind": "evidence_reuse",
+            "tool": "read_file",
+            "ok": True,
+            "action_sequence": 4,
+            "plan_revision": snapshot.plan.revision,
+            "result": {
+                "ok": True,
+                "already_covered": True,
+                "new_evidence": False,
+                "path": "src/example.py",
+                "requested_range": [20, 30],
+                "covered_range": [1, 100],
+                "sha256": "source-digest",
+                "reused_action_sequence": 3,
+                "progress_delta": "reuse_evidence_then_act",
+                "content": "must not be reinjected",
+            },
+        }
+    )
+    facade = StubFacade({"status": "blocked", "summary": "done", "confidence": "high"})
+
+    ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+
+    observations = json.loads(facade.requests[0].messages[1]["content"])["work"][
+        "recent_observations"
+    ]
+    reuse = next(item for item in observations if item["kind"] == "evidence_reuse")
+    assert reuse["result"]["already_covered"] is True
+    assert reuse["result"]["progress_delta"] == "reuse_evidence_then_act"
+    assert "content" not in reuse["result"]
+
+
 def test_model_deliberator_compacts_plan_tool_results(tmp_path):
     harness = WorkHarness(tmp_path)
     snapshot = harness.create("Fix the code in this repository")
