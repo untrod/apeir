@@ -302,7 +302,12 @@ class ProcessSandboxHost:
                                         "at": _utc_now(),
                                     },
                                 )
-                            ProcessSandboxHost._apply_control(process, action, control)
+                            ProcessSandboxHost._apply_control(
+                                process,
+                                action,
+                                control,
+                                job_handle=job_handle,
+                            )
                             result = {"ok": True, "action": action, "at": _utc_now()}
                         except (
                             OSError,
@@ -376,7 +381,11 @@ class ProcessSandboxHost:
 
     @staticmethod
     def _apply_control(
-        process: subprocess.Popen[bytes], action: str, control: Mapping[str, Any]
+        process: subprocess.Popen[bytes],
+        action: str,
+        control: Mapping[str, Any],
+        *,
+        job_handle: int = 0,
     ) -> None:
         if action == "stdin":
             if process.stdin is None or process.stdin.closed:
@@ -393,7 +402,7 @@ class ProcessSandboxHost:
             return
         if action == "interrupt":
             if sys.platform == "win32":
-                process.send_signal(signal.CTRL_BREAK_EVENT)
+                ProcessSandboxHost._interrupt_windows(process, job_handle)
             else:
                 os.killpg(process.pid, signal.SIGINT)
             return
@@ -407,6 +416,36 @@ class ProcessSandboxHost:
             ProcessSandboxHost._hard_kill(process, 0)
             return
         raise ValueError(f"unknown process control action: {action}")
+
+    @staticmethod
+    def _interrupt_windows(process: subprocess.Popen[bytes], job_handle: int) -> None:
+        """Interrupt a headless Windows process tree without a console race.
+
+        Detached service processes do not have a console to which
+        ``CTRL_BREAK_EVENT`` can be delivered reliably. On CI and desktop
+        background hosts it could terminate the helper or leave the effect
+        outcome unknown. The JobObject is the authoritative process-tree
+        boundary, so terminate that tree with Windows' control-C exit status.
+        If the runner forbids nested jobs, ``taskkill /T`` provides the same
+        bounded tree target.
+        """
+
+        control_c_exit = 0xC000013A
+        if job_handle:
+            ok = ctypes.windll.kernel32.TerminateJobObject(
+                ctypes.c_void_p(job_handle), ctypes.c_uint32(control_c_exit)
+            )
+            if not ok:
+                raise OSError("Windows JobObject interrupt failed")
+            return
+        result = subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        if result.returncode != 0 and process.poll() is None:
+            raise OSError("Windows process-tree interrupt failed")
 
     @staticmethod
     def _create_windows_job(pid: int) -> int:
