@@ -156,6 +156,59 @@ class ProgressiveTools(StubTools):
         return {"ok": True}
 
 
+class SkillProgressiveTools(ProgressiveTools):
+    def specifications(self):
+        return (
+            *super().specifications(),
+            {
+                "type": "function",
+                "function": {
+                    "name": "skill_list",
+                    "description": "list skills",
+                    "parameters": {"type": "object"},
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "skill_load",
+                    "description": "load one skill",
+                    "parameters": {"type": "object"},
+                },
+            },
+        )
+
+    def execute(self, name, arguments):
+        if name == "catalog_expand" and arguments.get("category") == "skill":
+            self.calls.append((name, dict(arguments)))
+            return {
+                "ok": True,
+                "tools": [
+                    {
+                        "tool_id": "skill_list",
+                        "category": "skill",
+                        "effect_class": "read",
+                    },
+                    {
+                        "tool_id": "skill_load",
+                        "category": "skill",
+                        "effect_class": "read",
+                    },
+                ],
+            }
+        if name == "skill_load":
+            self.calls.append((name, dict(arguments)))
+            return {
+                "ok": True,
+                "skill": {
+                    "skill_id": arguments["skill_id"],
+                    "instructions": "Inspect, patch, test, and verify.",
+                    "authority": "none",
+                },
+            }
+        return super().execute(name, arguments)
+
+
 def test_simple_work_skips_plan_and_completes(tmp_path):
     harness = WorkHarness(tmp_path)
     created = harness.create("Explain recursion clearly")
@@ -392,6 +445,53 @@ def test_tool_work_requires_safe_discovery_before_terminal_decision(tmp_path):
     ]
     assert "workspace_action" in blocked.loaded_tools
     assert blocked.state is RunState.BLOCKED
+
+
+def test_recommended_skill_loads_before_extended_tool_use(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Fix code and run targeted tests")
+    tools = SkillProgressiveTools()
+    decisions = iter(
+        (
+            WorkDecision(
+                DecisionStatus.CONTINUE,
+                "Load file tools",
+                tool_name="catalog_expand",
+                tool_arguments={"category": "files"},
+            ),
+            WorkDecision(
+                DecisionStatus.CONTINUE,
+                "Inspect the workspace",
+                tool_name="list_workspace",
+                tool_arguments={"path": ".", "max_depth": 2},
+            ),
+            WorkDecision(
+                DecisionStatus.CONTINUE,
+                "Inspect the workspace",
+                tool_name="list_workspace",
+                tool_arguments={"path": ".", "max_depth": 2},
+            ),
+            WorkDecision(
+                DecisionStatus.BLOCKED,
+                "Stop after proving Skill disclosure",
+                reason="fixture complete",
+            ),
+        )
+    )
+
+    blocked = harness.run(
+        created.run_id,
+        deliberator=lambda _context: next(decisions),
+        tools=tools,
+        max_iterations=4,
+    )
+
+    assert tools.calls[:3] == [
+        ("catalog_expand", {"category": "files"}),
+        ("catalog_expand", {"category": "skill"}),
+        ("skill_load", {"skill_id": "code-engineer"}),
+    ]
+    assert "code-engineer" in blocked.loaded_skills
 
 
 def test_safe_inspection_prefers_relevant_source_over_docs_and_dependencies(tmp_path):

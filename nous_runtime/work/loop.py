@@ -132,7 +132,10 @@ class AgentLoop:
             except (TypeError, ValueError) as exc:
                 return self._fail(snapshot, f"invalid work decision: {exc}")
 
-            if (
+            skill_discovery = self._required_skill_discovery(snapshot, decision, tools)
+            if skill_discovery is not None:
+                decision = skill_discovery
+            elif (
                 bool(snapshot.analysis.needs_tools)
                 and not snapshot.loaded_tools
                 and decision.status in {DecisionStatus.BLOCKED, DecisionStatus.COMPLETE}
@@ -429,6 +432,83 @@ class AgentLoop:
             )
             for item in snapshot.observations
             if isinstance(item.get("result"), Mapping)
+        )
+
+    def _required_skill_discovery(
+        self,
+        snapshot: WorkSnapshot,
+        decision: WorkDecision,
+        tools: Any,
+    ) -> WorkDecision | None:
+        """Load one recommended Skill before extended tool use.
+
+        The analyzer's recommendation is workflow guidance, never authority. The
+        load still travels through the governed discovery tools, and a failed
+        load is not retried automatically.
+        """
+
+        if decision.status not in {
+            DecisionStatus.CONTINUE,
+            DecisionStatus.BLOCKED,
+            DecisionStatus.COMPLETE,
+        }:
+            return None
+        candidates = tuple(
+            str(item)
+            for item in snapshot.analysis.candidate_skills
+            if str(item) and str(item) not in snapshot.loaded_skills
+        )
+        if not candidates or not snapshot.loaded_tools:
+            return None
+        known = self.harness._tool_names(tools)
+        if not {"catalog_expand", "skill_load"}.issubset(known):
+            return None
+        candidate = candidates[0]
+        if "skill_load" not in snapshot.loaded_tools:
+            if (
+                decision.tool_name == "catalog_expand"
+                and str(decision.tool_arguments.get("category") or "") == "skill"
+            ):
+                return None
+            skill_category_digest = self._arguments_digest({"category": "skill"})
+            if self._action_was_observed(
+                snapshot, "catalog_expand", skill_category_digest
+            ):
+                return None
+            return WorkDecision(
+                status=DecisionStatus.CONTINUE,
+                summary="Discover the recommended Skill before extended tool use",
+                next_action="Load the governed Skill catalog",
+                confidence="high",
+                tool_name="catalog_expand",
+                tool_arguments={"category": "skill"},
+            )
+        if (
+            decision.tool_name == "skill_load"
+            and str(decision.tool_arguments.get("skill_id") or "") == candidate
+        ):
+            return None
+        load_digest = self._arguments_digest({"skill_id": candidate})
+        if self._action_was_observed(snapshot, "skill_load", load_digest):
+            return None
+        return WorkDecision(
+            status=DecisionStatus.CONTINUE,
+            summary="Load the recommended Skill before extended tool use",
+            next_action=f"Load Skill {candidate}",
+            confidence="high",
+            tool_name="skill_load",
+            tool_arguments={"skill_id": candidate},
+        )
+
+    @staticmethod
+    def _action_was_observed(
+        snapshot: WorkSnapshot, tool_name: str, arguments_digest: str
+    ) -> bool:
+        return any(
+            item.get("kind") == "tool"
+            and item.get("tool") == tool_name
+            and item.get("arguments_digest") == arguments_digest
+            for item in snapshot.observations
         )
 
     @staticmethod
