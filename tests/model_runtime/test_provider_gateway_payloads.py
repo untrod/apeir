@@ -21,6 +21,8 @@ def test_openai_provider_preserves_gateway_tools_schema_and_usage():
                 "type": "object",
                 "properties": {"answer": {"type": "string"}},
             },
+            "thinking": {"type": "disabled"},
+            "reasoning_effort": "none",
         },
     )
     parsed = OpenAIProvider._parse_response(
@@ -41,7 +43,8 @@ def test_openai_provider_preserves_gateway_tools_schema_and_usage():
                                 },
                             }
                         ],
-                    }
+                    },
+                    "finish_reason": "length",
                 }
             ],
             "usage": {"total_tokens": 5},
@@ -52,8 +55,11 @@ def test_openai_provider_preserves_gateway_tools_schema_and_usage():
     assert body["tools"][0]["function"]["name"] == "lookup"
     assert body["tool_choice"] == "required"
     assert body["response_format"]["type"] == "json_schema"
+    assert body["thinking"] == {"type": "disabled"}
+    assert body["reasoning_effort"] == "none"
     assert parsed["tool_calls"][0]["id"] == "call-1"
     assert parsed["usage"]["total_tokens"] == 5
+    assert parsed["finish_reason"] == "length"
 
 
 def test_openai_provider_preserves_batch_embeddings():

@@ -226,6 +226,12 @@ class OpenAIProvider(Provider):
             or [{"role": "user", "content": content}],
             "max_tokens": int(params.get("max_tokens") or 1024),
         }
+        thinking = params.get("thinking")
+        if thinking is not None:
+            body["thinking"] = dict(thinking)
+        reasoning_effort = params.get("reasoning_effort")
+        if reasoning_effort is not None:
+            body["reasoning_effort"] = str(reasoning_effort)
         tools = params.get("tools") or ()
         if tools:
             body["tools"] = list(tools)
@@ -268,10 +274,12 @@ class OpenAIProvider(Provider):
         if capability_id == "model.rerank":
             return {"ok": True, "results": payload.get("results") or (), "model": model}
         message = (payload.get("choices") or [{}])[0].get("message", {})
+        choice = (payload.get("choices") or [{}])[0]
         return {
             "ok": True,
             "content": message.get("content", ""),
             "tool_calls": list(message.get("tool_calls") or ()),
             "usage": dict(payload.get("usage") or {}),
+            "finish_reason": str(choice.get("finish_reason") or "completed"),
             "model": str(payload.get("model") or model),
         }

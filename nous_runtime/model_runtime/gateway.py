@@ -740,6 +740,12 @@ class ModelGateway:
             "max_output_tokens": request.metadata.get("max_tokens"),
             "temperature": request.metadata.get("temperature"),
         }
+        thinking = request.metadata.get("thinking")
+        if thinking is not None:
+            model_input["thinking"] = thinking
+        reasoning_effort = request.metadata.get("reasoning_effort")
+        if reasoning_effort is not None:
+            model_input["reasoning_effort"] = reasoning_effort
         encoded_input = json.dumps(
             model_input, separators=(",", ":"), ensure_ascii=False
         )

@@ -49,6 +49,8 @@ from nous_runtime.model_runtime.facade import (
     GatewayTraceContext,
     GatewayVerificationRequirements,
     ModelGatewayFacade,
+    ReasoningEffort,
+    ReasoningMode,
     get_gateway_facade,
 )
 from nous_runtime.model_runtime.factory import (
@@ -184,6 +186,8 @@ __all__ = [
     "ParallelInvocationPolicy",
     "ParallelInvocationResult",
     "PrivacyClass",
+    "ReasoningEffort",
+    "ReasoningMode",
     "RejectedModel",
     "ResourceRequirements",
     "ResourceSchedulingDecision",

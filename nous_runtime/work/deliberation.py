@@ -14,6 +14,8 @@ from nous_runtime.model_runtime import (
     GatewayTraceContext,
     ModelGatewayFacade,
     ModelRole,
+    ReasoningEffort,
+    ReasoningMode,
     RoutingMode,
 )
 from nous_runtime.work.models import WorkContext, WorkDecision
@@ -167,6 +169,8 @@ class ModelWorkDeliberator:
             ),
             timeout_s=self.timeout_s,
             budget=GatewayBudget(max_tokens=self.max_output_tokens),
+            reasoning_mode=ReasoningMode.DISABLED,
+            reasoning_effort=ReasoningEffort.NONE,
             trace=GatewayTraceContext(
                 trace_id=context.run_id,
                 correlation_id=context.run_id,
@@ -184,6 +188,22 @@ class ModelWorkDeliberator:
             )
         value = response.structured_output
         if not isinstance(value, Mapping):
+            if response.finish_reason == "length":
+                usage = dict(response.usage or {})
+                completion_tokens = int(usage.get("completion_tokens") or 0)
+                reasoning_tokens = int(
+                    (usage.get("completion_tokens_details") or {}).get(
+                        "reasoning_tokens"
+                    )
+                    or 0
+                )
+                raise RuntimeError(
+                    "work model exhausted the output budget before returning a "
+                    "structured decision "
+                    f"(max_output_tokens={self.max_output_tokens}, "
+                    f"completion_tokens={completion_tokens}, "
+                    f"reasoning_tokens={reasoning_tokens})"
+                )
             raise RuntimeError("work model did not return a structured decision")
         return WorkDecision.from_value(value)
 

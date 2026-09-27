@@ -37,6 +37,18 @@ class GatewayOperation(str, Enum):
     VERIFICATION = "verification"
 
 
+class ReasoningMode(str, Enum):
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+
+
+class ReasoningEffort(str, Enum):
+    NONE = "none"
+    LOW = "low"
+    HIGH = "high"
+    MAX = "max"
+
+
 _OPERATION_CAPABILITIES: dict[GatewayOperation, frozenset[str]] = {
     GatewayOperation.CHAT: frozenset({"chat"}),
     GatewayOperation.COMPLETION: frozenset({"completion"}),
@@ -92,9 +104,7 @@ class GatewayExecutionContext:
         if not str(self.task_id).strip():
             raise ModelRuntimeError("execution task_id is required")
         if not 0 <= int(self.priority) <= 100:
-            raise ModelRuntimeError(
-                "execution priority must be between 0 and 100"
-            )
+            raise ModelRuntimeError("execution priority must be between 0 and 100")
         _reject_sensitive_data(self.metadata, "execution metadata")
         object.__setattr__(self, "priority", int(self.priority))
         object.__setattr__(self, "metadata", dict(self.metadata))
@@ -132,13 +142,9 @@ class GatewayFallbackPolicy:
 
     def __post_init__(self) -> None:
         if self.max_models < 1:
-            raise ModelRuntimeError(
-                "fallback max_models must be positive"
-            )
+            raise ModelRuntimeError("fallback max_models must be positive")
         if self.max_retries_per_model < 0:
-            raise ModelRuntimeError(
-                "fallback retries must be non-negative"
-            )
+            raise ModelRuntimeError("fallback retries must be non-negative")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -156,10 +162,7 @@ class GatewayVerificationRequirements:
     independent_reviewer: bool = False
 
     def __post_init__(self) -> None:
-        if (
-            self.minimum_score is not None
-            and not 0 <= self.minimum_score <= 1
-        ):
+        if self.minimum_score is not None and not 0 <= self.minimum_score <= 1:
             raise ModelRuntimeError(
                 "verification minimum_score must be between 0 and 1"
             )
@@ -180,9 +183,7 @@ class GatewayRequest:
     input: Any = None
     messages: tuple[Mapping[str, Any], ...] = ()
     required_capabilities: frozenset[str] = field(default_factory=frozenset)
-    required_modalities: frozenset[ModelModality] = field(
-        default_factory=frozenset
-    )
+    required_modalities: frozenset[ModelModality] = field(default_factory=frozenset)
     role: ModelRole = ModelRole.WORKER
     preferred_models: tuple[str, ...] = ()
     forbidden_models: frozenset[str] = field(default_factory=frozenset)
@@ -193,10 +194,10 @@ class GatewayRequest:
     quality_target: float = 0.5
     max_latency_ms: int | None = None
     budget: GatewayBudget = field(default_factory=GatewayBudget)
+    reasoning_mode: ReasoningMode | None = None
+    reasoning_effort: ReasoningEffort | None = None
     trace: GatewayTraceContext = field(default_factory=GatewayTraceContext)
-    fallback: GatewayFallbackPolicy = field(
-        default_factory=GatewayFallbackPolicy
-    )
+    fallback: GatewayFallbackPolicy = field(default_factory=GatewayFallbackPolicy)
     verification: GatewayVerificationRequirements = field(
         default_factory=GatewayVerificationRequirements
     )
@@ -214,9 +215,7 @@ class GatewayRequest:
         )
         object.__setattr__(self, "operation", operation)
         if not isinstance(self.execution, GatewayExecutionContext):
-            raise ModelRuntimeError(
-                "execution must be GatewayExecutionContext"
-            )
+            raise ModelRuntimeError("execution must be GatewayExecutionContext")
         object.__setattr__(
             self,
             "role",
@@ -238,10 +237,36 @@ class GatewayRequest:
             if isinstance(self.privacy_policy, PrivacyClass)
             else PrivacyClass(str(self.privacy_policy)),
         )
+        reasoning_mode = (
+            None
+            if self.reasoning_mode is None
+            else self.reasoning_mode
+            if isinstance(self.reasoning_mode, ReasoningMode)
+            else ReasoningMode(str(self.reasoning_mode))
+        )
+        reasoning_effort = (
+            None
+            if self.reasoning_effort is None
+            else self.reasoning_effort
+            if isinstance(self.reasoning_effort, ReasoningEffort)
+            else ReasoningEffort(str(self.reasoning_effort))
+        )
+        if reasoning_mode is ReasoningMode.DISABLED and reasoning_effort not in {
+            None,
+            ReasoningEffort.NONE,
+        }:
+            raise ModelRuntimeError(
+                "disabled reasoning mode cannot request a non-zero effort"
+            )
+        if (
+            reasoning_mode is ReasoningMode.ENABLED
+            and reasoning_effort is ReasoningEffort.NONE
+        ):
+            raise ModelRuntimeError("enabled reasoning mode cannot use none effort")
+        object.__setattr__(self, "reasoning_mode", reasoning_mode)
+        object.__setattr__(self, "reasoning_effort", reasoning_effort)
         modalities = frozenset(
-            item
-            if isinstance(item, ModelModality)
-            else ModelModality(str(item))
+            item if isinstance(item, ModelModality) else ModelModality(str(item))
             for item in self.required_modalities
         )
         object.__setattr__(self, "required_modalities", modalities)
@@ -275,12 +300,9 @@ class GatewayRequest:
 
     def to_model_request(self) -> ModelRequest:
         capabilities = (
-            self.required_capabilities
-            or _OPERATION_CAPABILITIES[self.operation]
+            self.required_capabilities or _OPERATION_CAPABILITIES[self.operation]
         )
-        modalities = self.required_modalities or _default_modalities(
-            self.operation
-        )
+        modalities = self.required_modalities or _default_modalities(self.operation)
         messages = self.messages
         if not messages and self.input is not None:
             messages = ({"role": "user", "content": self.input},)
@@ -302,6 +324,10 @@ class GatewayRequest:
         }
         if self.budget.max_tokens is not None:
             metadata["max_tokens"] = self.budget.max_tokens
+        if self.reasoning_mode is not None:
+            metadata["thinking"] = {"type": self.reasoning_mode.value}
+        if self.reasoning_effort is not None:
+            metadata["reasoning_effort"] = self.reasoning_effort.value
         return ModelRequest(
             task_id=self.execution.task_id,
             required_capabilities=capabilities,
@@ -421,9 +447,7 @@ class ModelGatewayFacade:
         stream: bool | None = None,
     ) -> ModelRequest:
         if not isinstance(request, GatewayRequest):
-            raise ModelInvocationError(
-                "request must be a GatewayRequest"
-            )
+            raise ModelInvocationError("request must be a GatewayRequest")
         model_request = request.to_model_request()
         if stream is not None and model_request.stream is not stream:
             payload = model_request.to_dict()
@@ -458,9 +482,7 @@ class ModelGatewayFacade:
             {},
         )
         failures = tuple(
-            event
-            for event in events
-            if event.event_type == "model.invoke.failed"
+            event for event in events if event.event_type == "model.invoke.failed"
         )
         fallback_history = tuple(
             str(event.payload.get("model_id") or "")
@@ -472,13 +494,8 @@ class ModelGatewayFacade:
             response.content,
             request.response_schema,
         )
-        warnings = tuple(
-            str(item)
-            for item in response.metadata.get("warnings", ())
-        )
-        verification = dict(
-            response.metadata.get("verification") or {}
-        )
+        warnings = tuple(str(item) for item in response.metadata.get("warnings", ()))
+        verification = dict(response.metadata.get("verification") or {})
         return GatewayResponse(
             request_id=response.request_id,
             content=content,
@@ -525,9 +542,7 @@ def _content_parts(
 ) -> tuple[Any, Any, tuple[Mapping[str, Any], ...]]:
     if not isinstance(raw, Mapping):
         return raw, _decode_structured(raw) if response_schema else None, ()
-    tool_calls = tuple(
-        dict(item) for item in raw.get("tool_calls") or ()
-    )
+    tool_calls = tuple(dict(item) for item in raw.get("tool_calls") or ())
     structured = raw.get("structured_output")
     if structured is None and response_schema:
         structured = raw.get("content", raw)
@@ -560,9 +575,7 @@ def _error_response(
         error={
             "type": type(error).__name__,
             "message": str(error),
-            "provider_error_code": str(
-                getattr(error, "provider_error_code", "") or ""
-            ),
+            "provider_error_code": str(getattr(error, "provider_error_code", "") or ""),
             "http_status": getattr(error, "http_status", None),
             "retryable": getattr(error, "retryable", None),
         },
@@ -596,5 +609,7 @@ __all__ = [
     "GatewayTraceContext",
     "GatewayVerificationRequirements",
     "ModelGatewayFacade",
+    "ReasoningEffort",
+    "ReasoningMode",
     "get_gateway_facade",
 ]

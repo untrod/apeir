@@ -145,6 +145,8 @@ def test_model_execution_uses_kernel_operation(monkeypatch) -> None:
                 metadata={
                     "max_tokens": 128,
                     "temperature": 0.2,
+                    "thinking": {"type": "disabled"},
+                    "reasoning_effort": "none",
                     "tools": [{"type": "function", "function": {"name": "lookup"}}],
                     "tool_choice": "required",
                     "response_schema": {
@@ -167,6 +169,8 @@ def test_model_execution_uses_kernel_operation(monkeypatch) -> None:
     model_input = json.loads(client.operation["input"])
     assert model_input["messages"][0]["content"] == "hello"
     assert model_input["max_output_tokens"] == 128
+    assert model_input["thinking"] == {"type": "disabled"}
+    assert model_input["reasoning_effort"] == "none"
     assert model_input["tools"][0]["function"]["name"] == "lookup"
     assert model_input["response_format"]["type"] == "json_schema"
     assert model_input["response_format"]["json_schema"]["schema"] == {

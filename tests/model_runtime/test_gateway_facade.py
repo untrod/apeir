@@ -22,6 +22,8 @@ from nous_runtime.model_runtime.facade import (
     GatewayResponse,
     GatewayTraceContext,
     ModelGatewayFacade,
+    ReasoningEffort,
+    ReasoningMode,
 )
 from nous_runtime.model_runtime.gateway import ModelGateway
 from nous_runtime.model_runtime.models import (
@@ -142,9 +144,7 @@ def test_facade_reports_retry_and_rejects_secret_metadata() -> None:
         "recovered",
         failures_before_success=1,
     )
-    response = facade.invoke_sync(
-        request(GatewayOperation.REASONING)
-    )
+    response = facade.invoke_sync(request(GatewayOperation.REASONING))
     assert response.retry_count == 1
     assert response.fallback_history == ("local/unified",)
 
@@ -165,6 +165,26 @@ def test_facade_disables_fallback_by_locking_selected_route() -> None:
     )
     assert response.ok
     assert response.route["fallback_model_ids"] == []
+
+
+def test_facade_preserves_explicit_reasoning_policy() -> None:
+    gateway_request = request(
+        GatewayOperation.STRUCTURED_OUTPUT,
+        reasoning_mode=ReasoningMode.DISABLED,
+        reasoning_effort=ReasoningEffort.NONE,
+    )
+
+    model_request = gateway_request.to_model_request()
+
+    assert model_request.metadata["thinking"] == {"type": "disabled"}
+    assert model_request.metadata["reasoning_effort"] == "none"
+
+    with pytest.raises(Exception, match="disabled reasoning mode"):
+        request(
+            GatewayOperation.STRUCTURED_OUTPUT,
+            reasoning_mode=ReasoningMode.DISABLED,
+            reasoning_effort=ReasoningEffort.HIGH,
+        )
 
 
 def test_chat_planner_reviewer_and_verification_use_facade() -> None:
@@ -383,7 +403,9 @@ def test_chat_handler_retries_prose_when_governed_effect_is_required(tmp_path) -
     assert (tmp_path / "result.txt").read_text(encoding="utf-8") == "done"
     assert result["agent_steps"][0]["tool"] == "write_file"
     assert len(facade.requests) == 3
-    assert "rejected the prose-only response" in facade.requests[1].messages[-1]["content"]
+    assert (
+        "rejected the prose-only response" in facade.requests[1].messages[-1]["content"]
+    )
 
 
 def test_create_intent_receives_extended_bounded_execution_budget(tmp_path) -> None:
@@ -396,7 +418,9 @@ def test_create_intent_receives_extended_bounded_execution_budget(tmp_path) -> N
 
     class Facade:
         def try_invoke_sync(self, request):
-            return GatewayResponse(request_id=request.execution.task_id, content="Ready.")
+            return GatewayResponse(
+                request_id=request.execution.task_id, content="Ready."
+            )
 
     stream = EventStream()
     result = GatewayChatHandler(Facade())(  # type: ignore[arg-type]
@@ -418,7 +442,8 @@ def test_create_intent_receives_extended_bounded_execution_budget(tmp_path) -> N
     )
 
     budget = next(
-        event for event in stream.events
+        event
+        for event in stream.events
         if event.event_type == "execution.budget.configured"
     )
     assert result["ok"] is False  # A required workspace effect was not fabricated.

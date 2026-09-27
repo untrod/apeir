@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from typer.testing import CliRunner
 
 from nous_runtime.events import RunEvent
@@ -13,8 +14,16 @@ from nous_runtime.work.deliberation import verify_recorded_work
 
 
 class StubFacade:
-    def __init__(self, decision):
+    def __init__(
+        self,
+        decision,
+        *,
+        finish_reason: str = "completed",
+        usage: dict | None = None,
+    ):
         self.decision = decision
+        self.finish_reason = finish_reason
+        self.usage = usage or {}
         self.requests = []
 
     def try_invoke_sync(self, request):
@@ -22,6 +31,8 @@ class StubFacade:
         return GatewayResponse(
             request_id="request-1",
             structured_output=self.decision,
+            finish_reason=self.finish_reason,
+            usage=self.usage,
         )
 
 
@@ -59,6 +70,8 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
     )
     assert request.timeout_s == 180.0
     assert request.budget.max_tokens == 1024
+    assert request.reasoning_mode.value == "disabled"
+    assert request.reasoning_effort.value == "none"
     payload = json.loads(request.messages[1]["content"])
     assert payload["decision_schema"] == request.response_schema
     assert payload["tool_capability_catalog"][0]["category"] == "files"
@@ -73,6 +86,30 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
         and "assessment" not in event["payload"]
         for event in payload["work"]["recent_events"]
     )
+
+
+def test_model_deliberator_classifies_structured_output_budget_exhaustion(
+    tmp_path,
+):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix this behavior")
+    facade = StubFacade(
+        None,
+        finish_reason="length",
+        usage={
+            "completion_tokens": 1024,
+            "completion_tokens_details": {"reasoning_tokens": 1024},
+        },
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            r"exhausted the output budget.*max_output_tokens=1024, "
+            r"completion_tokens=1024, reasoning_tokens=1024"
+        ),
+    ):
+        ModelWorkDeliberator(facade)(harness.context_for(snapshot))
 
 
 def test_model_deliberator_bounds_event_history_and_failure_text(tmp_path):
