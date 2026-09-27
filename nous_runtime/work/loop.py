@@ -1234,7 +1234,10 @@ class AgentLoop:
         snapshot: WorkSnapshot,
         decision: WorkDecision,
     ) -> Mapping[str, Any] | None:
-        if decision.tool_name != "web_fetch":
+        if (
+            decision.status is not DecisionStatus.CONTINUE
+            or decision.tool_name != "web_fetch"
+        ):
             return None
         resource_key = cls._web_resource_key(decision.tool_arguments)
         failures: list[Mapping[str, Any]] = []

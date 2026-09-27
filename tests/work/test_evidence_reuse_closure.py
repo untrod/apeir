@@ -271,6 +271,42 @@ def test_unknown_web_failure_is_not_reissued(tmp_path):
     assert len(tools.calls) == 1
 
 
+def test_unknown_web_failure_can_transition_to_explicit_approval(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Explain one workspace value")
+    tools = ClosureTools(web_error_code="UNEXPECTED_PROVIDER_FAILURE")
+    decisions = iter(
+        (
+            _decision("web_fetch", {"url": "https://example.com/issue"}),
+            WorkDecision(
+                DecisionStatus.REQUEST_APPROVAL,
+                "The governed URL fetch requires explicit approval",
+                next_action="Approve the public URL fetch",
+                reason="The required public evidence is not available locally",
+                tool_name="web_fetch",
+                tool_arguments={"url": "https://example.com/issue"},
+            ),
+        )
+    )
+
+    waiting = harness.run(
+        created.run_id,
+        deliberator=lambda _context: next(decisions),
+        tools=tools,
+        max_iterations=4,
+    )
+
+    assert waiting.state is RunState.WAITING_FOR_APPROVAL
+    assert (
+        waiting.goal.blocker == "The required public evidence is not available locally"
+    )
+    assert len(tools.calls) == 1
+    assert not any(
+        event.payload.get("reason_code") == "UNCLASSIFIED_URL_FAILURE"
+        for event in harness.events.load_events(created.run_id)
+    )
+
+
 def test_http_status_retry_classification_is_deterministic():
     assert AgentLoop._classify_web_failure(
         {
