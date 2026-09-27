@@ -454,6 +454,7 @@ class ProcessSessionStore:
             if not session.process_identity:
                 session.process_identity = identity
         host_state = str(host.get("state") or "")
+        control_pending = str(host.get("control_pending") or "")
         try:
             ProcessSessionState(host_state)
         except ValueError:
@@ -462,10 +463,19 @@ class ProcessSessionStore:
             session.stdin_available = False
             return
         if host_state == ProcessSessionState.RUNNING.value:
-            if (
-                not identity
-                or not process_identity_matches(identity)
-                or not process_identity_matches(session.helper_identity)
+            target_matches = bool(identity and process_identity_matches(identity))
+            helper_matches = process_identity_matches(session.helper_identity)
+            terminal_control_pending = control_pending in {
+                "interrupt",
+                "terminate",
+                "kill",
+            }
+            # A target may disappear immediately after a terminal control is
+            # accepted, before the host publishes the terminal observation.
+            # The live helper plus its durable control intent closes that
+            # observation gap without treating an unknown outcome as success.
+            if not helper_matches or (
+                not target_matches and not terminal_control_pending
             ):
                 session.state = ProcessSessionState.RECOVERY_REQUIRED.value
                 session.error = "running process host identity cannot be verified"

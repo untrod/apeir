@@ -101,6 +101,22 @@ def process_creation_token(pid: int) -> str:
             return suffix[19]
         except (OSError, IndexError):
             return ""
+    ps = Path("/bin/ps")
+    if ps.is_file():
+        try:
+            result = subprocess.run(
+                [str(ps), "-o", "lstart=", "-p", str(pid)],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                check=False,
+                env={"LC_ALL": "C", "PATH": "/usr/bin:/bin"},
+            )
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        started = result.stdout.strip()
+        if result.returncode == 0 and started:
+            return "ps:" + hashlib.sha256(started.encode("utf-8")).hexdigest()
     return ""
 
 
@@ -272,6 +288,11 @@ class ProcessSandboxHost:
                                 # does not race the effect it initiated. The host
                                 # state remains the authoritative effect result.
                                 last_control = action
+                                state.update(
+                                    control_pending=action,
+                                    updated_at=_utc_now(),
+                                )
+                                _atomic_json(state_path, state)
                                 _atomic_json(
                                     ack_path,
                                     {
@@ -297,6 +318,11 @@ class ProcessSandboxHost:
                             }
                             if terminal_control:
                                 last_control = ""
+                                state.update(
+                                    control_pending="",
+                                    updated_at=_utc_now(),
+                                )
+                                _atomic_json(state_path, state)
                         if not terminal_control or not bool(result.get("ok")):
                             _atomic_json(ack_path, result)
                     state.update(
@@ -319,6 +345,7 @@ class ProcessSandboxHost:
                 }.get(last_control, "EXITED")
                 state.update(
                     state=terminal,
+                    control_pending="",
                     exit_code=exit_code,
                     completed_at=_utc_now(),
                     updated_at=_utc_now(),
