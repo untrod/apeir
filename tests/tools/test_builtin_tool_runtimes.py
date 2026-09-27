@@ -77,3 +77,28 @@ def test_git_tools_are_fixed_read_only_catalog_entries(tmp_path):
     assert "sample.txt" in status["stdout"]
     assert {item["effect_class"] for item in definitions} == {"read"}
     assert {item["approval_policy"] for item in definitions} == {"none"}
+
+
+@pytest.mark.skipif(resolve_executable("git") is None, reason="git is unavailable")
+def test_git_diff_normalizes_windows_checkout_line_endings(tmp_path):
+    git = resolve_executable("git")
+    subprocess.run([git, "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run([git, "config", "user.name", "APEIR Test"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [git, "config", "user.email", "test@example.invalid"],
+        cwd=tmp_path,
+        check=True,
+    )
+    source = tmp_path / "stable.txt"
+    source.write_bytes(b"first\nsecond\n")
+    subprocess.run([git, "add", "stable.txt"], cwd=tmp_path, check=True)
+    subprocess.run([git, "commit", "-q", "-m", "baseline"], cwd=tmp_path, check=True)
+    source.write_bytes(b"first\r\nsecond\r\n")
+    runtime = GitToolRuntime(tmp_path)
+    if not runtime.sandbox_available:
+        pytest.skip("strong process sandbox is unavailable")
+
+    result = runtime.execute("git_diff", {})
+
+    assert result["ok"] is True
+    assert result["stdout"] == ""

@@ -288,6 +288,46 @@ def test_identical_effectful_action_is_not_suppressed(tmp_path):
     )
 
 
+def test_uncertain_effect_outcome_requires_recovery_without_replay(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Run one process and preserve an uncertain outcome")
+    tools = EffectTools("execute")
+    tools.results = [
+        {
+            "ok": False,
+            "state": "RECOVERY_REQUIRED",
+            "recovery_required": True,
+            "error": "process host state is missing",
+        }
+    ]
+    decision = WorkDecision(
+        DecisionStatus.CONTINUE,
+        "Start the governed process",
+        tool_name="workspace_action",
+        tool_arguments={"command": "python -m pytest -q"},
+    )
+
+    interrupted = harness.run(
+        created.run_id,
+        deliberator=lambda _context: decision,
+        tools=tools,
+        max_iterations=3,
+    )
+
+    assert interrupted.state is RunState.RECOVERY_REQUIRED
+    assert interrupted.terminal is False
+    assert interrupted.pending_action["tool"] == "workspace_action"
+    assert interrupted.pending_action["effect_class"] == "execute"
+    assert tools.calls == [("workspace_action", {"command": "python -m pytest -q"})]
+    recovery = [
+        event
+        for event in harness.events.load_events(created.run_id)
+        if event.event_type == "work.recovery.required"
+    ]
+    assert len(recovery) == 1
+    assert recovery[0].payload["automatic_replay"] is False
+
+
 def test_live_process_status_is_not_treated_as_duplicate_static_evidence(tmp_path):
     harness = WorkHarness(tmp_path)
     snapshot = harness.create("Observe one running development process")

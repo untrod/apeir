@@ -159,6 +159,8 @@ class GitToolRuntime:
                     "core.fsmonitor=false",
                     "-c",
                     "core.hooksPath=NUL",
+                    "-c",
+                    "core.autocrlf=true",
                     "--git-dir",
                     str(metadata_snapshot),
                     "--work-tree",

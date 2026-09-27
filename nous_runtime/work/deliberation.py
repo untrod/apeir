@@ -24,6 +24,7 @@ from nous_runtime.work.models import DecisionStatus, WorkContext, WorkDecision
 _DECISION_EVENT_LIMIT = 6
 _DECISION_EVENT_TEXT_LIMIT = 200
 _DECISION_OBSERVATION_LIMIT = 6
+_DECISION_TOOL_TEXT_LIMIT = 6_000
 
 
 _DECISION_SCHEMA: dict[str, Any] = {
@@ -681,6 +682,60 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
                 compact_observation["result"]["content"] = str(
                     result.get("content") or ""
                 )[:12_000]
+            elif observation.get("tool") == "git_diff":
+                compact_observation["result"] = {
+                    "ok": bool(result.get("ok")),
+                    "exit_code": result.get("exit_code"),
+                    "stdout": str(result.get("stdout") or "")[
+                        :_DECISION_TOOL_TEXT_LIMIT
+                    ],
+                    "stderr": str(result.get("stderr") or "")[:1_000],
+                    "security_grade": str(result.get("security_grade") or ""),
+                    "truncated": len(str(result.get("stdout") or ""))
+                    > _DECISION_TOOL_TEXT_LIMIT,
+                }
+            elif observation.get("tool") in {"shell_stdout", "shell_stderr"}:
+                compact_observation["result"] = {
+                    key: result.get(key)
+                    for key in (
+                        "ok",
+                        "session_id",
+                        "stream",
+                        "cursor",
+                        "next_cursor",
+                        "size_bytes",
+                        "eof",
+                        "state",
+                        "error",
+                    )
+                    if result.get(key) not in (None, "", [], {})
+                }
+                compact_observation["result"]["text"] = str(result.get("text") or "")[
+                    :_DECISION_TOOL_TEXT_LIMIT
+                ]
+                compact_observation["result"]["truncated"] = (
+                    bool(result.get("truncated"))
+                    or len(str(result.get("text") or "")) > _DECISION_TOOL_TEXT_LIMIT
+                )
+            elif observation.get("tool") in {
+                "shell_start",
+                "shell_status",
+                "shell_attach",
+            }:
+                compact_observation["result"] = {
+                    key: result.get(key)
+                    for key in (
+                        "ok",
+                        "session_id",
+                        "command",
+                        "state",
+                        "exit_code",
+                        "stdin_available",
+                        "artifacts",
+                        "error",
+                    )
+                    if result.get(key) not in (None, "", [], {})
+                }
             elif (
                 observation.get("tool") == "read_file"
                 and position not in full_read_positions

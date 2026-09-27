@@ -439,6 +439,9 @@ class AgentLoop:
 
             if decision.tool_name:
                 self._execute_tool(snapshot, decision, tools, agent_run_id)
+                if snapshot.state is RunState.RECOVERY_REQUIRED:
+                    self.harness.checkpoint_agent(snapshot, resume=False)
+                    return snapshot
                 execution = self.harness.agent_runtime.require(agent_run_id)
                 if execution.state in {
                     AgentExecutionState.FAILED,
@@ -880,7 +883,6 @@ class AgentLoop:
         }
         snapshot.observations.append(observation)
         snapshot.observations[:] = snapshot.observations[-50:]
-        snapshot.pending_action.clear()
         self._collect_artifacts(snapshot, normalized)
         self._record_task_result(
             snapshot,
@@ -889,6 +891,27 @@ class AgentLoop:
             normalized,
             effect_class=effect_class,
         )
+        if self._effect_outcome_requires_recovery(effect_class, normalized):
+            reason = (
+                f"tool {decision.tool_name} has an uncertain effect outcome; "
+                "Kernel or manual recovery evidence is required"
+            )
+            snapshot.goal.block(reason)
+            snapshot.state = RunState.RECOVERY_REQUIRED
+            snapshot.error = str(normalized.get("error") or reason)
+            snapshot.reanalysis_reason = reason
+            self.harness.persist_progress(
+                snapshot,
+                "work.recovery.required",
+                {
+                    "reason": reason,
+                    "pending_action": dict(snapshot.pending_action),
+                    "result": normalized,
+                    "automatic_replay": False,
+                },
+            )
+            return
+        snapshot.pending_action.clear()
         snapshot.state = RunState.OBSERVING
         snapshot.reanalysis_reason = (
             "" if ok else f"tool {decision.tool_name} failed; analyze before retrying"
@@ -903,6 +926,31 @@ class AgentLoop:
                 "error": str(normalized.get("error") or "")[:500],
             },
         )
+
+    @staticmethod
+    def _effect_outcome_requires_recovery(
+        effect_class: str,
+        result: Mapping[str, Any],
+    ) -> bool:
+        """Keep uncertain side effects pending until durable evidence resolves them."""
+
+        if effect_class not in {"write", "execute", "network"}:
+            return False
+        state = (
+            str(
+                result.get("state")
+                or result.get("status")
+                or result.get("outcome")
+                or ""
+            )
+            .strip()
+            .upper()
+        )
+        return bool(result.get("recovery_required")) or state in {
+            "RECOVERY_REQUIRED",
+            "UNKNOWN",
+            "LOST",
+        }
 
     @staticmethod
     def _tool_effect(tools: Any, tool_name: str) -> tuple[str, str]:

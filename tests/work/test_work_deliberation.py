@@ -489,6 +489,61 @@ def test_model_deliberator_preserves_web_source_and_read_evidence(tmp_path):
     }
 
 
+def test_model_deliberator_bounds_git_and_shell_observation_text(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix the code in this repository")
+    snapshot.observations.extend(
+        (
+            {
+                "kind": "tool",
+                "tool": "read_file",
+                "ok": True,
+                "result": {
+                    "path": "src/example.py",
+                    "content": "source",
+                    "sha256": "source-digest",
+                },
+            },
+            {
+                "kind": "tool",
+                "tool": "shell_stdout",
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "session_id": "ps_fixture",
+                    "state": "EXITED",
+                    "text": "s" * 20_000,
+                },
+            },
+            {
+                "kind": "tool",
+                "tool": "git_diff",
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "exit_code": 0,
+                    "stdout": "d" * 30_000,
+                    "security_grade": "strong_vm",
+                },
+            },
+        )
+    )
+    facade = StubFacade({"status": "blocked", "summary": "done", "confidence": "high"})
+
+    ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+
+    observations = json.loads(facade.requests[0].messages[1]["content"])["work"][
+        "recent_observations"
+    ]
+    shell = next(item for item in observations if item.get("tool") == "shell_stdout")
+    diff = next(item for item in observations if item.get("tool") == "git_diff")
+    assert len(shell["result"]["text"]) == 6_000
+    assert shell["result"]["truncated"] is True
+    assert len(diff["result"]["stdout"]) == 6_000
+    assert diff["result"]["truncated"] is True
+    assert diff["result"]["security_grade"] == "strong_vm"
+
+
 def test_model_deliberator_injects_minimal_evidence_reuse_delta(tmp_path):
     harness = WorkHarness(tmp_path)
     snapshot = harness.create("Fix the code in this repository")
