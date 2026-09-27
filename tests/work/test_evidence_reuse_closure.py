@@ -141,6 +141,26 @@ def test_covered_range_is_reused_then_patch_invalidates_coverage(tmp_path):
     assert reads[-1]["result"]["sha256"] == "sha256:revision-2"
 
 
+def test_read_evidence_does_not_complete_coding_step(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Fix the code in this repository")
+    tools = ClosureTools()
+    read = _decision(
+        "read_file",
+        {"path": "src/example.py", "start_line": 1, "end_line": 20},
+    )
+    read = WorkDecision(**{**read.__dict__, "step_id": "execute_1", "phase": "INSPECT"})
+
+    stopped = harness.run(
+        created.run_id,
+        deliberator=lambda _context: read,
+        tools=tools,
+        max_iterations=1,
+    )
+
+    assert stopped.plan.require_task("execute_1").status.value == "running"
+
+
 def test_repeated_covered_range_stops_as_action_transition_stall(tmp_path):
     harness = WorkHarness(tmp_path)
     created = harness.create("Explain one workspace value")

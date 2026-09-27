@@ -18,7 +18,7 @@ from nous_runtime.model_runtime import (
     ReasoningMode,
     RoutingMode,
 )
-from nous_runtime.work.models import WorkContext, WorkDecision
+from nous_runtime.work.models import DecisionStatus, WorkContext, WorkDecision
 
 
 _DECISION_EVENT_LIMIT = 6
@@ -68,6 +68,10 @@ _DECISION_SCHEMA: dict[str, Any] = {
             },
         },
         "output": {},
+        "phase": {
+            "type": "string",
+            "enum": ["INSPECT", "ACT", "VERIFY", "WAIT", "COMPLETE"],
+        },
     },
 }
 
@@ -93,12 +97,16 @@ class ModelWorkDeliberator:
         self.max_output_tokens = int(max_output_tokens)
 
     def __call__(self, context: WorkContext) -> WorkDecision:
+        progress = _execution_progress(context)
+        phase = str(progress["phase"])
         payload = {
             "work": _decision_context(context),
+            "execution_progress": progress,
             "tool_capability_catalog": list(self.tool_capabilities),
             "available_tools": [self._tool_summary(item) for item in self.tools],
             "decision_schema": _DECISION_SCHEMA,
         }
+        native_tools = self._native_action_tools(context, progress)
         request = GatewayRequest(
             operation=GatewayOperation.STRUCTURED_OUTPUT,
             execution=GatewayExecutionContext(
@@ -151,7 +159,15 @@ class ModelWorkDeliberator:
                         "blocked are invalid before that safe discovery step. When "
                         "work.assessment.needs_web is true and the objective contains an "
                         "explicit URL, use the governed web_fetch tool before inferring "
-                        "the external report's contents."
+                        "the external report's contents. Treat execution_progress.phase "
+                        "as the authoritative Work transition. INSPECT gathers a "
+                        "specifically missing fact. ACT must propose one concrete "
+                        "mutation through an available action tool. VERIFY runs or "
+                        "observes governed validation. COMPLETE is valid only after "
+                        "verification_passed. When phase is ACT, do not request more "
+                        "covered source; call the supplied mutation tool. When phase is "
+                        "VERIFY and tests_run is false, advance the persistent shell "
+                        "instead of returning to source inspection."
                     ),
                 },
                 {
@@ -165,6 +181,7 @@ class ModelWorkDeliberator:
                 },
             ),
             response_schema=_DECISION_SCHEMA,
+            tools=native_tools,
             role=ModelRole.PLANNER,
             preferred_models=(self.preferred_model,) if self.preferred_model else (),
             routing_mode=(
@@ -182,12 +199,25 @@ class ModelWorkDeliberator:
                 "source": "work.harness",
                 "work_run_id": context.run_id,
                 "temperature": 0.1,
+                "work_phase": phase,
+                "tool_choice": "required" if native_tools else "auto",
             },
         )
         response = self.facade.try_invoke_sync(request)
         if not response.ok:
             raise RuntimeError(
                 str(response.error.get("message") or "work model invocation failed")
+            )
+        if response.tool_calls:
+            if len(response.tool_calls) != 1:
+                raise RuntimeError(
+                    "work action envelope requires exactly one native tool call"
+                )
+            return self._native_action_decision(
+                response.tool_calls[0],
+                context=context,
+                phase=phase,
+                allowed_tools=native_tools,
             )
         value = response.structured_output
         if not isinstance(value, Mapping):
@@ -208,7 +238,99 @@ class ModelWorkDeliberator:
                     f"reasoning_tokens={reasoning_tokens})"
                 )
             raise RuntimeError("work model did not return a structured decision")
-        return WorkDecision.from_value(value)
+        decision = WorkDecision.from_value(value)
+        if decision.phase:
+            return decision
+        decision_value = decision.to_dict()
+        decision_value["phase"] = phase
+        return WorkDecision.from_value(decision_value)
+
+    def _native_action_tools(
+        self,
+        context: WorkContext,
+        progress: Mapping[str, Any],
+    ) -> tuple[dict[str, Any], ...]:
+        phase = str(progress.get("phase") or "")
+        loaded = tuple(item for item in context.loaded_tools if item.get("tool_id"))
+        if phase == "ACT":
+            return tuple(
+                self._model_tool_specification(item)
+                for item in loaded
+                if self._tool_effect(item) == "write"
+                and self._tool_name(item) in {"patch_file", "write_file", "write_files"}
+            )
+        if phase == "VERIFY" and not bool(progress.get("tests_run")):
+            if not bool(progress.get("execution_started")):
+                return tuple(
+                    self._model_tool_specification(item)
+                    for item in loaded
+                    if self._tool_name(item) == "shell_start"
+                )
+            return tuple(
+                self._model_tool_specification(item)
+                for item in loaded
+                if self._tool_name(item)
+                in {"shell_status", "shell_stdout", "shell_stderr"}
+            )
+        return ()
+
+    @classmethod
+    def _native_action_decision(
+        cls,
+        call: Mapping[str, Any],
+        *,
+        context: WorkContext,
+        phase: str,
+        allowed_tools: Sequence[Mapping[str, Any]],
+    ) -> WorkDecision:
+        function = call.get("function")
+        value = function if isinstance(function, Mapping) else call
+        name = str(value.get("name") or call.get("name") or "")
+        raw_arguments = value.get("arguments", call.get("arguments", {}))
+        if isinstance(raw_arguments, str):
+            arguments = json.loads(raw_arguments or "{}")
+        elif isinstance(raw_arguments, Mapping):
+            arguments = dict(raw_arguments)
+        else:
+            raise RuntimeError("native action arguments must be an object")
+        allowed = {cls._tool_name(item) for item in allowed_tools}
+        if not name or name not in allowed:
+            raise RuntimeError(f"native action tool is not allowed in {phase}: {name}")
+        return WorkDecision(
+            status=DecisionStatus.CONTINUE,
+            summary=f"Execute provider-native {phase} action: {name}",
+            next_action=f"Execute governed tool {name}",
+            confidence="high",
+            tool_name=name,
+            tool_arguments=arguments,
+            step_id=_phase_step_id(context, phase),
+            phase=phase,
+            action_source="provider_native_tool_call",
+        )
+
+    @staticmethod
+    def _model_tool_specification(item: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": str(item.get("tool_id") or item.get("name") or ""),
+                "description": str(item.get("description") or ""),
+                "parameters": dict(
+                    item.get("input_schema") or item.get("parameters") or {}
+                ),
+            },
+        }
+
+    @staticmethod
+    def _tool_name(item: Mapping[str, Any]) -> str:
+        function = item.get("function")
+        if isinstance(function, Mapping):
+            return str(function.get("name") or "")
+        return str(item.get("name") or item.get("tool_id") or "")
+
+    @staticmethod
+    def _tool_effect(item: Mapping[str, Any]) -> str:
+        return str(item.get("effect_class") or "")
 
     @staticmethod
     def _tool_summary(specification: Mapping[str, Any]) -> dict[str, Any]:
@@ -224,6 +346,104 @@ class ModelWorkDeliberator:
             "description": str(specification.get("description") or ""),
             "parameters": dict(specification.get("input_schema") or {}),
         }
+
+
+def _execution_progress(context: WorkContext) -> dict[str, Any]:
+    observations = tuple(context.recent_observations)
+    assessment = dict(context.assessment)
+    source_evidence = any(
+        item.get("kind") == "tool"
+        and item.get("tool") == "read_file"
+        and item.get("ok") is True
+        and isinstance(item.get("result"), Mapping)
+        and _read_evidence_kind(str(item["result"].get("path") or "")) == "source"
+        for item in observations
+    )
+    web_evidence = any(
+        item.get("kind") == "tool"
+        and item.get("tool") in {"web_fetch", "web_search"}
+        and item.get("ok") is True
+        for item in observations
+    )
+    evidence_sufficient = source_evidence and (
+        not bool(assessment.get("needs_web")) or web_evidence
+    )
+    workspace_changed = any(
+        item.get("kind") == "tool"
+        and item.get("ok") is True
+        and _result_has_change(item.get("result"))
+        for item in observations
+    )
+    shell_results = [
+        item
+        for item in observations
+        if item.get("kind") == "tool"
+        and item.get("tool")
+        in {"shell_start", "shell_status", "shell_attach", "shell_stdout"}
+        and item.get("ok") is True
+        and isinstance(item.get("result"), Mapping)
+    ]
+    execution_started = bool(shell_results)
+    tests_run = any(_completed_test_result(item["result"]) for item in shell_results)
+    diff_reviewed = any(
+        item.get("kind") == "tool"
+        and item.get("tool") == "git_diff"
+        and item.get("ok") is True
+        and isinstance(item.get("result"), Mapping)
+        and bool(str(item["result"].get("stdout") or "").strip())
+        for item in observations
+    )
+    verification_passed = any(
+        item.get("kind") == "verification" and item.get("ok") is True
+        for item in observations
+    )
+    if verification_passed:
+        phase = "COMPLETE"
+    elif workspace_changed:
+        phase = "VERIFY"
+    elif evidence_sufficient:
+        phase = "ACT"
+    else:
+        phase = "INSPECT"
+    return {
+        "phase": phase,
+        "evidence_sufficient": evidence_sufficient,
+        "workspace_changed": workspace_changed,
+        "execution_started": execution_started,
+        "tests_run": tests_run,
+        "diff_reviewed": diff_reviewed,
+        "verification_passed": verification_passed,
+    }
+
+
+def _result_has_change(value: Any) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    if isinstance(value.get("change"), Mapping):
+        return True
+    if any(isinstance(item, Mapping) for item in value.get("changes") or ()):
+        return True
+    return any(
+        isinstance(item, Mapping) and isinstance(item.get("change"), Mapping)
+        for item in value.get("files") or ()
+    )
+
+
+def _completed_test_result(result: Mapping[str, Any]) -> bool:
+    command = tuple(str(item) for item in result.get("command") or ())
+    is_test = any(item in {"pytest", "test"} or "pytest" in item for item in command)
+    state = str(result.get("state") or "").upper()
+    return is_test and state == "EXITED" and int(result.get("exit_code") or 0) == 0
+
+
+def _phase_step_id(context: WorkContext, phase: str) -> str:
+    plan = dict(context.plan or {})
+    tasks = tuple(item for item in plan.get("tasks") or () if isinstance(item, Mapping))
+    preferred_capability = "coding" if phase in {"ACT", "VERIFY"} else "reasoning"
+    for task in tasks:
+        if str(task.get("capability_id") or "") == preferred_capability:
+            return str(task.get("task_id") or "")
+    return ""
 
 
 def _decision_context(context: WorkContext) -> dict[str, Any]:
@@ -619,13 +839,30 @@ def verify_recorded_work(context: WorkContext) -> dict[str, Any]:
     successful_tools = [
         item for item in latest_tool_results.values() if item.get("ok") is True
     ]
-    ok = not failed and not unfinished and (not needs_tools or bool(successful_tools))
+    progress = _execution_progress(context)
+    required_progress: tuple[str, ...] = ()
+    if str(context.assessment.get("task_type") or "") == "coding":
+        required_progress = (
+            "evidence_sufficient",
+            "workspace_changed",
+            "tests_run",
+            "diff_reviewed",
+        )
+    missing_progress = [key for key in required_progress if not progress.get(key)]
+    ok = (
+        not failed
+        and not unfinished
+        and (not needs_tools or bool(successful_tools))
+        and not missing_progress
+    )
     return {
         "ok": ok,
-        "strategy": "recorded-work-baseline-v1",
+        "strategy": "recorded-work-baseline-v2",
         "failed_tool_observations": len(failed),
         "unfinished_steps": [str(item) for item in unfinished if item],
         "successful_tool_observations": len(successful_tools),
+        "execution_progress": progress,
+        "missing_progress_facts": missing_progress,
         "error": "" if ok else "recorded work does not satisfy the baseline gate",
     }
 

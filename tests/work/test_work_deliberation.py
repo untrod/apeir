@@ -20,10 +20,12 @@ class StubFacade:
         *,
         finish_reason: str = "completed",
         usage: dict | None = None,
+        tool_calls: tuple[dict, ...] = (),
     ):
         self.decision = decision
         self.finish_reason = finish_reason
         self.usage = usage or {}
+        self.tool_calls = tool_calls
         self.requests = []
 
     def try_invoke_sync(self, request):
@@ -31,6 +33,7 @@ class StubFacade:
         return GatewayResponse(
             request_id="request-1",
             structured_output=self.decision,
+            tool_calls=self.tool_calls,
             finish_reason=self.finish_reason,
             usage=self.usage,
         )
@@ -86,6 +89,140 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
         and "assessment" not in event["payload"]
         for event in payload["work"]["recent_events"]
     )
+
+
+def test_model_deliberator_maps_native_patch_call_to_action_envelope(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix the code in this repository")
+    snapshot.loaded_tools["patch_file"] = {
+        "tool_id": "patch_file",
+        "description": "Patch exact source context",
+        "effect_class": "write",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "expected": {"type": "string"},
+                "replacement": {"type": "string"},
+            },
+            "required": ["path", "expected", "replacement"],
+        },
+    }
+    snapshot.observations.append(
+        {
+            "kind": "tool",
+            "tool": "read_file",
+            "ok": True,
+            "plan_revision": snapshot.plan.revision,
+            "result": {
+                "ok": True,
+                "path": "src/example.py",
+                "start_line": 1,
+                "end_line": 20,
+                "content": "def value():\n    return 1",
+                "sha256": "source-digest",
+            },
+        }
+    )
+    facade = StubFacade(
+        None,
+        tool_calls=(
+            {
+                "id": "call-patch",
+                "type": "function",
+                "function": {
+                    "name": "patch_file",
+                    "arguments": json.dumps(
+                        {
+                            "path": "src/example.py",
+                            "expected": "return 1",
+                            "replacement": "return 2",
+                        }
+                    ),
+                },
+            },
+        ),
+    )
+
+    decision = ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+
+    assert decision.phase == "ACT"
+    assert decision.action_source == "provider_native_tool_call"
+    assert decision.tool_name == "patch_file"
+    assert decision.tool_arguments["replacement"] == "return 2"
+    assert decision.step_id == "execute_1"
+    request = facade.requests[0]
+    assert request.metadata["work_phase"] == "ACT"
+    assert request.metadata["tool_choice"] == "required"
+    assert [item["function"]["name"] for item in request.tools] == ["patch_file"]
+    payload = json.loads(request.messages[1]["content"])
+    assert payload["execution_progress"] == {
+        "phase": "ACT",
+        "evidence_sufficient": True,
+        "workspace_changed": False,
+        "execution_started": False,
+        "tests_run": False,
+        "diff_reviewed": False,
+        "verification_passed": False,
+    }
+
+
+def test_model_deliberator_requires_shell_start_after_workspace_change(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix the code in this repository")
+    snapshot.loaded_tools["shell_start"] = {
+        "tool_id": "shell_start",
+        "description": "Start a governed test process",
+        "effect_class": "execute",
+        "input_schema": {
+            "type": "object",
+            "properties": {"command": {"type": "array"}},
+            "required": ["command"],
+        },
+    }
+    snapshot.observations.extend(
+        (
+            {
+                "kind": "tool",
+                "tool": "read_file",
+                "ok": True,
+                "plan_revision": snapshot.plan.revision,
+                "result": {"path": "src/example.py", "sha256": "old"},
+            },
+            {
+                "kind": "tool",
+                "tool": "patch_file",
+                "ok": True,
+                "plan_revision": snapshot.plan.revision,
+                "result": {
+                    "ok": True,
+                    "change": {
+                        "path": "src/example.py",
+                        "before_digest": "old",
+                        "after_digest": "new",
+                    },
+                },
+            },
+        )
+    )
+    facade = StubFacade(
+        None,
+        tool_calls=(
+            {
+                "id": "call-test",
+                "function": {
+                    "name": "shell_start",
+                    "arguments": '{"command":["pytest","-q"]}',
+                },
+            },
+        ),
+    )
+
+    decision = ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+
+    assert decision.phase == "VERIFY"
+    assert decision.tool_name == "shell_start"
+    assert facade.requests[0].metadata["tool_choice"] == "required"
 
 
 def test_model_deliberator_classifies_structured_output_budget_exhaustion(
@@ -423,8 +560,8 @@ def test_recorded_work_verifier_requires_tool_evidence_when_assessed(tmp_path):
     snapshot = harness.create("Fix the code in this repository")
 
     missing = verify_recorded_work(harness.context_for(snapshot))
-    snapshot.observations.append(
-        {"kind": "tool", "tool": "write_file", "ok": True, "result": {"ok": True}}
+    snapshot.observations.extend(
+        _completed_code_work_observations(snapshot.plan.revision)
     )
     for task in snapshot.plan.tasks:
         if task.task_id != "verify":
@@ -433,6 +570,7 @@ def test_recorded_work_verifier_requires_tool_evidence_when_assessed(tmp_path):
 
     assert missing["ok"] is False
     assert recorded["ok"] is True
+    assert recorded["missing_progress_facts"] == []
 
 
 def test_recorded_work_verifier_uses_latest_result_for_current_plan(tmp_path):
@@ -455,6 +593,7 @@ def test_recorded_work_verifier_uses_latest_result_for_current_plan(tmp_path):
                 "ok": True,
                 "plan_revision": revision,
             },
+            *_completed_code_work_observations(revision),
         )
     )
     for task in snapshot.plan.tasks:
@@ -488,6 +627,7 @@ def test_recorded_work_verifier_ignores_denied_unregistered_tool_name(tmp_path):
                 "plan_revision": revision,
                 "result": {"ok": True},
             },
+            *_completed_code_work_observations(revision),
         )
     )
     for task in snapshot.plan.tasks:
@@ -499,6 +639,49 @@ def test_recorded_work_verifier_ignores_denied_unregistered_tool_name(tmp_path):
     assert result["ok"] is True
     assert result["failed_tool_observations"] == 0
     assert result["successful_tool_observations"] == 1
+
+
+def _completed_code_work_observations(revision):
+    return (
+        {
+            "kind": "tool",
+            "tool": "read_file",
+            "ok": True,
+            "plan_revision": revision,
+            "result": {"path": "src/example.py", "sha256": "before"},
+        },
+        {
+            "kind": "tool",
+            "tool": "patch_file",
+            "ok": True,
+            "plan_revision": revision,
+            "result": {
+                "change": {
+                    "path": "src/example.py",
+                    "before_digest": "before",
+                    "after_digest": "after",
+                }
+            },
+        },
+        {
+            "kind": "tool",
+            "tool": "shell_start",
+            "ok": True,
+            "plan_revision": revision,
+            "result": {
+                "command": ["pytest", "-q"],
+                "state": "EXITED",
+                "exit_code": 0,
+            },
+        },
+        {
+            "kind": "tool",
+            "tool": "git_diff",
+            "ok": True,
+            "plan_revision": revision,
+            "result": {"stdout": "diff --git a/src/example.py b/src/example.py"},
+        },
+    )
 
 
 def test_work_cli_lists_durable_runs_without_loading_a_model(tmp_path):

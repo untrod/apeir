@@ -61,6 +61,12 @@ _NON_RETRYABLE_WEB_FAILURES = {
     "NETWORK_TLS_FAILED",
     "NETWORK_URL_INVALID",
 }
+_VOLATILE_OBSERVATION_TOOLS = {
+    "shell_status",
+    "shell_attach",
+    "shell_stdout",
+    "shell_stderr",
+}
 
 
 class AgentLoop:
@@ -104,6 +110,7 @@ class AgentLoop:
                 return snapshot
 
             snapshot.state = RunState.UNDERSTANDING
+            self._reconcile_plan_progress(snapshot)
             self.harness.persist_progress(
                 snapshot,
                 "work.analysis",
@@ -486,6 +493,10 @@ class AgentLoop:
             categories.append("files")
         if snapshot.analysis.task_type == "coding":
             categories.append("shell")
+            if known.intersection(
+                {"git_status", "git_diff", "git_log", "git_branch", "git_show"}
+            ):
+                categories.append("git")
         if snapshot.analysis.needs_web:
             categories.append("web")
 
@@ -755,6 +766,8 @@ class AgentLoop:
         snapshot.pending_action = {
             "tool": decision.tool_name,
             "step_id": step_id,
+            "phase": decision.phase,
+            "action_source": decision.action_source,
             "arguments_digest": self._arguments_digest(decision.tool_arguments),
             "effect_class": effect_class,
             "capability_id": capability_id,
@@ -869,7 +882,13 @@ class AgentLoop:
         snapshot.observations[:] = snapshot.observations[-50:]
         snapshot.pending_action.clear()
         self._collect_artifacts(snapshot, normalized)
-        self._record_task_result(snapshot, step_id, ok, normalized)
+        self._record_task_result(
+            snapshot,
+            step_id,
+            ok,
+            normalized,
+            effect_class=effect_class,
+        )
         snapshot.state = RunState.OBSERVING
         snapshot.reanalysis_reason = (
             "" if ok else f"tool {decision.tool_name} failed; analyze before retrying"
@@ -918,6 +937,11 @@ class AgentLoop:
         tools: Any,
     ) -> Mapping[str, Any] | None:
         if not decision.tool_name:
+            return None
+        if decision.tool_name in _VOLATILE_OBSERVATION_TOOLS:
+            # These reads observe a live process and may legitimately change while
+            # their arguments remain identical. The bounded Work iteration budget
+            # still prevents an unbounded polling loop.
             return None
         effect_class, _ = cls._tool_effect(tools, decision.tool_name)
         if effect_class not in {"none", "read"}:
@@ -1475,6 +1499,8 @@ class AgentLoop:
         step_id: str,
         ok: bool,
         result: Mapping[str, Any],
+        *,
+        effect_class: str = "unknown",
     ) -> None:
         if snapshot.plan is None or not step_id:
             return
@@ -1485,10 +1511,64 @@ class AgentLoop:
                 f"tool result referenced unknown step: {step_id}"
             )
             return
-        task.status = TaskStatus.COMPLETED if ok else TaskStatus.FAILED
+        if ok and task.capability_id == "coding" and effect_class in {"none", "read"}:
+            task.status = TaskStatus.RUNNING
+        else:
+            task.status = TaskStatus.COMPLETED if ok else TaskStatus.FAILED
         task.result = dict(result)
         task.error = "" if ok else str(result.get("error") or "tool failed")
         task.completed_at = work_timestamp()
+
+    @staticmethod
+    def _reconcile_plan_progress(snapshot: WorkSnapshot) -> None:
+        if snapshot.plan is None:
+            return
+        revision = snapshot.plan.revision
+        current = [
+            item
+            for item in snapshot.observations
+            if int(item.get("plan_revision") or revision) == revision
+        ]
+        source_evidence = any(
+            item.get("kind") == "tool"
+            and item.get("tool") == "read_file"
+            and item.get("ok") is True
+            and isinstance(item.get("result"), Mapping)
+            and AgentLoop._is_source_path(
+                str((item.get("result") or {}).get("path") or "")
+            )
+            for item in current
+        )
+        web_evidence = any(
+            item.get("kind") == "tool"
+            and item.get("tool") in {"web_fetch", "web_search"}
+            and item.get("ok") is True
+            for item in current
+        )
+        evidence_sufficient = source_evidence and (
+            not snapshot.analysis.needs_web or web_evidence
+        )
+        workspace_changed = any(
+            item.get("kind") == "tool"
+            and item.get("ok") is True
+            and AgentLoop._changed_paths(item.get("result"))
+            for item in current
+        )
+        for task in snapshot.plan.tasks:
+            if task.task_id == "analyze" or task.task_id == "verify":
+                continue
+            if task.capability_id == "reasoning" and evidence_sufficient:
+                task.status = TaskStatus.COMPLETED
+                task.result = {"progress_fact": "evidence_sufficient"}
+                task.error = ""
+            elif task.capability_id == "coding":
+                if workspace_changed:
+                    task.status = TaskStatus.COMPLETED
+                    task.result = {"progress_fact": "workspace_changed"}
+                    task.error = ""
+                elif task.status is TaskStatus.COMPLETED:
+                    task.status = TaskStatus.RUNNING
+                    task.result = {"progress_fact": "awaiting_workspace_change"}
 
     @staticmethod
     def _result_mapping(value: Any) -> dict[str, Any]:

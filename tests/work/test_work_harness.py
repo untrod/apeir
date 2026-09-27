@@ -288,6 +288,32 @@ def test_identical_effectful_action_is_not_suppressed(tmp_path):
     )
 
 
+def test_live_process_status_is_not_treated_as_duplicate_static_evidence(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Observe one running development process")
+    decision = WorkDecision(
+        DecisionStatus.CONTINUE,
+        "Observe the current process state",
+        tool_name="shell_status",
+        tool_arguments={"session_id": "ps_fixture"},
+    )
+    snapshot.observations.append(
+        {
+            "kind": "tool",
+            "tool": "shell_status",
+            "ok": True,
+            "plan_revision": snapshot.plan.revision if snapshot.plan else 0,
+            "arguments_digest": AgentLoop._arguments_digest(decision.tool_arguments),
+            "result": {"state": "RUNNING"},
+        }
+    )
+
+    assert (
+        AgentLoop._successful_read_action(snapshot, decision, EffectTools("read"))
+        is None
+    )
+
+
 def test_repeated_identical_read_loop_stops_at_cost_guardrail(tmp_path):
     harness = WorkHarness(tmp_path)
     created = harness.create("Explain one workspace value")

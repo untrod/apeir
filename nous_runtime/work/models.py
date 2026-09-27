@@ -75,6 +75,8 @@ class WorkDecision:
     plan_revision_required: bool = False
     replacement_steps: tuple[PlanStepDraft, ...] = ()
     output: Any = None
+    phase: str = ""
+    action_source: str = "structured_decision"
 
     def __post_init__(self) -> None:
         if not str(self.summary or "").strip():
@@ -85,6 +87,14 @@ class WorkDecision:
             self.tool_name or self.next_action
         ):
             raise ValueError("continue decision requires a tool or next action")
+        if self.phase and self.phase not in {
+            "INSPECT",
+            "ACT",
+            "VERIFY",
+            "WAIT",
+            "COMPLETE",
+        }:
+            raise ValueError("work decision phase is invalid")
         if self.plan_revision_required and not self.replacement_steps:
             raise ValueError("plan revision requires replacement steps")
 
@@ -101,6 +111,8 @@ class WorkDecision:
             "plan_revision_required": self.plan_revision_required,
             "replacement_steps": [item.to_dict() for item in self.replacement_steps],
             "output": self.output,
+            "phase": self.phase,
+            "action_source": self.action_source,
         }
 
     @classmethod
@@ -124,6 +136,8 @@ class WorkDecision:
                 for item in value.get("replacement_steps") or ()
             ),
             output=value.get("output"),
+            phase=str(value.get("phase") or ""),
+            action_source=str(value.get("action_source") or "structured_decision"),
         )
 
 
