@@ -47,7 +47,10 @@ $portable = (Resolve-Path -LiteralPath $PortableRoot).Path
 $sidecar = Join-Path $portable "nous-runtime.exe"
 $kernel = Join-Path $portable "nousd.exe"
 $worker = Join-Path $portable "nous-provider-worker.exe"
-$launcher = Join-Path $portable "Nous.exe"
+$launcher = Join-Path $portable "APEIR.exe"
+if (-not (Test-Path -LiteralPath $launcher)) {
+    $launcher = Join-Path $portable "Nous.exe"
+}
 foreach ($path in @($sidecar, $kernel, $worker, $launcher)) {
     if (-not (Test-Path -LiteralPath $path)) { throw "Native artifact missing: $path" }
 }
@@ -248,7 +251,11 @@ try {
 
     $evidence = [ordered]@{
         timestamp_utc = [DateTime]::UtcNow.ToString("o")
-        evidence_level = "native-packaged-windows-10-x64-integrated-host"
+        evidence_level = if ([string]::IsNullOrWhiteSpace($env:APEIR_SCIENTIFIC_EVIDENCE_LEVEL)) {
+            "native-packaged-windows-10-x64-integrated-host"
+        } else {
+            $env:APEIR_SCIENTIFIC_EVIDENCE_LEVEL
+        }
         workspace = $workspace
         token_disclosed = $false
         contracts = @{
