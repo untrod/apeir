@@ -1162,6 +1162,10 @@ fn create_default_workspace(path: String) -> Result<String, String> {
     Ok(activated)
 }
 
+fn should_hide_main_window_on_close(label: &str) -> bool {
+    label == "main"
+}
+
 fn main() {
     let app = tauri::Builder::default()
         .manage(RuntimeManager::default())
@@ -1204,6 +1208,16 @@ fn main() {
             tray.build(app.handle())?;
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if should_hide_main_window_on_close(window.label()) {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    if let Err(error) = window.hide() {
+                        log::error!("Desktop detach failed: {error}");
+                    }
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             get_version,
             show_window,
@@ -1244,7 +1258,7 @@ fn main() {
 mod tests {
     use super::{
         credential_allowlist, initialize_workspace, runtime_session_is_valid,
-        validate_workspace_root,
+        should_hide_main_window_on_close, validate_workspace_root,
     };
     use std::{
         env, fs,
@@ -1303,6 +1317,12 @@ mod tests {
         let (port, handle) = session_server("401 Unauthorized", &token);
         assert!(!runtime_session_is_valid("127.0.0.1", port, &token));
         handle.join().expect("join test server");
+    }
+
+    #[test]
+    fn main_window_close_detaches_to_tray() {
+        assert!(should_hide_main_window_on_close("main"));
+        assert!(!should_hide_main_window_on_close("diagnostics"));
     }
 
     #[test]
