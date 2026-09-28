@@ -9,7 +9,9 @@ from nous_runtime.governance.runtime_mode import (
 def test_local_cli_defaults_to_development(monkeypatch):
     monkeypatch.delenv("NOUS_RUNTIME_MODE", raising=False)
     monkeypatch.delenv("NOUS_ENV", raising=False)
-    assert resolve_runtime_mode(surface="local_cli") == GovernanceRuntimeMode.DEVELOPMENT
+    assert (
+        resolve_runtime_mode(surface="local_cli") == GovernanceRuntimeMode.DEVELOPMENT
+    )
     assert not should_fail_closed(surface="local_cli")
 
 
@@ -19,6 +21,16 @@ def test_server_defaults_to_production(monkeypatch):
     policy = mode_policy(surface="server")
     assert policy.mode == GovernanceRuntimeMode.PRODUCTION
     assert policy.fail_closed
+    assert policy.audit_required
+
+
+def test_work_harness_defaults_to_fail_closed_production(monkeypatch):
+    monkeypatch.delenv("NOUS_RUNTIME_MODE", raising=False)
+    monkeypatch.delenv("NOUS_ENV", raising=False)
+    policy = mode_policy(surface="work_harness")
+    assert policy.mode == GovernanceRuntimeMode.PRODUCTION
+    assert policy.fail_closed
+    assert not policy.compatibility_bypass_allowed
     assert policy.audit_required
 
 

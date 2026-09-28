@@ -24,7 +24,9 @@ class GovernanceModePolicy:
     audit_required: bool
 
 
-def parse_runtime_mode(value: str | GovernanceRuntimeMode | None) -> GovernanceRuntimeMode | None:
+def parse_runtime_mode(
+    value: str | GovernanceRuntimeMode | None,
+) -> GovernanceRuntimeMode | None:
     """Parse a runtime mode value. Returns None for an unset value."""
     if value is None:
         return None
@@ -55,24 +57,31 @@ def resolve_runtime_mode(*, surface: str = "local_cli") -> GovernanceRuntimeMode
     if env == "test":
         return GovernanceRuntimeMode.TEST
 
-    if surface in {"server", "api", "control_plane"}:
+    if surface in {"server", "api", "control_plane", "work_harness"}:
         return GovernanceRuntimeMode.PRODUCTION
     return GovernanceRuntimeMode.DEVELOPMENT
 
 
-def mode_policy(mode: GovernanceRuntimeMode | str | None = None, *, surface: str = "local_cli") -> GovernanceModePolicy:
+def mode_policy(
+    mode: GovernanceRuntimeMode | str | None = None, *, surface: str = "local_cli"
+) -> GovernanceModePolicy:
     """Return enforcement policy for the resolved mode."""
     resolved = parse_runtime_mode(mode) or resolve_runtime_mode(surface=surface)
-    fail_closed = resolved in {GovernanceRuntimeMode.STRICT, GovernanceRuntimeMode.PRODUCTION}
+    fail_closed = resolved in {
+        GovernanceRuntimeMode.STRICT,
+        GovernanceRuntimeMode.PRODUCTION,
+    }
     return GovernanceModePolicy(
         mode=resolved,
         fail_closed=fail_closed,
-        compatibility_bypass_allowed=resolved in {
+        compatibility_bypass_allowed=resolved
+        in {
             GovernanceRuntimeMode.DEVELOPMENT,
             GovernanceRuntimeMode.TEST,
             GovernanceRuntimeMode.COMPATIBILITY,
         },
-        audit_required=resolved in {
+        audit_required=resolved
+        in {
             GovernanceRuntimeMode.COMPATIBILITY,
             GovernanceRuntimeMode.STRICT,
             GovernanceRuntimeMode.PRODUCTION,
@@ -80,6 +89,8 @@ def mode_policy(mode: GovernanceRuntimeMode | str | None = None, *, surface: str
     )
 
 
-def should_fail_closed(mode: GovernanceRuntimeMode | str | None = None, *, surface: str = "local_cli") -> bool:
+def should_fail_closed(
+    mode: GovernanceRuntimeMode | str | None = None, *, surface: str = "local_cli"
+) -> bool:
     """True when side-effecting execution must be denied on governance failure."""
     return mode_policy(mode, surface=surface).fail_closed
