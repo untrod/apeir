@@ -320,3 +320,12 @@ def test_http_status_retry_classification_is_deterministic():
             "error": "The remote server returned HTTP 404.",
         }
     ) == ("non_retryable", False, "NETWORK_HTTP_STATUS")
+
+
+def test_connection_reset_is_retryable_even_with_generic_runtime_code():
+    assert AgentLoop._classify_web_failure(
+        {
+            "error_code": "NOUS_RUNTIME_EXECUTION_FAILED",
+            "error": "The remote peer reset the connection.",
+        }
+    ) == ("retryable", True, "NOUS_RUNTIME_EXECUTION_FAILED")

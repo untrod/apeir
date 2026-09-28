@@ -1321,7 +1321,19 @@ class AgentLoop:
             if status in {408, 425, 429, 500, 502, 503, 504}:
                 return "retryable", True, code
             return "non_retryable", False, code
-        if any(marker in lowered for marker in ("timed out", "timeout", "temporar")):
+        if any(
+            marker in lowered
+            for marker in (
+                "timed out",
+                "timeout",
+                "temporar",
+                "connection reset",
+                "reset the connection",
+                "remote peer reset",
+                "connection aborted",
+                "server disconnected",
+            )
+        ):
             return "retryable", True, code
         if any(
             marker in lowered
