@@ -420,12 +420,25 @@ def _execution_progress(context: WorkContext) -> dict[str, Any]:
 def _result_has_change(value: Any) -> bool:
     if not isinstance(value, Mapping):
         return False
-    if isinstance(value.get("change"), Mapping):
+
+    if value.get("changed") is False:
+        return False
+
+    def is_effective(change: Any) -> bool:
+        if not isinstance(change, Mapping) or change.get("changed") is False:
+            return False
+        before = str(change.get("before_digest") or "")
+        after = str(change.get("after_digest") or "")
+        if before and after:
+            return before != after
+        return bool(change.get("path"))
+
+    if is_effective(value.get("change")):
         return True
-    if any(isinstance(item, Mapping) for item in value.get("changes") or ()):
+    if any(is_effective(item) for item in value.get("changes") or ()):
         return True
     return any(
-        isinstance(item, Mapping) and isinstance(item.get("change"), Mapping)
+        isinstance(item, Mapping) and is_effective(item.get("change"))
         for item in value.get("files") or ()
     )
 
@@ -552,10 +565,23 @@ def _decision_context(context: WorkContext) -> dict[str, Any]:
     select_latest(lambda item: item.get("kind") == "guardrail")
     select_latest(lambda item: item.get("kind") == "tool" and item.get("ok") is False)
     select_latest(
-        lambda item: (
-            item.get("tool") in {"web_fetch", "web_search"} and item.get("ok") is True
-        )
+        lambda item: item.get("tool") == "web_search" and item.get("ok") is True
     )
+    selected_web_urls: set[str] = set()
+    for index in range(len(recent_observations) - 1, -1, -1):
+        item = recent_observations[index]
+        if item.get("tool") != "web_fetch" or item.get("ok") is not True:
+            continue
+        result = item.get("result")
+        if not isinstance(result, Mapping):
+            continue
+        url = str(result.get("url") or "").split("#", 1)[0].rstrip("/")
+        if not url or url in selected_web_urls:
+            continue
+        selected_web_urls.add(url)
+        selected_indexes.add(index)
+        if len(selected_web_urls) >= 3:
+            break
     select_latest(
         lambda item: (
             item.get("tool") == "read_file"

@@ -225,6 +225,47 @@ def test_model_deliberator_requires_shell_start_after_workspace_change(tmp_path)
     assert facade.requests[0].metadata["tool_choice"] == "required"
 
 
+def test_model_deliberator_does_not_advance_after_noop_patch(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Fix the code in this repository")
+    snapshot.observations.extend(
+        (
+            {
+                "kind": "tool",
+                "tool": "read_file",
+                "ok": True,
+                "plan_revision": snapshot.plan.revision,
+                "result": {"path": "src/example.py", "sha256": "same"},
+            },
+            {
+                "kind": "tool",
+                "tool": "patch_file",
+                "ok": True,
+                "plan_revision": snapshot.plan.revision,
+                "result": {
+                    "ok": True,
+                    "changed": False,
+                    "change": {
+                        "path": "src/example.py",
+                        "before_digest": "same",
+                        "after_digest": "same",
+                    },
+                },
+            },
+        )
+    )
+    facade = StubFacade(
+        {"status": "blocked", "summary": "no change", "confidence": "high"}
+    )
+
+    ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+
+    payload = json.loads(facade.requests[0].messages[1]["content"])
+    progress = payload["execution_progress"]
+    assert progress["phase"] == "ACT"
+    assert progress["workspace_changed"] is False
+
+
 def test_model_deliberator_classifies_structured_output_budget_exhaustion(
     tmp_path,
 ):
@@ -486,6 +527,76 @@ def test_model_deliberator_preserves_web_source_and_read_evidence(tmp_path):
     assert {item["result"]["content"] for item in reads} == {
         "source body",
         "test body",
+    }
+
+
+def test_model_deliberator_preserves_search_and_distinct_web_sources(tmp_path):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Research two official sources and write a report")
+    snapshot.observations.extend(
+        (
+            {
+                "kind": "tool",
+                "tool": "web_search",
+                "ok": True,
+                "result": {"ok": True, "query": "official APIs", "results": []},
+            },
+            {
+                "kind": "tool",
+                "tool": "web_fetch",
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "url": "https://docs.example.test/python#api",
+                    "content": "python evidence",
+                    "content_hash": "python-digest",
+                },
+            },
+            {
+                "kind": "tool",
+                "tool": "web_fetch",
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "url": "https://docs.example.test/rust#api",
+                    "content": "rust evidence",
+                    "content_hash": "rust-digest",
+                },
+            },
+            {
+                "kind": "tool",
+                "tool": "web_fetch",
+                "ok": True,
+                "result": {
+                    "ok": True,
+                    "url": "https://docs.example.test/python",
+                    "content": "duplicate python evidence",
+                    "content_hash": "python-digest",
+                },
+            },
+            *(
+                {
+                    "kind": "tool",
+                    "tool": "catalog_expand",
+                    "ok": True,
+                    "result": {"ok": True, "category": f"later-{index}", "tools": []},
+                }
+                for index in range(8)
+            ),
+        )
+    )
+    facade = StubFacade({"status": "blocked", "summary": "done", "confidence": "high"})
+
+    ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+
+    observations = json.loads(facade.requests[0].messages[1]["content"])["work"][
+        "recent_observations"
+    ]
+    assert any(item.get("tool") == "web_search" for item in observations)
+    web = [item for item in observations if item.get("tool") == "web_fetch"]
+    assert {item["result"]["url"].split("#", 1)[0].rstrip("/") for item in web} == {
+        "https://docs.example.test/python",
+        "https://docs.example.test/rust",
     }
 
 

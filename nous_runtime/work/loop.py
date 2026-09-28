@@ -1159,10 +1159,18 @@ class AgentLoop:
     def _changed_paths(result: Any) -> tuple[str, ...]:
         if not isinstance(result, Mapping):
             return ()
+        if result.get("changed") is False:
+            return ()
         paths: list[str] = []
 
         def collect(change: Any) -> None:
-            if isinstance(change, Mapping) and change.get("path"):
+            if not isinstance(change, Mapping) or change.get("changed") is False:
+                return
+            before = str(change.get("before_digest") or "")
+            after = str(change.get("after_digest") or "")
+            if before and after and before == after:
+                return
+            if change.get("path"):
                 paths.append(str(change["path"]))
 
         collect(result.get("change"))
