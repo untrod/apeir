@@ -124,7 +124,7 @@ class TestCircuitBreaker:
     def test_cooldown_to_half_open(self):
         cb = CircuitBreaker("p:m", CircuitConfig(
             consecutive_failure_threshold=2,
-            min_sample_count=1,
+            min_sample_count=2,
             cooldown_seconds=0.001,
         ))
         for _ in range(2):
