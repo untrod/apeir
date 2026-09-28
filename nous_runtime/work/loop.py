@@ -262,7 +262,15 @@ class AgentLoop:
                 },
             )
 
-            covered = self._covered_file_read(snapshot, decision)
+            patch_recovery_read = self._failed_patch_recovery_read(
+                snapshot,
+                decision,
+            )
+            covered = (
+                None
+                if patch_recovery_read
+                else self._covered_file_read(snapshot, decision)
+            )
             if covered is not None:
                 if self._awaiting_action_transition(snapshot):
                     return self._block_action_transition_stall(snapshot, decision)
@@ -275,7 +283,11 @@ class AgentLoop:
             if retry_block is not None:
                 return self._block_web_retry(snapshot, decision, retry_block)
 
-            duplicate = self._successful_read_action(snapshot, decision, tools)
+            duplicate = (
+                None
+                if patch_recovery_read
+                else self._successful_read_action(snapshot, decision, tools)
+            )
             if duplicate is not None:
                 arguments_digest = self._arguments_digest(decision.tool_arguments)
                 suppression_count = 1 + sum(
@@ -1178,6 +1190,37 @@ class AgentLoop:
                 return True
             if observation.get("kind") == "tool" and observation.get("ok") is True:
                 return False
+        return False
+
+    @staticmethod
+    def _failed_patch_recovery_read(
+        snapshot: WorkSnapshot,
+        decision: WorkDecision,
+    ) -> bool:
+        """Allow one fresh source read after a failed exact-context patch."""
+
+        if decision.tool_name != "read_file":
+            return False
+        plan_revision = snapshot.plan.revision if snapshot.plan else 0
+        for observation in reversed(snapshot.observations):
+            if (
+                observation.get("kind") != "tool"
+                or int(observation.get("plan_revision") or 0) != plan_revision
+            ):
+                continue
+            if observation.get("tool") == "read_file" and observation.get("ok") is True:
+                return False
+            if observation.get("tool") == "patch_file":
+                result = observation.get("result")
+                error = (
+                    str(result.get("error") or "")
+                    if isinstance(result, Mapping)
+                    else ""
+                )
+                return (
+                    observation.get("ok") is False
+                    and "context must match exactly once" in error.casefold()
+                )
         return False
 
     @classmethod

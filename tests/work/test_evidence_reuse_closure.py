@@ -8,9 +8,15 @@ from nous_runtime.work.loop import AgentLoop
 
 
 class ClosureTools:
-    def __init__(self, *, web_error_code: str = "") -> None:
+    def __init__(
+        self,
+        *,
+        web_error_code: str = "",
+        patch_failures: int = 0,
+    ) -> None:
         self.calls: list[tuple[str, dict]] = []
         self.web_error_code = web_error_code
+        self.patch_failures = patch_failures
         self.revision = 1
 
     def specifications(self):
@@ -48,6 +54,15 @@ class ClosureTools:
                 "sha256": f"sha256:revision-{self.revision}",
             }
         if name == "patch_file":
+            if self.patch_failures:
+                self.patch_failures -= 1
+                return {
+                    "ok": False,
+                    "error": (
+                        "Patch context must match exactly once; reload and provide "
+                        "exact context."
+                    ),
+                }
             self.revision += 1
             return {
                 "ok": True,
@@ -195,6 +210,73 @@ def test_repeated_covered_range_stops_as_action_transition_stall(tmp_path):
         event.payload.get("reason_code") == "ACTION_TRANSITION_STALL"
         for event in harness.events.load_events(created.run_id)
     )
+
+
+def test_failed_patch_allows_one_fresh_recovery_read(tmp_path):
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Fix the code in this repository")
+    tools = ClosureTools(patch_failures=1)
+    decisions = iter(
+        (
+            _decision(
+                "read_file",
+                {"path": "src/example.py", "start_line": 1, "end_line": 100},
+            ),
+            _decision(
+                "read_file",
+                {"path": "src/example.py", "start_line": 20, "end_line": 30},
+            ),
+            _decision(
+                "patch_file",
+                {
+                    "path": "src/example.py",
+                    "expected": "stale",
+                    "replacement": "new",
+                },
+            ),
+            _decision(
+                "read_file",
+                {"path": "src/example.py", "start_line": 20, "end_line": 30},
+            ),
+            _decision(
+                "patch_file",
+                {
+                    "path": "src/example.py",
+                    "expected": "revision 1",
+                    "replacement": "revision 2",
+                },
+            ),
+            WorkDecision(
+                DecisionStatus.COMPLETE,
+                "The patch was applied after refreshing exact context",
+                output="done",
+            ),
+        )
+    )
+
+    completed = harness.run(
+        created.run_id,
+        deliberator=lambda _context: next(decisions),
+        tools=tools,
+        verifier=lambda _context: {"ok": True, "checks": ["patch-recovery-read"]},
+        max_iterations=8,
+    )
+
+    assert completed.state is RunState.COMPLETED
+    assert [name for name, _arguments in tools.calls] == [
+        "read_file",
+        "patch_file",
+        "read_file",
+        "patch_file",
+    ]
+    reads = [
+        item
+        for item in completed.observations
+        if item["kind"] == "tool" and item["tool"] == "read_file"
+    ]
+    assert len(reads) == 2
+    assert reads[-1]["result"]["start_line"] == 20
+    assert reads[-1]["result"]["end_line"] == 30
 
 
 def test_retryable_url_failure_is_bounded_to_three_attempts(tmp_path):
