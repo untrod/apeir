@@ -9,7 +9,7 @@
       "canonical_name": "apeir-kernel",
       "component_id": "nous-kernel",
       "repository": "https://github.com/untrod/apeir-kernel",
-      "revision": "b7b3244f72e6c7c6f87ad2c3f713d13df2b5c267",
+      "revision": "61aa6595f860837fb0ecf4229224b0ad60fe1f40",
       "protocol": "nous.nki.v1",
       "nki_versions": [1, 2],
       "target": "x86_64-pc-windows-msvc",
@@ -18,13 +18,13 @@
           "name": "nousd",
           "canonical_name": "apeird",
           "path": "desktop/src-tauri/binaries/nousd-x86_64-pc-windows-msvc.exe",
-          "sha256": "4316EBD4140AF609FE8F9AD6CDACE01E59FBB5F0142D09A4744E2759F2067694",
+          "sha256": "052BF3BFBA76D9F908D353AB9357B4EAF53A8D341E0413C785065832C482BA2F",
           "pe_machine": "0x8664"
         },
         {
           "name": "nous-provider-worker",
           "path": "desktop/src-tauri/binaries/nous-provider-worker-x86_64-pc-windows-msvc.exe",
-          "sha256": "280B90E9C8DF6B3DDF23E449DEC16B63DAB1791BE6EA6DCF0DC192D9A653307E",
+          "sha256": "9359983FFE60FBC36C0EFEFF229F9CF376AF59C69F1ADEDCE5CE2D5B872D09C2",
           "pe_machine": "0x8664"
         }
       ]
