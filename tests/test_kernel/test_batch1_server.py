@@ -200,8 +200,12 @@ class TestNousConfig:
 
 class TestNousServer:
     @pytest.fixture
-    def server_config(self):
+    def server_config(self, monkeypatch):
         with tempfile.TemporaryDirectory() as tmp:
+            # The compatibility database resolves its location from the
+            # process environment. Keep this server test isolated from every
+            # database opened earlier in the full test process.
+            monkeypatch.setenv("NOUS_DATA_DIR", tmp)
             yield NousConfig(
                 server_name="test-server",
                 data_dir=tmp,

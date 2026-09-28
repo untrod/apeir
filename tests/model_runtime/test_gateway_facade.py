@@ -55,6 +55,16 @@ ALL_CAPABILITIES = frozenset(
     }
 )
 
+_BUILT_FACADES: list[ModelGatewayFacade] = []
+
+
+@pytest.fixture(autouse=True)
+def close_built_gateway_bridges():
+    """Do not leak one synchronous gateway thread per facade test."""
+    yield
+    while _BUILT_FACADES:
+        _BUILT_FACADES.pop().gateway.close_sync_bridge()
+
 
 def build_facade(
     content,
@@ -96,7 +106,9 @@ def build_facade(
     )
     adapters = ModelAdapterRegistry()
     adapters.register(adapter)
-    return ModelGatewayFacade(ModelGateway(registry, adapters)), adapter
+    facade = ModelGatewayFacade(ModelGateway(registry, adapters))
+    _BUILT_FACADES.append(facade)
+    return facade, adapter
 
 
 def request(
