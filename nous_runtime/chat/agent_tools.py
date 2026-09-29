@@ -48,6 +48,12 @@ def mutation_is_explicit(text: str) -> bool:
     for scoped_constraint in (
         "do not modify unrelated",
         "don't modify unrelated",
+        "do not modify any other file",
+        "don't modify any other file",
+        "do not modify other files",
+        "don't modify other files",
+        "不要修改任何其他文件",
+        "不要修改其他文件",
     ):
         denial_scope = denial_scope.replace(scoped_constraint, "")
     denied = (

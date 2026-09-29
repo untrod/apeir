@@ -53,6 +53,10 @@ def test_mutation_requires_an_explicit_request() -> None:
     assert mutation_is_explicit(
         "Make the smallest correct change. Do not modify unrelated code."
     )
+    assert mutation_is_explicit(
+        "Create research-report.md. Do not modify any other file."
+    )
+    assert mutation_is_explicit("创建 research-report.md，不要修改任何其他文件。")
     assert mutation_is_explicit("请联网搜索最新资料")
     assert mutation_is_explicit("run simulation sim-1")
     assert mutation_is_explicit("渲染文档 doc-1")

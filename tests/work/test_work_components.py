@@ -66,3 +66,26 @@ def test_work_components_fall_back_to_runtime_provider_workspace(tmp_path, monke
     build_work_components(tmp_path, snapshot)
 
     assert loaded == [tmp_path.resolve(), None]
+
+
+def test_work_components_disclose_bounded_write_tools(tmp_path, monkeypatch):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create(
+        "Create research-report.md. Do not modify any other file."
+    )
+    facade = object()
+
+    monkeypatch.setattr(
+        "nous_runtime.cli.provider_setup.load_providers_from_config",
+        lambda workspace=None: 1,
+    )
+    monkeypatch.setattr(
+        "nous_runtime.model_runtime.get_gateway_facade",
+        lambda *, required: facade,
+    )
+
+    components = build_work_components(tmp_path, snapshot)
+    file_tools = {item["tool_id"] for item in components.tools.expand("files")["tools"]}
+
+    assert "write_file" in file_tools
+    assert "patch_file" in file_tools
