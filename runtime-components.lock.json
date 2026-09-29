@@ -9,7 +9,7 @@
       "canonical_name": "apeir-kernel",
       "component_id": "nous-kernel",
       "repository": "https://github.com/untrod/apeir-kernel",
-      "revision": "bc70e9964d2b919bc1d3f1042a8e9a391fe97791",
+      "revision": "87fd1b2ff28ef14ab1a515a58162592b452fda2e",
       "protocol": "nous.nki.v1",
       "nki_versions": [1, 2],
       "target": "x86_64-pc-windows-msvc",
