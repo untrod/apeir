@@ -195,8 +195,9 @@ class AnthropicProvider(Provider):
             "ok": True,
             "content": text,
             "model": str(payload.get("model") or model),
-            "finish_reason": str(payload.get("stop_reason") or "completed"),
         }
+        if payload.get("stop_reason") is not None:
+            result["finish_reason"] = str(payload["stop_reason"])
         if tool_calls:
             result["tool_calls"] = tool_calls
         if payload.get("usage"):
