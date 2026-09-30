@@ -23,6 +23,7 @@ def test_openai_provider_preserves_gateway_tools_schema_and_usage():
             },
             "thinking": {"type": "disabled"},
             "reasoning_effort": "none",
+            "max_tokens": 1024,
         },
     )
     parsed = OpenAIProvider._parse_response(
@@ -57,6 +58,7 @@ def test_openai_provider_preserves_gateway_tools_schema_and_usage():
     assert body["response_format"]["type"] == "json_schema"
     assert body["thinking"] == {"type": "disabled"}
     assert body["reasoning_effort"] == "none"
+    assert body["max_tokens"] == 1024
     assert parsed["tool_calls"][0]["id"] == "call-1"
     assert parsed["usage"]["total_tokens"] == 5
     assert parsed["finish_reason"] == "length"
@@ -145,6 +147,7 @@ def test_anthropic_provider_normalizes_tools_messages_and_response():
                 },
             ],
             "usage": {"input_tokens": 3, "output_tokens": 2},
+            "stop_reason": "max_tokens",
         },
         "claude-example",
     )
@@ -155,3 +158,4 @@ def test_anthropic_provider_normalizes_tools_messages_and_response():
     assert tools[0]["input_schema"] == {"type": "object"}
     assert parsed["content"] == "done"
     assert parsed["tool_calls"][0]["id"] == "call-2"
+    assert parsed["finish_reason"] == "max_tokens"

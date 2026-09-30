@@ -148,7 +148,45 @@ def test_facade_normalizes_structured_tools_route_usage_and_trace() -> None:
     assert response.provider_id == "mock-provider"
     assert response.route["selected_model_id"] == "local/unified"
     assert response.usage["total_tokens"] == 12
+    assert response.usage["reasoning_tokens"] == 0
     assert response.trace_context["trace_id"] == "trace"
+
+
+def test_facade_normalizes_provider_usage_and_finish_reason() -> None:
+    facade, adapter = build_facade(None)
+    adapter.total_tokens = 0
+    original_invoke = adapter.invoke
+
+    async def invoke_with_provider_telemetry(request, descriptor, instance):
+        response = await original_invoke(request, descriptor, instance)
+        return response.__class__(
+            request_id=response.request_id,
+            model_id=response.model_id,
+            instance_id=response.instance_id,
+            content=None,
+            usage={
+                "prompt_tokens": 4096,
+                "completion_tokens": 1024,
+                "prompt_cache_hit_tokens": 3072,
+                "prompt_cache_miss_tokens": 1024,
+                "completion_tokens_details": {"reasoning_tokens": 1024},
+                "total_tokens": 5120,
+            },
+            finish_reason="max_tokens",
+        )
+
+    adapter.invoke = invoke_with_provider_telemetry
+    response = facade.invoke_sync(request(GatewayOperation.STRUCTURED_OUTPUT))
+
+    assert response.finish_reason == "length"
+    assert response.usage == {
+        "input_tokens": 4096,
+        "output_tokens": 1024,
+        "cached_input_tokens": 3072,
+        "cache_miss_input_tokens": 1024,
+        "reasoning_tokens": 1024,
+        "total_tokens": 5120,
+    }
 
 
 def test_facade_reports_retry_and_rejects_secret_metadata() -> None:

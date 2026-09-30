@@ -72,7 +72,7 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
         in (request.messages[0]["content"])
     )
     assert request.timeout_s == 180.0
-    assert request.budget.max_tokens == 1024
+    assert request.budget.max_tokens == 1536
     assert request.reasoning_mode.value == "disabled"
     assert request.reasoning_effort.value == "none"
     payload = json.loads(request.messages[1]["content"])
@@ -275,8 +275,8 @@ def test_model_deliberator_classifies_structured_output_budget_exhaustion(
         None,
         finish_reason="length",
         usage={
-            "completion_tokens": 1024,
-            "completion_tokens_details": {"reasoning_tokens": 1024},
+            "output_tokens": 1024,
+            "reasoning_tokens": 1024,
         },
     )
 
@@ -284,10 +284,13 @@ def test_model_deliberator_classifies_structured_output_budget_exhaustion(
         RuntimeError,
         match=(
             r"exhausted the output budget.*max_output_tokens=1024, "
-            r"completion_tokens=1024, reasoning_tokens=1024"
+            r"output_tokens=1024, reasoning_tokens=1024"
         ),
     ):
-        ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+        ModelWorkDeliberator(
+            facade,
+            max_output_tokens=1024,
+        )(harness.context_for(snapshot))
 
 
 def test_model_deliberator_bounds_event_history_and_failure_text(tmp_path):

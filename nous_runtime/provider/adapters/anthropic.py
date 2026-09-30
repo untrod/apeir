@@ -195,6 +195,7 @@ class AnthropicProvider(Provider):
             "ok": True,
             "content": text,
             "model": str(payload.get("model") or model),
+            "finish_reason": str(payload.get("stop_reason") or "completed"),
         }
         if tool_calls:
             result["tool_calls"] = tool_calls

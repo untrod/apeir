@@ -88,7 +88,7 @@ class ModelWorkDeliberator:
         tool_capabilities: Sequence[Mapping[str, Any]] = (),
         preferred_model: str = "",
         timeout_s: float = 180.0,
-        max_output_tokens: int = 1024,
+        max_output_tokens: int = 1536,
     ) -> None:
         self.facade = facade
         self.tools = tuple(dict(item) for item in tool_specifications)
@@ -224,9 +224,12 @@ class ModelWorkDeliberator:
         if not isinstance(value, Mapping):
             if response.finish_reason == "length":
                 usage = dict(response.usage or {})
-                completion_tokens = int(usage.get("completion_tokens") or 0)
+                output_tokens = int(
+                    usage.get("output_tokens") or usage.get("completion_tokens") or 0
+                )
                 reasoning_tokens = int(
-                    (usage.get("completion_tokens_details") or {}).get(
+                    usage.get("reasoning_tokens")
+                    or (usage.get("completion_tokens_details") or {}).get(
                         "reasoning_tokens"
                     )
                     or 0
@@ -235,7 +238,7 @@ class ModelWorkDeliberator:
                     "work model exhausted the output budget before returning a "
                     "structured decision "
                     f"(max_output_tokens={self.max_output_tokens}, "
-                    f"completion_tokens={completion_tokens}, "
+                    f"output_tokens={output_tokens}, "
                     f"reasoning_tokens={reasoning_tokens})"
                 )
             raise RuntimeError("work model did not return a structured decision")

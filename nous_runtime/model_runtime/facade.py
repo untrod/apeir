@@ -12,6 +12,7 @@ from nous_runtime.model_runtime.errors import (
     ModelInvocationError,
     ModelRuntimeError,
 )
+from nous_runtime.model_runtime.cost_control import Usage
 from nous_runtime.model_runtime.factory import gateway_service
 from nous_runtime.model_runtime.gateway import ModelGateway
 from nous_runtime.model_runtime.models import (
@@ -505,7 +506,7 @@ class ModelGatewayFacade:
             model_id=response.model_id,
             instance_id=response.instance_id,
             route=route,
-            usage=response.usage,
+            usage=Usage.from_mapping(response.usage).to_dict(),
             cost_usd=response.cost_usd,
             latency_ms=response.latency_ms,
             retry_count=len(failures),
@@ -513,9 +514,21 @@ class ModelGatewayFacade:
             warnings=warnings,
             verification_metadata=verification,
             trace_context=request.trace.to_dict(),
-            finish_reason=response.finish_reason,
+            finish_reason=_normalize_finish_reason(response.finish_reason),
             raw_metadata=response.metadata,
         )
+
+
+def _normalize_finish_reason(value: Any) -> str:
+    reason = str(value or "completed").strip().lower()
+    aliases = {
+        "max_tokens": "length",
+        "max_output_tokens": "length",
+        "end_turn": "completed",
+        "stop_sequence": "completed",
+        "tool_use": "tool_calls",
+    }
+    return aliases.get(reason, reason)
 
 
 def get_gateway_facade(

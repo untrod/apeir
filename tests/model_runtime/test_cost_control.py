@@ -37,14 +37,43 @@ def test_usage_normalizes_provider_field_names() -> None:
             "prompt_tokens": 20,
             "completion_tokens": 5,
             "prompt_tokens_details": {"cached_tokens": 4},
+            "completion_tokens_details": {"reasoning_tokens": 3},
         }
     )
     assert usage.to_dict() == {
         "input_tokens": 20,
         "output_tokens": 5,
         "cached_input_tokens": 4,
+        "cache_miss_input_tokens": 16,
+        "reasoning_tokens": 3,
         "total_tokens": 25,
     }
+
+
+def test_usage_normalizes_deepseek_and_anthropic_cache_fields() -> None:
+    deepseek = Usage.from_mapping(
+        {
+            "prompt_tokens": 20,
+            "completion_tokens": 5,
+            "prompt_cache_hit_tokens": 12,
+            "prompt_cache_miss_tokens": 8,
+        }
+    )
+    anthropic = Usage.from_mapping(
+        {
+            "input_tokens": 5,
+            "output_tokens": 2,
+            "cache_read_input_tokens": 7,
+            "cache_creation_input_tokens": 3,
+        }
+    )
+
+    assert deepseek.input_tokens == 20
+    assert deepseek.cached_input_tokens == 12
+    assert deepseek.cache_miss_input_tokens == 8
+    assert anthropic.input_tokens == 15
+    assert anthropic.cached_input_tokens == 7
+    assert anthropic.cache_miss_input_tokens == 8
 
 
 def test_request_is_capped_before_provider_execution(tmp_path: Path) -> None:

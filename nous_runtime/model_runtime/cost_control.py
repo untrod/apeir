@@ -55,12 +55,14 @@ class Usage:
     input_tokens: int = 0
     output_tokens: int = 0
     cached_input_tokens: int = 0
+    cache_miss_input_tokens: int = 0
+    reasoning_tokens: int = 0
     total_tokens: int = 0
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any] | None) -> "Usage":
         raw = dict(value or {})
-        input_tokens = int(
+        provider_input_tokens = int(
             raw.get("input_tokens") or raw.get("prompt_tokens") or 0
         )
         output_tokens = int(
@@ -69,22 +71,57 @@ class Usage:
         cached = int(
             raw.get("cached_input_tokens")
             or raw.get("cache_read_input_tokens")
+            or raw.get("prompt_cache_hit_tokens")
             or (raw.get("prompt_tokens_details") or {}).get("cached_tokens")
             or 0
         )
+        cache_write = int(raw.get("cache_creation_input_tokens") or 0)
+        if raw.get("cache_read_input_tokens") is not None or cache_write:
+            # Anthropic reports uncached, cache-read, and cache-creation input
+            # separately. The canonical input count includes all three.
+            input_tokens = provider_input_tokens + cached + cache_write
+        else:
+            input_tokens = provider_input_tokens
+        cache_miss = int(
+            raw.get("cache_miss_input_tokens")
+            or raw.get("prompt_cache_miss_tokens")
+            or max(0, input_tokens - cached)
+        )
+        reasoning = int(
+            raw.get("reasoning_tokens")
+            or (raw.get("completion_tokens_details") or {}).get("reasoning_tokens")
+            or (raw.get("output_tokens_details") or {}).get("reasoning_tokens")
+            or 0
+        )
         total = int(raw.get("total_tokens") or input_tokens + output_tokens)
-        values = (input_tokens, output_tokens, cached, total)
+        values = (
+            input_tokens,
+            output_tokens,
+            cached,
+            cache_miss,
+            reasoning,
+            total,
+        )
         if any(item < 0 for item in values):
             raise CostLimitExceeded("provider usage values must be non-negative")
         if total < input_tokens + output_tokens:
             total = input_tokens + output_tokens
-        return cls(input_tokens, output_tokens, cached, total)
+        return cls(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cached_input_tokens=cached,
+            cache_miss_input_tokens=cache_miss,
+            reasoning_tokens=reasoning,
+            total_tokens=total,
+        )
 
     def to_dict(self) -> dict[str, int]:
         return {
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "cached_input_tokens": self.cached_input_tokens,
+            "cache_miss_input_tokens": self.cache_miss_input_tokens,
+            "reasoning_tokens": self.reasoning_tokens,
             "total_tokens": self.total_tokens,
         }
 
