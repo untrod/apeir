@@ -1,5 +1,8 @@
 # R6 laptop checkpoint
 
+> Historical checkpoint. The current frozen state is documented in
+> `R6_BASELINE.md`; this file remains as dated acceptance history.
+
 - Date: 2026-09-26
 - Branch: `feature/reality-execution-v2`
 - Distribution base: `94f1f7e676dc907fcb6c9a809355ed9103d1dee7`

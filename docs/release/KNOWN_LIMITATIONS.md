@@ -8,27 +8,15 @@ Version: `0.1.0-rc1`
   `feature/reality-execution-v2`, but x64 Controller to Windows ARM64 real-effect
   acceptance, independent remote observation, reconnect/fault injection, and
   malicious/stale-node matrices remain pending. This is not M2 completion.
-- The R6 Work Harness core now has structured assessment and deliberation,
-  versioned plans, progress events, steering, durable checkpoints, restart
-  recovery, and a CLI entry. ToolCatalog now provides normalized, progressive
-  discovery for the existing Workspace runtime and governed Extension/MCP tool
-  projections, plus fixed read-only Git and ContentAddressedArtifactStore tools.
-  Git tools fail closed and are not advertised when strong process isolation is
-  unavailable. SkillRegistry now provides progressive discovery/loading for
-  legacy JSON, project/user `SKILL.md`, installed Extension packages, and local
-  or HTTPS catalog summaries; installation produces Extension supply-chain
-  evidence and a pinned Artifact bundle without executing scripts. Remote Skill
-  package download/install and Git URL cloning are not yet supported. WebRuntime
-  now exposes governed search/fetch through the existing Network
-  Gateway and writes successful responses to content-addressed evidence before
-  returning them to Work. The first search implementation still uses the
-  existing Bing parser; provider configuration UX and the full cited Research
-  vertical remain pending. Desktop Task Center now projects durable Work state,
-  plans, progress, and Artifact references, and pause/cancel use WorkHarness as
-  the authority. Desktop background submission/resume is not implemented. File
-  patch/move/remove, persistent shell control, live MCP catalog attachment,
-  context compaction, and the Code/Research/Scientific acceptance tasks are
-  still pending. This is not R6 completion.
+- The R6 baseline is frozen. Desktop reconnect, forced Runtime restart,
+  Scientific Work, the deterministic Code Work control path, model usage
+  normalization, and release-class regression have passed. The final paid
+  Research Work was not repeated after the Model Decision Boundary fix. The
+  earlier live run acquired independent official Python and Rust sources through
+  governed Web operations, but exhausted its structured-decision output budget
+  before producing and verifying the report. A successful live-model Research
+  completion and its successful Token baseline therefore remain unverified and
+  are not release claims. See `R6_BASELINE.md`.
 - The first Reality Adapter supports only an administrator-bound loopback HTTP
   service target. It is not an arbitrary remote endpoint or device runtime.
 - Model-backed tasks require a configured Provider account or a local model.
