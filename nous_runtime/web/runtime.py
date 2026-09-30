@@ -94,6 +94,9 @@ class WebRuntime:
                 "error_code": str(raw.get("error_code") or "WEB_REQUEST_FAILED"),
                 "request_id": str(raw.get("request_id") or ""),
                 "run_id": str(raw.get("run_id") or ""),
+                "approval_required": bool(raw.get("approval_required", False)),
+                "approval_request_id": str(raw.get("approval_request_id") or ""),
+                "proposal_hash": str(raw.get("proposal_hash") or ""),
             }
 
         evidence = {
@@ -212,6 +215,9 @@ class WebRuntime:
                 "error_code": str(
                     metadata.get("error_code") or "NETWORK_CAPABILITY_FAILED"
                 ),
+                "approval_required": bool(metadata.get("approval_required", False)),
+                "approval_request_id": str(metadata.get("approval_request_id") or ""),
+                "proposal_hash": str(metadata.get("proposal_hash") or ""),
             }
         data = dict(observation.data or {})
         result = data.get("result", data)

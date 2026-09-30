@@ -212,6 +212,70 @@ class WorkHarness:
             snapshot = self.require_runtime_recovery(snapshot, reason=snapshot.error)
         if (
             snapshot.pending_action
+            and str(snapshot.pending_action.get("recovery_policy") or "")
+            == "approval_then_retry"
+        ):
+            from nous_runtime.governance.store import GovernanceStore
+
+            pending_approval = dict(snapshot.pending_action)
+            request_id = str(pending_approval.get("approval_request_id") or "")
+            request = GovernanceStore(self.root / ".nous").get_approval_request(
+                request_id
+            )
+            approval_status = str((request or {}).get("status") or "MISSING")
+            if approval_status == "PENDING":
+                snapshot.state = RunState.WAITING_FOR_APPROVAL
+                return snapshot
+            if approval_status != "APPROVED":
+                reason = (
+                    f"bound approval {request_id or '<missing>'} is "
+                    f"{approval_status.casefold()}"
+                )
+                snapshot.goal.block(reason)
+                snapshot.state = RunState.BLOCKED
+                snapshot.reanalysis_reason = reason
+                return self._persist(
+                    snapshot,
+                    "work.blocked",
+                    {
+                        "reason": reason,
+                        "approval_request_id": request_id,
+                        "approval_status": approval_status,
+                    },
+                )
+            if snapshot.goal.status.value in {"paused", "blocked", "waiting_user"}:
+                snapshot.goal.resume()
+            else:
+                snapshot.goal.start_understanding()
+            pending_approval["recovery_policy"] = "approved_replay"
+            snapshot.pending_action = pending_approval
+            snapshot.state = RunState.RECOVERING
+            snapshot.error = ""
+            snapshot.reanalysis_reason = (
+                "bound approval granted; execute the exact persisted action once"
+            )
+            self._persist(
+                snapshot,
+                "work.approval.granted",
+                {
+                    "approval_request_id": request_id,
+                    "proposal_hash": str(pending_approval.get("proposal_hash") or ""),
+                    "arguments_digest": str(
+                        pending_approval.get("arguments_digest") or ""
+                    ),
+                    "automatic_replay": False,
+                    "approved_exact_retry": True,
+                },
+            )
+            return self.run(
+                run_id,
+                deliberator=deliberator,
+                tools=tools,
+                verifier=verifier,
+                max_iterations=max_iterations,
+            )
+        if (
+            snapshot.pending_action
             and str(snapshot.pending_action.get("tool") or "") == "shell_start"
             and tools is not None
         ):

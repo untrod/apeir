@@ -9,6 +9,7 @@ from nous_runtime.work import (
     WorkHarness,
 )
 from nous_runtime.work.loop import AgentLoop
+from nous_runtime.governance.store import GovernanceStore
 
 
 class StubTools:
@@ -74,6 +75,30 @@ class EffectTools(StubTools):
             "Definition",
             (),
             {"effect_class": self.effect_class, "capability_id": name},
+        )()
+
+
+class ApprovalNetworkTools(StubTools):
+    def __init__(self, results):
+        super().__init__(results)
+
+    def specifications(self):
+        return (
+            {
+                "type": "function",
+                "function": {
+                    "name": "web_search",
+                    "description": "bounded Web search",
+                    "parameters": {"type": "object"},
+                },
+            },
+        )
+
+    def require(self, _name):
+        return type(
+            "Definition",
+            (),
+            {"effect_class": "network", "capability_id": "network.fetch"},
         )()
 
 
@@ -732,6 +757,85 @@ def test_restart_resume_reassesses_without_replaying_last_tool(tmp_path):
     assert len(tools.calls) == 1
     assert seen_contexts[0].recovering is True
     assert "re-evaluate" in seen_contexts[0].reanalysis_reason
+
+
+def test_bound_network_approval_replays_exact_action_once(tmp_path):
+    request_id = "apr_exact_network"
+    arguments = {"query": "official docs", "max_results": 5}
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Research one public fact")
+    tools = ApprovalNetworkTools(
+        (
+            {
+                "ok": False,
+                "error": "approval required",
+                "error_code": "NOUS_APPROVAL_REQUIRED",
+                "approval_required": True,
+                "approval_request_id": request_id,
+                "proposal_hash": "b" * 64,
+            },
+            {"ok": True, "results": []},
+        )
+    )
+    waiting = harness.run(
+        created.run_id,
+        deliberator=lambda _context: WorkDecision(
+            DecisionStatus.CONTINUE,
+            "Search official documentation",
+            tool_name="web_search",
+            tool_arguments=arguments,
+        ),
+        tools=tools,
+        max_iterations=3,
+    )
+
+    assert waiting.state is RunState.WAITING_FOR_APPROVAL
+    assert waiting.pending_action["arguments"] == arguments
+    assert waiting.pending_action["recovery_policy"] == "approval_then_retry"
+    assert len(tools.calls) == 1
+
+    store = GovernanceStore(tmp_path / ".nous")
+    assert store.save_approval_request(
+        {
+            "request_id": request_id,
+            "proposal_hash": "b" * 64,
+            "summary": "network.fetch",
+            "risk_summary": "critical",
+            "scope_summary": str(tmp_path),
+            "status": "PENDING",
+            "requested_by": "user",
+            "requested_at": "2026-09-30T00:00:00Z",
+            "expires_at": "2026-10-01T00:00:00Z",
+            "priority": "normal",
+        }
+    )
+    assert store.update_approval_status(request_id, "APPROVED")
+
+    resumed = WorkHarness(tmp_path).resume(
+        created.run_id,
+        deliberator=lambda _context: WorkDecision(
+            DecisionStatus.BLOCKED,
+            "Stop after approved replay",
+            reason="test complete",
+        ),
+        tools=tools,
+        max_iterations=2,
+    )
+
+    assert resumed.state is RunState.BLOCKED
+    assert tools.calls == [
+        ("web_search", arguments),
+        ("web_search", arguments),
+    ]
+    assert resumed.pending_action == {}
+    assert any(
+        item.get("tool") == "web_search" and item.get("ok") is True
+        for item in resumed.observations
+    )
+    assert any(
+        event.event_type == "work.approval.consumed"
+        for event in WorkHarness(tmp_path).events.load_events(created.run_id)
+    )
 
 
 def test_resume_reattaches_persistent_shell_without_replaying_start(tmp_path):

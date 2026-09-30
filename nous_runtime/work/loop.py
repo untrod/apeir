@@ -94,6 +94,61 @@ class AgentLoop:
         snapshot = self._prepare_governed_context(snapshot, tools, agent_run_id)
         if snapshot.terminal:
             return snapshot
+        if (
+            str(snapshot.pending_action.get("recovery_policy") or "")
+            == "approved_replay"
+        ):
+            pending = dict(snapshot.pending_action)
+            arguments = dict(pending.get("arguments") or {})
+            if self._arguments_digest(arguments) != str(
+                pending.get("arguments_digest") or ""
+            ):
+                snapshot.goal.block("approved action arguments failed integrity check")
+                snapshot.state = RunState.RECOVERY_REQUIRED
+                snapshot.reanalysis_reason = snapshot.goal.blocker
+                return self.harness.persist_progress(
+                    snapshot,
+                    "work.recovery.required",
+                    {
+                        "reason": snapshot.goal.blocker,
+                        "pending_action": pending,
+                        "automatic_replay": False,
+                    },
+                )
+            self._execute_tool(
+                snapshot,
+                WorkDecision(
+                    status=DecisionStatus.CONTINUE,
+                    summary="Execute the exact action covered by the granted approval",
+                    next_action="Consume the bound one-use approval lease",
+                    confidence="high",
+                    tool_name=str(pending.get("tool") or ""),
+                    tool_arguments=arguments,
+                    step_id=str(pending.get("step_id") or ""),
+                    phase=str(pending.get("phase") or ""),
+                    action_source="approved_replay",
+                ),
+                tools,
+                agent_run_id,
+            )
+            snapshot = self.harness.require(snapshot.run_id)
+            if snapshot.state in {
+                RunState.WAITING_FOR_APPROVAL,
+                RunState.RECOVERY_REQUIRED,
+            }:
+                self.harness.checkpoint_agent(snapshot, resume=False)
+                return snapshot
+            self.harness.persist_progress(
+                snapshot,
+                "work.approval.consumed",
+                {
+                    "approval_request_id": str(
+                        pending.get("approval_request_id") or ""
+                    ),
+                    "tool": str(pending.get("tool") or ""),
+                    "arguments_digest": str(pending.get("arguments_digest") or ""),
+                },
+            )
 
         for iteration in range(1, maximum + 1):
             snapshot = self.harness.refresh(snapshot)
@@ -903,6 +958,43 @@ class AgentLoop:
             normalized,
             effect_class=effect_class,
         )
+        if (
+            decision.tool_name in {"web_search", "web_fetch"}
+            and not ok
+            and str(normalized.get("error_code") or "") == "NOUS_APPROVAL_REQUIRED"
+            and str(normalized.get("approval_request_id") or "")
+        ):
+            reason = str(normalized.get("error") or "network approval required")
+            snapshot.pending_action.update(
+                {
+                    "arguments": dict(decision.tool_arguments),
+                    "approval_request_id": str(
+                        normalized.get("approval_request_id") or ""
+                    ),
+                    "proposal_hash": str(normalized.get("proposal_hash") or ""),
+                    "recovery_policy": "approval_then_retry",
+                }
+            )
+            snapshot.goal.wait_for_user(reason)
+            snapshot.state = RunState.WAITING_FOR_APPROVAL
+            snapshot.error = ""
+            snapshot.reanalysis_reason = reason
+            self.harness.checkpoint_agent(snapshot, resume=False)
+            self.harness.persist_progress(
+                snapshot,
+                "work.waiting_approval",
+                {
+                    "summary": reason,
+                    "action": "Approve the exact bound network request",
+                    "tool": decision.tool_name,
+                    "approval_request_id": str(
+                        normalized.get("approval_request_id") or ""
+                    ),
+                    "proposal_hash": str(normalized.get("proposal_hash") or ""),
+                    "arguments_digest": self._arguments_digest(decision.tool_arguments),
+                },
+            )
+            return
         if self._effect_outcome_requires_recovery(effect_class, normalized):
             reason = (
                 f"tool {decision.tool_name} has an uncertain effect outcome; "

@@ -119,6 +119,34 @@ def test_failed_request_does_not_create_evidence_store(tmp_path: Path):
     assert not (tmp_path / ".nous" / "artifacts").exists()
 
 
+def test_failed_request_preserves_bound_approval_metadata(tmp_path: Path):
+    runtime = WebRuntime(
+        tmp_path,
+        capability_executor=lambda _values: {
+            "ok": False,
+            "error_code": "NOUS_APPROVAL_REQUIRED",
+            "error_message": "approval required",
+            "approval_required": True,
+            "approval_request_id": "apr_web_once",
+            "proposal_hash": "a" * 64,
+        },
+    )
+
+    result = runtime.search({"query": "official documentation"})
+
+    assert result == {
+        "ok": False,
+        "error": "approval required",
+        "error_code": "NOUS_APPROVAL_REQUIRED",
+        "request_id": "",
+        "run_id": "",
+        "approval_required": True,
+        "approval_request_id": "apr_web_once",
+        "proposal_hash": "a" * 64,
+    }
+    assert not (tmp_path / ".nous" / "artifacts").exists()
+
+
 def test_web_tools_join_progressive_catalog_without_network_side_effect(tmp_path: Path):
     runtime = WebRuntime(
         tmp_path,
