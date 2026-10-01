@@ -11,6 +11,7 @@ import os
 import random
 import secrets
 import ssl
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,12 @@ from .protocol import (
     NodeProtocolError,
     ReplayWindow,
     workload_request_digest,
+)
+from .distributed_work import (
+    DistributedWorkError,
+    DistributedWorkState,
+    DistributedWorkStore,
+    WorkRequirements,
 )
 from .service import NodeRuntimeService
 
@@ -103,6 +110,9 @@ class NodeRelayServer:
         )
         self.provider_results = (
             self.state_dir / "provider-results" if self.state_dir else None
+        )
+        self.work_store = (
+            DistributedWorkStore(self.state_dir) if self.state_dir else None
         )
 
     def register_node(self, node_id: str, public_key: str) -> None:
@@ -339,6 +349,12 @@ class NodeRelayServer:
             "artifact_count": (
                 len(self.artifact_store.list()) if self.artifact_store else 0
             ),
+            "distributed_work_count": (
+                len(self.work_store.list()) if self.work_store else 0
+            ),
+            "distributed_work_states": (
+                self.work_store.counts() if self.work_store else {}
+            ),
             "nodes": nodes,
         }
 
@@ -395,6 +411,401 @@ class NodeRelayServer:
             "authority": "placement-only",
             "grants_capabilities": False,
         }
+
+    def select_work_node(self, requirements: WorkRequirements) -> dict[str, Any]:
+        """Match a distributed Work to signed Node facts deterministically."""
+        candidates: list[dict[str, Any]] = []
+        for node in self.controller_status()["nodes"]:
+            node_id = str(node["node_id"])
+            observation = self.reports.get(node_id, {})
+            resources = observation.get("RESOURCE_REPORT", {})
+            if not isinstance(resources, dict):
+                resources = {}
+            device_report = observation.get("DEVICE_REPORT", {})
+            devices = (
+                device_report.get("devices", [])
+                if isinstance(device_report, dict)
+                else []
+            )
+            if not isinstance(devices, list):
+                devices = []
+
+            architecture = _normalize_node_architecture(str(node["platform"]["arch"]))
+            operating_system = str(node["platform"]["os"]).strip().lower()
+            capabilities = {str(item).strip().lower() for item in node["capabilities"]}
+            memory_available = _non_negative_int(
+                resources.get("memory_available_bytes")
+            )
+            memory_total = _non_negative_int(resources.get("memory_total_bytes"))
+            gpu_available = any(_is_gpu_device(item) for item in devices)
+            reasons: list[str] = []
+            if node["liveness"] not in {"CONNECTED", "RECENTLY_OBSERVED"}:
+                reasons.append(f"node liveness is {node['liveness']}")
+            if (
+                requirements.architectures
+                and architecture not in requirements.architectures
+            ):
+                reasons.append(
+                    "architecture mismatch: requires one of "
+                    f"{list(requirements.architectures)}, node is "
+                    f"{architecture or 'unknown'}"
+                )
+            if (
+                requirements.operating_systems
+                and operating_system not in requirements.operating_systems
+            ):
+                reasons.append(
+                    "operating system mismatch: requires one of "
+                    f"{list(requirements.operating_systems)}, node is "
+                    f"{operating_system or 'unknown'}"
+                )
+            missing = sorted(set(requirements.capabilities) - capabilities)
+            if missing:
+                reasons.append(f"capabilities are not reported: {missing}")
+            if requirements.minimum_memory_bytes:
+                measured_memory = memory_available or memory_total
+                if measured_memory < requirements.minimum_memory_bytes:
+                    reasons.append(
+                        "insufficient memory: requires "
+                        f"{requirements.minimum_memory_bytes}, node reports "
+                        f"{measured_memory}"
+                    )
+            if requirements.gpu_required and not gpu_available:
+                reasons.append("GPU is required but not reported")
+            candidates.append(
+                {
+                    "node_id": node_id,
+                    "node_name": node["node_name"],
+                    "architecture": architecture,
+                    "operating_system": operating_system,
+                    "capabilities": sorted(capabilities),
+                    "memory_available_bytes": memory_available,
+                    "memory_total_bytes": memory_total,
+                    "gpu_available": gpu_available,
+                    "eligible": not reasons,
+                    "reasons": reasons,
+                }
+            )
+        eligible = sorted(
+            (item for item in candidates if item["eligible"]),
+            key=lambda item: item["node_id"],
+        )
+        return {
+            "schema": "apeir.work-placement/v1",
+            "strategy": "deterministic-capability-resource-match",
+            "requirements": requirements.to_dict(),
+            "selected_node": eligible[0]["node_id"] if eligible else "",
+            "candidates": candidates,
+            "authority": "placement-only",
+            "grants_capabilities": False,
+        }
+
+    def schedule_work(self, work_id: str) -> dict[str, Any]:
+        """Evaluate and persist placement without dispatching the Work."""
+        if self.work_store is None:
+            raise DistributedWorkError("Controller state directory is required")
+        work = self.work_store.get(work_id)
+        if work is None:
+            raise DistributedWorkError(f"Work does not exist: {work_id}")
+        if work.state is DistributedWorkState.CREATED:
+            work = self.work_store.transition(
+                work_id,
+                DistributedWorkState.SCHEDULED,
+                reason="Work admitted for deterministic placement",
+            )
+        elif work.state is not DistributedWorkState.SCHEDULED:
+            raise DistributedWorkError(
+                f"Work cannot be scheduled from {work.state.value}"
+            )
+        decision = self.select_work_node(work.requirements)
+        work = self.work_store.record_placement(work_id, decision)
+        selected_node = str(decision["selected_node"])
+        if selected_node:
+            work = self.work_store.assign(work_id, selected_node)
+        return {"work": work.to_dict(), "placement": decision}
+
+    def stage_work_dispatch(self, work_id: str) -> dict[str, Any]:
+        """Stage one assignment for the running Controller provider spool."""
+        if (
+            self.work_store is None
+            or self.provider_requests is None
+            or self.artifact_store is None
+        ):
+            raise DistributedWorkError(
+                "Controller state and Artifact store are required"
+            )
+        work = self.work_store.get(work_id)
+        if work is None:
+            raise DistributedWorkError(f"Work does not exist: {work_id}")
+        if work.state is not DistributedWorkState.ASSIGNED or not work.assignment:
+            raise DistributedWorkError("dispatch requires an ASSIGNED Work")
+        if work.execution_policy.delivery != "at_most_once":
+            raise DistributedWorkError(
+                "Distributed Work v0.2 dispatch requires at-most-once delivery"
+            )
+        capability = work.execution_capability
+        if not capability:
+            raise DistributedWorkError("Work execution capability is required")
+        if capability not in work.requirements.capabilities:
+            raise DistributedWorkError(
+                "Work execution capability must be included in requirements"
+            )
+        input_digests = tuple(
+            _artifact_uri_digest(reference) for reference in work.input_artifacts
+        )
+        for digest in input_digests:
+            self.artifact_store.resolve(digest, verify=True)
+
+        target = {
+            "node_id": work.assigned_node,
+            "capability": capability,
+        }
+        binding = {
+            "intent_id": work.work_id,
+            "effect_contract_digest": _payload_digest(
+                {
+                    "capability": capability,
+                    "execution_policy": work.execution_policy.to_dict(),
+                }
+            ),
+            "target_ref": (f"node://{work.assigned_node}/capability/{capability}"),
+            "target_binding_digest": _payload_digest(target),
+            "workload_id": work.work_id,
+            "request_digest": _payload_digest(work.execution_arguments),
+            "provider_revision": "apeir.distributed-work/v1",
+        }
+        request = {
+            "schema": "nous.remote-provider-request/v1",
+            "operation_id": work.work_id,
+            "workload_id": work.work_id,
+            "step_id": work.assignment.assignment_id,
+            "node_id": work.assigned_node,
+            "capability": capability,
+            "arguments": dict(work.execution_arguments),
+            "timeout_seconds": 30.0,
+            "delivery_semantics": "at_most_once",
+            "binding": binding,
+            "input_artifacts": list(work.input_artifacts),
+        }
+        request_digest = _payload_digest(request)
+        self.provider_requests.mkdir(parents=True, exist_ok=True)
+        request_path = self.provider_requests / f"{work.work_id}.json"
+        if work.dispatch_record:
+            if work.dispatch_record.get("provider_request_digest") != request_digest:
+                raise DistributedWorkError("recorded Work dispatch binding changed")
+            if request_path.exists():
+                if _read_json(request_path) != request:
+                    raise DistributedWorkError("staged Work dispatch binding changed")
+            else:
+                _atomic_json(request_path, request)
+            return {"work": work.to_dict(), "dispatch": work.dispatch_record}
+        if request_path.exists():
+            if _read_json(request_path) != request:
+                raise DistributedWorkError("staged Work dispatch binding changed")
+        else:
+            _atomic_json(request_path, request)
+        dispatch = {
+            "schema": "apeir.work-dispatch/v1",
+            "work_id": work.work_id,
+            "assignment_id": work.assignment.assignment_id,
+            "node_id": work.assigned_node,
+            "staged_at": _utc_now(),
+            "provider_request_digest": request_digest,
+            "input_artifacts": list(work.input_artifacts),
+            "delivery": "at_most_once",
+        }
+        updated = self.work_store.record_dispatch(work.work_id, dispatch)
+        return {"work": updated.to_dict(), "dispatch": dispatch}
+
+    def reconcile_work(self, work_id: str) -> dict[str, Any]:
+        """Reconcile one signed terminal Node result into durable Work state."""
+        if self.state_dir is None or self.artifact_store is None:
+            raise DistributedWorkError(
+                "Controller state and Artifact store are required"
+            )
+        self.work_store = DistributedWorkStore(self.state_dir)
+        work = self.work_store.get(work_id)
+        if work is None:
+            raise DistributedWorkError(f"Work does not exist: {work_id}")
+        if work.state is DistributedWorkState.COMMITTED:
+            return {"work": work.to_dict(), "reconciled": False, "idempotent": True}
+        payload = self.results.get(work_id)
+        envelope = self.result_envelopes.get(work_id)
+        if not isinstance(payload, dict) or not isinstance(envelope, dict):
+            raise DistributedWorkError("signed Work result is not available")
+        if not work.assignment:
+            raise DistributedWorkError("Work result has no durable assignment")
+        source_node = str(envelope.get("source") or "")
+        if source_node != work.assignment.node_id:
+            raise DistributedWorkError("Work result node does not match assignment")
+
+        state = str(payload.get("state") or "")
+        if state == "RECOVERY_REQUIRED":
+            if work.state is DistributedWorkState.UNKNOWN:
+                _verify_recorded_result(work, payload, envelope, status="UNKNOWN")
+                return {
+                    "work": work.to_dict(),
+                    "reconciled": False,
+                    "idempotent": True,
+                }
+            summary = _work_result_summary(work, payload, envelope, status="UNKNOWN")
+            work = self.work_store.record_result(work_id, summary)
+            work = self.work_store.transition(
+                work_id,
+                DistributedWorkState.UNKNOWN,
+                reason="Node reported an uncertain at-most-once effect",
+            )
+            return {"work": work.to_dict(), "reconciled": True, "idempotent": False}
+        if state != "COMPLETED":
+            if work.state is DistributedWorkState.FAILED:
+                _verify_recorded_result(work, payload, envelope, status="FAILED")
+                return {
+                    "work": work.to_dict(),
+                    "reconciled": False,
+                    "idempotent": True,
+                }
+            summary = _work_result_summary(work, payload, envelope, status="FAILED")
+            work = self.work_store.record_result(work_id, summary)
+            work = self.work_store.transition(
+                work_id,
+                DistributedWorkState.FAILED,
+                reason="Signed Node execution failed",
+            )
+            return {"work": work.to_dict(), "reconciled": True, "idempotent": False}
+
+        receipt = remote_execution_receipt(envelope, expected_operation_id=work.work_id)
+        if receipt["node_id"] != work.assignment.node_id:
+            raise DistributedWorkError(
+                "verified receipt node does not match assignment"
+            )
+        if work.state is DistributedWorkState.VERIFIED:
+            _verify_committed_artifacts(work, self.artifact_store)
+            work = self.work_store.transition(
+                work_id,
+                DistributedWorkState.COMMITTED,
+                reason="Recovered verified Work result committed",
+            )
+            return {"work": work.to_dict(), "reconciled": True, "idempotent": True}
+        if work.state is DistributedWorkState.SUCCEEDED and work.result_summary:
+            _verify_recorded_result(work, payload, envelope, status="VERIFIED")
+            _verify_committed_artifacts(work, self.artifact_store)
+            work = self.work_store.transition(
+                work_id,
+                DistributedWorkState.VERIFIED,
+                reason="Recovered receipt and Artifact verification",
+            )
+            work = self.work_store.transition(
+                work_id,
+                DistributedWorkState.COMMITTED,
+                reason="Recovered verified Work result committed",
+            )
+            return {"work": work.to_dict(), "reconciled": True, "idempotent": True}
+        if work.state is DistributedWorkState.ASSIGNED:
+            work = self.work_store.transition(
+                work_id,
+                DistributedWorkState.RUNNING,
+                reason="Signed terminal result proves Node execution occurred",
+            )
+        if work.state is DistributedWorkState.RUNNING:
+            work = self.work_store.transition(
+                work_id,
+                DistributedWorkState.SUCCEEDED,
+                reason="Node returned a signed successful execution result",
+            )
+        elif work.state is not DistributedWorkState.SUCCEEDED:
+            raise DistributedWorkError(
+                f"completed result cannot reconcile from {work.state.value}"
+            )
+
+        dependencies = tuple(
+            _artifact_uri_digest(reference) for reference in work.input_artifacts
+        )
+        output_value = {
+            "schema": "apeir.distributed-work-output/v1",
+            "work_id": work.work_id,
+            "node_id": work.assigned_node,
+            "output": payload.get("output"),
+        }
+        output_stored = self.artifact_store.store_bytes(
+            json.dumps(
+                output_value,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8"),
+            artifact_type="verification_result",
+            name=f"{work.work_id}-output.json",
+            media_type="application/vnd.apeir.distributed-work-output+json",
+            produced_by=f"distributed-work:{work.work_id}",
+            derived_from=dependencies,
+            metadata={
+                "work_id": work.work_id,
+                "node_id": work.assigned_node,
+                "owner": work.creator,
+                "retention_policy": "work-lifecycle",
+            },
+        )
+        evidence_value = {
+            "schema": "apeir.distributed-work-evidence/v1",
+            "work_id": work.work_id,
+            "remote_execution_receipt": receipt,
+        }
+        evidence_stored = self.artifact_store.store_bytes(
+            json.dumps(
+                evidence_value,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8"),
+            artifact_type="evidence",
+            name=f"{work.work_id}-evidence.json",
+            media_type="application/vnd.apeir.distributed-work-evidence+json",
+            produced_by=f"distributed-work:{work.work_id}",
+            depends_on=(str(output_stored["artifact"]["digest"]),),
+            derived_from=dependencies,
+            metadata={
+                "work_id": work.work_id,
+                "node_id": work.assigned_node,
+                "owner": work.creator,
+                "retention_policy": "audit",
+                "signed_envelope_digest": receipt["signed_envelope_digest"],
+            },
+        )
+        output_digest = str(output_stored["artifact"]["digest"])
+        evidence_digest = str(evidence_stored["artifact"]["digest"])
+        if not (
+            self.artifact_store.verify(output_digest)
+            and self.artifact_store.verify(evidence_digest)
+        ):
+            raise DistributedWorkError("Work Artifact verification failed")
+        output_ref = _artifact_digest_uri(output_digest)
+        evidence_ref = _artifact_digest_uri(evidence_digest)
+        summary = _work_result_summary(
+            work,
+            payload,
+            envelope,
+            status="VERIFIED",
+            remote_receipt=receipt,
+            output_artifact=output_ref,
+            evidence_artifact=evidence_ref,
+        )
+        work = self.work_store.record_result(
+            work_id,
+            summary,
+            output_artifacts=(output_ref,),
+            evidence_refs=(evidence_ref,),
+        )
+        work = self.work_store.transition(
+            work_id,
+            DistributedWorkState.VERIFIED,
+            reason="Receipt signature and Artifact digests verified",
+        )
+        work = self.work_store.transition(
+            work_id,
+            DistributedWorkState.COMMITTED,
+            reason="Verified Work result committed",
+        )
+        return {"work": work.to_dict(), "reconciled": True, "idempotent": False}
 
     async def start(self) -> str:
         self._server = await serve(
@@ -653,12 +1064,12 @@ class NodeRelayServer:
                 },
                 reply_to=envelope.message_id,
             )
-            for request in list(self.pending.get(node_id, {}).values()):
-                await self._send_workload(websocket, node_id, request)
             for digest, artifact in list(
                 self.pending_artifacts.get(node_id, {}).items()
             ):
                 await self._send_artifact(websocket, node_id, digest, artifact)
+            for request in list(self.pending.get(node_id, {}).values()):
+                await self._send_workload(websocket, node_id, request)
             for request in list(self.pending_controls.get(node_id, [])):
                 await self._send(
                     websocket,
@@ -744,11 +1155,14 @@ class NodeRelayServer:
                 if envelope.payload.get("state") == "READY":
                     self.pending_artifacts.get(node_id, {}).pop(digest, None)
         elif envelope.message_type == "ACK":
+            acknowledged = str(envelope.payload.get("acknowledged", ""))
+            if acknowledged == "WORKLOAD_START":
+                workload_id = str(envelope.payload.get("workload_id", ""))
+                self._mark_work_running(workload_id, node_id)
             lease = envelope.payload.get("lease")
             if isinstance(lease, dict) and lease.get("lease_id"):
                 lease_id = str(lease["lease_id"])
                 self.lease_results[lease_id] = lease
-                acknowledged = str(envelope.payload.get("acknowledged", ""))
                 if acknowledged in {"LEASE_ACQUIRE", "LEASE_RELEASE"}:
                     self._complete_control(node_id, acknowledged, lease_id)
         elif envelope.message_type not in {"HEARTBEAT", "ACK", "ERROR"}:
@@ -779,6 +1193,32 @@ class NodeRelayServer:
         )
         observation["observed_at"] = _utc_now()
         self._save_observations()
+
+    def _mark_work_running(self, work_id: str, node_id: str) -> None:
+        """Bind a signed Node acknowledgement to the durable Work lifecycle."""
+        if not self.state_dir or not work_id:
+            return
+        self.work_store = DistributedWorkStore(self.state_dir)
+        work = self.work_store.get(work_id)
+        if work is None:
+            return
+        if work.assigned_node != node_id:
+            raise NodeProtocolError("Work acknowledgement node changed")
+        if work.state is DistributedWorkState.ASSIGNED:
+            self.work_store.transition(
+                work_id,
+                DistributedWorkState.RUNNING,
+                reason="Node acknowledged the signed Work assignment",
+            )
+        elif work.state not in {
+            DistributedWorkState.RUNNING,
+            DistributedWorkState.SUCCEEDED,
+            DistributedWorkState.VERIFIED,
+            DistributedWorkState.COMMITTED,
+        }:
+            raise NodeProtocolError(
+                f"Work acknowledgement is invalid from {work.state.value}"
+            )
 
     def _complete_control(
         self, node_id: str, message_type: str, idempotency_key: str
@@ -836,6 +1276,17 @@ class NodeRelayServer:
             node_id = str(value.get("node_id", ""))
             if request_path.stem != operation_id:
                 raise NodeProtocolError("remote provider request filename is not bound")
+            input_artifacts = value.get("input_artifacts", [])
+            if not isinstance(input_artifacts, list) or not all(
+                isinstance(item, str) for item in input_artifacts
+            ):
+                raise NodeProtocolError("remote provider input artifacts are invalid")
+            if input_artifacts and self.artifact_store is not None:
+                self.artifact_store = ContentAddressedArtifactStore(
+                    self.artifact_store.root
+                )
+            for reference in input_artifacts:
+                await self.queue_artifact(node_id, _artifact_uri_digest(reference))
             await self.queue_workload(
                 node_id,
                 operation_id,
@@ -1272,14 +1723,131 @@ def _normalize_node_architecture(value: str) -> str:
     return normalized
 
 
+def _non_negative_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, parsed)
+
+
+def _is_gpu_device(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    spec = value.get("spec")
+    if not isinstance(spec, dict):
+        return False
+    return str(spec.get("device_type", "")).upper() in {
+        "CUDA",
+        "ROCM",
+        "METAL",
+        "QNN",
+        "VULKAN",
+    }
+
+
+def _artifact_uri_digest(reference: str) -> str:
+    prefix = "artifact://sha256/"
+    if not reference.startswith(prefix):
+        raise DistributedWorkError(
+            "dispatch input artifacts must use artifact://sha256/<digest>"
+        )
+    value = reference.removeprefix(prefix)
+    if len(value) != 64 or any(
+        character not in "0123456789abcdef" for character in value
+    ):
+        raise DistributedWorkError("dispatch input Artifact digest is invalid")
+    return f"sha256:{value}"
+
+
+def _artifact_digest_uri(digest: str) -> str:
+    if not digest.startswith("sha256:"):
+        raise DistributedWorkError("committed Artifact digest is invalid")
+    return f"artifact://sha256/{digest.removeprefix('sha256:')}"
+
+
+def _work_result_summary(
+    work: Any,
+    payload: dict[str, Any],
+    envelope: dict[str, Any],
+    *,
+    status: str,
+    remote_receipt: dict[str, Any] | None = None,
+    output_artifact: str = "",
+    evidence_artifact: str = "",
+) -> dict[str, Any]:
+    return {
+        "schema": "apeir.work-result-summary/v1",
+        "work_id": work.work_id,
+        "assignment_id": work.assignment.assignment_id if work.assignment else "",
+        "node_id": str(envelope.get("source") or ""),
+        "status": status,
+        "node_result_state": str(payload.get("state") or ""),
+        "signed_envelope_digest": _payload_digest(envelope),
+        "output_artifact": output_artifact,
+        "evidence_artifact": evidence_artifact,
+        "remote_execution_receipt": dict(remote_receipt or {}),
+        "reconciled_at": _utc_now(),
+    }
+
+
+def _verify_recorded_result(
+    work: Any,
+    payload: dict[str, Any],
+    envelope: dict[str, Any],
+    *,
+    status: str,
+) -> None:
+    summary = work.result_summary
+    if (
+        summary.get("schema") != "apeir.work-result-summary/v1"
+        or summary.get("work_id") != work.work_id
+        or summary.get("assignment_id")
+        != (work.assignment.assignment_id if work.assignment else "")
+        or summary.get("node_id") != str(envelope.get("source") or "")
+        or summary.get("status") != status
+        or summary.get("node_result_state") != str(payload.get("state") or "")
+        or summary.get("signed_envelope_digest") != _payload_digest(envelope)
+    ):
+        raise DistributedWorkError("recorded Work result binding changed")
+
+
+def _verify_committed_artifacts(
+    work: Any, artifact_store: ContentAddressedArtifactStore
+) -> None:
+    references = (*work.output_artifacts, *work.evidence_refs)
+    if not references:
+        raise DistributedWorkError("verified Work has no committed Artifacts")
+    for reference in references:
+        if not artifact_store.verify(_artifact_uri_digest(reference)):
+            raise DistributedWorkError("committed Work Artifact verification failed")
+
+
 def _atomic_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    with temporary.open("w", encoding="utf-8") as stream:
-        stream.write(json.dumps(value, ensure_ascii=False, sort_keys=True) + "\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    temporary.replace(path)
+    temporary = path.with_name(f"{path.name}.{secrets.token_hex(8)}.tmp")
+    try:
+        with temporary.open("w", encoding="utf-8") as stream:
+            stream.write(json.dumps(value, ensure_ascii=False, sort_keys=True) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        _replace_file(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _replace_file(source: Path, target: Path) -> None:
+    """Bound Windows sharing violations without weakening atomic replacement."""
+    for attempt in range(6):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if attempt == 5:
+                raise
+            time.sleep(0.01 * (attempt + 1))
 
 
 def _workload_request_digest(request: dict[str, Any]) -> str:

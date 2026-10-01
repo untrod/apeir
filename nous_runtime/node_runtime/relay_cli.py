@@ -14,6 +14,12 @@ from nous_runtime.artifact.content_store import ContentAddressedArtifactStore
 from nous_runtime.project.workspace import default_workspace_path
 
 from .relay import NodeRelayServer
+from .distributed_work import (
+    DistributedWork,
+    DistributedWorkStore,
+    WorkExecutionPolicy,
+    WorkRequirements,
+)
 
 
 app = typer.Typer(
@@ -29,6 +35,20 @@ def _controller(state_dir: Path, **options: object) -> NodeRelayServer:
         artifact_store=ContentAddressedArtifactStore(resolved / "artifacts"),
         **options,
     )
+
+
+def _work_store(state_dir: Path) -> DistributedWorkStore:
+    return DistributedWorkStore(state_dir.expanduser().resolve())
+
+
+def _json_object(value: str) -> dict[str, object]:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise typer.BadParameter("execution arguments must be valid JSON") from exc
+    if not isinstance(parsed, dict):
+        raise typer.BadParameter("execution arguments must be a JSON object")
+    return parsed
 
 
 def _read_node_identity(source: Path) -> dict[str, str]:
@@ -99,6 +119,116 @@ def select_node(
     typer.echo(json.dumps(decision, ensure_ascii=False, sort_keys=True))
     if not decision["selected_node"]:
         raise typer.Exit(code=2)
+
+
+@app.command("submit-work")
+def submit_work(
+    intent: str = typer.Option(..., "--intent"),
+    state_dir: Path = typer.Option(default_workspace_path("relay"), "--state-dir"),
+    architecture: list[str] | None = typer.Option(None, "--architecture"),
+    operating_system: list[str] | None = typer.Option(None, "--os"),
+    capability: list[str] | None = typer.Option(None, "--capability"),
+    execution_capability: str = typer.Option("", "--execution-capability"),
+    arguments_json: str = typer.Option("{}", "--arguments-json"),
+    minimum_memory_bytes: int = typer.Option(0, "--minimum-memory-bytes", min=0),
+    gpu_required: bool = typer.Option(False, "--gpu-required"),
+    input_artifact: list[str] | None = typer.Option(None, "--input-artifact"),
+    creator: str = typer.Option("", "--creator"),
+    priority: int = typer.Option(0, "--priority", min=0, max=100),
+    delivery: str = typer.Option("at_most_once", "--delivery"),
+    require_receipt: bool = typer.Option(
+        True, "--require-receipt/--no-require-receipt"
+    ),
+    work_id: str = typer.Option("", "--work-id"),
+) -> None:
+    """Create a durable Compute Mesh Work without dispatching it."""
+    options: dict[str, object] = {}
+    if work_id:
+        options["work_id"] = work_id
+    required_capabilities = list(capability or ())
+    if execution_capability and execution_capability not in required_capabilities:
+        required_capabilities.append(execution_capability)
+    work = DistributedWork(
+        intent=intent,
+        requirements=WorkRequirements(
+            architectures=tuple(architecture or ()),
+            operating_systems=tuple(operating_system or ()),
+            capabilities=tuple(required_capabilities),
+            minimum_memory_bytes=minimum_memory_bytes,
+            gpu_required=gpu_required,
+        ),
+        input_artifacts=tuple(input_artifact or ()),
+        execution_policy=WorkExecutionPolicy(
+            delivery=delivery,
+            require_receipt=require_receipt,
+        ),
+        execution_capability=execution_capability,
+        execution_arguments=_json_object(arguments_json),
+        creator=creator,
+        priority=priority,
+        **options,
+    )
+    created = _work_store(state_dir).create(work)
+    typer.echo(json.dumps(created.to_dict(), ensure_ascii=False, sort_keys=True))
+
+
+@app.command("schedule-work")
+def schedule_work(
+    work_id: str = typer.Argument(...),
+    state_dir: Path = typer.Option(default_workspace_path("relay"), "--state-dir"),
+) -> None:
+    """Place one CREATED Work using durable signed Node observations."""
+    result = _controller(state_dir).schedule_work(work_id)
+    typer.echo(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    if not result["placement"]["selected_node"]:
+        raise typer.Exit(code=2)
+
+
+@app.command("dispatch-work")
+def dispatch_work(
+    work_id: str = typer.Argument(...),
+    state_dir: Path = typer.Option(default_workspace_path("relay"), "--state-dir"),
+) -> None:
+    """Stage one ASSIGNED Work for the running Controller."""
+    result = _controller(state_dir).stage_work_dispatch(work_id)
+    typer.echo(json.dumps(result, ensure_ascii=False, sort_keys=True))
+
+
+@app.command("reconcile-work")
+def reconcile_work(
+    work_id: str = typer.Argument(...),
+    state_dir: Path = typer.Option(default_workspace_path("relay"), "--state-dir"),
+) -> None:
+    """Verify and commit one signed terminal Node result."""
+    result = _controller(state_dir).reconcile_work(work_id)
+    typer.echo(json.dumps(result, ensure_ascii=False, sort_keys=True))
+
+
+@app.command("work-status")
+def work_status(
+    work_id: str = typer.Argument(""),
+    state_dir: Path = typer.Option(default_workspace_path("relay"), "--state-dir"),
+) -> None:
+    """Read one Work or list the durable Compute Mesh Work registry."""
+    store = _work_store(state_dir)
+    if work_id:
+        work = store.get(work_id)
+        if work is None:
+            typer.echo(json.dumps({"error": "Work not found", "work_id": work_id}))
+            raise typer.Exit(code=2)
+        typer.echo(json.dumps(work.to_dict(), ensure_ascii=False, sort_keys=True))
+        return
+    typer.echo(
+        json.dumps(
+            {
+                "schema": "apeir.compute-mesh-work-status/v1",
+                "counts": store.counts(),
+                "works": [item.to_dict() for item in store.list()],
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
 
 
 @app.command("serve")

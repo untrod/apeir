@@ -10,6 +10,11 @@ from typer.testing import CliRunner
 
 from nous_runtime.artifact import ContentAddressedArtifactStore
 from nous_runtime.node_runtime.protocol import NodeProtocolError
+from nous_runtime.node_runtime.distributed_work import (
+    DistributedWork,
+    DistributedWorkState,
+    WorkRequirements,
+)
 from nous_runtime.node_runtime.relay import NodeRelayClient, NodeRelayServer
 from nous_runtime.node_runtime.relay_cli import app
 from nous_runtime.node_runtime.cli import node_daemon_app
@@ -111,6 +116,107 @@ def test_controller_select_node_cli_fails_closed_without_match(
 
     assert result.exit_code == 2
     assert json.loads(result.stdout)["selected_node"] == ""
+
+
+def test_controller_schedules_work_by_capability_resource_and_device_facts(
+    tmp_path: Path,
+):
+    server = NodeRelayServer(state_dir=tmp_path / "controller", heartbeat_seconds=60)
+    server.node_keys = {"node-jetson": "01" * 32, "node-windows": "02" * 32}
+    observed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def observation(
+        node_id: str, node_name: str, architecture: str, os_name: str, gpu: bool
+    ) -> dict:
+        devices = (
+            [{"device_id": "gpu-0", "spec": {"device_type": "CUDA"}}] if gpu else []
+        )
+        return {
+            "observed_at": observed_at,
+            "REGISTER": {
+                "identity": {
+                    "node_id": node_id,
+                    "node_name": node_name,
+                    "capabilities": ["vision.run", "system.echo"],
+                    "platform": {
+                        "os": os_name,
+                        "arch": architecture,
+                        "abi": "glibc" if os_name == "Linux" else "msvc",
+                    },
+                    "word_size_bits": 64,
+                }
+            },
+            "HEARTBEAT": {
+                "node_id": node_id,
+                "status": "ONLINE",
+                "heartbeat_sequence": 1,
+            },
+            "RESOURCE_REPORT": {
+                "schema": "nous.node-resource-report/v1",
+                "measurement_source": "test-fixture",
+                "memory_total_bytes": 16 * 1024**3,
+                "memory_available_bytes": 12 * 1024**3,
+            },
+            "DEVICE_REPORT": {"devices": devices},
+        }
+
+    server.reports = {
+        "node-jetson": observation("node-jetson", "jetson", "aarch64", "Linux", True),
+        "node-windows": observation(
+            "node-windows", "windows", "AMD64", "Windows", False
+        ),
+    }
+    assert server.work_store is not None
+    server.work_store.create(
+        DistributedWork(
+            work_id="work-vision-placement",
+            intent="Run vision inference",
+            requirements=WorkRequirements(
+                architectures=("arm64",),
+                operating_systems=("linux",),
+                capabilities=("vision.run",),
+                minimum_memory_bytes=8 * 1024**3,
+                gpu_required=True,
+            ),
+        )
+    )
+
+    result = server.schedule_work("work-vision-placement")
+
+    assert result["placement"]["selected_node"] == "node-jetson"
+    assert result["placement"]["strategy"] == (
+        "deterministic-capability-resource-match"
+    )
+    assert result["work"]["state"] == DistributedWorkState.ASSIGNED.value
+    assert result["work"]["assigned_node"] == "node-jetson"
+    rejected = next(
+        item
+        for item in result["placement"]["candidates"]
+        if item["node_id"] == "node-windows"
+    )
+    assert any("architecture mismatch" in reason for reason in rejected["reasons"])
+    assert any("GPU is required" in reason for reason in rejected["reasons"])
+
+
+def test_controller_keeps_unmatched_work_scheduled(tmp_path: Path):
+    server = NodeRelayServer(state_dir=tmp_path / "controller")
+    assert server.work_store is not None
+    server.work_store.create(
+        DistributedWork(
+            work_id="work-no-placement",
+            intent="Require an unavailable node",
+            requirements=WorkRequirements(architectures=("arm64",)),
+        )
+    )
+
+    result = server.schedule_work("work-no-placement")
+
+    assert result["placement"]["selected_node"] == ""
+    assert result["work"]["state"] == DistributedWorkState.SCHEDULED.value
+    persisted = server.work_store.get("work-no-placement")
+    assert persisted is not None
+    assert persisted.state is DistributedWorkState.SCHEDULED
+    assert persisted.assigned_node == ""
 
 
 def test_node_cli_exports_public_identity_without_running_host_probes(tmp_path: Path):

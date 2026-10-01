@@ -65,6 +65,13 @@ for remote connections and validate the pinned Controller Ed25519 public key.
 For the Jetson Orin Nano deployment procedure and ARM64-specific prerequisites,
 see [Jetson Node setup](JETSON_NODE_SETUP.md).
 
+For the durable Distribution-layer Work contract and its fail-closed state
+machine, see [Distributed Work](DISTRIBUTED_WORK.md).
+The complete execution and recovery path is documented in
+[Distributed execution](DISTRIBUTED_EXECUTION.md),
+[Work lifecycle](WORK_LIFECYCLE.md), and
+[Execution recovery](EXECUTION_RECOVERY.md).
+
 ## 3. Inspect durable state
 
 ```bash
