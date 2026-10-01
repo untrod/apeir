@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import ssl
+import sys
 from pathlib import Path
 
 import typer
@@ -123,9 +124,9 @@ def serve_relay(
                     "artifact_store": str(relay.artifact_store.root),
                 },
                 sort_keys=True,
-            ),
-            flush=True,
+            )
         )
+        sys.stdout.flush()
         try:
             await asyncio.Future()
         finally:
