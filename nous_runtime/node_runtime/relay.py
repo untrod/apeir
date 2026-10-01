@@ -23,6 +23,7 @@ from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
 from nous_runtime.artifact.content_store import ContentAddressedArtifactStore
+from nous_runtime.connectivity.protocol.identity import NodeIdentity
 from nous_runtime.security.private_files import restrict_owner_only_file
 
 from .protocol import (
@@ -36,6 +37,9 @@ from .protocol import (
 from .service import NodeRuntimeService
 
 CONTROL_PLANE_ID = "control_plane"
+OBSERVED_MESSAGE_TYPES = frozenset(
+    {"REGISTER", "HEARTBEAT", "RESOURCE_REPORT", "DEVICE_REPORT", "TELEMETRY"}
+)
 
 
 def public_key_hex(private_key: Ed25519PrivateKey) -> str:
@@ -238,9 +242,7 @@ class NodeRelayServer:
                 raise NodeProtocolError("relay node observation identity is invalid")
             signed = observation.get("signed_envelopes")
             message_types = {
-                key
-                for key in observation
-                if key in {"HEARTBEAT", "RESOURCE_REPORT", "DEVICE_REPORT", "TELEMETRY"}
+                key for key in observation if key in OBSERVED_MESSAGE_TYPES
             }
             if not isinstance(signed, dict) or set(signed) != message_types:
                 raise NodeProtocolError("relay node observation provenance is invalid")
@@ -281,14 +283,29 @@ class NodeRelayServer:
         for node_id in sorted(self.node_keys):
             observation = self.reports.get(node_id, {})
             heartbeat = observation.get("HEARTBEAT", {})
+            registration = observation.get("REGISTER", {})
+            identity = registration.get("identity", {})
+            platform = identity.get("platform", {})
             nodes.append(
                 {
                     "node_id": node_id,
+                    "node_name": str(identity.get("node_name", "")),
                     "connected": node_id in self.connections,
                     "session_id": self.sessions.get(node_id, ""),
                     "last_observed_at": str(observation.get("observed_at", "")),
                     "heartbeat_sequence": int(heartbeat.get("heartbeat_sequence", 0)),
-                    "reported_status": str(heartbeat.get("status", "UNKNOWN")),
+                    "reported_status": str(
+                        heartbeat.get(
+                            "status", "REGISTERED" if registration else "UNKNOWN"
+                        )
+                    ),
+                    "platform": {
+                        "os": str(platform.get("os", "")),
+                        "arch": str(platform.get("arch", "")),
+                        "abi": str(platform.get("abi", "")),
+                        "word_size_bits": identity.get("word_size_bits", 0),
+                    },
+                    "capabilities": list(identity.get("capabilities", [])),
                     "has_resource_report": "RESOURCE_REPORT" in observation,
                     "has_device_report": "DEVICE_REPORT" in observation,
                 }
@@ -530,8 +547,21 @@ class NodeRelayServer:
             payload = envelope.payload
             if payload.get("node_id") != node_id:
                 raise NodeProtocolError("registered identity does not match source")
+            raw_identity = payload.get("identity")
+            if not isinstance(raw_identity, dict):
+                raise NodeProtocolError("registered node identity is invalid")
+            try:
+                identity = NodeIdentity.from_dict(raw_identity)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise NodeProtocolError("registered node identity is invalid") from exc
+            if identity.node_id != node_id or identity.public_key != public_key:
+                raise NodeProtocolError(
+                    "registered node identity is not bound to its trusted key"
+                )
             if NODE_PROTOCOL_VERSION not in payload.get("supported_versions", []):
                 raise NodeProtocolError("no compatible protocol version")
+
+            self._record_observation(node_id, envelope)
 
             previous = self.sessions.get(node_id, "")
             resume = payload.get("resume_session_id", "")
@@ -597,19 +627,8 @@ class NodeRelayServer:
     async def _handle_message(
         self, websocket: Any, node_id: str, envelope: NodeProtocolEnvelope
     ) -> None:
-        if envelope.message_type in {
-            "HEARTBEAT",
-            "RESOURCE_REPORT",
-            "DEVICE_REPORT",
-            "TELEMETRY",
-        }:
-            observation = self.reports.setdefault(node_id, {})
-            observation[envelope.message_type] = envelope.payload
-            observation.setdefault("signed_envelopes", {})[envelope.message_type] = (
-                envelope.to_dict()
-            )
-            observation["observed_at"] = _utc_now()
-            self._save_observations()
+        if envelope.message_type in OBSERVED_MESSAGE_TYPES - {"REGISTER"}:
+            self._record_observation(node_id, envelope)
         elif envelope.message_type == "WORKLOAD_STATUS":
             workload_id = str(envelope.payload.get("workload_id", ""))
             assignment = self.pending.get(node_id, {}).get(workload_id)
@@ -680,6 +699,15 @@ class NodeRelayServer:
             {"acknowledged": envelope.message_type},
             reply_to=envelope.message_id,
         )
+
+    def _record_observation(self, node_id: str, envelope: NodeProtocolEnvelope) -> None:
+        observation = self.reports.setdefault(node_id, {})
+        observation[envelope.message_type] = envelope.payload
+        observation.setdefault("signed_envelopes", {})[envelope.message_type] = (
+            envelope.to_dict()
+        )
+        observation["observed_at"] = _utc_now()
+        self._save_observations()
 
     def _complete_control(
         self, node_id: str, message_type: str, idempotency_key: str
@@ -925,6 +953,8 @@ class NodeRelayClient:
             status = self.service.run_once()
             await self._send(websocket, "RESOURCE_REPORT", status["resources"])
             await self._send(websocket, "DEVICE_REPORT", {"devices": status["devices"]})
+            resource_digest = _payload_digest(status["resources"])
+            device_digest = _payload_digest(status["devices"])
 
             while not stop_event.is_set():
                 try:
@@ -932,17 +962,30 @@ class NodeRelayClient:
                         websocket.recv(), timeout=self.heartbeat_seconds
                     )
                 except asyncio.TimeoutError:
+                    status = self.service.run_once()
                     await self._send(
                         websocket,
                         "HEARTBEAT",
                         {
                             "node_id": self.service.identity.node_id,
                             "status": "ONLINE",
-                            "heartbeat_sequence": self.service.run_once()[
-                                "heartbeat_sequence"
-                            ],
+                            "heartbeat_sequence": status["heartbeat_sequence"],
                         },
                     )
+                    next_resource_digest = _payload_digest(status["resources"])
+                    if next_resource_digest != resource_digest:
+                        await self._send(
+                            websocket, "RESOURCE_REPORT", status["resources"]
+                        )
+                        resource_digest = next_resource_digest
+                    next_device_digest = _payload_digest(status["devices"])
+                    if next_device_digest != device_digest:
+                        await self._send(
+                            websocket,
+                            "DEVICE_REPORT",
+                            {"devices": status["devices"]},
+                        )
+                        device_digest = next_device_digest
                     continue
                 envelope = NodeProtocolEnvelope.from_json(raw)
                 if envelope.source != CONTROL_PLANE_ID:
@@ -1123,6 +1166,17 @@ def _utc_now() -> str:
         .isoformat(timespec="milliseconds")
         .replace("+00:00", "Z")
     )
+
+
+def _payload_digest(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _atomic_json(path: Path, value: dict[str, Any]) -> None:

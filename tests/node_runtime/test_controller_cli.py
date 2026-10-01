@@ -129,6 +129,9 @@ def test_controller_persists_node_observations_without_claiming_live_connection(
         assert durable["nodes"][0]["last_observed_at"].endswith("Z")
         assert durable["nodes"][0]["has_resource_report"] is True
         assert durable["nodes"][0]["has_device_report"] is True
+        assert durable["nodes"][0]["node_name"] == node.identity.node_name
+        assert durable["nodes"][0]["platform"]["arch"] == node.identity.platform_arch
+        assert durable["nodes"][0]["capabilities"] == list(node.identity.capabilities)
 
     asyncio.run(scenario())
 
