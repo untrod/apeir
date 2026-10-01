@@ -111,6 +111,7 @@ def test_controller_persists_node_observations_without_claiming_live_connection(
             live = server.controller_status()
             assert live["connected_node_count"] == 1
             assert live["nodes"][0]["connected"] is True
+            assert live["nodes"][0]["liveness"] == "CONNECTED"
         finally:
             stop.set()
             await asyncio.wait_for(task, timeout=2)
@@ -125,6 +126,7 @@ def test_controller_persists_node_observations_without_claiming_live_connection(
         durable = restarted.controller_status()
         assert durable["connected_node_count"] == 0
         assert durable["nodes"][0]["connected"] is False
+        assert durable["nodes"][0]["liveness"] == "RECENTLY_OBSERVED"
         assert durable["nodes"][0]["heartbeat_sequence"] > 0
         assert durable["nodes"][0]["last_observed_at"].endswith("Z")
         assert durable["nodes"][0]["has_resource_report"] is True

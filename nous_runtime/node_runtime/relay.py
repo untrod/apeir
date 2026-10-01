@@ -286,13 +286,25 @@ class NodeRelayServer:
             registration = observation.get("REGISTER", {})
             identity = registration.get("identity", {})
             platform = identity.get("platform", {})
+            last_observed_at = str(observation.get("observed_at", ""))
+            observation_age = _observation_age_seconds(last_observed_at)
+            if node_id in self.connections:
+                liveness = "CONNECTED"
+            elif observation_age is None:
+                liveness = "NEVER_SEEN"
+            elif observation_age <= self.heartbeat_seconds * 3:
+                liveness = "RECENTLY_OBSERVED"
+            else:
+                liveness = "STALE"
             nodes.append(
                 {
                     "node_id": node_id,
                     "node_name": str(identity.get("node_name", "")),
                     "connected": node_id in self.connections,
                     "session_id": self.sessions.get(node_id, ""),
-                    "last_observed_at": str(observation.get("observed_at", "")),
+                    "liveness": liveness,
+                    "last_observed_at": last_observed_at,
+                    "observation_age_seconds": observation_age,
                     "heartbeat_sequence": int(heartbeat.get("heartbeat_sequence", 0)),
                     "reported_status": str(
                         heartbeat.get(
@@ -1177,6 +1189,16 @@ def _payload_digest(value: Any) -> str:
             separators=(",", ":"),
         ).encode("utf-8")
     ).hexdigest()
+
+
+def _observation_age_seconds(value: str) -> float | None:
+    if not value:
+        return None
+    try:
+        observed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return max((datetime.now(timezone.utc) - observed).total_seconds(), 0.0)
 
 
 def _atomic_json(path: Path, value: dict[str, Any]) -> None:

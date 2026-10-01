@@ -75,6 +75,8 @@ Controller process. After a restart, the last signed heartbeat and resource
 reports remain visible, but an offline Node is never presented as currently
 connected. Persisted observations retain their signed protocol envelopes and
 are verified against the enrolled Node key when Controller state is reopened.
+The separate status process reports recent signed evidence as
+`RECENTLY_OBSERVED`; after three heartbeat intervals it becomes `STALE`.
 
 ## Security boundary
 
