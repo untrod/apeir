@@ -342,6 +342,60 @@ class NodeRelayServer:
             "nodes": nodes,
         }
 
+    def select_node(self, requirements: dict[str, Any]) -> dict[str, Any]:
+        """Select one recently observed Node by deterministic capability match."""
+        if not isinstance(requirements, dict):
+            raise TypeError("node placement requirements must be an object")
+        raw_architecture = requirements.get("architecture", "")
+        raw_capability = requirements.get("capability", "")
+        if not isinstance(raw_architecture, str) or not isinstance(raw_capability, str):
+            raise TypeError("node placement requirements must be strings")
+        architecture = _normalize_node_architecture(raw_architecture)
+        capability = raw_capability.strip()
+        normalized_requirements = {
+            "architecture": architecture,
+            "capability": capability,
+        }
+
+        candidates: list[dict[str, Any]] = []
+        for node in self.controller_status()["nodes"]:
+            reasons: list[str] = []
+            observed_architecture = _normalize_node_architecture(
+                str(node["platform"]["arch"])
+            )
+            if node["liveness"] not in {"CONNECTED", "RECENTLY_OBSERVED"}:
+                reasons.append(f"node liveness is {node['liveness']}")
+            if architecture and observed_architecture != architecture:
+                reasons.append(
+                    "architecture mismatch: "
+                    f"requires {architecture}, node is {observed_architecture or 'unknown'}"
+                )
+            if capability and capability not in node["capabilities"]:
+                reasons.append(f"capability {capability} is not reported")
+            candidates.append(
+                {
+                    "node_id": node["node_id"],
+                    "node_name": node["node_name"],
+                    "architecture": observed_architecture,
+                    "eligible": not reasons,
+                    "reasons": reasons,
+                }
+            )
+
+        eligible = sorted(
+            (item for item in candidates if item["eligible"]),
+            key=lambda item: item["node_id"],
+        )
+        return {
+            "schema": "apeir.node-placement/v1",
+            "strategy": "deterministic-capability-match",
+            "requirements": normalized_requirements,
+            "selected_node": eligible[0]["node_id"] if eligible else "",
+            "candidates": candidates,
+            "authority": "placement-only",
+            "grants_capabilities": False,
+        }
+
     async def start(self) -> str:
         self._server = await serve(
             self._handle_connection,
@@ -1207,6 +1261,15 @@ def _observation_age_seconds(value: str) -> float | None:
     except ValueError:
         return None
     return max((datetime.now(timezone.utc) - observed).total_seconds(), 0.0)
+
+
+def _normalize_node_architecture(value: str) -> str:
+    normalized = value.strip().lower().replace("_", "-")
+    if normalized in {"aarch64", "arm64"}:
+        return "arm64"
+    if normalized in {"amd64", "x86-64", "x64"}:
+        return "amd64"
+    return normalized
 
 
 def _atomic_json(path: Path, value: dict[str, Any]) -> None:

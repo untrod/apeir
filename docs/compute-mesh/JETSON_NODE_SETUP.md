@@ -101,6 +101,19 @@ sudo -u apeir /opt/apeir/.venv/bin/apeir-controller status \
   --state-dir /var/lib/apeir-controller
 ```
 
+Verify deterministic placement before binding a workload to a Node:
+
+```bash
+sudo -u apeir /opt/apeir/.venv/bin/apeir-controller select-node \
+  --state-dir /var/lib/apeir-controller \
+  --architecture arm64 \
+  --capability system.echo
+```
+
+The decision uses signed, durable Controller observations and stable Node ID
+ordering. It is not an LLM decision, does not grant capabilities, and fails
+closed with exit code `2` when no eligible Node is available.
+
 The signed observations for `jetson-orin-nano` must show:
 
 - registration under its own Node identity;
@@ -116,9 +129,9 @@ Controller:
    verify its SHA-256 digest.
 2. Dispatch a bounded remote workload and retain its signed result envelope and
    OperationReceipt.
-3. Dispatch a workload requiring `architecture=arm64` and verify that
-   deterministic preflight/placement selects the Jetson rather than an AMD64
-   Node.
+3. Run signed execution preflight against the candidates, invoke deterministic
+   placement with `architecture=arm64`, and verify that it selects the Jetson
+   rather than an AMD64 Node before the workload target is bound.
 
 A connected socket or an `echo` alone is not sufficient evidence. Preserve the
 Node identity hash, Distribution revision, signed observations, workload

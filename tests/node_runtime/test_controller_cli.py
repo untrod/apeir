@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -48,6 +49,68 @@ def test_controller_cli_initializes_artifacts_and_trusts_identity_file(
     assert value["connected_node_count"] == 0
     assert value["nodes"][0]["node_id"] == node.identity.node_id
     assert value["nodes"][0]["connected"] is False
+
+
+def test_controller_selects_arm64_node_by_deterministic_capability_match():
+    server = NodeRelayServer(heartbeat_seconds=60.0)
+    server.node_keys = {"node-arm64": "01" * 32, "node-x64": "02" * 32}
+    observed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def observation(node_id: str, node_name: str, architecture: str) -> dict:
+        return {
+            "observed_at": observed_at,
+            "REGISTER": {
+                "identity": {
+                    "node_id": node_id,
+                    "node_name": node_name,
+                    "capabilities": ["system.echo"],
+                    "platform": {
+                        "os": "Linux" if architecture == "aarch64" else "Windows",
+                        "arch": architecture,
+                        "abi": "glibc" if architecture == "aarch64" else "msvc",
+                    },
+                    "word_size_bits": 64,
+                }
+            },
+            "HEARTBEAT": {
+                "node_id": node_id,
+                "status": "ONLINE",
+                "heartbeat_sequence": 1,
+            },
+        }
+
+    server.reports = {
+        "node-arm64": observation("node-arm64", "jetson", "aarch64"),
+        "node-x64": observation("node-x64", "windows", "AMD64"),
+    }
+
+    decision = server.select_node(
+        {"architecture": "aarch64", "capability": "system.echo"}
+    )
+
+    assert decision["strategy"] == "deterministic-capability-match"
+    assert decision["selected_node"] == "node-arm64"
+    assert decision["requirements"]["architecture"] == "arm64"
+    assert [item["eligible"] for item in decision["candidates"]] == [True, False]
+    assert "architecture mismatch" in decision["candidates"][1]["reasons"][0]
+
+
+def test_controller_select_node_cli_fails_closed_without_match(
+    tmp_path: Path,
+):
+    result = CliRunner().invoke(
+        app,
+        [
+            "select-node",
+            "--state-dir",
+            str(tmp_path / "controller"),
+            "--architecture",
+            "arm64",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert json.loads(result.stdout)["selected_node"] == ""
 
 
 def test_node_cli_exports_public_identity_without_running_host_probes(tmp_path: Path):

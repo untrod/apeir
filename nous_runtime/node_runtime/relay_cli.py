@@ -85,6 +85,22 @@ def controller_status(
     )
 
 
+@app.command("select-node")
+def select_node(
+    state_dir: Path = typer.Option(default_workspace_path("relay"), "--state-dir"),
+    architecture: str = typer.Option("", "--architecture"),
+    capability: str = typer.Option("", "--capability"),
+) -> None:
+    """Select a recently observed Node using deterministic requirements."""
+    relay = _controller(state_dir)
+    decision = relay.select_node(
+        {"architecture": architecture, "capability": capability}
+    )
+    typer.echo(json.dumps(decision, ensure_ascii=False, sort_keys=True))
+    if not decision["selected_node"]:
+        raise typer.Exit(code=2)
+
+
 @app.command("serve")
 def serve_relay(
     state_dir: Path = typer.Option(default_workspace_path("relay"), "--state-dir"),
