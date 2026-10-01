@@ -967,49 +967,52 @@ class NodeRelayClient:
             await self._send(websocket, "DEVICE_REPORT", {"devices": status["devices"]})
             resource_digest = _payload_digest(status["resources"])
             device_digest = _payload_digest(status["devices"])
+            loop = asyncio.get_running_loop()
+            next_heartbeat = loop.time() + self.heartbeat_seconds
 
             while not stop_event.is_set():
+                timeout = max(next_heartbeat - loop.time(), 0.001)
                 try:
-                    raw = await asyncio.wait_for(
-                        websocket.recv(), timeout=self.heartbeat_seconds
-                    )
+                    raw = await asyncio.wait_for(websocket.recv(), timeout=timeout)
                 except asyncio.TimeoutError:
-                    status = self.service.run_once()
+                    pass
+                else:
+                    envelope = NodeProtocolEnvelope.from_json(raw)
+                    if envelope.source != CONTROL_PLANE_ID:
+                        raise NodeProtocolError("unexpected message source")
+                    if envelope.target != self.service.identity.node_id:
+                        raise NodeProtocolError("message addressed to another node")
+                    if not envelope.verify(self.server_public_key):
+                        raise NodeProtocolError(
+                            "control-plane signature verification failed"
+                        )
+                    self._replay.accept(envelope)
+                    await self._handle_message(websocket, envelope)
+                if loop.time() < next_heartbeat:
+                    continue
+                status = self.service.run_once()
+                await self._send(
+                    websocket,
+                    "HEARTBEAT",
+                    {
+                        "node_id": self.service.identity.node_id,
+                        "status": "ONLINE",
+                        "heartbeat_sequence": status["heartbeat_sequence"],
+                    },
+                )
+                next_resource_digest = _payload_digest(status["resources"])
+                if next_resource_digest != resource_digest:
+                    await self._send(websocket, "RESOURCE_REPORT", status["resources"])
+                    resource_digest = next_resource_digest
+                next_device_digest = _payload_digest(status["devices"])
+                if next_device_digest != device_digest:
                     await self._send(
                         websocket,
-                        "HEARTBEAT",
-                        {
-                            "node_id": self.service.identity.node_id,
-                            "status": "ONLINE",
-                            "heartbeat_sequence": status["heartbeat_sequence"],
-                        },
+                        "DEVICE_REPORT",
+                        {"devices": status["devices"]},
                     )
-                    next_resource_digest = _payload_digest(status["resources"])
-                    if next_resource_digest != resource_digest:
-                        await self._send(
-                            websocket, "RESOURCE_REPORT", status["resources"]
-                        )
-                        resource_digest = next_resource_digest
-                    next_device_digest = _payload_digest(status["devices"])
-                    if next_device_digest != device_digest:
-                        await self._send(
-                            websocket,
-                            "DEVICE_REPORT",
-                            {"devices": status["devices"]},
-                        )
-                        device_digest = next_device_digest
-                    continue
-                envelope = NodeProtocolEnvelope.from_json(raw)
-                if envelope.source != CONTROL_PLANE_ID:
-                    raise NodeProtocolError("unexpected message source")
-                if envelope.target != self.service.identity.node_id:
-                    raise NodeProtocolError("message addressed to another node")
-                if not envelope.verify(self.server_public_key):
-                    raise NodeProtocolError(
-                        "control-plane signature verification failed"
-                    )
-                self._replay.accept(envelope)
-                await self._handle_message(websocket, envelope)
+                    device_digest = next_device_digest
+                next_heartbeat = loop.time() + self.heartbeat_seconds
 
     async def _handle_message(
         self, websocket: Any, envelope: NodeProtocolEnvelope
