@@ -122,6 +122,7 @@ ui = ["rich>=13.0"]
 [project.scripts]
 apeir = "nous_runtime.cli.main:app"
 apeir-node = "nous_runtime.node_runtime.cli:main"
+apeir-controller = "nous_runtime.node_runtime.relay_cli:main"
 apeir-relay = "nous_runtime.node_runtime.relay_cli:main"
 apeir-remote-provider = "nous_runtime.node_runtime.remote_provider:main"
 nous = "nous_runtime.cli.main:app"

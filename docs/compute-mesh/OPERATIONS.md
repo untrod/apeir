@@ -1,0 +1,86 @@
+# Compute Mesh operations
+
+APEIR Compute Mesh uses the existing authenticated Node Protocol. The Controller
+does not grant Kernel authority. It maintains durable node trust, signed workload
+results, pending controls, and a content-addressed artifact store. Nodes retain
+their own Ed25519 private keys; only public `identity.json` files are enrolled.
+Node and Controller startup fail closed if their private-key files cannot be
+restricted to the current operating-system identity.
+
+Protocol identifiers under `nous.*.v1` remain compatibility contracts. The
+public commands use the APEIR product name.
+
+## 1. Controller on Linux
+
+Use a dedicated host and a DNS name with a valid TLS certificate. Internet-facing
+plaintext WebSockets are rejected by the Runtime.
+
+```bash
+python3 -m venv /opt/apeir/.venv
+/opt/apeir/.venv/bin/pip install /opt/apeir/source
+sudo install -d -o apeir -g apeir -m 0700 /var/lib/apeir-controller
+sudo install -d -o root -g apeir -m 0750 /etc/apeir-controller/tls
+sudo install -m 0640 deploy/compute-mesh/controller.env.example \
+  /etc/apeir-controller/controller.env
+sudo install -m 0644 deploy/compute-mesh/apeir-controller.service \
+  /etc/systemd/system/apeir-controller.service
+```
+
+Edit `controller.env` for the certificate paths and public port. Limit the cloud
+security-group ingress rule to the known Node source addresses whenever possible.
+Then initialize and start the service:
+
+```bash
+sudo -u apeir /opt/apeir/.venv/bin/apeir-controller init \
+  --state-dir /var/lib/apeir-controller
+sudo systemctl daemon-reload
+sudo systemctl enable --now apeir-controller
+sudo systemctl status apeir-controller
+```
+
+The `init` output includes the Controller public key. Distribute that public key
+and the TLS CA chain to Nodes over an authenticated channel. Never copy
+`identity.ed25519.pem` from the Controller.
+
+## 2. Enroll a Node
+
+Create a Node identity locally without connecting it:
+
+```powershell
+.\.venv\Scripts\apeir-node.exe --state-dir .local\compute-mesh-node-x64 --identity-only --json
+```
+
+Transfer only `.local/compute-mesh-node-x64/identity.json` to the Controller and
+enroll it:
+
+```bash
+sudo -u apeir /opt/apeir/.venv/bin/apeir-controller trust \
+  /tmp/identity.json --state-dir /var/lib/apeir-controller
+```
+
+Start a Windows x64 or ARM64 Node with
+`scripts/compute-mesh/run-node-windows.ps1`. Start a Jetson or other Linux Node
+with `scripts/compute-mesh/run-node-linux.sh`. Both launchers require `wss://`
+for remote connections and validate the pinned Controller Ed25519 public key.
+
+## 3. Inspect durable state
+
+```bash
+sudo -u apeir /opt/apeir/.venv/bin/apeir-controller status \
+  --state-dir /var/lib/apeir-controller
+```
+
+The status is deliberately conservative. `connected` is true only in the live
+Controller process. After a restart, the last signed heartbeat and resource
+reports remain visible, but an offline Node is never presented as currently
+connected. Persisted observations retain their signed protocol envelopes and
+are verified against the enrolled Node key when Controller state is reopened.
+
+## Security boundary
+
+- TLS protects the transport; Ed25519 signatures authenticate protocol messages.
+- Trust enrollment is explicit and out of band.
+- Remote plaintext transport is allowed only on loopback.
+- Artifact bytes are verified against SHA-256 before they become ready on a Node.
+- Completed workload results retain the signed Node envelope.
+- Unknown remote effects must not be replayed as a recovery shortcut.

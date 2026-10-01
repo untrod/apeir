@@ -1,0 +1,33 @@
+[Unit]
+Description=APEIR Compute Mesh Controller
+Documentation=https://github.com/untrod/apeir
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=apeir
+Group=apeir
+EnvironmentFile=/etc/apeir-controller/controller.env
+ExecStart=/opt/apeir/.venv/bin/apeir-controller serve --state-dir ${APEIR_CONTROLLER_STATE_DIR} --host ${APEIR_CONTROLLER_HOST} --port ${APEIR_CONTROLLER_PORT} --heartbeat-seconds ${APEIR_CONTROLLER_HEARTBEAT_SECONDS} --cert-file ${APEIR_CONTROLLER_CERT_FILE} --key-file ${APEIR_CONTROLLER_KEY_FILE}
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ReadWritePaths=/var/lib/apeir-controller
+ReadOnlyPaths=/etc/apeir-controller
+
+[Install]
+WantedBy=multi-user.target

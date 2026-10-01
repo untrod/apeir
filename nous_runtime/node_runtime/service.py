@@ -31,6 +31,7 @@ from nous_runtime.node_runtime.execution_host import (
     evaluate_execution_preflight,
 )
 from nous_runtime.node_runtime.protocol import workload_request_digest
+from nous_runtime.security.private_files import restrict_owner_only_file
 from nous_runtime.version import __version__
 
 
@@ -141,14 +142,20 @@ class NodeRuntimeService:
         )
         _atomic_write_bytes(self.private_key_path, private_pem)
         try:
-            os.chmod(self.private_key_path, 0o600)
-        except OSError:
-            pass
+            restrict_owner_only_file(
+                self.private_key_path, subject="Node identity private key"
+            )
+        except Exception:
+            self.private_key_path.unlink(missing_ok=True)
+            raise
         _atomic_write_json(self.identity_path, identity.to_dict())
         self._verify_identity_key(identity)
         return identity
 
     def _verify_identity_key(self, identity: NodeIdentity) -> None:
+        restrict_owner_only_file(
+            self.private_key_path, subject="Node identity private key"
+        )
         try:
             key = serialization.load_pem_private_key(
                 self.private_key_path.read_bytes(), password=None

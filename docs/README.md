@@ -19,6 +19,7 @@ contributors, security reviewers, and release maintainers.
 - [Runtime specifications](specs/)
 - [Protocol specifications](protocol/)
 - [Deployment references](user/deployment/)
+- [Compute Mesh operations](compute-mesh/OPERATIONS.md)
 - [Model routing](architecture/intelligence/PROVIDER_ROUTING.md)
 - [Configuration reference](user/configuration/CONFIG_REFERENCE.md)
 

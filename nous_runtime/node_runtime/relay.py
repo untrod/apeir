@@ -11,6 +11,7 @@ import os
 import random
 import secrets
 import ssl
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -22,6 +23,7 @@ from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
 from nous_runtime.artifact.content_store import ContentAddressedArtifactStore
+from nous_runtime.security.private_files import restrict_owner_only_file
 
 from .protocol import (
     MAX_MESSAGE_BYTES,
@@ -87,7 +89,7 @@ class NodeRelayServer:
         self._load_workload_state()
         self.artifact_results: dict[str, dict[str, Any]] = {}
         self.lease_results: dict[str, dict[str, Any]] = {}
-        self.reports: dict[str, dict[str, Any]] = {}
+        self.reports: dict[str, dict[str, Any]] = self._load_observations()
         self._replay = ReplayWindow()
         self._sequence = 0
         self._server: Any = None
@@ -218,6 +220,98 @@ class NodeRelayServer:
                     ),
                 },
             )
+
+    def _load_observations(self) -> dict[str, dict[str, Any]]:
+        if self.state_dir is None:
+            return {}
+        value = _read_json(self.state_dir / "node-observations.json")
+        if not value:
+            return {}
+        if value.get("schema") != "apeir.controller-observations/v1":
+            raise NodeProtocolError("relay node observations are invalid")
+        nodes = value.get("nodes")
+        if not isinstance(nodes, dict):
+            raise NodeProtocolError("relay node observations are invalid")
+        observations: dict[str, dict[str, Any]] = {}
+        for node_id, observation in nodes.items():
+            if node_id not in self.node_keys or not isinstance(observation, dict):
+                raise NodeProtocolError("relay node observation identity is invalid")
+            signed = observation.get("signed_envelopes")
+            message_types = {
+                key
+                for key in observation
+                if key in {"HEARTBEAT", "RESOURCE_REPORT", "DEVICE_REPORT", "TELEMETRY"}
+            }
+            if not isinstance(signed, dict) or set(signed) != message_types:
+                raise NodeProtocolError("relay node observation provenance is invalid")
+            for message_type, raw_envelope in signed.items():
+                if not isinstance(raw_envelope, dict):
+                    raise NodeProtocolError(
+                        "relay node observation provenance is invalid"
+                    )
+                envelope = NodeProtocolEnvelope.from_json(
+                    json.dumps(raw_envelope), check_time=False
+                )
+                if (
+                    envelope.source != node_id
+                    or envelope.target != CONTROL_PLANE_ID
+                    or envelope.message_type != message_type
+                    or envelope.payload != observation[message_type]
+                    or not envelope.verify(self.node_keys[node_id])
+                ):
+                    raise NodeProtocolError(
+                        "relay node observation signature is invalid"
+                    )
+            observations[node_id] = observation
+        return observations
+
+    def _save_observations(self) -> None:
+        if self.state_dir is not None:
+            _atomic_json(
+                self.state_dir / "node-observations.json",
+                {
+                    "schema": "apeir.controller-observations/v1",
+                    "nodes": self.reports,
+                },
+            )
+
+    def controller_status(self) -> dict[str, Any]:
+        """Return durable controller facts without claiming offline nodes are live."""
+        nodes = []
+        for node_id in sorted(self.node_keys):
+            observation = self.reports.get(node_id, {})
+            heartbeat = observation.get("HEARTBEAT", {})
+            nodes.append(
+                {
+                    "node_id": node_id,
+                    "connected": node_id in self.connections,
+                    "session_id": self.sessions.get(node_id, ""),
+                    "last_observed_at": str(observation.get("observed_at", "")),
+                    "heartbeat_sequence": int(heartbeat.get("heartbeat_sequence", 0)),
+                    "reported_status": str(heartbeat.get("status", "UNKNOWN")),
+                    "has_resource_report": "RESOURCE_REPORT" in observation,
+                    "has_device_report": "DEVICE_REPORT" in observation,
+                }
+            )
+        return {
+            "schema": "apeir.controller-status/v1",
+            "role": "controller",
+            "state_dir": str(self.state_dir) if self.state_dir else "",
+            "public_key": self.public_key,
+            "trusted_node_count": len(self.node_keys),
+            "connected_node_count": len(self.connections),
+            "pending_workload_count": sum(
+                len(items) for items in self.pending.values()
+            ),
+            "completed_workload_count": len(self.results),
+            "pending_control_count": sum(
+                len(items) for items in self.pending_controls.values()
+            ),
+            "artifact_count": (
+                len(self.artifact_store.list()) if self.artifact_store else 0
+            ),
+            "nodes": nodes,
+        }
 
     async def start(self) -> str:
         self._server = await serve(
@@ -503,10 +597,19 @@ class NodeRelayServer:
     async def _handle_message(
         self, websocket: Any, node_id: str, envelope: NodeProtocolEnvelope
     ) -> None:
-        if envelope.message_type in {"RESOURCE_REPORT", "DEVICE_REPORT", "TELEMETRY"}:
-            self.reports.setdefault(node_id, {})[envelope.message_type] = (
-                envelope.payload
+        if envelope.message_type in {
+            "HEARTBEAT",
+            "RESOURCE_REPORT",
+            "DEVICE_REPORT",
+            "TELEMETRY",
+        }:
+            observation = self.reports.setdefault(node_id, {})
+            observation[envelope.message_type] = envelope.payload
+            observation.setdefault("signed_envelopes", {})[envelope.message_type] = (
+                envelope.to_dict()
             )
+            observation["observed_at"] = _utc_now()
+            self._save_observations()
         elif envelope.message_type == "WORKLOAD_STATUS":
             workload_id = str(envelope.payload.get("workload_id", ""))
             assignment = self.pending.get(node_id, {}).get(workload_id)
@@ -1014,6 +1117,14 @@ def _read_json(path: Path) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _utc_now() -> str:
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+
+
 def _atomic_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -1163,6 +1274,7 @@ def _load_or_create_relay_key(state_dir: Path) -> Ed25519PrivateKey:
     state_dir.mkdir(parents=True, exist_ok=True)
     key_path = state_dir / "identity.ed25519.pem"
     if key_path.is_file():
+        restrict_owner_only_file(key_path, subject="Controller identity private key")
         key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
         if not isinstance(key, Ed25519PrivateKey):
             raise ValueError("relay identity key must be Ed25519")
@@ -1176,9 +1288,10 @@ def _load_or_create_relay_key(state_dir: Path) -> Ed25519PrivateKey:
             encryption_algorithm=serialization.NoEncryption(),
         )
     )
-    temporary.replace(key_path)
     try:
-        key_path.chmod(0o600)
-    except OSError:
-        pass
+        restrict_owner_only_file(temporary, subject="Controller identity private key")
+        temporary.replace(key_path)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
     return key

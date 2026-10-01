@@ -1,0 +1,169 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+
+import pytest
+from typer.testing import CliRunner
+
+from nous_runtime.artifact import ContentAddressedArtifactStore
+from nous_runtime.node_runtime.protocol import NodeProtocolError
+from nous_runtime.node_runtime.relay import NodeRelayClient, NodeRelayServer
+from nous_runtime.node_runtime.relay_cli import app
+from nous_runtime.node_runtime.cli import node_daemon_app
+from nous_runtime.node_runtime.service import NodeRuntimeConfig, NodeRuntimeService
+
+
+def test_controller_cli_initializes_artifacts_and_trusts_identity_file(
+    tmp_path: Path,
+):
+    node = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+    controller_state = tmp_path / "controller"
+    runner = CliRunner()
+
+    initialized = runner.invoke(app, ["init", "--state-dir", str(controller_state)])
+    assert initialized.exit_code == 0, initialized.output
+    initial_status = json.loads(initialized.stdout)
+    assert initial_status["schema"] == "apeir.controller-status/v1"
+    assert initial_status["artifact_count"] == 0
+    assert (controller_state / "artifacts" / "objects" / "sha256").is_dir()
+
+    trusted = runner.invoke(
+        app,
+        [
+            "trust",
+            str(node.identity_path),
+            "--state-dir",
+            str(controller_state),
+        ],
+    )
+    assert trusted.exit_code == 0, trusted.output
+    assert json.loads(trusted.stdout)["trusted"] == node.identity.node_id
+
+    status = runner.invoke(app, ["status", "--state-dir", str(controller_state)])
+    assert status.exit_code == 0, status.output
+    value = json.loads(status.stdout)
+    assert value["trusted_node_count"] == 1
+    assert value["connected_node_count"] == 0
+    assert value["nodes"][0]["node_id"] == node.identity.node_id
+    assert value["nodes"][0]["connected"] is False
+
+
+def test_node_cli_exports_public_identity_without_running_host_probes(tmp_path: Path):
+    state = tmp_path / "node"
+    result = CliRunner().invoke(
+        node_daemon_app,
+        ["--state-dir", str(state), "--identity-only", "--json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    identity = json.loads(result.stdout)
+    assert identity["node_id"].startswith("node_")
+    assert len(identity["public_key"]) == 64
+    assert (state / "identity.json").is_file()
+    assert (state / "identity.ed25519.pem").is_file()
+    assert not (state / "status.json").exists()
+
+
+def test_controller_persists_node_observations_without_claiming_live_connection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    async def scenario() -> None:
+        controller_state = tmp_path / "controller"
+        node = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+        sequence = 0
+
+        def lightweight_status() -> dict:
+            nonlocal sequence
+            sequence += 1
+            return {
+                "heartbeat_sequence": sequence,
+                "resources": {
+                    "schema": "nous.resource-report/v1",
+                    "measurement_source": "test-fixture",
+                },
+                "devices": [],
+            }
+
+        monkeypatch.setattr(node, "run_once", lightweight_status)
+        server = NodeRelayServer(
+            state_dir=controller_state,
+            artifact_store=ContentAddressedArtifactStore(
+                controller_state / "artifacts"
+            ),
+            heartbeat_seconds=0.05,
+        )
+        server.register_node(node.identity.node_id, node.identity.public_key)
+        url = await server.start()
+        stop = asyncio.Event()
+        client = NodeRelayClient(node, url, server.public_key, heartbeat_seconds=0.05)
+        task = asyncio.create_task(client.run_forever(stop))
+        try:
+            await _wait_for(
+                lambda: (
+                    "HEARTBEAT" in server.reports.get(node.identity.node_id, {})
+                    and "RESOURCE_REPORT"
+                    in server.reports.get(node.identity.node_id, {})
+                    and "DEVICE_REPORT" in server.reports.get(node.identity.node_id, {})
+                )
+            )
+            live = server.controller_status()
+            assert live["connected_node_count"] == 1
+            assert live["nodes"][0]["connected"] is True
+        finally:
+            stop.set()
+            await asyncio.wait_for(task, timeout=2)
+            await server.stop()
+
+        restarted = NodeRelayServer(
+            state_dir=controller_state,
+            artifact_store=ContentAddressedArtifactStore(
+                controller_state / "artifacts"
+            ),
+        )
+        durable = restarted.controller_status()
+        assert durable["connected_node_count"] == 0
+        assert durable["nodes"][0]["connected"] is False
+        assert durable["nodes"][0]["heartbeat_sequence"] > 0
+        assert durable["nodes"][0]["last_observed_at"].endswith("Z")
+        assert durable["nodes"][0]["has_resource_report"] is True
+        assert durable["nodes"][0]["has_device_report"] is True
+
+    asyncio.run(scenario())
+
+
+def test_controller_rejects_observations_without_signed_provenance(tmp_path: Path):
+    state = tmp_path / "controller"
+    first = NodeRelayServer(state_dir=state)
+    first.register_node("node-trusted", "01" * 32)
+    (state / "node-observations.json").write_text(
+        json.dumps(
+            {
+                "schema": "apeir.controller-observations/v1",
+                "nodes": {
+                    "node-trusted": {
+                        "observed_at": "2026-10-01T00:00:00Z",
+                        "HEARTBEAT": {
+                            "node_id": "node-trusted",
+                            "status": "ONLINE",
+                            "heartbeat_sequence": 1,
+                        },
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(NodeProtocolError, match="observation provenance is invalid"):
+        NodeRelayServer(state_dir=state)
+
+
+async def _wait_for(predicate, timeout: float = 5.0) -> None:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        if predicate():
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError("timed out waiting for Controller observation")
