@@ -552,6 +552,11 @@ class NodeRelayServer:
             ):
                 raise NodeProtocolError("REGISTER must be the first message")
             node_id = envelope.source
+            if self.state_dir is not None:
+                # The controller CLI may enroll a Node while this listener is
+                # running. Reload the durable registry at the authentication
+                # boundary so the new key becomes usable without a restart.
+                self.node_keys = self._load_trusted_nodes()
             public_key = self.node_keys.get(node_id, "")
             if not public_key or not envelope.verify(public_key):
                 raise NodeProtocolError("node authentication failed")

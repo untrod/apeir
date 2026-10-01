@@ -138,6 +138,44 @@ def test_controller_persists_node_observations_without_claiming_live_connection(
     asyncio.run(scenario())
 
 
+def test_running_controller_reloads_durable_trust_before_registration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    async def scenario() -> None:
+        controller_state = tmp_path / "controller"
+        node = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+        monkeypatch.setattr(
+            node,
+            "run_once",
+            lambda: {
+                "heartbeat_sequence": 1,
+                "resources": {
+                    "schema": "nous.node-resource-report/v1",
+                    "measurement_source": "test-fixture",
+                },
+                "devices": [],
+            },
+        )
+        running = NodeRelayServer(state_dir=controller_state)
+        url = await running.start()
+        registrar = NodeRelayServer(state_dir=controller_state)
+        registrar.register_node(node.identity.node_id, node.identity.public_key)
+        stop = asyncio.Event()
+        client = NodeRelayClient(node, url, running.public_key, heartbeat_seconds=0.05)
+        task = asyncio.create_task(client.run_forever(stop))
+        try:
+            await _wait_for(
+                lambda: "REGISTER" in running.reports.get(node.identity.node_id, {})
+            )
+            assert node.identity.node_id in running.connections
+        finally:
+            stop.set()
+            await asyncio.wait_for(task, timeout=2)
+            await running.stop()
+
+    asyncio.run(scenario())
+
+
 def test_controller_rejects_observations_without_signed_provenance(tmp_path: Path):
     state = tmp_path / "controller"
     first = NodeRelayServer(state_dir=state)

@@ -47,23 +47,52 @@ def test_preflight_reports_each_missing_or_incompatible_fact():
 
 
 def test_tool_inventory_cache_is_shared_but_refreshable(monkeypatch):
-    calls = []
+    presence_calls = []
+    version_calls = []
 
-    def probe(candidates):
-        calls.append(candidates)
-        return {"available": False}
+    def probe_presence(candidates):
+        presence_calls.append(candidates)
+        return {"available": True, "version_probe_ok": False}
+
+    def probe_version(candidates):
+        version_calls.append(candidates)
+        return {"available": True, "version_probe_ok": True}
 
     monkeypatch.setattr(execution_host, "_TOOL_INVENTORY_CACHE", None)
     monkeypatch.setattr(execution_host, "_TOOL_INVENTORY_CACHE_AT", 0.0)
-    monkeypatch.setattr(execution_host, "_probe_command", probe)
+    monkeypatch.setattr(execution_host, "_probe_command_presence", probe_presence)
+    monkeypatch.setattr(execution_host, "_probe_command", probe_version)
     monkeypatch.setattr(execution_host, "_probe_pip", lambda: {"available": True})
 
     first = execution_host.collect_tool_inventory()
     second = execution_host.collect_tool_inventory()
     refreshed = execution_host.collect_tool_inventory(refresh=True)
 
-    assert first == second == refreshed
-    assert len(calls) == len(execution_host._TOOL_COMMANDS) * 2
+    assert first == second
+    assert refreshed != first
+    assert len(presence_calls) == len(execution_host._TOOL_COMMANDS)
+    assert len(version_calls) == len(execution_host._TOOL_COMMANDS)
+
+
+def test_default_tool_inventory_never_executes_version_commands(monkeypatch):
+    monkeypatch.setattr(execution_host, "_TOOL_INVENTORY_CACHE", None)
+    monkeypatch.setattr(execution_host, "_TOOL_INVENTORY_CACHE_AT", 0.0)
+    monkeypatch.setattr(
+        execution_host,
+        "_TOOL_COMMANDS",
+        {"git": (("git", "--version"),)},
+    )
+    monkeypatch.setattr(execution_host.shutil, "which", lambda _name: __file__)
+
+    def reject_execution(_command):
+        raise AssertionError("routine Node inventory must not execute a command")
+
+    monkeypatch.setattr(execution_host, "_run_version_command", reject_execution)
+
+    inventory = execution_host.collect_tool_inventory()
+
+    assert inventory["git"]["available"] is True
+    assert inventory["git"]["version_probe_ok"] is False
 
 
 def test_execution_host_inventory_is_in_node_status(tmp_path):
