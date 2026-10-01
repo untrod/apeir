@@ -62,6 +62,8 @@ Start a Windows x64 or ARM64 Node with
 `scripts/compute-mesh/run-node-windows.ps1`. Start a Jetson or other Linux Node
 with `scripts/compute-mesh/run-node-linux.sh`. Both launchers require `wss://`
 for remote connections and validate the pinned Controller Ed25519 public key.
+For the Jetson Orin Nano deployment procedure and ARM64-specific prerequisites,
+see [Jetson Node setup](JETSON_NODE_SETUP.md).
 
 ## 3. Inspect durable state
 
