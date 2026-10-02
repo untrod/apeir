@@ -104,7 +104,10 @@ class NodeRelayServer:
         self.lease_results: dict[str, dict[str, Any]] = {}
         self.reports: dict[str, dict[str, Any]] = self._load_observations()
         self._replay = ReplayWindow()
-        self._sequence = 0
+        self.sequence_path = (
+            self.state_dir / "relay-sequence.json" if self.state_dir else None
+        )
+        self._sequence = self._load_sequence()
         self._server: Any = None
         self._provider_spool_task: asyncio.Task[None] | None = None
         self.provider_requests = (
@@ -1414,17 +1417,35 @@ class NodeRelayServer:
         reply_to: str = "",
         idempotency_key: str = "",
     ) -> None:
-        self._sequence += 1
         envelope = NodeProtocolEnvelope(
             message_type=message_type,
             source=CONTROL_PLANE_ID,
             target=target,
-            sequence=self._sequence,
+            sequence=self._next_sequence(),
             payload=payload,
             reply_to=reply_to,
             idempotency_key=idempotency_key,
         ).sign(self.private_key)
         await websocket.send(envelope.to_json())
+
+    def _next_sequence(self) -> int:
+        self._sequence += 1
+        if self.sequence_path is not None:
+            _atomic_json(self.sequence_path, {"sequence": self._sequence})
+        return self._sequence
+
+    def _load_sequence(self) -> int:
+        if self.sequence_path is None:
+            return 0
+        value = _read_json(self.sequence_path)
+        sequence = value.get("sequence", 0)
+        return (
+            sequence
+            if isinstance(sequence, int)
+            and not isinstance(sequence, bool)
+            and sequence >= 0
+            else 0
+        )
 
 
 class NodeRelayClient:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -150,6 +151,62 @@ def test_completed_work_is_delivered_after_transport_loss_without_reexecution(
             assert disconnected["connected"] is False
             assert disconnected["connectivity_lease_valid"] is True
             await server.stop()
+
+    asyncio.run(scenario())
+
+
+def test_node_reconnects_after_durable_controller_restart(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        state_dir = tmp_path / "controller"
+        service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+        server = NodeRelayServer(state_dir=state_dir, heartbeat_seconds=0.05)
+        server.register_node(service.identity.node_id, service.identity.public_key)
+        url = await server.start()
+        port = int(url.rsplit(":", 1)[1])
+        stop = asyncio.Event()
+        client = NodeRelayClient(
+            service, url, server.public_key, heartbeat_seconds=0.05
+        )
+        task = asyncio.create_task(client.run_forever(stop))
+        restarted: NodeRelayServer | None = None
+        try:
+            await _wait_for(
+                lambda: (
+                    server.controller_status()["nodes"][0]["connectivity_state"]
+                    == "ONLINE"
+                )
+            )
+            first_sequence = json.loads(
+                (state_dir / "relay-sequence.json").read_text(encoding="utf-8")
+            )["sequence"]
+
+            await server.stop()
+            restarted = NodeRelayServer(
+                host="127.0.0.1",
+                port=port,
+                state_dir=state_dir,
+                heartbeat_seconds=0.05,
+            )
+            assert await restarted.start() == url
+            await _wait_for(
+                lambda: (
+                    restarted.controller_status()["nodes"][0]["connectivity_state"]
+                    == "ONLINE"
+                )
+            )
+            assert (
+                json.loads(
+                    (state_dir / "relay-sequence.json").read_text(encoding="utf-8")
+                )["sequence"]
+                > first_sequence
+            )
+        finally:
+            stop.set()
+            await asyncio.wait_for(task, timeout=2)
+            if restarted is not None:
+                await restarted.stop()
+            else:
+                await server.stop()
 
     asyncio.run(scenario())
 
