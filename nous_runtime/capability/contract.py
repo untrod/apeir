@@ -21,28 +21,30 @@ from nous_runtime.kernel.error_codes import ErrorCode, NousResult
 
 
 class RetryStrategy(str, Enum):
-    NONE = "none"              # Never retry
-    LINEAR = "linear"          # Fixed interval
+    NONE = "none"  # Never retry
+    LINEAR = "linear"  # Fixed interval
     EXPONENTIAL = "exponential"  # Exponential backoff
-    ADAPTIVE = "adaptive"      # Based on error type
+    ADAPTIVE = "adaptive"  # Based on error type
 
 
 class Idempotency(str, Enum):
     """Whether a capability can be safely retried."""
-    IDEMPOTENT = "idempotent"              # Safe to retry any number of times
-    CONDITIONAL = "conditional"            # Safe only if same params
-    NOT_IDEMPOTENT = "not_idempotent"      # Must not retry without user confirmation
+
+    IDEMPOTENT = "idempotent"  # Safe to retry any number of times
+    CONDITIONAL = "conditional"  # Safe only if same params
+    NOT_IDEMPOTENT = "not_idempotent"  # Must not retry without user confirmation
 
 
 class VerificationMethod(str, Enum):
     """How to verify the capability's output."""
-    NONE = "none"                # No verification needed
-    ASSERTION = "assertion"      # Check output against expected
-    SCRIPT = "script"            # Run a verification script
-    LLM_REVIEW = "llm_review"    # Have a reviewer model check
-    TEST_RERUN = "test_rerun"    # Rerun tests and compare
-    DIFF_CHECK = "diff_check"    # Check git diff
-    MANUAL = "manual"            # Human must verify
+
+    NONE = "none"  # No verification needed
+    ASSERTION = "assertion"  # Check output against expected
+    SCRIPT = "script"  # Run a verification script
+    LLM_REVIEW = "llm_review"  # Have a reviewer model check
+    TEST_RERUN = "test_rerun"  # Rerun tests and compare
+    DIFF_CHECK = "diff_check"  # Check git diff
+    MANUAL = "manual"  # Human must verify
 
 
 @dataclass
@@ -54,51 +56,62 @@ class CapabilityContract:
     """
 
     # Identity
-    capability_id: str = ""              # e.g., "project.read_file"
-    name: str = ""                       # Human-readable name
-    description: str = ""                # What it does
+    capability_id: str = ""  # e.g., "project.read_file"
+    name: str = ""  # Human-readable name
+    description: str = ""  # What it does
     version: str = "1.0.0"
 
     # Input / Output schema
-    input_schema: dict[str, Any] = field(default_factory=dict)   # JSON Schema
+    input_schema: dict[str, Any] = field(default_factory=dict)  # JSON Schema
     output_schema: dict[str, Any] = field(default_factory=dict)  # JSON Schema
 
     # Risk & Security
-    risk_level: str = "MEDIUM"           # READ_ONLY | LOW | MEDIUM | HIGH | CRITICAL
+    risk_level: str = "MEDIUM"  # READ_ONLY | LOW | MEDIUM | HIGH | CRITICAL
+    side_effect_class: str = (
+        ""  # read_only | local_write | external_write | destructive
+    )
     required_permissions: list[str] = field(default_factory=list)
 
     # Execution constraints
     allowed_nodes: list[str] = field(default_factory=list)  # Empty = all nodes
-    denied_nodes: list[str] = field(default_factory=list)   # Explicitly blocked
+    denied_nodes: list[str] = field(default_factory=list)  # Explicitly blocked
     timeout_seconds: int = 30
-    max_output_bytes: int = 1_000_000    # 1MB default
+    max_output_bytes: int = 1_000_000  # 1MB default
 
     # Retry & Reliability
     retry_strategy: RetryStrategy = RetryStrategy.EXPONENTIAL
     max_retries: int = 3
     retry_delay_ms: int = 1000
-    retryable_errors: list[str] = field(default_factory=lambda: [
-        "TIMEOUT", "UNAVAILABLE", "OVERLOADED", "CIRCUIT_OPEN",
-    ])
+    retryable_errors: list[str] = field(
+        default_factory=lambda: [
+            "TIMEOUT",
+            "UNAVAILABLE",
+            "OVERLOADED",
+            "CIRCUIT_OPEN",
+        ]
+    )
 
     # Idempotency
     idempotency: Idempotency = Idempotency.CONDITIONAL
 
     # Rollback
-    rollback_capability_id: str = ""     # Capability to undo this operation
+    rollback_capability_id: str = ""  # Capability to undo this operation
     rollback_timeout_seconds: int = 30
 
     # Verification
+    observation_method: str = ""  # How the real outcome is observed
     verification_method: VerificationMethod = VerificationMethod.NONE
-    verification_script: str = ""        # Script path or inline check
+    verification_script: str = ""  # Script path or inline check
     verification_timeout_seconds: int = 60
 
     # Audit
-    audit_level: str = "standard"        # none | standard | detailed
+    audit_level: str = "standard"  # none | standard | detailed
     audit_retention_days: int = 90
 
     # Metadata
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
     updated_at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -110,6 +123,8 @@ class CapabilityContract:
             "input_schema": self.input_schema,
             "output_schema": self.output_schema,
             "risk_level": self.risk_level,
+            "risk": self.risk_level,
+            "side_effect_class": self.side_effect_class,
             "required_permissions": self.required_permissions,
             "allowed_nodes": self.allowed_nodes,
             "timeout_seconds": self.timeout_seconds,
@@ -117,9 +132,15 @@ class CapabilityContract:
             "max_retries": self.max_retries,
             "idempotency": self.idempotency.value,
             "rollback_capability_id": self.rollback_capability_id,
+            "observation_method": self.observation_method,
             "verification_method": self.verification_method.value,
             "audit_level": self.audit_level,
         }
+
+    @property
+    def risk(self) -> str:
+        """Capability 2.0 alias without breaking the existing risk_level API."""
+        return self.risk_level
 
     def is_retryable_error(self, error_code: str) -> bool:
         return error_code in self.retryable_errors
@@ -134,6 +155,7 @@ class CapabilityContract:
 
 # Contract registry
 
+
 class CapabilityContractRegistry:
     """Registry of all capability contracts with validation."""
 
@@ -144,15 +166,18 @@ class CapabilityContractRegistry:
     def register(self, contract: CapabilityContract) -> NousResult[CapabilityContract]:
         cid = contract.capability_id
         if not cid:
-            return NousResult.err(ErrorCode.INVALID_ARGUMENT, message="capability_id required")
+            return NousResult.err(
+                ErrorCode.INVALID_ARGUMENT, message="capability_id required"
+            )
         self._contracts[cid] = contract
         return NousResult.ok(contract)
 
     def get(self, capability_id: str) -> NousResult[CapabilityContract]:
         contract = self._contracts.get(capability_id)
         if contract is None:
-            return NousResult.err(ErrorCode.NOT_FOUND,
-                                  message=f"No contract for '{capability_id}'")
+            return NousResult.err(
+                ErrorCode.NOT_FOUND, message=f"No contract for '{capability_id}'"
+            )
         return NousResult.ok(contract)
 
     def list_all(self) -> list[CapabilityContract]:
