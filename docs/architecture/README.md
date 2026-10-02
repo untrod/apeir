@@ -4,6 +4,7 @@ These documents define the current APEIR Distribution design.
 
 - [Distribution boundary](DISTRIBUTION.md)
 - [Execution path](EXECUTION_PATH.md)
+- [Runtime coordination](RUNTIME_COORDINATION.md)
 - [Runtime boundary](RUNTIME_BOUNDARY.md)
 - [State ownership](STATE_OWNERSHIP.md)
 - [Security boundary](SECURITY_BOUNDARY.md)
