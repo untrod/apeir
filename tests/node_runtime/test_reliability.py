@@ -144,6 +144,7 @@ def test_completed_work_is_delivered_after_transport_loss_without_reexecution(
         finally:
             stop.set()
             await asyncio.wait_for(task, timeout=2)
+            await _wait_for(lambda: service.identity.node_id not in server.connections)
             disconnected = server.controller_status()["nodes"][0]
             assert disconnected["connectivity_state"] == "DEGRADED"
             assert disconnected["connected"] is False
