@@ -138,6 +138,22 @@ Node identity hash, Distribution revision, signed observations, workload
 binding, receipt, artifact digest, and verification result as the acceptance
 record.
 
+## Integrated GPU discovery
+
+Jetson does not normally expose its integrated GPU through the desktop/server
+NVML path used by discrete NVIDIA GPUs. The Node therefore reports a CUDA
+device only when all of the following bounded host evidence is present:
+
+- Linux on ARM64;
+- an NVIDIA Jetson, Orin, Xavier, or Tegra device-tree model;
+- an L4T release record;
+- both `/dev/nvhost-gpu` and `/dev/nvmap`.
+
+The CUDA version is read from the local JetPack installation when available.
+Because Jetson uses unified memory, the fallback does not invent a dedicated
+VRAM capacity. If any required evidence is missing, `gpu_required=true`
+placement remains unsatisfied and no Work is dispatched.
+
 ## Troubleshooting
 
 ### The package requires a newer Python

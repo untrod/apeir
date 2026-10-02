@@ -39,6 +39,113 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _zero_resource_vector() -> dict[str, int]:
+    return {
+        "cpu_cores_millis": 0,
+        "cpu_time_us": 0,
+        "ram_bytes": 0,
+        "pinned_ram_bytes": 0,
+        "device_memory_bytes": 0,
+        "kv_cache_bytes": 0,
+        "storage_bytes": 0,
+        "memory_bandwidth_bps": 0,
+        "interconnect_bandwidth_bps": 0,
+        "network_bandwidth_bps": 0,
+        "power_milliwatts": 0,
+        "thermal_budget_millic": 0,
+        "time_budget_us": 0,
+    }
+
+
+def _probe_jetson_cuda_device(root: Path = Path("/")) -> dict[str, Any] | None:
+    """Report an integrated Jetson GPU when the bounded OS evidence agrees."""
+    if platform.system().lower() != "linux":
+        return None
+    if platform.machine().lower() not in {"aarch64", "arm64"}:
+        return None
+
+    l4t_path = root / "etc" / "nv_tegra_release"
+    model_path = root / "proc" / "device-tree" / "model"
+    gpu_path = root / "dev" / "nvhost-gpu"
+    nvmap_path = root / "dev" / "nvmap"
+    if not all(path.exists() for path in (l4t_path, model_path, gpu_path, nvmap_path)):
+        return None
+
+    try:
+        model = (
+            model_path.read_bytes().decode("utf-8", errors="replace").strip("\x00\n ")
+        )
+        l4t_release = l4t_path.read_text(
+            encoding="utf-8", errors="replace"
+        ).splitlines()[0]
+    except (OSError, IndexError):
+        return None
+    if "nvidia" not in model.lower() or not any(
+        marker in model.lower() for marker in ("jetson", "orin", "xavier", "tegra")
+    ):
+        return None
+
+    cuda_version = ""
+    cuda_version_path = root / "usr" / "local" / "cuda" / "version.json"
+    try:
+        cuda_value = json.loads(cuda_version_path.read_text(encoding="utf-8"))
+        cuda_version = str(cuda_value.get("cuda", {}).get("version", ""))
+    except (OSError, TypeError, ValueError):
+        pass
+
+    machine_id = platform.node()
+    try:
+        machine_id = (root / "etc" / "machine-id").read_text(
+            encoding="utf-8"
+        ).strip() or machine_id
+    except OSError:
+        pass
+    stable_id = hashlib.sha256(f"{machine_id}:{model}".encode()).hexdigest()[:16]
+    resources = _zero_resource_vector()
+    return {
+        "device_id": f"dev-nvidia-jetson-{stable_id}",
+        "spec": {
+            "device_type": "CUDA",
+            "vendor": "NVIDIA",
+            "model": model,
+            "driver_version": (
+                f"CUDA {cuda_version}; {l4t_release}" if cuda_version else l4t_release
+            ),
+            "architecture": "integrated-jetson",
+            "total_resources": dict(resources),
+            "capabilities": ["cuda", "inference", "shared-memory"],
+            "supported_engines": ["tensorrt", "onnx", "llama.cpp"],
+            "supported_dtypes": ["fp32", "fp16", "int8"],
+            "compute_units": 0,
+            "numa_node": -1,
+            "pci_bus_id": "",
+        },
+        "status": {
+            "phase": "READY",
+            "available": dict(resources),
+            "temperature_celsius": 0.0,
+            "power_milliwatts": 0,
+            "utilization_percent": 0.0,
+            "memory_utilization_percent": 0.0,
+            "active_engines": [],
+            "active_workloads": [],
+            "topology": None,
+            "last_health_check": 0.0,
+            "error_count": 0,
+            "last_error": "",
+            "uptime_seconds": 0.0,
+        },
+        "device_class": "nvidia.jetson.edge",
+        "created_at": 0.0,
+        "labels": {
+            "hostname": platform.node(),
+            "integrated_memory": "true",
+            "evidence": "l4t+device-tree+nvhost-gpu+nvmap",
+        },
+        "probe_source": "nous.node_runtime.jetson",
+    }
+
+
 @dataclass(frozen=True)
 class NodeRuntimeConfig:
     state_dir: Path
@@ -477,6 +584,14 @@ class NodeRuntimeService:
             value = device.to_dict()
             value["probe_source"] = "nous.kernel.hardware_discovery"
             devices.append(value)
+        has_cuda = any(
+            str(value.get("spec", {}).get("device_type", "")).upper() == "CUDA"
+            for value in devices
+        )
+        if not has_cuda:
+            jetson = _probe_jetson_cuda_device()
+            if jetson is not None:
+                devices.append(jetson)
         return devices
 
     def probe_execution_host(

@@ -10,7 +10,12 @@ from typer.testing import CliRunner
 
 from nous_runtime.cli.main import app as nous_app
 from nous_runtime.node_runtime.cli import node_daemon_app
-from nous_runtime.node_runtime.service import NodeRuntimeConfig, NodeRuntimeService
+from nous_runtime.node_runtime import service as node_service
+from nous_runtime.node_runtime.service import (
+    NodeRuntimeConfig,
+    NodeRuntimeService,
+    _probe_jetson_cuda_device,
+)
 
 
 def test_node_identity_is_cryptographic_and_stable_across_restart(tmp_path: Path):
@@ -59,6 +64,72 @@ def test_run_once_reads_real_host_resources_and_devices_without_llm(
     assert status["devices"]
     assert status["artifact_cache"]["objects"] == 0
     assert status["registration"]["authority"] == "none"
+
+
+def test_jetson_cuda_probe_requires_bounded_hardware_evidence(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.setattr(node_service.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(node_service.platform, "machine", lambda: "aarch64")
+    monkeypatch.setattr(node_service.platform, "node", lambda: "jetson-test")
+    (tmp_path / "etc").mkdir()
+    (tmp_path / "proc" / "device-tree").mkdir(parents=True)
+    (tmp_path / "dev").mkdir()
+    (tmp_path / "usr" / "local" / "cuda").mkdir(parents=True)
+    (tmp_path / "etc" / "nv_tegra_release").write_text(
+        "# R35 (release), REVISION: 5.0\n", encoding="utf-8"
+    )
+    (tmp_path / "etc" / "machine-id").write_text(
+        "jetson-machine-id\n", encoding="utf-8"
+    )
+    (tmp_path / "proc" / "device-tree" / "model").write_bytes(
+        b"NVIDIA Orin Nano Developer Kit\x00"
+    )
+    (tmp_path / "usr" / "local" / "cuda" / "version.json").write_text(
+        '{"cuda":{"version":"11.4.19"}}', encoding="utf-8"
+    )
+
+    assert _probe_jetson_cuda_device(tmp_path) is None
+
+    (tmp_path / "dev" / "nvhost-gpu").touch()
+    (tmp_path / "dev" / "nvmap").touch()
+    device = _probe_jetson_cuda_device(tmp_path)
+
+    assert device is not None
+    assert device["spec"]["device_type"] == "CUDA"
+    assert device["device_class"] == "nvidia.jetson.edge"
+    assert device["status"]["phase"] == "READY"
+    assert device["probe_source"] == "nous.node_runtime.jetson"
+    assert "CUDA 11.4.19" in device["spec"]["driver_version"]
+
+
+def test_node_device_probe_adds_jetson_fallback_without_duplicate_cuda(
+    monkeypatch, tmp_path: Path
+):
+    service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+    fallback = {
+        "device_id": "jetson-gpu",
+        "spec": {"device_type": "CUDA"},
+        "probe_source": "nous.node_runtime.jetson",
+    }
+    monkeypatch.setattr(node_service, "discover_all_devices", lambda: [])
+    monkeypatch.setattr(node_service, "_probe_jetson_cuda_device", lambda: fallback)
+
+    assert service.probe_devices() == [fallback]
+
+    class ExistingCuda:
+        def to_dict(self) -> dict:
+            return {"device_id": "nvml-gpu", "spec": {"device_type": "CUDA"}}
+
+    monkeypatch.setattr(node_service, "discover_all_devices", lambda: [ExistingCuda()])
+
+    assert service.probe_devices() == [
+        {
+            "device_id": "nvml-gpu",
+            "spec": {"device_type": "CUDA"},
+            "probe_source": "nous.kernel.hardware_discovery",
+        }
+    ]
 
 
 def test_node_workload_is_bounded_and_idempotent(tmp_path: Path):
