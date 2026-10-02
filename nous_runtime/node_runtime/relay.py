@@ -41,6 +41,7 @@ from .distributed_work import (
     DistributedWorkStore,
     WorkRequirements,
 )
+from .reliability import NodeConnectivityState, project_node_connectivity
 from .service import NodeRuntimeService
 
 CONTROL_PLANE_ID = "control_plane"
@@ -92,6 +93,7 @@ class NodeRelayServer:
         self.node_keys: dict[str, str] = self._load_trusted_nodes()
         self.connections: dict[str, Any] = {}
         self.sessions: dict[str, str] = {}
+        self.connection_states: dict[str, str] = {}
         self.pending: dict[str, dict[str, dict[str, Any]]] = {}
         self.pending_artifacts: dict[str, dict[str, dict[str, Any]]] = {}
         self.pending_controls: dict[str, list[dict[str, Any]]] = {}
@@ -297,8 +299,15 @@ class NodeRelayServer:
             identity = registration.get("identity", {})
             platform = identity.get("platform", {})
             last_observed_at = str(observation.get("observed_at", ""))
-            observation_age = _observation_age_seconds(last_observed_at)
-            if node_id in self.connections:
+            connected = node_id in self.connections
+            projection = project_node_connectivity(
+                connected=connected,
+                connection_phase=self.connection_states.get(node_id, ""),
+                last_observed_at=last_observed_at,
+                heartbeat_seconds=self.heartbeat_seconds,
+            )
+            observation_age = projection.observation_age_seconds
+            if connected:
                 liveness = "CONNECTED"
             elif observation_age is None:
                 liveness = "NEVER_SEEN"
@@ -310,9 +319,13 @@ class NodeRelayServer:
                 {
                     "node_id": node_id,
                     "node_name": str(identity.get("node_name", "")),
-                    "connected": node_id in self.connections,
+                    "connected": connected,
                     "session_id": self.sessions.get(node_id, ""),
                     "liveness": liveness,
+                    "connectivity_state": projection.state.value,
+                    "connectivity_lease_expires_at": projection.lease_expires_at,
+                    "connectivity_lease_valid": projection.lease_valid,
+                    "schedulable": projection.schedulable,
                     "last_observed_at": last_observed_at,
                     "observation_age_seconds": observation_age,
                     "heartbeat_sequence": int(heartbeat.get("heartbeat_sequence", 0)),
@@ -379,8 +392,8 @@ class NodeRelayServer:
             observed_architecture = _normalize_node_architecture(
                 str(node["platform"]["arch"])
             )
-            if node["liveness"] not in {"CONNECTED", "RECENTLY_OBSERVED"}:
-                reasons.append(f"node liveness is {node['liveness']}")
+            if not node["schedulable"]:
+                reasons.append(f"node connectivity is {node['connectivity_state']}")
             if architecture and observed_architecture != architecture:
                 reasons.append(
                     "architecture mismatch: "
@@ -439,8 +452,8 @@ class NodeRelayServer:
             memory_total = _non_negative_int(resources.get("memory_total_bytes"))
             gpu_available = any(_is_gpu_device(item) for item in devices)
             reasons: list[str] = []
-            if node["liveness"] not in {"CONNECTED", "RECENTLY_OBSERVED"}:
-                reasons.append(f"node liveness is {node['liveness']}")
+            if not node["schedulable"]:
+                reasons.append(f"node connectivity is {node['connectivity_state']}")
             if (
                 requirements.architectures
                 and architecture not in requirements.architectures
@@ -1043,6 +1056,7 @@ class NodeRelayServer:
             if NODE_PROTOCOL_VERSION not in payload.get("supported_versions", []):
                 raise NodeProtocolError("no compatible protocol version")
 
+            self.connection_states[node_id] = NodeConnectivityState.RECONNECTING.value
             self._record_observation(node_id, envelope)
 
             previous = self.sessions.get(node_id, "")
@@ -1051,6 +1065,7 @@ class NodeRelayServer:
             session_id = previous if resumed else f"session_{secrets.token_hex(16)}"
             self.sessions[node_id] = session_id
             self.connections[node_id] = websocket
+            self.connection_states[node_id] = NodeConnectivityState.RECONCILING.value
             await self._send(
                 websocket,
                 node_id,
@@ -1105,6 +1120,7 @@ class NodeRelayServer:
         finally:
             if node_id and self.connections.get(node_id) is websocket:
                 self.connections.pop(node_id, None)
+                self.connection_states[node_id] = NodeConnectivityState.DEGRADED.value
 
     async def _handle_message(
         self, websocket: Any, node_id: str, envelope: NodeProtocolEnvelope
@@ -1192,6 +1208,8 @@ class NodeRelayServer:
             envelope.to_dict()
         )
         observation["observed_at"] = _utc_now()
+        if node_id in self.connections and "RESOURCE_REPORT" in observation:
+            self.connection_states[node_id] = NodeConnectivityState.ONLINE.value
         self._save_observations()
 
     def _mark_work_running(self, work_id: str, node_id: str) -> None:
@@ -1702,16 +1720,6 @@ def _payload_digest(value: Any) -> str:
             separators=(",", ":"),
         ).encode("utf-8")
     ).hexdigest()
-
-
-def _observation_age_seconds(value: str) -> float | None:
-    if not value:
-        return None
-    try:
-        observed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return max((datetime.now(timezone.utc) - observed).total_seconds(), 0.0)
 
 
 def _normalize_node_architecture(value: str) -> str:

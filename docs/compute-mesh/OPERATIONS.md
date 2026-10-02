@@ -70,7 +70,8 @@ machine, see [Distributed Work](DISTRIBUTED_WORK.md).
 The complete execution and recovery path is documented in
 [Distributed execution](DISTRIBUTED_EXECUTION.md),
 [Work lifecycle](WORK_LIFECYCLE.md), and
-[Execution recovery](EXECUTION_RECOVERY.md).
+[Execution recovery](EXECUTION_RECOVERY.md). The fault and replay rules are
+summarized in the [recovery matrix](RECOVERY_MATRIX.md).
 
 ## 3. Inspect durable state
 
@@ -84,8 +85,13 @@ Controller process. After a restart, the last signed heartbeat and resource
 reports remain visible, but an offline Node is never presented as currently
 connected. Persisted observations retain their signed protocol envelopes and
 are verified against the enrolled Node key when Controller state is reopened.
-The separate status process reports recent signed evidence as
-`RECENTLY_OBSERVED`; after three heartbeat intervals it becomes `STALE`.
+The legacy `liveness` field remains available for compatible clients. The
+authoritative operational projection is `connectivity_state`: an interrupted
+transport becomes `DEGRADED` while its short connectivity lease remains valid,
+then `STALE`, and finally `OFFLINE`. An authenticated reconnect passes through
+`RECONNECTING` and `RECONCILING` before returning to `ONLINE`. Only `ONLINE` and
+a lease-valid `DEGRADED` Node are eligible for placement; queued work still
+requires the normal capability, policy, and Kernel authorization path.
 
 ## Security boundary
 
