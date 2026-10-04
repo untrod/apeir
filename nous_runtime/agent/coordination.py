@@ -199,6 +199,8 @@ class AgentSessionCoordinator:
             {
                 **dict(inputs or {}),
                 "_agent_session_id": session.session_id,
+                "_plan_id": plan.plan_id,
+                "_workflow_id": definition.workflow_id,
             },
             idempotency_key=f"{session.session_id}:{plan.plan_id}",
         )
@@ -224,10 +226,15 @@ class AgentSessionCoordinator:
             event_bus=self.events,
             event_metadata={"agent_session_id": session.session_id},
         )
+        if session.state is AgentSessionState.OBSERVING:
+            session = transition_session(session, AgentSessionState.REPLANNING)
         session = transition_session(session, AgentSessionState.SUBMITTING_WORK)
         self.store.save(session)
         run = runtime.resume(session.workflow_run_id, approved_steps=approved_steps)
-        return self._observe_workflow(session.session_id, runtime, run)
+        observed = self._observe_workflow(session.session_id, runtime, run)
+        if observed.state is AgentSessionState.OBSERVING and observed.error:
+            return self.wait(session_id, reason=observed.error)
+        return observed
 
     def wait(self, session_id: str, *, reason: str = "") -> AgentSession:
         session = transition_session(
@@ -297,6 +304,17 @@ class AgentSessionCoordinator:
             }
             for event in runtime.events.load_events(run.run_id)
         )
+        reality_evidence = tuple(
+            {
+                "kind": "reality_effect",
+                "work_id": output["work_id"],
+                "receipt": dict(output.get("receipt") or {}),
+                "observations": list(output.get("observations") or ()),
+                "effect_verification": dict(output.get("effect_verification") or {}),
+            }
+            for output in run.outputs.values()
+            if isinstance(output, Mapping) and output.get("effect_verification")
+        )
         work_ids = tuple(
             dict.fromkeys(
                 str(output.get("work_id"))
@@ -308,7 +326,9 @@ class AgentSessionCoordinator:
             session,
             workflow_run_id=run.run_id,
             active_work=work_ids,
-            observations=(*session.observations, *events)[-_OBSERVATION_LIMIT:],
+            observations=(*session.observations, *events, *reality_evidence)[
+                -_OBSERVATION_LIMIT:
+            ],
             updated_at=session_timestamp(),
         )
         if run.state is WorkflowState.COMPLETED:
@@ -379,6 +399,12 @@ class AgentSessionCoordinator:
         with self._lock:
             session = self.store.get(session_id)
             if session is None or session.terminal:
+                return
+            device_id = str(
+                event.metadata.get("device_id") or event.payload.get("device_id") or ""
+            )
+            target_device = str(session.context.get("device_id") or "")
+            if device_id and target_device and device_id != target_device:
                 return
             if any(
                 str(item.get("event_id") or "") == event.event_id

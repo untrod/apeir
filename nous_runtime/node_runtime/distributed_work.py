@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import time
 import uuid
@@ -30,6 +31,12 @@ def _timestamp() -> str:
 
 class DistributedWorkError(ValueError):
     """Raised when a distributed Work contract or transition is invalid."""
+
+    def __init__(
+        self, message: str, *, workflow_output: Mapping[str, Any] | None = None
+    ):
+        super().__init__(message)
+        self.workflow_output = dict(workflow_output or {})
 
 
 class DistributedWorkState(str, Enum):
@@ -118,6 +125,7 @@ class WorkRequirements:
     capabilities: tuple[str, ...] = ()
     minimum_memory_bytes: int = 0
     gpu_required: bool = False
+    node_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.minimum_memory_bytes < 0:
@@ -137,6 +145,7 @@ class WorkRequirements:
             "capabilities": list(self.capabilities),
             "minimum_memory_bytes": self.minimum_memory_bytes,
             "gpu_required": self.gpu_required,
+            **({"node_ids": list(self.node_ids)} if self.node_ids else {}),
         }
 
     @classmethod
@@ -149,6 +158,7 @@ class WorkRequirements:
             capabilities=tuple(str(item) for item in value.get("capabilities") or ()),
             minimum_memory_bytes=int(value.get("minimum_memory_bytes") or 0),
             gpu_required=bool(value.get("gpu_required", False)),
+            node_ids=tuple(str(item) for item in value.get("node_ids") or ()),
         )
 
 
@@ -157,6 +167,7 @@ class WorkExecutionPolicy:
     retry_disabled: bool = True
     delivery: str = "at_most_once"
     require_receipt: bool = True
+    require_effect_verification: bool = False
 
     def __post_init__(self) -> None:
         if self.delivery not in {"at_most_once", "idempotent"}:
@@ -167,6 +178,11 @@ class WorkExecutionPolicy:
             "retry_disabled": self.retry_disabled,
             "delivery": self.delivery,
             "require_receipt": self.require_receipt,
+            **(
+                {"require_effect_verification": True}
+                if self.require_effect_verification
+                else {}
+            ),
         }
 
     @classmethod
@@ -175,6 +191,9 @@ class WorkExecutionPolicy:
             retry_disabled=bool(value.get("retry_disabled", True)),
             delivery=str(value.get("delivery") or "at_most_once"),
             require_receipt=bool(value.get("require_receipt", True)),
+            require_effect_verification=bool(
+                value.get("require_effect_verification", False)
+            ),
         )
 
 
@@ -276,6 +295,10 @@ class DistributedWork:
     state_history: list[dict[str, str]] = field(default_factory=list)
     created_at: str = field(default_factory=_timestamp)
     updated_at: str = field(default_factory=_timestamp)
+    target_resource_id: str = ""
+    expected_effect: dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, str] = field(default_factory=dict)
+    effect_verification: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.intent = self.intent.strip()
@@ -283,6 +306,13 @@ class DistributedWork:
         self.execution_capability = self.execution_capability.strip().lower()
         if not isinstance(self.execution_arguments, dict):
             raise DistributedWorkError("Work execution arguments must be an object")
+        if not isinstance(self.expected_effect, dict):
+            raise DistributedWorkError("Work expected effect must be an object")
+        if not isinstance(self.provenance, dict) or not all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in self.provenance.items()
+        ):
+            raise DistributedWorkError("Work provenance must contain string fields")
         if not self.intent:
             raise DistributedWorkError("Work intent is required")
         if not self.work_id.strip():
@@ -319,6 +349,14 @@ class DistributedWork:
             raise DistributedWorkError(
                 f"invalid Work transition: {self.state.value} -> {target.value}"
             )
+        if (
+            target is DistributedWorkState.COMMITTED
+            and self.execution_policy.require_effect_verification
+        ):
+            if self.effect_verification.get("verdict") != "MATCH":
+                raise DistributedWorkError(
+                    "Reality Work commit requires an independent MATCH"
+                )
         if target in {
             DistributedWorkState.ASSIGNED,
             DistributedWorkState.RUNNING,
@@ -359,6 +397,9 @@ class DistributedWork:
             "execution_policy": self.execution_policy.to_dict(),
             "execution_capability": self.execution_capability,
             "execution_arguments": dict(self.execution_arguments),
+            "target_resource_id": self.target_resource_id,
+            "expected_effect": dict(self.expected_effect),
+            "provenance": dict(self.provenance),
             "state": self.state.value,
             "assigned_node": self.assigned_node,
             "output_artifacts": list(self.output_artifacts),
@@ -367,6 +408,7 @@ class DistributedWork:
             "assignment": self.assignment.to_dict() if self.assignment else None,
             "dispatch_record": dict(self.dispatch_record),
             "result_summary": dict(self.result_summary),
+            "effect_verification": dict(self.effect_verification),
             "state_history": [dict(item) for item in self.state_history],
         }
 
@@ -393,6 +435,12 @@ class DistributedWork:
             ),
             execution_capability=str(value.get("execution_capability") or ""),
             execution_arguments=dict(value.get("execution_arguments") or {}),
+            target_resource_id=str(value.get("target_resource_id") or ""),
+            expected_effect=dict(value.get("expected_effect") or {}),
+            provenance={
+                str(key): str(item)
+                for key, item in dict(value.get("provenance") or {}).items()
+            },
             creator=str(value.get("creator") or ""),
             priority=int(value.get("priority") or 0),
             work_id=str(value.get("work_id") or ""),
@@ -410,6 +458,7 @@ class DistributedWork:
             ),
             dispatch_record=dict(value.get("dispatch_record") or {}),
             result_summary=dict(value.get("result_summary") or {}),
+            effect_verification=dict(value.get("effect_verification") or {}),
             state_history=[
                 {str(key): str(item_value) for key, item_value in item.items()}
                 for item in history
@@ -563,6 +612,66 @@ class DistributedWorkStore:
             current.result_summary = dict(result)
             current.output_artifacts = _artifact_references(output_artifacts)
             current.evidence_refs = _artifact_references(evidence_refs)
+            current.updated_at = _timestamp()
+            staged = dict(self._works)
+            staged[work_id] = current
+            self._save(staged)
+            self._works = staged
+        return DistributedWork.from_dict(current.to_dict())
+
+    def record_effect_verification(
+        self,
+        work_id: str,
+        verification: Mapping[str, Any],
+        *,
+        evidence_refs: tuple[str, ...] = (),
+    ) -> DistributedWork:
+        """Persist the independent Reality verdict before any effect commit."""
+        with file_lock(self.lock_path):
+            current = self.get(work_id)
+            if current is None:
+                raise DistributedWorkError(f"Work does not exist: {work_id}")
+            if current.state is not DistributedWorkState.VERIFIED:
+                raise DistributedWorkError(
+                    "effect verification requires receipt-VERIFIED Work"
+                )
+            value = dict(verification)
+            receipt_digest = hashlib.sha256(
+                json.dumps(
+                    current.result_summary.get("remote_execution_receipt") or {},
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode()
+            ).hexdigest()
+            if (
+                value.get("operation_id") != work_id
+                or value.get("receipt_operation_id") != work_id
+                or value.get("device_id") != current.target_resource_id
+                or value.get("receipt_digest") != receipt_digest
+                or not value.get("observation_ids")
+                or not evidence_refs
+            ):
+                raise DistributedWorkError(
+                    "effect verification provenance is incomplete or changed"
+                )
+            if value.get("work_id") != work_id or value.get("verdict") not in {
+                "MATCH",
+                "MISMATCH",
+                "UNKNOWN",
+            }:
+                raise DistributedWorkError("effect verification binding is invalid")
+            if current.effect_verification:
+                if current.effect_verification == value:
+                    return current
+                if current.effect_verification.get("verdict") == "MATCH":
+                    raise DistributedWorkError(
+                        "committable effect verification binding changed"
+                    )
+            current.effect_verification = value
+            current.evidence_refs = _artifact_references(
+                (*current.evidence_refs, *evidence_refs)
+            )
             current.updated_at = _timestamp()
             staged = dict(self._works)
             staged[work_id] = current

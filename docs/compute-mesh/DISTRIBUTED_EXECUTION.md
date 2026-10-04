@@ -52,6 +52,14 @@ Controller reconciliation verifies:
 Only after these checks does the Work become `COMMITTED`. Model output, a Node
 claim, or a successful process exit alone is not sufficient.
 
+Reality simulation Work additionally sets `require_effect_verification=true`.
+For this Work, receipt and CAS checks stop at `VERIFIED`. A separate read-only
+Distributed Work on the same assigned Node acquires an Observation, and only an
+independent `MATCH` permits `COMMITTED`. `MISMATCH` and `UNKNOWN` keep the Work
+uncommitted. The additive `WorkRequirements.node_ids` constraint keeps both
+mutation and observation on the Device's hosting Node. Ordinary Work retains
+its existing receipt/CAS commit behavior and dispatch bindings.
+
 ## Workflow integration
 
 `DistributedWorkflowAdapter` is an ordinary handler for the existing
@@ -59,3 +67,11 @@ claim, or a successful process exit alone is not sufficient.
 verified completion, and returns Artifact references to the next step. A later
 step may declare `input_from_steps` to consume those Artifacts. This adapter is
 not a new scheduler or workflow engine.
+
+`RealityOperationWorkflowHandler` supplies the existing adapter's verification
+finalizer. The AgentSession planner returns an ordinary Plan step with action
+`reality.operation`, `device_id`, `capability=device.state.set`, structured
+`mutation`, and non-empty `expected_effect`. Mutation inputs are stored in CAS
+before dispatch. Workflow failure checkpoints retain the Work reference;
+resuming the same run consumes that Work and its immutable arguments. See the
+[Reality architecture audit](../architecture/REALITY_ARCHITECTURE_AUDIT.md).

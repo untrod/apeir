@@ -207,6 +207,7 @@ class WorkflowRuntime:
             "outputs": dict(run.outputs),
         }
         attempts = 0
+        failure_output: dict[str, Any] = {}
         while attempts <= step.retries:
             attempts += 1
             with ThreadPoolExecutor(max_workers=1) as executor:
@@ -218,8 +219,9 @@ class WorkflowRuntime:
                     error = f"step timed out after {step.timeout_seconds} seconds"
                 except Exception as exc:
                     error = str(exc)
+                    failure_output = dict(getattr(exc, "workflow_output", {}) or {})
             if attempts > step.retries:
-                return "failed", {}, error
+                return "failed", failure_output, error
         return "failed", {}, "step failed"
 
     def _compensate(

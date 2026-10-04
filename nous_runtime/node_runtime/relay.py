@@ -455,6 +455,8 @@ class NodeRelayServer:
             memory_total = _non_negative_int(resources.get("memory_total_bytes"))
             gpu_available = any(_is_gpu_device(item) for item in devices)
             reasons: list[str] = []
+            if requirements.node_ids and node_id not in requirements.node_ids:
+                reasons.append("node is not in the Work target node set")
             if not node["schedulable"]:
                 reasons.append(f"node connectivity is {node['connectivity_state']}")
             if (
@@ -575,6 +577,11 @@ class NodeRelayServer:
         target = {
             "node_id": work.assigned_node,
             "capability": capability,
+            **(
+                {"resource_id": work.target_resource_id}
+                if work.target_resource_id
+                else {}
+            ),
         }
         binding = {
             "intent_id": work.work_id,
@@ -582,9 +589,18 @@ class NodeRelayServer:
                 {
                     "capability": capability,
                     "execution_policy": work.execution_policy.to_dict(),
+                    **(
+                        {"expected_effect": work.expected_effect}
+                        if work.execution_policy.require_effect_verification
+                        else {}
+                    ),
                 }
             ),
-            "target_ref": (f"node://{work.assigned_node}/capability/{capability}"),
+            "target_ref": (
+                f"device://{work.target_resource_id}/capability/{capability}"
+                if work.target_resource_id
+                else f"node://{work.assigned_node}/capability/{capability}"
+            ),
             "target_binding_digest": _payload_digest(target),
             "workload_id": work.work_id,
             "request_digest": _payload_digest(work.execution_arguments),
@@ -695,7 +711,14 @@ class NodeRelayServer:
                 "verified receipt node does not match assignment"
             )
         if work.state is DistributedWorkState.VERIFIED:
+            _verify_recorded_result(work, payload, envelope, status="VERIFIED")
             _verify_committed_artifacts(work, self.artifact_store)
+            if work.execution_policy.require_effect_verification:
+                return {
+                    "work": work.to_dict(),
+                    "reconciled": False,
+                    "idempotent": True,
+                }
             work = self.work_store.transition(
                 work_id,
                 DistributedWorkState.COMMITTED,
@@ -710,6 +733,12 @@ class NodeRelayServer:
                 DistributedWorkState.VERIFIED,
                 reason="Recovered receipt and Artifact verification",
             )
+            if work.execution_policy.require_effect_verification:
+                return {
+                    "work": work.to_dict(),
+                    "reconciled": True,
+                    "idempotent": True,
+                }
             work = self.work_store.transition(
                 work_id,
                 DistributedWorkState.COMMITTED,
@@ -816,6 +845,8 @@ class NodeRelayServer:
             DistributedWorkState.VERIFIED,
             reason="Receipt signature and Artifact digests verified",
         )
+        if work.execution_policy.require_effect_verification:
+            return {"work": work.to_dict(), "reconciled": True, "idempotent": False}
         work = self.work_store.transition(
             work_id,
             DistributedWorkState.COMMITTED,
@@ -1594,6 +1625,15 @@ class NodeRelayClient:
                 reply_to=envelope.message_id,
                 idempotency_key=workload_id,
             )
+            output = result.get("output")
+            if isinstance(output, dict) and output.get("duplicate_receipt") is True:
+                await self._send(
+                    websocket,
+                    "WORKLOAD_STATUS",
+                    result,
+                    reply_to=envelope.message_id,
+                    idempotency_key=workload_id,
+                )
         elif envelope.message_type == "WORKLOAD_STOP":
             workload_id = str(envelope.payload.get("workload_id", ""))
             result = self.service.stop_workload(workload_id)

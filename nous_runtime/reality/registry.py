@@ -6,7 +6,9 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
+from nous_runtime.events.bus import RuntimeEventBus
 from nous_runtime.reality.contracts import Device, DeviceLifecycle, utc_now
 
 
@@ -40,6 +42,10 @@ _TRANSITIONS = {
     },
     DeviceLifecycle.OFFLINE: {
         DeviceLifecycle.DISCOVERED,
+        DeviceLifecycle.IDENTIFIED,
+        DeviceLifecycle.TRUSTED,
+        DeviceLifecycle.AVAILABLE,
+        DeviceLifecycle.DEGRADED,
         DeviceLifecycle.REVOKED,
     },
     DeviceLifecycle.REVOKED: set(),
@@ -47,15 +53,25 @@ _TRANSITIONS = {
 
 
 class DeviceRegistry:
-    def __init__(self, state_dir: str | Path):
+    def __init__(
+        self,
+        state_dir: str | Path,
+        *,
+        event_bus: RuntimeEventBus | None = None,
+    ):
         self.state_dir = Path(state_dir).expanduser().resolve()
         self.path = self.state_dir / "reality-devices.json"
+        self.events = event_bus
         self._devices: dict[str, Device] = {}
         self._load()
 
     def register(self, device: Device) -> Device:
+        self._load()
         existing = self._devices.get(device.device_id)
-        if existing is not None and existing.stable_identity != device.stable_identity:
+        if existing is not None and (
+            existing.stable_identity != device.stable_identity
+            or existing.provider_id != device.provider_id
+        ):
             raise ValueError("device_id collision with a different stable identity")
         for candidate in self._devices.values():
             if (
@@ -64,6 +80,7 @@ class DeviceRegistry:
                 and candidate.device_id != device.device_id
             ):
                 raise ValueError("stable device identity is already registered")
+        created = existing is None
         if existing is not None:
             # Rediscovery refreshes routes and metadata, but cannot reduce trust or
             # resurrect a revoked Device.
@@ -81,9 +98,12 @@ class DeviceRegistry:
             )
         self._devices[device.device_id] = device
         self._save()
+        if created:
+            self._publish("reality.device.identified", device)
         return device
 
     def get(self, device_id: str) -> Device | None:
+        self._load()
         return self._devices.get(device_id)
 
     def list(self) -> tuple[Device, ...]:
@@ -99,10 +119,60 @@ class DeviceRegistry:
             raise ValueError(
                 f"invalid device transition: {current.lifecycle.value} -> {target.value}"
             )
-        updated = replace(current, lifecycle=target, observed_at=utc_now())
+        metadata = dict(current.metadata)
+        if target is DeviceLifecycle.OFFLINE:
+            metadata["lifecycle_before_offline"] = current.lifecycle.value
+        if current.lifecycle is DeviceLifecycle.OFFLINE and target in {
+            DeviceLifecycle.IDENTIFIED,
+            DeviceLifecycle.TRUSTED,
+            DeviceLifecycle.AVAILABLE,
+            DeviceLifecycle.DEGRADED,
+        }:
+            if metadata.get("lifecycle_before_offline") != target.value:
+                raise ValueError("offline device has no preserved lifecycle to restore")
+        updated = replace(
+            current,
+            lifecycle=target,
+            metadata=metadata,
+            observed_at=utc_now(),
+        )
         self._devices[device_id] = updated
         self._save()
+        self._publish(
+            "reality.device.lifecycle.changed",
+            updated,
+            previous=current.lifecycle.value,
+        )
+        self._publish(f"reality.device.{target.value.lower()}", updated)
         return updated
+
+    def reconnect(self, device_id: str) -> Device:
+        """Restore only trust that existed before a transient disconnect."""
+        current = self.get(device_id)
+        if current is None:
+            raise KeyError(f"device not found: {device_id}")
+        if current.lifecycle is DeviceLifecycle.REVOKED:
+            return current
+        if current.lifecycle is not DeviceLifecycle.OFFLINE:
+            return current
+        before = str(current.metadata.get("lifecycle_before_offline") or "")
+        target = DeviceLifecycle(before) if before else DeviceLifecycle.DISCOVERED
+        return self.transition(device_id, target)
+
+    def _publish(self, event_type: str, device: Device, **extra: Any) -> None:
+        if self.events is None:
+            return
+        self.events.publish(
+            event_type,
+            source="reality.device-registry",
+            payload={
+                "device_id": device.device_id,
+                "provider_id": device.provider_id,
+                "lifecycle": device.lifecycle.value,
+                **extra,
+            },
+            metadata={"device_id": device.device_id},
+        )
 
     def _load(self) -> None:
         if not self.path.is_file():

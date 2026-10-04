@@ -24,6 +24,20 @@ results, Work state, and CAS indexes. After restart it can:
 - continue from `VERIFIED` by rechecking CAS and committing;
 - return the existing result for repeated reconciliation.
 
+Reality simulation Work adds an independent observation gate. Reconciliation
+leaves it `VERIFIED` until `EffectVerifier` returns `MATCH`. Resuming its
+Workflow performs a fresh read-only observation Work rather than repeating the
+device mutation. Previous verdicts and observations remain in CAS. If the
+MATCH was persisted but commit was interrupted, recovery checks the existing
+signed result and CAS evidence before committing that MATCH.
+
+The simulator can apply an effect, persist its state and the Node terminal
+OperationReceipt, then drop the transport response. On reconnect the existing
+at-most-once Node path returns the persisted result without invoking the handler
+again. A fresh Observation must still match before commit. If terminal Node
+persistence was also interrupted, the existing `EXECUTING` journal yields
+`RECOVERY_REQUIRED`; observation alone cannot replace the missing receipt.
+
 Temporary state files have unique names, writes are serialized with the project
 file lock, and final replacement is atomic. Windows sharing violations receive
 a small bounded retry; exhaustion remains a hard failure.

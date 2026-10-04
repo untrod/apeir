@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -163,10 +163,31 @@ class NodeRuntimeConfig:
             raise ValueError("artifact_max_bytes must be at least 1048576")
 
 
+class WorkloadResponseLost(ConnectionError):
+    """Simulation hook: persist the terminal result, then drop its response."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        output: Mapping[str, Any],
+        completed: bool,
+    ):
+        super().__init__(message)
+        self.output = dict(output)
+        self.completed = completed
+
+
 class NodeRuntimeService:
     """Own a Node's durable identity, probes, heartbeat and local workloads."""
 
-    def __init__(self, config: NodeRuntimeConfig):
+    def __init__(
+        self,
+        config: NodeRuntimeConfig,
+        *,
+        capability_handlers: Mapping[str, Callable[[dict[str, Any]], dict[str, Any]]]
+        | None = None,
+    ):
         self.config = config
         self.state_dir = config.state_dir.expanduser().resolve()
         self.artifact_store = ContentAddressedArtifactStore(
@@ -200,8 +221,15 @@ class NodeRuntimeService:
             "node.execution-host-evidence": self.execution_host_evidence,
             "node.execution-preflight": self.preflight_execution,
         }
+        for capability, handler in dict(capability_handlers or {}).items():
+            normalized = capability.strip().lower()
+            if not normalized or normalized in self._handlers:
+                raise ValueError(f"invalid or duplicate Node capability: {capability}")
+            self._handlers[normalized] = handler
         self._prepare_state()
         self.identity = self._load_or_create_identity()
+        if set(self._handlers) - set(self.identity.capabilities):
+            raise ValueError("durable Node identity does not declare all handlers")
         self._sequence = self._load_heartbeat_sequence()
         self._workloads = self._load_workloads()
         self._leases = self._load_leases()
@@ -738,13 +766,38 @@ class NodeRuntimeService:
                 "finished_at": _utc_now(),
             }
         else:
+            response_loss: WorkloadResponseLost | None = None
             try:
-                output = handler(dict(arguments or {}))
+                execute_bound = getattr(handler, "execute_bound", None)
+                if callable(execute_bound):
+                    output = execute_bound(
+                        dict(arguments or {}),
+                        workload_id=workload_id,
+                        node_id=self.identity.node_id,
+                        binding=dict(binding or {}),
+                    )
+                else:
+                    output = handler(dict(arguments or {}))
                 result = {
                     "workload_id": workload_id,
                     "capability": capability,
                     "state": "COMPLETED",
                     "output": output,
+                    "started_at": started,
+                    "finished_at": _utc_now(),
+                }
+            except WorkloadResponseLost as exc:
+                response_loss = exc
+                result = {
+                    "workload_id": workload_id,
+                    "capability": capability,
+                    "state": "COMPLETED" if exc.completed else "FAILED",
+                    "output": dict(exc.output),
+                    "error_code": (
+                        "NOUS_NODE_RESPONSE_LOST"
+                        if exc.completed
+                        else "NOUS_NODE_EFFECT_NOT_APPLIED"
+                    ),
                     "started_at": started,
                     "finished_at": _utc_now(),
                 }
@@ -804,6 +857,8 @@ class NodeRuntimeService:
             _atomic_write_json(self.workloads_path, staged)
             self._workloads = staged
         self._emit("node.workload.finished", result)
+        if handler is not None and response_loss is not None:
+            raise response_loss
         return dict(result)
 
     def run_once(self) -> dict[str, Any]:

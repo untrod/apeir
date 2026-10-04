@@ -3,6 +3,15 @@
 All notable changes to APEIR Distribution are recorded here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+- M3.3-B stateful Reality simulation through existing AgentSession, Plan,
+  Workflow, Distributed Work, Node and Artifact CAS paths. Device mutations
+  commit only after independent fresh observation yields `MATCH`.
+- Deterministic device, operation, delay, duplicate/stale evidence and response
+  loss faults, with persisted at-most-once recovery and lifecycle events.
+- Physical-device acceptance (M3.3-C) remains pending; Kernel is unchanged.
+
 ## [0.1.0-rc1] - 2026-09-07
 
 First public release candidate of the APEIR user distribution.

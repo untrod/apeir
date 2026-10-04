@@ -194,6 +194,13 @@ class Operation:
     expected_effect: Mapping[str, Any]
     operation_id: str = field(default_factory=lambda: f"op_{uuid.uuid4().hex}")
     requested_at: str = field(default_factory=utc_now)
+    agent_session_id: str = ""
+    plan_id: str = ""
+    workflow_id: str = ""
+    workflow_run_id: str = ""
+    node_id: str = ""
+    input_artifacts: tuple[str, ...] = ()
+    observation_request_id: str = ""
 
     def __post_init__(self) -> None:
         if not all(
@@ -208,9 +215,14 @@ class Operation:
                 "operation, work, capability, and target identifiers are required"
             )
         object.__setattr__(self, "expected_effect", dict(self.expected_effect))
+        object.__setattr__(
+            self, "input_artifacts", tuple(dict.fromkeys(self.input_artifacts))
+        )
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        value = asdict(self)
+        value["input_artifacts"] = list(self.input_artifacts)
+        return value
 
     @property
     def expected_effect_digest(self) -> str:
@@ -234,6 +246,9 @@ class EffectVerification:
         default_factory=lambda: f"effect_verify_{uuid.uuid4().hex}"
     )
     verified_at: str = field(default_factory=utc_now)
+    work_id: str = ""
+    device_id: str = ""
+    receipt_digest: str = ""
 
     @property
     def committable(self) -> bool:
