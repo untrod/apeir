@@ -9,7 +9,7 @@ APEIR Kernel 对经 NKI 准入的工作负载拥有最终权威，包括准入�
 租约、调度、Kernel 持久状态、受治理副作用和执行证明。本仓库负责产品体验、
 集成与有限的本地服务，不包含第二套 Rust Kernel。
 
-[English](README.md) · [架构](docs/architecture/FOUNDATION_1_0.md) ·
+[English](README.md) · [架构](docs/architecture/README.md) ·
 [安全](SECURITY.md) · [贡献指南](CONTRIBUTING.md)
 
 ## 发布状态

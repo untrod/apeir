@@ -1,120 +1,72 @@
-# Provider Contract v1.0
+# Provider model and contract
 
-## Definition
+A Provider supplies a bounded replaceable implementation. APEIR owns heterogeneous
+execution semantics, governance, Work/Operation lifecycle, evidence, observation,
+effect verification and recovery. Reuse mature external agent harnesses, cluster
+schedulers, policy engines, secret stores, identity systems and device ecosystems
+instead of rebuilding them as competing authorities.
 
-A Provider declares **WHO** executes capabilities and **HOW**.
+## Roles and existing boundaries
 
-## Interface
+| Role | Existing authoritative path | Authority constraint |
+| --- | --- | --- |
+| Intelligence | Model Gateway, existing Provider adapters and Agent planning | Output is a proposal/observation, never approval |
+| Execution | admitted Runtime capability or Distributed Work/Node; NPA engine for Kernel scope | Placement and callbacks cannot grant execution authority |
+| Policy | existing ApprovalPolicy/PermissionEngine/Operation Gate and policy inputs | An external result cannot bypass Core deny/UNKNOWN or issue a grant |
+| Secret | existing SecretBackend and CredentialBroker | Resolve only for current authorized scoped Operation; no general Provider store access |
+| Identity | existing Node identity/trust and trusted human-session boundary | Identity evidence is verified by the configured trust boundary; self-declaration is insufficient |
+| Device | existing DeviceProvider/DeviceTransport and Reality contracts | Discovery is not trust; a locator is not identity; receipt is not state observation |
 
-```python
-from abc import ABC, abstractmethod
+These roles describe ownership boundaries, not six newly implemented systems.
+External Codex, Ray/Kubernetes, OPA, OpenBao/Vault, SPIFFE/SPIRE and
+Viam/ROS/KubeEdge integrations need explicit implementation and exercised
+conformance before being called supported. A local class named VaultSecretBackend
+is not evidence of an exercised external Vault service.
 
-class Provider(ABC):
-    name: str               # Unique provider name
-    version: str            # Semver
+## Public SDK
 
-    @abstractmethod
-    def list_capabilities(self) -> list[str]:
-        """Capability IDs this provider can execute."""
+Import Distribution contracts from `nous_provider.runtime`, conformance from
+`nous_provider.conformance`, and existing Kernel NPA interfaces from
+`nous_provider`. The facade reexports canonical types rather than copying Work,
+Capability, Observation, Verification or Artifact models.
 
-    @abstractmethod
-    def invoke(self, capability_id: str, **params) -> dict:
-        """Execute a capability. Returns {'ok': True/False, ...}."""
+`nous_provider.Device` remains a Kernel compute Device;
+`nous_provider.runtime.ManagedDevice` is a Reality resource. Legacy NPA
+`ExecutionProvider` is an inference interface, not a new Distributed executor.
+Runtime `ProviderAdapter` declares a `ProviderManifest`, `invoke` and `health`;
+`DeviceProvider` supplies discovery/identity/independent state acquisition.
+They serve different roles and need not share an artificial universal interface.
+See [Provider Development](../development/PROVIDER_DEVELOPMENT.md) and the
+[Developer Platform audit](../development/DEVELOPER_PLATFORM.md#m36-public-runtime-sdk-audit).
 
-    @abstractmethod
-    def health(self) -> dict:
-        """Return {'status': 'ok'|'degraded'|'down', ...}."""
+## Runtime admission and evidence
 
-    # Optional
-    def estimate_cost(self, capability_id: str, **params) -> dict | None:
-        """Estimate resource cost for an invocation."""
-        return None
+- Discovery/capability advertisements and claimed health are untrusted metadata.
+  Current trusted Capability 2.0 risk, side effects, idempotency and verification
+  declarations inform policy. A Provider cannot lower its own required authority.
+- Host registration is not Operation approval. Models, planners, schedulers,
+  resource graphs, Nodes and Providers cannot approve themselves.
+- Submit through the existing authorized execution path. Provider credentials
+  arrive only at the current Operation execution boundary through scoped leases.
+- Bind AgentSession/Plan/Workflow, Work/Operation, Node, Capability, target resource,
+  Artifact inputs, Receipt, Observation and verification IDs where available.
+- Map unsupported capabilities, unhealthy/unknown state, timeouts and transport
+  loss to bounded explicit errors. Never relabel UNKNOWN as success.
+- A lost acknowledgement after a possible effect requires reconciliation of the
+  original operation and a fresh Observation, not another provider invocation.
+  Valid authority does not imply safe redelivery.
 
-    def validate_params(self, capability_id: str, **params) -> bool:
-        """Validate parameters before execution."""
-        return True
-```
+## Conformance and replaceability
 
-## Provider Types
+Use the existing CTK. Metadata validation never invokes Operations. Executable
+legacy probes require an explicit governed host fixture; `test_mode=True` is not
+a safety boundary. Opt-in runtime suites inspect supplied canonical records,
+signed envelopes and CAS bytes, and independently recompute effect verification.
+Missing targets are SKIP; a required SKIP, duplicate probe identity or mismatched
+result cannot certify. Reports identify `validation_level=contract` and
+`execution_performed=false`; they are not native/physical/performance qualification.
 
-| Type | Examples | Capability Pattern |
-|------|----------|-------------------|
-| **Model** | OpenAI, Claude, DeepSeek, Ollama, Whisper | `model.*` |
-| **Device** | PC Agent, Android, ESP32, Robot, PLC | `device.*` |
-| **Storage** | ChromaDB, SQLite, S3, Weaviate | `storage.*`, `rag.*` |
-| **Service** | Web Search, Notification, Calendar, Email | `tool.*`, `notification.*` |
-| **Node** | Remote Runtime, Edge Node, Cloud Function | `node.*` |
-
-## Lifecycle
-
-```
-DISCOVER
-  ↓
-CONNECT        <- Establish transport
-  ↓
-AUTHENTICATE   <- Verify identity
-  ↓
-ADVERTISE      <- Announce capabilities
-  ↓
-HEALTH_CHECK   <- Verify readiness
-  ↓
-READY          <- Available for execution
-  ↓
-EXECUTE        <- Handling capability invocations
-  ↓
-DEGRADED       <- Partial failure
-  ↓
-RECONNECT      <- Attempt recovery
-  ↓
-DISCONNECT     <- Graceful shutdown
-```
-
-## Provider Metadata
-
-```yaml
-identity: "openai-gpt4"
-version: "1.0.0"
-capabilities: ["model.reason", "model.code"]
-health: "ok"
-latency_ms: 450
-cost_per_1k_tokens: 0.03
-reliability: 0.999
-trust_level: "high"
-location: "us-east"
-resource_availability: 0.95
-```
-
-## Registration
-
-```python
-from nous_runtime.provider import register_adapter
-from nous_runtime.provider.adapters.openai import OpenAIProvider
-
-register_adapter(OpenAIProvider())
-# Raises TypeError if not a Provider subclass
-```
-
-## Rules
-
-1. Provider knows WHO and HOW, not WHAT (that's Capability's job)
-2. One Provider can serve multiple Capabilities
-3. One Capability can be served by multiple Providers (routing)
-4. Provider must implement all three abstract methods
-5. Provider health is checked periodically by the Runtime
-6. Provider failure does not crash the Runtime
-7. Model providers are just one type — nothing special
-8. Future providers (Robot, PLC, Browser) use the same interface
-
-## Public SDK and conformance boundary (M3.6)
-
-Distribution Work/Node/Reality contracts are exported by `nous_provider.runtime`;
-existing Kernel NPA types remain in `nous_provider`. They share canonical types
-rather than parallel implementations. See the authoritative
-[Developer Platform audit](../development/DEVELOPER_PLATFORM.md#m36-public-runtime-sdk-audit)
-and [Provider Development Guide](../development/PROVIDER_DEVELOPMENT.md).
-
-Provider metadata validation must not invoke Operations. CTK contract probes
-inspect supplied records; executable probes require an explicit governed host
-fixture. A required SKIP cannot certify, and a static declaration is not physical
-qualification. Neither a passing contract probe nor a Provider manifest grants
-trust, authorization, or effect commitment.
+A real integration needs capability discovery, health reporting, standard error
+mapping, bound evidence, recovery semantics and its own exercised conformance.
+An unavailable external credential or device leaves that specific integration
+PENDING. Cloud uses deterministic fake secrets and never claims physical results.

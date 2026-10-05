@@ -5,6 +5,14 @@
 
 ---
 
+## Scope and current authority
+
+This document describes trust crossings. The authoritative policy and current
+Operation admission contract are in [Security Contract](SECURITY_CONTRACT.md);
+execution scopes and state owners are in [Distribution boundary](DISTRIBUTION.md)
+and [State Ownership](STATE_OWNERSHIP.md). Trust labels below describe assumptions,
+not permission grants or an alternative approval system.
+
 ## Trust Zones
 
 ```
@@ -74,7 +82,13 @@
 - High-risk actions require explicit human approval
 - No shell execution without capability grant
 
-## P0–P4 Hardening Status
+## Recorded P0–P4 hardening reference
+
+These migration notes describe previously recorded host checks, not the current
+milestone acceptance result. Current SDK/Work validation and the visible local
+baseline failures are recorded in [Developer Platform](../development/DEVELOPER_PLATFORM.md).
+Missing locked native binaries and physical-device qualification remain explicit
+acceptance items; the notes below do not substitute for those checks.
 
 1. **P0 — governed execution complete:** production gateways use NKI/Kernel by default and fail closed; direct provider execution is restricted to explicit compatibility/test callers.
 2. **P0 — shell boundary complete:** Remote Agent and `brain_exec` execute only through the designated strict sandbox path; legacy local execution is disabled by default.
@@ -86,7 +100,7 @@
 ## Residual Risks and Compatibility Boundaries
 
 - `ModelGateway(use_nki=False)` and the legacy `ExecutionSandbox` compatibility path remain available for explicit isolated compatibility/tests; product construction paths must not select them implicitly.
-- The bundled sidecars target Windows ARM64. An AMD64 release requires rebuilding/staging native sidecars and updating the component lock.
+- Native bundles must stage the architecture-specific binaries required by the existing component lock; missing artifacts remain a qualification blocker.
 - The current host lacks Visual Studio C++ Build Tools and Windows SDK libraries, so Rust link/test and Tauri native compilation must be rerun after installing that prerequisite.
 - Migration checksums describe the immutable pre-development transfer snapshot and are expected to differ after P0–P4 source changes.
 
@@ -138,8 +152,9 @@ attestation and physical hardware qualification are not claimed.
 
 Approval list/detail and Once/Deny backend operations reuse ApprovalBroker.
 Existing API bearer authentication identifies a service and cannot approve
-high-risk Operations as a human; a trusted remote human identity channel remains
-pending. The accepted approval boundary continues to be the local owner CLI.
+high-risk Operations as a human. This records the M3.4-B boundary; M3.5 subsequently
+adds the verified remote-human contract below. Real IdP deployment qualification
+remains pending, while the trusted local owner CLI remains supported.
 
 
 ## M3.5 remote-human control surface

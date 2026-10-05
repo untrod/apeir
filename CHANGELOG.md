@@ -5,6 +5,11 @@ All notable changes to APEIR Distribution are recorded here. The project follows
 
 ## Unreleased
 
+- Architecture Consolidation Gate: five existing authoritative contracts now
+  distinguish Kernel and Distribution execution scopes, authority, state/failure
+  semantics and replaceable Providers. Legacy overviews forward to these paths;
+  unknown effects and pending physical qualification remain explicit.
+
 - M3.6 additive public Work/Node/Reality/Provider SDK facade over canonical
   contracts, independently installable SDK wheels, existing protocol/schema
   rejection and seven opt-in CTK runtime contract suites. Metadata conformance

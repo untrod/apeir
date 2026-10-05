@@ -59,6 +59,33 @@ Kernel. Responses and UI status must report `execution_scope=runtime-service`
 and `kernel_traversed=false`. It must not issue, emulate, or persist Kernel
 permits, leases, receipts, or journal entries.
 
+## Governed Distributed Reality path
+
+The M3 runtime-service vertical slice extends the existing coordination and Node
+path; it is not a Kernel proof or an Agent-to-Provider shortcut:
+
+```text
+Agent Goal -> TaskPlan proposal -> existing durable Workflow
+  -> Operation policy and exact bound GovernanceRequest
+  -> explicit human Approve Once / Deny when required
+  -> pause/resume the original Workflow and Work/Operation
+  -> existing Distributed Work -> placement-only Node selection
+  -> Node journal and fresh execution admission
+  -> current-Operation CredentialContext when needed
+  -> Device Provider effect -> existing signed result/OperationReceipt
+  -> separately authorized independent read Work -> fresh Observation
+  -> deterministic EffectVerification -> MATCH-only Work COMMITTED
+```
+
+The model cannot approve or resolve credentials. Scheduling an eligible Node does
+not authorize a mutation. Execution success and a Receipt do not prove the effect.
+MISMATCH and UNKNOWN remain uncommitted. Recovery first consults persisted
+Work/Node evidence; an effect that may already have happened is never blindly
+executed again merely because an approval/grant remains valid. See
+[Runtime Coordination](RUNTIME_COORDINATION.md),
+[State/failure semantics](STATE_OWNERSHIP.md) and
+[Reality acceptance](REALITY_ARCHITECTURE_AUDIT.md).
+
 ## Product execution projection
 
 The Python product Runtime currently projects complex interactive requests

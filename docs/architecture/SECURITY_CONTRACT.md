@@ -1,6 +1,35 @@
 # Security Contract v1.0
 
-## Admission Pipeline
+## Authority and scope
+
+The [project constitution](DISTRIBUTION.md) and [State Ownership](STATE_OWNERSHIP.md)
+define the Kernel-managed and Distribution runtime-service domains. Model,
+Planner, Scheduler, Node, Provider and Resource Graph never grant authority.
+Discovery, trust, authorization, execution and effect are separate facts.
+Current Operation admission is the four-decision contract below; unknown facts
+fail closed. External policy, identity or secret providers cannot replace the
+existing authority or approve their own requests.
+
+Current Operation outcomes are exactly:
+
+| Decision | Runtime obligation |
+| --- | --- |
+| ALLOW | Admit only while all current bound authorization facts remain valid |
+| DENY | Block execution |
+| REQUIRE_APPROVAL | Durably pause the original Workflow/Work for trusted human authority |
+| UNKNOWN | Block execution; unresolved facts never become success |
+
+Only explicit policy may auto-allow registered low-risk read-only Operations.
+State mutation requires valid scoped authority; high risk normally requires
+trusted human approval. Critical/destructive or unsafe unknown operations are
+denied by default. An approval does not replace admission or effect verification.
+
+The initial admission/risk examples below describe legacy generic Runtime modes,
+not M3.4+ Operation policy. Operation policy is governed by the
+[M3.4-A contract](#m34-a-operation-governance-audit), with current human identity
+at the [M3.5 boundary](#m35-remote-human-boundary).
+
+## Legacy admission pipeline
 
 ```
 Request
@@ -26,7 +55,7 @@ Execution         <- Run with appropriate constraints
 Audit             <- Record the decision and outcome
 ```
 
-## Admission Decisions
+## Legacy admission decisions
 
 | Decision | Meaning |
 |----------|---------|
@@ -35,7 +64,7 @@ Audit             <- Record the decision and outcome
 | `REQUIRE_APPROVAL` | Pause until human approves |
 | `SANDBOX_ONLY` | Allow but with restricted capabilities |
 
-## Risk Levels
+## Legacy risk examples
 
 | Level | Auto-allow? | Requires | Example |
 |-------|------------|----------|---------|
@@ -63,15 +92,16 @@ permissions:
 
 1. Secrets never stored in plaintext in the repository
 2. Secrets never logged (auto-masked in audit)
-3. Secrets loaded from environment or encrypted vault
-4. Provider credentials scoped per-provider, not global
+3. Legacy environment credential configuration is not the governed Operation delivery API
+4. Current Operations use opaque SecretHandle references and narrowly scoped Credential leases
+5. Raw values are resolved only by the execution boundary with valid existing authorization; they never become ordinary context or durable evidence
 
 ## Audit
 
 - Every admission decision is logged
 - Every capability execution is logged
-- Logs are append-only, immutable
-- Retention: configurable, default 90 days
+- Current governance audit is append-oriented and integrity chained; it does not claim immutable host storage
+- Retention and external archival guarantees require their own configured and tested backend
 - Sensitive fields auto-masked before storage
 
 ## M3.4-A Operation governance audit

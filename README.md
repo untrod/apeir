@@ -11,7 +11,7 @@ permits, resource leases, scheduling, durable Kernel state, governed effects,
 and execution proof. This repository owns the product experience, integrations,
 and bounded local services. It does not contain a second copy of the Rust Kernel.
 
-[简体中文](README.zh-CN.md) · [Architecture](docs/architecture/FOUNDATION_1_0.md) ·
+[简体中文](README.zh-CN.md) · [Architecture](docs/architecture/README.md) ·
 [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 
 ## Release status

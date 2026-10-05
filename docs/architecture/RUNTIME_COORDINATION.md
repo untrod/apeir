@@ -12,7 +12,7 @@ AgentSession
     -> durable Workflow
     -> capability handler
     -> local or Distributed Work
-    -> policy and Kernel boundary
+    -> Governance and explicitly selected execution scope
     -> receipt, evidence, and verification
 ```
 
@@ -87,7 +87,7 @@ reasoning, Node private keys, or capability credentials.
 
 ## Current scope
 
-This layer establishes the M3.1 coordination boundary:
+The coordination contract established at M3.1 remains authoritative:
 
 - durable Agent sessions;
 - existing plan-to-Workflow compilation;
@@ -96,6 +96,10 @@ This layer establishes the M3.1 coordination boundary:
 - event-driven wake-up with durable subscription definitions;
 - multi-step, multi-node artifact orchestration through existing handlers.
 
-Resource graphs, device lifecycle, leases, disconnected execution, effect
-verification, and expanded governance remain separate follow-on gates. They
-must not bypass the authority path described above.
+M3.2 reliability, M3.3 Reality, M3.4 Governance/credentials, M3.5 Control Plane
+and M3.6 SDK extend this same path. For Reality mutations, approval pauses the
+original run and exact Work/Operation. Approve Once resumes it without silently
+replanning. Delivery/Node journals precede execution; lost-response recovery
+reconciles persisted evidence and acquires a new independent Observation.
+MISMATCH and UNKNOWN cannot commit. See the [Reality audit](REALITY_ARCHITECTURE_AUDIT.md)
+and [Security Contract](SECURITY_CONTRACT.md). Physical acceptance remains PENDING.

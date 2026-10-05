@@ -205,3 +205,13 @@ regressions **650 passed, 3 skipped**; full repository **3600 passed, 35 skipped
 9 unchanged baseline failures**. Ruff, changed-file formatting, compile and the
 isolated Distribution wheel build pass. The corrective SHA and its CI outcome
 are checked after push. Kernel and the component lock remain unchanged.
+
+The corrective commit `6960175c2a554d813047ea7c462f0447bc204584` passes both
+[Desktop CI](https://github.com/untrod/apeir/actions/runs/37285404969) and
+[Multi-Arch CI](https://github.com/untrod/apeir/actions/runs/37285405037), first
+attempt: Windows Python **3611 passed, 28 skipped**; Linux Python 3.10/3.12 and
+macOS Python **3604 passed, 35 skipped** each; Linux amd64/ARM64 matrix
+**3315 passed, 36 skipped, 272 deselected** each plus **13 platform tests** each;
+Windows amd64 matrix **3323 passed, 28 skipped, 272 deselected**. Frontend remains
+**47 passed**. Native bundle jobs are conditionally skipped, not qualified.
+M3.6 software acceptance passes; native/physical qualification remains PENDING.
