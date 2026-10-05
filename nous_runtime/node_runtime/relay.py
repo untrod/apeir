@@ -597,7 +597,9 @@ class NodeRelayServer:
                 }
             ),
             "target_ref": (
-                f"device://{work.target_resource_id}/capability/{capability}"
+                f"resource://{work.target_resource_id}/capability/{capability}"
+                if work.target_resource_id.startswith("agent-provider:")
+                else f"device://{work.target_resource_id}/capability/{capability}"
                 if work.target_resource_id
                 else f"node://{work.assigned_node}/capability/{capability}"
             ),

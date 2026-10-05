@@ -5,6 +5,12 @@ All notable changes to APEIR Distribution are recorded here. The project follows
 
 ## Unreleased
 
+- M4 public replaceable provider roles, restrictive external policy inside the
+  existing Governance Gate, and an admitted external-agent Workflow/Node bridge
+  over existing CAS, process supervision, isolated Environment Providers and
+  at-most-once recovery. Real OCI reference execution is separately qualified;
+  unexercised external services and hardware remain pending.
+
 - Architecture Consolidation Gate: five existing authoritative contracts now
   distinguish Kernel and Distribution execution scopes, authority, state/failure
   semantics and replaceable Providers. Legacy overviews forward to these paths;

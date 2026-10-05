@@ -50,9 +50,11 @@ class ExecutionAuthorizationGate(OperationAuthorizationMixin):
         permission_engine: PermissionEngine | None = None,
         operation_contracts=None,
         operation_policy=None,
+        operation_policy_provider=None,
     ):
         self.store = store or GovernanceStore()
         self.permission_engine = permission_engine
+        self.operation_policy_provider = operation_policy_provider
         self._execution_admissions = {}
         from nous_runtime.capability.contract import CapabilityContractRegistry
         from nous_runtime.governance.broker import ApprovalPolicy

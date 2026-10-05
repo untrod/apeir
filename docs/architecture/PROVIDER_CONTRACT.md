@@ -70,3 +70,100 @@ A real integration needs capability discovery, health reporting, standard error
 mapping, bound evidence, recovery semantics and its own exercised conformance.
 An unavailable external credential or device leaves that specific integration
 PENDING. Cloud uses deterministic fake secrets and never claims physical results.
+
+## M4 interoperability audit
+
+| Concern | Classification | Authoritative path |
+| --- | --- | --- |
+| Intelligence discovery/invoke/stream/cancel | REUSE | Model Gateway and ModelBackendAdapter |
+| Provider registration and metadata | REUSE | Existing registry and ProviderAdapter |
+| External-agent lifecycle | EXTEND | AgentDescriptor/RunRequest/RunResult, CommandAgentAdapter, ProcessSupervisor |
+| External-agent admission | EXTEND | Existing Workflow/DistributedWork/Node and Operation Gate |
+| Process/environment isolation | REUSE | Host-supplied Environment Provider; new handler has no host-process fallback |
+| Capability risk and verification declarations | REUSE | Host-owned CapabilityContractRegistry |
+| Human authority and grants | REUSE | ApprovalBroker, GovernanceStore and human-session boundary |
+| Replaceable policy evaluation | EXTEND | Restrictive PolicyProvider hook in the same Operation Gate |
+| Secrets and identity | REUSE | SecretBackend/CredentialBroker and HumanIdentityProvider |
+| Artifacts, receipts, observation and recovery | REUSE | Existing CAS, Node journal, Work evidence and Reality verification |
+| Public replaceable role contracts | EXTEND | `nous_provider.interoperability` exports canonical types |
+| Real Codex, Ray/Kubernetes, OPA, OpenBao/Vault, SPIFFE/SPIRE, Viam/ROS/KubeEdge | MISSING | Specific external integrations PENDING; interfaces are preparation, not qualification |
+
+The public interoperability SDK aliases IntelligenceProvider to ModelBackendAdapter,
+SecretProvider to SecretBackend, IdentityProvider to HumanIdentityProvider, and
+reuses DeviceProvider. ExecutionProvider describes the existing bound Node handler;
+it differs from legacy NPA inference. PolicyProvider returns exactly the four
+Operation decisions. No parallel provider registry or authority is introduced.
+
+`ExternalAgentWorkflowHandler` fixes descriptor and Node in trusted host
+configuration. A Plan supplies an objective, Work identifier and bounded timeout,
+never an executable, environment or credentials. The input enters existing CAS;
+GovernanceRequest binds all available AgentSession/Plan/Workflow, Work/Operation,
+Node, resource, Capability and input identities. The existing DistributedWorkflowAdapter
+pauses for human approval and resumes the same Work. Changed inputs cannot reuse
+approval. `ExternalAgentOperationHandler` accepts only an attested Node execution
+context, at-most-once delivery and immutable bound CAS input. It revalidates
+authorization immediately before the existing Supervisor invokes an isolated
+Environment runner. Missing isolation fails closed.
+
+Command heuristics and `always_allow` metadata are proposals, never Governance
+authority. Legacy direct CommandAgentAdapter is a trusted-host compatibility API
+and must not be exposed as an unrestricted model tool. The new handler gives no
+Gate, Broker, secret backend or CredentialContext to ordinary agent context.
+Secret requirements are currently rejected for external harnesses; authenticated
+model credential delivery needs a future adapter at a scoped transport boundary,
+not credential environment variables. The host runner must enforce isolation,
+bounded output/time and cancellation. Production default OCI still requires its
+existing strict backend; Cloud acceptance uses an explicit fixture-owned engine
+runner and the existing OCI provider's non-root user, network-disabled/read-only
+root filesystem and scoped workspace mount. It does not qualify a production
+Linux controller deployment.
+
+Outputs enter CAS as `untrusted-provider-result`, with available provenance.
+Process completion is not device effect verification. Failure/timeout cannot
+commit Work. Lost responses reach the existing Node journal; restart/duplicate
+delivery reconciles evidence without invoking the harness again. A subsequent
+device mutation requires its own authority and independent fresh Observation/MATCH.
+
+External policy receives detached request facts. ALLOW only lets Core evaluation
+continue; it cannot override Core denial, changed facts, revocation, expiration
+or missing grants. DENY/UNKNOWN, malformed results and exceptions fail closed.
+REQUIRE_APPROVAL suppresses read-only auto-approval. Policy is re-evaluated at
+admission and immediately before execution, recorded in the existing audit trail
+as `provider.policy.evaluated`. Trusted hosts must choose bounded-I/O adapters;
+the hook does not itself provide an OPA transport or remote authority.
+
+The real OCI reference probe is reproducible with an already installed image:
+
+```sh
+APEIR_OCI_TEST_IMAGE=python:3.11-slim python -m pytest tests/interoperability -q
+```
+
+It exercises an actual isolated reference subprocess, a durable AgentSession
+approval pause, the original Distributed Work/Node receipt, and separate simulated
+firmware approval, CredentialLease, Observation and MATCH. Without this explicit
+environment only the real OCI probe skips; contract/security tests still run.
+Cloud has a Codex CLI, but no authenticated Codex model/remote egress integration
+was exercised. That specific provider, other external services and all physical
+qualification remain PENDING.
+
+### M4 Cloud validation record
+
+The explicit real-OCI interoperability suite has **25 passed**; directly affected
+Agent/Workflow/Node/Reality/Governance/Control Plane/SDK/recovery regressions have
+**709 passed**. Full Cloud regression with the OCI probe enabled has **3625 passed,
+35 skipped and 9 unchanged baseline failures**. These are the previously reproduced
+managed-interpreter, read-only host-home/Desktop automation and orphan-process
+cleanup failures recorded in the existing security validation history; none is
+rewritten, suppressed or counted as a new interoperability success.
+
+Ruff, changed-file formatting, compilation, all 245 current Markdown local-link
+checks, document/comment/identity/Git-metadata hygiene, release version checks and
+security scan pass (zero findings). Component-lock contract tests: **3 passed**.
+The actual native component verifier remains blocked by the baseline missing
+locked Windows Kernel binaries. Kernel sources, C SDK and the Kernel component
+pin remain unchanged at `87fd1b2ff28ef14ab1a515a58162592b452fda2e`.
+Built Distribution/Provider SDK wheels import their public roles outside the
+repository under `python -I -O`. Relevant Desktop/Multi-Arch CI is evaluated on
+the pushed SHA before the M4 software Gate is reported. This record certifies the
+bounded software/reference flow, not authenticated Codex service integration,
+production Linux OCI, a remote authority topology or physical hardware.

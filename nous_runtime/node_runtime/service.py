@@ -772,6 +772,11 @@ class NodeRuntimeService:
                 return dict(existing)
             started = _utc_now()
             handler = self._handlers.get(capability)
+            if (
+                getattr(handler, "requires_at_most_once", False)
+                and delivery_semantics != "at_most_once"
+            ):
+                raise PermissionError("Capability requires at-most-once Node delivery")
             if delivery_semantics == "at_most_once":
                 executing = {
                     "workload_id": workload_id,

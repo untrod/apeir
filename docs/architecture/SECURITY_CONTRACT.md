@@ -407,3 +407,16 @@ and Multi-Arch CI are checked against the pushed commit, not an earlier SHA.
 This qualifies the Distribution software/simulation boundary only. External
 IdP deployment, Windows file-based identity enrollment, native binary release
 qualification and M3.3-C physical hardware acceptance remain pending.
+
+## M4 external-provider admission
+
+External policy is a restrictive input to the same Operation Gate, never a grant
+issuer. ALLOW cannot override Core denial or replace authority; exceptions and
+unknown/malformed results fail closed. Providers receive detached facts and policy
+is rechecked at the effect boundary. External-agent execution requires an attested
+Node context, immutable approved CAS input, at-most-once journal and an explicitly
+configured isolated Environment runner. Ordinary agent context receives neither
+credentials nor authority objects. A provider-authored approval or completion
+claim cannot authorize a device mutation or substitute for independent effect
+verification. The [Provider contract and M4 audit](PROVIDER_CONTRACT.md#m4-interoperability-audit)
+documents the real OCI reference scope and unexercised integrations.

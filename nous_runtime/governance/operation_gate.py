@@ -213,9 +213,36 @@ class OperationAuthorizationMixin:
             return GovernanceDecision.DENY, None
         if approval and approval[0] in {"DENIED", "EXPIRED", "CANCELLED"}:
             return GovernanceDecision.DENY, None
+        # External policy can restrict Core, never supply authority. Re-evaluate
+        # at admission and immediately before the effect with current facts.
+        external = GovernanceDecision.ALLOW
+        if self.operation_policy_provider is not None:
+            try:
+                external = self.operation_policy_provider.evaluate(
+                    GovernanceRequest.from_dict(
+                        json.loads(json.dumps(request.to_dict()))
+                    )
+                )
+            except Exception:
+                external = GovernanceDecision.UNKNOWN
+            if not isinstance(external, GovernanceDecision) or external not in {
+                GovernanceDecision.ALLOW,
+                GovernanceDecision.DENY,
+                GovernanceDecision.REQUIRE_APPROVAL,
+                GovernanceDecision.UNKNOWN,
+            }:
+                external = GovernanceDecision.UNKNOWN
+            self.store.append_operation_audit(
+                db,
+                "provider.policy.evaluated",
+                self._evidence(request, verdict=external.value),
+            )
+            if external in {GovernanceDecision.DENY, GovernanceDecision.UNKNOWN}:
+                return external, None
         policy = self.operation_policy
         if (
-            policy
+            external is GovernanceDecision.ALLOW
+            and policy
             and policy.capability_id == request.capability_id
             and policy.auto_approve_read_only
             and policy.scope == "policy_controlled"
