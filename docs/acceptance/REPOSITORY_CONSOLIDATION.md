@@ -364,3 +364,18 @@ with loopback-network permission. An initial SDK-only invocation without that
 permission had **13 passed, 1 failed** because its simulation could not bind
 127.0.0.1; its original log is retained separately from test/code failures.
 History-wide changed-source formatting now passes **77 Python files**.
+
+The next PR Security run
+[37336900912](https://github.com/untrod/apeir/actions/runs/37336900912)
+passed formatting and then found a genuine repository-checker defect: human
+`git branch -a` display text classified detached HEAD and GitHub's generated
+`remotes/pull/3/merge` as contributor branches. The existing metadata auditor now
+reads actual head/remote refs. It recognizes only exact numeric GitHub PR head/merge
+refs and remote HEAD aliases; local or disguised pull branches still fail naming
+checks. Forbidden prefixes apply across named remotes and symbolic contributor
+branches. `hardware/` is supported, main is exact, and Git command failures cannot
+silently become empty successful audits. No Runtime execution path changes.
+
+Ten meaningful repository contract regressions cover these positive/negative
+cases using real temporary Git refs. The repository suite passes **248 tests**.
+The failed CI run remains published; the fix does not skip Git metadata auditing.

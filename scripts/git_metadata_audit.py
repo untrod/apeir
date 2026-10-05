@@ -12,28 +12,54 @@ Checks:
 """
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 FORBIDDEN_BRANCH_PREFIXES = [
-    "claude/", "gpt/", "ai/", "agent/", "auto-generated/",
+    "codex/",
+    "claude/",
+    "gpt/",
+    "ai/",
+    "agent/",
+    "auto-generated/",
 ]
 
 ALLOWED_BRANCH_PREFIXES = [
-    "feature/", "fix/", "refactor/", "docs/", "test/", "release/",
-    "kernel/", "platform/", "provider/", "research/", "archive/",
-    "codex/",
-    "main", "master", "develop",
+    "feature/",
+    "fix/",
+    "refactor/",
+    "docs/",
+    "test/",
+    "release/",
+    "kernel/",
+    "platform/",
+    "provider/",
+    "research/",
+    "archive/",
+    "hardware/",
+    "main",
 ]
 
 AI_BOT_PATTERNS = [
-    "claude", "codex", "chatgpt", "gpt", "openai bot", "anthropic bot",
-    "noreply@anthropic", "noreply@openai", "ai assistant", "ai agent",
+    "claude",
+    "codex",
+    "chatgpt",
+    "gpt",
+    "openai bot",
+    "anthropic bot",
+    "noreply@anthropic",
+    "noreply@openai",
+    "ai assistant",
+    "ai agent",
 ]
 
 SUSPICIOUS_EMAILS = [
-    "bot@", "ai@", "temp@", "test@",
+    "bot@",
+    "ai@",
+    "temp@",
+    "test@",
 ]
 
 
@@ -46,6 +72,7 @@ def run_git(repo: Path, *args: str) -> str:
         text=True,
         encoding="utf-8",
         errors="replace",
+        check=True,
     )
     return result.stdout.strip()
 
@@ -53,17 +80,31 @@ def run_git(repo: Path, *args: str) -> str:
 def check_branches(repo: Path) -> list[dict]:
     """Check all branches for naming compliance."""
     violations = []
-    branches = run_git(repo, "branch", "-a").split("\n")
-    for branch_line in branches:
-        # Clean up the branch name format
-        branch = branch_line.strip().lstrip("*").strip()
-        if not branch or "->" in branch:
+    refs = run_git(
+        repo,
+        "for-each-ref",
+        "--format=%(refname) %(symref)",
+        "refs/heads/",
+        "refs/remotes/",
+    ).splitlines()
+    for entry in refs:
+        ref, _, symbolic_target = entry.partition(" ")
+        if symbolic_target and re.fullmatch(r"refs/remotes/[^/]+/HEAD", ref):
             continue
-        # Extract short name
-        short = branch.replace("remotes/origin/", "")
+        # GitHub's generated PR refs are not contributor branches. Match the
+        # exact namespace/shape; a local pull/* branch still needs validation.
+        if re.fullmatch(r"refs/remotes/pull/[1-9][0-9]*/(?:head|merge)", ref):
+            continue
+        if ref.startswith("refs/heads/"):
+            short = ref.removeprefix("refs/heads/")
+        elif ref.startswith("refs/remotes/"):
+            short = ref.removeprefix("refs/remotes/").partition("/")[2]
+        else:
+            continue
+        branch = ref
 
         is_compliant = any(
-            short == prefix.rstrip("/") or short.startswith(prefix)
+            short.startswith(prefix) if prefix.endswith("/") else short == prefix
             for prefix in ALLOWED_BRANCH_PREFIXES
         )
 
@@ -72,19 +113,23 @@ def check_branches(repo: Path) -> list[dict]:
         )
 
         if is_forbidden:
-            violations.append({
-                "branch": branch,
-                "short": short,
-                "issue": "forbidden_prefix",
-                "recommendation": f"Rename to follow allowed prefixes: {', '.join(ALLOWED_BRANCH_PREFIXES[:6])}",
-            })
+            violations.append(
+                {
+                    "branch": branch,
+                    "short": short,
+                    "issue": "forbidden_prefix",
+                    "recommendation": f"Rename to follow allowed prefixes: {', '.join(ALLOWED_BRANCH_PREFIXES[:6])}",
+                }
+            )
         elif not is_compliant:
-            violations.append({
-                "branch": branch,
-                "short": short,
-                "issue": "non_standard_prefix",
-                "recommendation": "Review and rename if needed",
-            })
+            violations.append(
+                {
+                    "branch": branch,
+                    "short": short,
+                    "issue": "non_standard_prefix",
+                    "recommendation": "Review and rename if needed",
+                }
+            )
 
     return violations
 
@@ -106,41 +151,49 @@ def check_authors(repo: Path) -> list[dict]:
         # Check author name
         for pattern in AI_BOT_PATTERNS:
             if pattern in author.lower():
-                violations.append({
-                    "sha": sha[:8],
-                    "field": "author",
-                    "value": author,
-                    "issue": f"Potential AI bot identity: matches '{pattern}'",
-                })
+                violations.append(
+                    {
+                        "sha": sha[:8],
+                        "field": "author",
+                        "value": author,
+                        "issue": f"Potential AI bot identity: matches '{pattern}'",
+                    }
+                )
                 break
 
         # Check committer name
         for pattern in AI_BOT_PATTERNS:
             if pattern in committer.lower():
-                violations.append({
-                    "sha": sha[:8],
-                    "field": "committer",
-                    "value": committer,
-                    "issue": f"Potential AI bot identity: matches '{pattern}'",
-                })
+                violations.append(
+                    {
+                        "sha": sha[:8],
+                        "field": "committer",
+                        "value": committer,
+                        "issue": f"Potential AI bot identity: matches '{pattern}'",
+                    }
+                )
                 break
 
         # Check emails
         for email_pattern in SUSPICIOUS_EMAILS:
             if email_pattern in author_email.lower():
-                violations.append({
-                    "sha": sha[:8],
-                    "field": "author_email",
-                    "value": author_email,
-                    "issue": f"Suspicious email pattern: '{email_pattern}'",
-                })
+                violations.append(
+                    {
+                        "sha": sha[:8],
+                        "field": "author_email",
+                        "value": author_email,
+                        "issue": f"Suspicious email pattern: '{email_pattern}'",
+                    }
+                )
             if email_pattern in committer_email.lower():
-                violations.append({
-                    "sha": sha[:8],
-                    "field": "committer_email",
-                    "value": committer_email,
-                    "issue": f"Suspicious email pattern: '{email_pattern}'",
-                })
+                violations.append(
+                    {
+                        "sha": sha[:8],
+                        "field": "committer_email",
+                        "value": committer_email,
+                        "issue": f"Suspicious email pattern: '{email_pattern}'",
+                    }
+                )
 
     return violations
 
@@ -160,12 +213,14 @@ def check_co_authored(repo: Path) -> list[dict]:
             if "co-authored-by:" in line_lower:
                 for pattern in AI_BOT_PATTERNS:
                     if pattern in line_lower:
-                        violations.append({
-                            "sha": sha[:8],
-                            "field": "co-authored-by",
-                            "value": line.strip(),
-                            "issue": f"AI co-author trailer matches '{pattern}'",
-                        })
+                        violations.append(
+                            {
+                                "sha": sha[:8],
+                                "field": "co-authored-by",
+                                "value": line.strip(),
+                                "issue": f"AI co-author trailer matches '{pattern}'",
+                            }
+                        )
                         break
 
     return violations
@@ -174,7 +229,9 @@ def check_co_authored(repo: Path) -> list[dict]:
 def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
-    parser = argparse.ArgumentParser(description="Audit git metadata for public release readiness")
+    parser = argparse.ArgumentParser(
+        description="Audit git metadata for public release readiness"
+    )
     parser.add_argument("--repo", default=".", help="Path to git repository")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
@@ -192,11 +249,18 @@ def main():
 
     if args.json:
         import json
-        print(json.dumps({
-            "branches": branch_violations,
-            "authors": author_violations,
-            "co_authors": coauthor_violations,
-        }, indent=2, ensure_ascii=False))
+
+        print(
+            json.dumps(
+                {
+                    "branches": branch_violations,
+                    "authors": author_violations,
+                    "co_authors": coauthor_violations,
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
     else:
         if not all_violations:
             print("PASS: Git metadata is clean for public release.")
