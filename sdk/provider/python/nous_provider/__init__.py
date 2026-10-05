@@ -19,7 +19,7 @@ Usage:
 
 from __future__ import annotations
 
-__version__ = "1.0.0-beta1"
+__version__ = "1.0.0-beta2"
 __api_version__ = "v1beta1"
 
 
@@ -63,6 +63,7 @@ log = logging.getLogger("nous.provider")
 
 # ── Discovery Provider ──
 
+
 class DiscoveryProvider(ABC):
     """Discover and describe hardware devices or engines.
 
@@ -102,6 +103,7 @@ class DiscoveryProvider(ABC):
 
 # ── Resource Provider ──
 
+
 class ResourceProvider(ABC):
     """Manage resource allocation and deallocation for devices.
 
@@ -114,7 +116,9 @@ class ResourceProvider(ABC):
         ...
 
     @abstractmethod
-    def reserve(self, device_id: str, amount: ResourceVector) -> Optional[ResourceLease]:
+    def reserve(
+        self, device_id: str, amount: ResourceVector
+    ) -> Optional[ResourceLease]:
         """Reserve resources on a device. Returns a lease or None."""
         ...
 
@@ -137,6 +141,7 @@ class ResourceProvider(ABC):
 
 
 # ── Execution Provider ──
+
 
 class ExecutionProvider(ABC):
     """Execute workloads on engines or devices.
@@ -173,6 +178,7 @@ class ExecutionProvider(ABC):
 
 # ── Telemetry Provider ──
 
+
 class TelemetryProvider(ABC):
     """Report device/engine health, metrics, and faults."""
 
@@ -204,9 +210,11 @@ class TelemetryProvider(ABC):
 
 # ── Provider Registration ──
 
+
 @dataclass
 class ProviderPackage:
     """A complete provider package ready for registration."""
+
     name: str
     version: str
     provider_class: str  # "device", "engine", "policy"
@@ -243,7 +251,9 @@ def register_provider(package: ProviderPackage, endpoint: str | None = None) -> 
     from compat.nki_client import NKIClient
 
     async def _register():
-        client = await NKIClient.connect(endpoint) if endpoint else await NKIClient.connect()
+        client = (
+            await NKIClient.connect(endpoint) if endpoint else await NKIClient.connect()
+        )
 
         try:
             # Register devices
@@ -252,7 +262,11 @@ def register_provider(package: ProviderPackage, endpoint: str | None = None) -> 
                 for device in devices:
                     nki_req = device.to_nki_register_request()
                     await client.register_device(nki_req["device"])
-                    log.info("Registered device: %s (%s)", device.device_id, device.spec.model)
+                    log.info(
+                        "Registered device: %s (%s)",
+                        device.device_id,
+                        device.spec.model,
+                    )
 
             # Register engines
             if package.execution:
@@ -282,13 +296,28 @@ def register_provider(package: ProviderPackage, endpoint: str | None = None) -> 
 
 __all__ = [
     # Types (re-exported from stable ABI)
-    "ResourceVector", "ResourceLimits", "ResourceDomain", "ResourceLease",
-    "ResourceClaim", "ResourceSlice", "PriorityClass", "PreemptionPolicy",
-    "Device", "DeviceSpec", "DeviceStatus", "DevicePhase", "DeviceClass",
-    "DeviceType", "DeviceRegistry", "TopologyLink",
+    "ResourceVector",
+    "ResourceLimits",
+    "ResourceDomain",
+    "ResourceLease",
+    "ResourceClaim",
+    "ResourceSlice",
+    "PriorityClass",
+    "PreemptionPolicy",
+    "Device",
+    "DeviceSpec",
+    "DeviceStatus",
+    "DevicePhase",
+    "DeviceClass",
+    "DeviceType",
+    "DeviceRegistry",
+    "TopologyLink",
     # Provider interfaces
-    "DiscoveryProvider", "ResourceProvider", "ExecutionProvider",
+    "DiscoveryProvider",
+    "ResourceProvider",
+    "ExecutionProvider",
     "TelemetryProvider",
     # Package and registration
-    "ProviderPackage", "register_provider",
+    "ProviderPackage",
+    "register_provider",
 ]

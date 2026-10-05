@@ -7,6 +7,7 @@ Kernel paths.
 
 from __future__ import annotations
 
+import importlib.metadata
 import importlib.util
 import os
 import platform
@@ -60,7 +61,12 @@ def _normalize_architecture(value: str) -> str:
 
 
 def collect_tool_inventory(*, refresh: bool = False) -> dict[str, dict[str, Any]]:
-    """Probe required and optional engineering tools without invoking a shell."""
+    """Probe engineering tools without blocking routine Node heartbeats.
+
+    Normal inventory collection reports executable presence only. Version
+    commands use the strong process-isolation backend and may be expensive on
+    Windows, so they run only for an explicit refresh.
+    """
     global _TOOL_INVENTORY_CACHE, _TOOL_INVENTORY_CACHE_AT
     now = time.monotonic()
     with _TOOL_INVENTORY_CACHE_LOCK:
@@ -75,7 +81,11 @@ def collect_tool_inventory(*, refresh: bool = False) -> dict[str, dict[str, Any]
             "pip": _probe_pip(),
         }
         for name, candidates in _TOOL_COMMANDS.items():
-            inventory[name] = _probe_command(candidates)
+            inventory[name] = (
+                _probe_command(candidates)
+                if refresh
+                else _probe_command_presence(candidates)
+            )
         _TOOL_INVENTORY_CACHE = deepcopy(inventory)
         _TOOL_INVENTORY_CACHE_AT = time.monotonic()
         return inventory
@@ -91,13 +101,45 @@ def _probe_python() -> dict[str, Any]:
 
 
 def _probe_pip() -> dict[str, Any]:
-    result = _run_version_command((sys.executable, "-m", "pip", "--version"))
+    try:
+        version = importlib.metadata.version("pip")
+    except importlib.metadata.PackageNotFoundError:
+        return {
+            "available": False,
+            "path": "",
+            "version": "",
+            "version_output": "",
+            "invocation": "python -m pip",
+        }
     return {
-        "available": result[0],
+        "available": True,
         "path": str(Path(sys.executable).resolve()),
-        "version": _extract_version(result[1]),
-        "version_output": result[1],
+        "version": version,
+        "version_output": f"pip {version}",
         "invocation": "python -m pip",
+    }
+
+
+def _probe_command_presence(
+    candidates: tuple[tuple[str, ...], ...],
+) -> dict[str, Any]:
+    """Report command presence without executing host binaries."""
+    for candidate in candidates:
+        executable = shutil.which(candidate[0])
+        if executable is not None:
+            return {
+                "available": True,
+                "path": str(Path(executable).resolve()),
+                "version": "",
+                "version_output": "",
+                "version_probe_ok": False,
+            }
+    return {
+        "available": False,
+        "path": "",
+        "version": "",
+        "version_output": "",
+        "version_probe_ok": False,
     }
 
 

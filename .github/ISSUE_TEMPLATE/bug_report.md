@@ -1,24 +1,16 @@
 ---
-name: Bug Report
-about: Report a bug in Nous Runtime
+name: Bug
+about: Reproducible APEIR Runtime defect (no private security details)
 title: "[Bug] "
 labels: bug
 ---
 
-**Describe the bug**
-What happened and what did you expect?
+Version/Distribution SHA, OS, Node/Provider type:
+Expected behavior and actual result:
+Minimal reproduction and redacted evidence:
+Effect certainty (occurred / did not occur / UNKNOWN):
+Recovery attempted and whether duplicate execution occurred:
+Baseline or new regression:
 
-**To Reproduce**
-Steps:
-1. Run `nous ...`
-2. See error
-
-**Environment**
-- OS: [e.g. Windows 11, Ubuntu 24.04]
-- Python: [e.g. 3.11.4]
-- Nous version: [e.g. 1.0.0]
-
-**Output of `nous doctor`**
-```
-(paste here)
-```
+Do not include secrets, private runtime state or undisclosed vulnerability details.
+Use SECURITY.md for private disclosure.

@@ -1,4 +1,4 @@
-# Component Dependencies — Nous Runtime
+# Component Dependencies — APEIR Runtime
 
 > **What depends on what. Circular dependencies. Layering violations.**
 > **Last updated:** 2026-08-06

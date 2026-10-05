@@ -1,9 +1,17 @@
-# Security Boundary — Nous Runtime
+# Security Boundary — APEIR Runtime
 
 > **Where trust changes. What crosses boundaries. What must be verified.**
-> **Last updated:** 2026-08-28
+> **Last updated:** 2026-10-05
 
 ---
+
+## Scope and current authority
+
+This document describes trust crossings. The authoritative policy and current
+Operation admission contract are in [Security Contract](SECURITY_CONTRACT.md);
+execution scopes and state owners are in [Distribution boundary](DISTRIBUTION.md)
+and [State Ownership](STATE_OWNERSHIP.md). Trust labels below describe assumptions,
+not permission grants or an alternative approval system.
 
 ## Trust Zones
 
@@ -74,7 +82,13 @@
 - High-risk actions require explicit human approval
 - No shell execution without capability grant
 
-## P0–P4 Hardening Status
+## Recorded P0–P4 hardening reference
+
+These migration notes describe previously recorded host checks, not the current
+milestone acceptance result. Current SDK/Work validation and the visible local
+baseline failures are recorded in [Developer Platform](../development/DEVELOPER_PLATFORM.md).
+Missing locked native binaries and physical-device qualification remain explicit
+acceptance items; the notes below do not substitute for those checks.
 
 1. **P0 — governed execution complete:** production gateways use NKI/Kernel by default and fail closed; direct provider execution is restricted to explicit compatibility/test callers.
 2. **P0 — shell boundary complete:** Remote Agent and `brain_exec` execute only through the designated strict sandbox path; legacy local execution is disabled by default.
@@ -86,6 +100,69 @@
 ## Residual Risks and Compatibility Boundaries
 
 - `ModelGateway(use_nki=False)` and the legacy `ExecutionSandbox` compatibility path remain available for explicit isolated compatibility/tests; product construction paths must not select them implicitly.
-- The bundled sidecars target Windows ARM64. An AMD64 release requires rebuilding/staging native sidecars and updating the component lock.
+- Native bundles must stage the architecture-specific binaries required by the existing component lock; missing artifacts remain a qualification blocker.
 - The current host lacks Visual Studio C++ Build Tools and Windows SDK libraries, so Rust link/test and Tauri native compilation must be rerun after installing that prerequisite.
 - Migration checksums describe the immutable pre-development transfer snapshot and are expected to differ after P0–P4 source changes.
+
+## M3.4-A governed Reality boundary
+
+The authoritative [Security Contract](SECURITY_CONTRACT.md#m34-a-operation-governance-audit)
+records the repository-wide REUSE / EXTEND / MISSING audit and deterministic
+Operation policy. The existing Gate, Broker and GovernanceStore own approvals
+and leases. Human authority comes from the existing trusted local CLI owner
+boundary, with a nonserialized context attestation; Work arguments and model
+claims cannot establish that authority. API bearer identity remains a service
+identity and cannot approve these Operations. Wider scope issuance is trusted
+runtime infrastructure, while the human approval surface offers only Once/Deny.
+
+Workflow pauses before scheduling; the actual Node effect boundary reloads and
+consumes authority. The shared local GovernanceStore transaction orders grant
+revocation against admission; DeviceRegistry lifecycle is freshly checked before
+the effect. Arbitrary host-file tampering and remote distributed revocation
+consensus are outside this local simulation gate. Node, controller and approval
+control plane in this slice use the same durable governance authority; deploying
+independent remote governance stores would require a separately authenticated
+control-plane protocol and is not qualified here.
+
+The firmware acceptance runs through signed Distributed Work on the existing
+simulated Reality Node path. It does not exercise a physical bootloader,
+credential broker, or Rust Kernel Effect Gate/StepCommit. Kernel remains pinned
+to `87fd1b2ff28ef14ab1a515a58162592b452fda2e`. M3.3-A PASS and M3.3-B PASS remain
+Distribution qualifications; M3.3-C Real Hardware Acceptance is PENDING.
+M3.4-B now extends this Distribution boundary with scoped credential brokerage;
+the historical M3.4-A acceptance above did not exercise it.
+
+## M3.4-B credential execution boundary
+
+The [Security Contract](SECURITY_CONTRACT.md#m34-b-credential-governance-audit)
+records the credential/security REUSE / EXTEND / MISSING audit. SecretHandle
+reuses Kernel SecretRef. The existing Gate and GovernanceStore authorize and
+audit one delivery to an admitted Node Work; providers receive a short-lived
+CredentialContext rather than storage access. Handle and delivery revocation
+are durable. Node journals prevent effect replay during recovery; fresh
+verification reads are independently authorized without mutation credentials.
+
+The protected vault requires a stable externally supplied master key. Tests use
+deterministic fake secrets and scan runtime/persisted outputs; no Cloud test uses
+a real device credential. Central redaction protects cooperative execution
+outputs, not malicious arbitrary code running as the host owner. Shared local
+governance, existing legacy provider credential configuration and Kernel/NKI
+compatibility boundaries remain explicit. Remote secret transport, identity
+attestation and physical hardware qualification are not claimed.
+
+Approval list/detail and Once/Deny backend operations reuse ApprovalBroker.
+Existing API bearer authentication identifies a service and cannot approve
+high-risk Operations as a human. This records the M3.4-B boundary; M3.5 subsequently
+adds the verified remote-human contract below. Real IdP deployment qualification
+remains pending, while the trusted local owner CLI remains supported.
+
+
+## M3.5 remote-human control surface
+
+See the [Security Contract](SECURITY_CONTRACT.md#m35-remote-human-boundary) and
+[Control Plane specification](CONTROL_CENTER_SPEC.md). Trusted host enrollment
+selects the external IdP and explicit permission policy. Verified human sessions
+extend the existing Governance boundary; API service bearers remain services.
+Protected cookies, durable replay binding and transaction-time revalidation
+prevent serialized identity claims from upgrading themselves to approval.
+No native, external IdP or physical-device qualification is implied.

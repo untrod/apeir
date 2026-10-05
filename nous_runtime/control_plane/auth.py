@@ -24,6 +24,8 @@ import stat
 import tempfile
 from typing import Any
 
+from nous_runtime.security.private_files import restrict_owner_only_file
+
 log = logging.getLogger("nous.control_plane.auth")
 
 
@@ -48,111 +50,12 @@ def _windows_acl_identity() -> str:
 
 def _restrict_token_permissions(path: str) -> None:
     """Restrict a token file to the current OS identity or fail closed."""
-    if os.name != "nt":
-        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
-        mode = stat.S_IMODE(os.stat(path).st_mode)
-        if mode & (stat.S_IRWXG | stat.S_IRWXO):
-            raise PermissionError(f"session token permissions are too broad: {mode:o}")
-        return
-
-    _set_owner_only_windows_acl(path)
+    restrict_owner_only_file(path, subject="session token")
 
 
 def _set_owner_only_windows_acl(path: str) -> None:
-    """Apply a protected current-user-only DACL through native Windows APIs."""
-    import ctypes
-    from ctypes import wintypes
-
-    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
-    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-    kernel32.CloseHandle.restype = wintypes.BOOL
-    kernel32.LocalFree.argtypes = [wintypes.HLOCAL]
-    kernel32.LocalFree.restype = wintypes.HLOCAL
-    advapi32.OpenProcessToken.argtypes = [
-        wintypes.HANDLE,
-        wintypes.DWORD,
-        ctypes.POINTER(wintypes.HANDLE),
-    ]
-    advapi32.OpenProcessToken.restype = wintypes.BOOL
-    advapi32.GetTokenInformation.argtypes = [
-        wintypes.HANDLE,
-        ctypes.c_int,
-        wintypes.LPVOID,
-        wintypes.DWORD,
-        ctypes.POINTER(wintypes.DWORD),
-    ]
-    advapi32.GetTokenInformation.restype = wintypes.BOOL
-    advapi32.ConvertSidToStringSidW.argtypes = [
-        wintypes.LPVOID,
-        ctypes.POINTER(wintypes.LPWSTR),
-    ]
-    advapi32.ConvertSidToStringSidW.restype = wintypes.BOOL
-    advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
-        wintypes.LPCWSTR,
-        wintypes.DWORD,
-        ctypes.POINTER(wintypes.LPVOID),
-        ctypes.POINTER(wintypes.DWORD),
-    ]
-    advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype = wintypes.BOOL
-    advapi32.SetFileSecurityW.argtypes = [
-        wintypes.LPCWSTR,
-        wintypes.DWORD,
-        wintypes.LPVOID,
-    ]
-    advapi32.SetFileSecurityW.restype = wintypes.BOOL
-    token = wintypes.HANDLE()
-    token_query = 0x0008
-    token_user_class = 1
-    if not advapi32.OpenProcessToken(
-        kernel32.GetCurrentProcess(), token_query, ctypes.byref(token)
-    ):
-        raise ctypes.WinError(ctypes.get_last_error())
-    sid_text = wintypes.LPWSTR()
-    descriptor = wintypes.LPVOID()
-    try:
-        required = wintypes.DWORD()
-        advapi32.GetTokenInformation(
-            token, token_user_class, None, 0, ctypes.byref(required)
-        )
-        if not required.value:
-            raise ctypes.WinError(ctypes.get_last_error())
-        buffer = ctypes.create_string_buffer(required.value)
-        if not advapi32.GetTokenInformation(
-            token,
-            token_user_class,
-            buffer,
-            required,
-            ctypes.byref(required),
-        ):
-            raise ctypes.WinError(ctypes.get_last_error())
-        sid_pointer = ctypes.cast(buffer, ctypes.POINTER(wintypes.LPVOID))[0]
-        if not advapi32.ConvertSidToStringSidW(
-            sid_pointer, ctypes.byref(sid_text)
-        ):
-            raise ctypes.WinError(ctypes.get_last_error())
-        sddl = f"D:P(A;;FA;;;{sid_text.value})"
-        if not advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            sddl, 1, ctypes.byref(descriptor), None
-        ):
-            raise ctypes.WinError(ctypes.get_last_error())
-        dacl_security_information = 0x00000004
-        protected_dacl_security_information = 0x80000000
-        if not advapi32.SetFileSecurityW(
-            os.path.abspath(path),
-            dacl_security_information | protected_dacl_security_information,
-            descriptor,
-        ):
-            raise ctypes.WinError(ctypes.get_last_error())
-    except OSError as exc:
-        raise PermissionError(f"could not restrict the session token ACL: {exc}") from exc
-    finally:
-        if descriptor:
-            kernel32.LocalFree(descriptor)
-        if sid_text:
-            kernel32.LocalFree(sid_text)
-        kernel32.CloseHandle(token)
+    """Compatibility wrapper for the shared owner-only file policy."""
+    restrict_owner_only_file(path, subject="session token")
 
 
 class ControlPlaneAuth:
@@ -286,6 +189,7 @@ CORS_ALLOWED_HEADERS = [
     "X-Request-Id",
     "X-Correlation-Id",
     "X-Idempotency-Key",
+    "X-Control-Nonce",
 ]
 CORS_MAX_AGE = 3600
 
@@ -295,11 +199,29 @@ def add_cors_headers(
 ):
     """Add CORS headers to an HTTP response."""
     origin = request_origin or "tauri://localhost"
+    # Explicit host-owned deployment configuration, never request-supplied trust.
+    import json
+    from urllib.parse import urlsplit
+
+    configured_origins = json.loads(os.environ.get("NOUS_CONTROL_ORIGINS", "[]"))
+    if not isinstance(configured_origins, list) or any(
+        not isinstance(item, str)
+        or not item.startswith("https://")
+        or "*" in item
+        or not urlsplit(item).hostname
+        or urlsplit(item).username
+        or urlsplit(item).password
+        or urlsplit(item).path
+        or urlsplit(item).query
+        or urlsplit(item).fragment
+        for item in configured_origins
+    ):
+        raise ValueError("Remote console origins must be explicit HTTPS origins")
 
     # Wildcard entries match a numeric port only. Prefix-only matching would
     # incorrectly allow hosts such as localhost.example.com.
     allowed = False
-    for allowed_origin in CORS_ALLOWED_ORIGINS:
+    for allowed_origin in [*CORS_ALLOWED_ORIGINS, *configured_origins]:
         if allowed_origin.endswith(":*"):
             prefix = allowed_origin[:-1]
             if origin.startswith(prefix) and origin[len(prefix) :].isdigit():

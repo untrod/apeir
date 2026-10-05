@@ -8,9 +8,9 @@ integration testing without a commercial support or response-time commitment.
 
 1. Run `apeir doctor`, `apeir status`, and `apeir models doctor`. The legacy
    `nous` command remains available during the compatibility window.
-2. Review the [user documentation](docs/user/README.md),
-  [troubleshooting guide](docs/user/getting-started/TROUBLESHOOTING.md), and
-  [known limitations](docs/release/KNOWN_LIMITATIONS.md).
+2. Review the [user documentation](docs/operations/README.md),
+  [troubleshooting guide](docs/operations/getting-started/TROUBLESHOOTING.md), and
+  [known limitations](docs/acceptance/KNOWN_LIMITATIONS.md).
 3. Search existing issues.
 
 For a reproducible non-security defect, include the APEIR version, operating

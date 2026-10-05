@@ -61,6 +61,13 @@ from nous_runtime.governance.runtime_mode import (
     resolve_runtime_mode,
     should_fail_closed,
 )
+from nous_runtime.governance.operation_contracts import (
+    CapabilityGrant,
+    GovernanceDecision,
+    GovernanceRequest,
+    GrantScope,
+    Policy,
+)
 
 _store_instance: GovernanceStore | None = None
 _store_lock = Lock()
@@ -77,6 +84,11 @@ def get_store() -> GovernanceStore:
 
 
 __all__ = [
+    "CapabilityGrant",
+    "GovernanceDecision",
+    "GovernanceRequest",
+    "GrantScope",
+    "Policy",
     "ApprovalBinding",
     "CanonicalAction",
     "EffectGate",

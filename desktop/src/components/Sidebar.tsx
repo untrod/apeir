@@ -7,11 +7,12 @@ import React from "react";
 import { colors, typo, radius, space } from "../design";
 import { useTheme } from "../theme";
 
-export type NavPage = "chat" | "tasks" | "develop" | "documents" | "environments" | "simulations" | "nodes" | "models" | "workspace" | "settings";
+export type NavPage = "operations" | "chat" | "tasks" | "develop" | "documents" | "environments" | "simulations" | "nodes" | "models" | "workspace" | "settings";
 
 interface NavItem { page: NavPage; label: string; short: string; }
 
 const NAV_ITEMS: NavItem[] = [
+  { page: "operations", label: "Operations", short: "O" },
   { page: "chat",      label: "Chat",      short: "C" },
   { page: "tasks",     label: "Tasks",     short: "T" },
   { page: "develop",   label: "Develop",   short: "D" },

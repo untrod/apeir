@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nous-provider-sdk"
-version = "1.0.0b1"
-description = "Provider ABI SDK for Nous Foundation"
+version = "1.0.0b2"
+description = "APEIR public Provider and heterogeneous runtime contracts"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
-dependencies = ["nous-runtime>=2.0.0rc3"]
+dependencies = ["apeir-distribution>=0.1.0rc1,<0.2"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["nous_provider"]

@@ -15,11 +15,12 @@ def dashboard():
                 {"task_id": "run-2", "status": "waiting_approval"},
             ],
             "observations": [{"observation_id": "event-1"}],
-            "devices": [
+            "devices": [{"device_id": "actuator-1", "device_type": "actuator"}],
+            "nodes": [
                 {
-                    "device_id": "node-1",
+                    "node_id": "node-1",
                     "name": "Laptop",
-                    "device_type": "desktop",
+                    "node_type": "desktop",
                     "online": True,
                     "capabilities": ["code"],
                     "last_seen": "now",
@@ -55,6 +56,7 @@ def test_dashboard_is_bounded_server_authoritative_and_redacted():
             "last_seen": "now",
         }
     ]
+    assert data["devices"][0]["device_id"] == "actuator-1"
     assert "must-not-leak" not in str(data)
     assert len(data["missions"]) <= data["limits"]["missions"]
     assert len(data["timeline"]) <= data["limits"]["timeline"]

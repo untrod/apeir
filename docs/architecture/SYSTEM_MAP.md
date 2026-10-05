@@ -1,4 +1,4 @@
-# Nous Foundation system map
+# APEIR Foundation system map
 
 This is the canonical high-level map. Detailed compatibility contracts are in
 `spec/contracts/v1`.

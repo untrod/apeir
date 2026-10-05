@@ -21,16 +21,22 @@ workspace paths, device identities, and Runtime state.
 ## Security model
 
 APEIR treats identity, authorization, approval, delegation, credentials, and
-audit records as Runtime boundaries. Provider and connector credentials must
-use environment or secret-store references. The Server Runtime remains
+audit records as Runtime boundaries. Agents and plans use SecretHandle identifiers; credentials resolve only at the
+authorized execution boundary with scoped, expiring leases and centralized
+redaction. Legacy provider configuration may reference environment/secret stores,
+but raw values must never enter ordinary Work, evidence, events or audit. The Server Runtime remains
 authoritative; Desktop, IDE, mobile, terminal, and device clients are control
 surfaces.
 
 APEIR is not a complete operating-system sandbox. Operators remain responsible
 for process isolation, network controls, provider policies, and data governance.
-Review the [threat model](docs/security/THREAT_MODEL.md),
-[trust boundaries](docs/security/TRUST_BOUNDARIES.md), and
-[known limitations](docs/release/KNOWN_LIMITATIONS.md) before deployment.
+Review the [threat model](docs/architecture/security/THREAT_MODEL.md),
+[trust boundaries](docs/architecture/security/TRUST_BOUNDARIES.md), and
+[known limitations](docs/acceptance/KNOWN_LIMITATIONS.md) before deployment.
+
+Component-lock contracts passing do not establish native binary integrity.
+Actual SHA-256 verification is required for verified releases. Physical and
+provider qualification limits are recorded in [ROADMAP](ROADMAP.md).
 
 ## Disclosure
 

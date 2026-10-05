@@ -12,6 +12,9 @@ import subprocess
 import tempfile
 import threading
 import time
+from collections.abc import Callable
+
+from nous_runtime.core.redaction import redact_sensitive_text
 
 from nous_runtime.agents.adapters.artifact_collector import ArtifactCollector
 from nous_runtime.agents.adapters.environment_filter import EnvironmentFilter
@@ -50,8 +53,12 @@ class ProcessSupervisor:
         descriptor: AgentDescriptor,
         *,
         grace_period_seconds: float = 5.0,
+        before_spawn: Callable[[], None] | None = None,
+        execution_runner: Callable | None = None,
     ):
         self._descriptor = descriptor
+        self._before_spawn = before_spawn
+        self._execution_runner = execution_runner
         self._grace_period = grace_period_seconds
         self._process: subprocess.Popen[bytes] | None = None
         self._state = AgentProcessState.CREATED
@@ -87,16 +94,16 @@ class ProcessSupervisor:
         before_snapshot = ArtifactCollector.snapshot_workspace(context.workspace_path)
 
         environment_values = dict(context.environment)
-        environment_values.update({
-            "NOUS_RUN_ID": run_id,
-            "NOUS_TASK_ID": request.task_id,
-            "NOUS_WORKSPACE": context.workspace_path,
-        })
+        environment_values.update(
+            {
+                "NOUS_RUN_ID": run_id,
+                "NOUS_TASK_ID": request.task_id,
+                "NOUS_WORKSPACE": context.workspace_path,
+            }
+        )
         env = env_filter.build_env(extra=environment_values)
         request_environment = {
-            key: env[key]
-            for key in context.environment
-            if key in env
+            key: env[key] for key in context.environment if key in env
         }
 
         request_path = ""
@@ -114,7 +121,7 @@ class ProcessSupervisor:
                 agent_id=request.agent_id,
                 status="FAILED",
                 exit_code=-1,
-                errors=(str(exc),),
+                errors=(redact_sensitive_text(str(exc)),),
             )
 
         # Phase 4: Execute
@@ -133,6 +140,10 @@ class ProcessSupervisor:
                 )
             )
         except Exception as exc:
+            from nous_runtime.node_runtime.service import WorkloadResponseLost
+
+            if isinstance(exc, WorkloadResponseLost):
+                raise
             _log.exception("Agent process failed: %s", exc)
             self._state = AgentProcessState.FAILED
             return AgentRunResult(
@@ -141,8 +152,8 @@ class ProcessSupervisor:
                 agent_id=request.agent_id,
                 status="FAILED",
                 exit_code=-1,
-                errors=(str(exc),),
-                raw_output=limiter.getvalue_text(),
+                errors=(redact_sensitive_text(str(exc)),),
+                raw_output=redact_sensitive_text(limiter.getvalue_text()),
             )
         finally:
             if request_path:
@@ -273,6 +284,23 @@ class ProcessSupervisor:
     ) -> tuple[int, str, str, bool, AgentResourceUsage]:
         """Execute the subprocess with timeout and output capture."""
         self._state = AgentProcessState.RUNNING
+        if self._execution_runner is not None:
+            if self._before_spawn is not None:
+                self._before_spawn()
+            result = self._execution_runner(cmd, env, cwd, timeout_ms)
+            stdout_limiter.write(result.stdout.encode("utf-8"))
+            stdout_text = redact_sensitive_text(stdout_limiter.getvalue_text())
+            stderr_limiter = OutputLimiter(limit_bytes=stdout_limiter.limit)
+            stderr_limiter.write(result.stderr.encode("utf-8"))
+            stderr_text = redact_sensitive_text(stderr_limiter.getvalue_text())
+            parser.parse_stream(stdout_text)
+            return (
+                result.exit_code if result.ok else (result.exit_code or -1),
+                stdout_text,
+                stderr_text,
+                result.timed_out,
+                AgentResourceUsage(),
+            )
 
         popen_options: dict[str, object] = {}
         if os.name == "nt":
@@ -281,6 +309,8 @@ class ProcessSupervisor:
             popen_options["start_new_session"] = True
 
         try:
+            if self._before_spawn is not None:
+                self._before_spawn()
             self._process = subprocess.Popen(
                 cmd,
                 env=env,
@@ -291,7 +321,13 @@ class ProcessSupervisor:
                 **popen_options,
             )
         except FileNotFoundError:
-            return -1, "", f"Executable not found: {cmd[0]}", False, AgentResourceUsage()
+            return (
+                -1,
+                "",
+                f"Executable not found: {cmd[0]}",
+                False,
+                AgentResourceUsage(),
+            )
         except PermissionError as exc:
             return -1, "", f"Permission denied: {exc}", False, AgentResourceUsage()
 
@@ -311,17 +347,21 @@ class ProcessSupervisor:
                 self._terminate_process_tree(force=True)
                 stdout_bytes, stderr_bytes = self._process.communicate(timeout=5.0)
 
-        exit_code = self._process.returncode if self._process.returncode is not None else -1
+        exit_code = (
+            self._process.returncode if self._process.returncode is not None else -1
+        )
 
         # Apply output limits
         stdout_limiter.write(stdout_bytes or b"")
         stdout_text = stdout_limiter.getvalue_text()
+        stdout_text = redact_sensitive_text(stdout_text)
 
         stderr_text = ""
         if stderr_bytes:
             stderr_limit = OutputLimiter(limit_bytes=stdout_limiter.limit)
             stderr_limit.write(stderr_bytes)
             stderr_text = stderr_limit.getvalue_text()
+            stderr_text = redact_sensitive_text(stderr_text)
 
         # Parse structured events from stdout
         parser.parse_stream(stdout_text)
@@ -334,7 +374,9 @@ class ProcessSupervisor:
     def _graceful_terminate(self) -> None:
         if self._process is None or self._process.poll() is not None:
             return
-        _log.info("Gracefully terminating agent process tree (pid=%s)", self._process.pid)
+        _log.info(
+            "Gracefully terminating agent process tree (pid=%s)", self._process.pid
+        )
         self._terminate_process_tree(force=False)
 
     def _terminate_process_tree(self, *, force: bool) -> None:
@@ -369,7 +411,9 @@ class ProcessSupervisor:
 
     def _measure_resources(self) -> AgentResourceUsage:
         """Measure resource usage of the completed process."""
-        wall_time = int((self._end_time - self._start_time) * 1000) if self._end_time else 0
+        wall_time = (
+            int((self._end_time - self._start_time) * 1000) if self._end_time else 0
+        )
         return AgentResourceUsage(wall_time_ms=wall_time)
 
     @staticmethod
@@ -414,8 +458,7 @@ class ProcessSupervisor:
     ) -> str:
         if status == "COMPLETED":
             return (
-                f"Run completed in {duration_ms}ms. "
-                f"{len(changed_files)} files changed."
+                f"Run completed in {duration_ms}ms. {len(changed_files)} files changed."
             )
         elif status == "FAILED":
             return f"Run failed with exit code {exit_code}."

@@ -50,16 +50,27 @@ class RuntimeDashboard:
             "decisions": [],
             "nodes": [
                 {
-                    "node_id": item.get("device_id", ""),
+                    "node_id": item.get("node_id", ""),
                     "name": item.get("name", ""),
-                    "type": item.get("device_type", "unknown"),
+                    "type": item.get("node_type", "unknown"),
                     "online": bool(item.get("online", False)),
                     "capabilities": list(item.get("capabilities") or ()),
                     "last_seen": item.get("last_seen", ""),
                 }
+                for item in list(inspector.get("nodes") or ())[:50]
+            ],
+            "devices": [
+                {
+                    "device_id": item.get("device_id", ""),
+                    "name": item.get("name", ""),
+                    "type": item.get("device_type", "unknown"),
+                    "online": bool(item.get("online", False)),
+                    "capabilities": list(item.get("capabilities") or ()),
+                }
                 for item in devices
             ],
-            "alerts": findings + [
+            "alerts": findings
+            + [
                 {"severity": "error", "component": "runtime", "message": str(error)}
                 for error in runtime_errors
             ],
@@ -118,7 +129,11 @@ class RuntimeDashboard:
         try:
             return loader()
         except Exception as exc:
-            return {"ok": False, "error": str(exc)} if isinstance(fallback, dict) else fallback
+            return (
+                {"ok": False, "error": str(exc)}
+                if isinstance(fallback, dict)
+                else fallback
+            )
 
 
 def control_center_snapshot(root: str | Path = ".") -> dict[str, Any]:

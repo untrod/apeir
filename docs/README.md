@@ -1,30 +1,15 @@
-# APEIR Distribution Documentation
+# APEIR documentation
 
-This documentation is organized around the needs of users, integrators,
-contributors, security reviewers, and release maintainers.
+The [roadmap](../ROADMAP.md) is the sole current milestone-status source.
 
-## Primary sections
-
-| Section | Purpose |
+| Domain | Responsibility |
 | --- | --- |
-| [User](user/README.md) | Installation, configuration, operation, troubleshooting, and common workflows |
-| [Architecture](architecture/README.md) | Runtime boundaries, state ownership, protocols, execution, models, and control plane |
-| [Development](development/README.md) | Contributor setup, APIs, extensions, compatibility, and development standards |
-| [Security](security/README.md) | Threat model, trust boundaries, supply chain, abuse cases, and release review |
-| [Release](release/README.md) | Policies, checklists, known limitations, and validation evidence |
-| [Roadmap](roadmap/README.md) | Current priorities and long-term direction |
+| [Architecture](architecture/README.md) | Five canonical contracts, scoped security, protocol and implementation references |
+| [Operations](operations/README.md) | Install, configure, run, recover, Nodes and Devices |
+| [Development](development/README.md) | SDK, conformance, packaging and contributor interfaces |
+| [Acceptance](acceptance/README.md) | Dated evidence, limitations and release discipline |
+| [RFCs](rfc/README.md) | Proposed contracts and architecture decisions; not acceptance claims |
 
-## Technical references
-
-- [Runtime specifications](specs/)
-- [Protocol specifications](protocol/)
-- [Deployment references](user/deployment/)
-- [Model routing](architecture/intelligence/PROVIDER_ROUTING.md)
-- [Configuration reference](user/configuration/CONFIG_REFERENCE.md)
-
-## Current release
-
-APEIR Distribution `0.1.0-rc1` is the first public release candidate. Start
-with the [public release checklist](release/PUBLIC_RELEASE_CHECKLIST.md),
-[release runbook](release/RELEASE_RUNBOOK.md), and
-[known limitations](release/KNOWN_LIMITATIONS.md).
+Begin with the [constitution](architecture/DISTRIBUTION.md). Historical evidence
+retains its original revision/scope; Git history and immutable checkpoint tags
+preserve obsolete designs without a documentation archive.

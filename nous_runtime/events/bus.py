@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from nous_runtime.core.events import EventEnvelope
+from nous_runtime.core.redaction import redact_sensitive_data
 
 _log = logging.getLogger("nous.events.bus")
 
@@ -35,6 +36,7 @@ DEFAULT_PERSIST_INTERVAL_SEC = 1.0
 @dataclass
 class BusMetrics:
     """Runtime metrics for the event bus."""
+
     events_published: int = 0
     events_dropped: int = 0
     events_persisted: int = 0
@@ -109,8 +111,8 @@ class RuntimeEventBus:
             event_id=event_id or f"evt_{uuid.uuid4().hex}",
             event_type=event_type,
             source=source,
-            payload=dict(payload or {}),
-            metadata=dict(metadata or {}),
+            payload=redact_sensitive_data(dict(payload or {})),
+            metadata=redact_sensitive_data(dict(metadata or {})),
         )
 
         with self._lock:
@@ -135,9 +137,7 @@ class RuntimeEventBus:
         """Publish multiple events atomically."""
         envelopes = []
         for event_type, payload in events:
-            envelopes.append(
-                self.publish(event_type, payload=payload, source=source)
-            )
+            envelopes.append(self.publish(event_type, payload=payload, source=source))
         return envelopes
 
     # Subscribe
@@ -162,7 +162,8 @@ class RuntimeEventBus:
             if len(listeners) >= self._max_listeners:
                 _log.warning(
                     "Listener limit reached for pattern '%s' (%d)",
-                    pattern, self._max_listeners,
+                    pattern,
+                    self._max_listeners,
                 )
                 return
             listeners.append(callback)
@@ -176,8 +177,7 @@ class RuntimeEventBus:
         with self._lock:
             if pattern in self._subscriptions:
                 self._subscriptions[pattern] = [
-                    cb for cb in self._subscriptions[pattern]
-                    if cb is not callback
+                    cb for cb in self._subscriptions[pattern] if cb is not callback
                 ]
 
     # Query
@@ -196,8 +196,9 @@ class RuntimeEventBus:
         self._ensure_db()
         if self._db is None:
             # Fall back to in-memory buffer
-            return self._query_buffer(event_type=event_type, domain=domain,
-                                      source=source, limit=limit)
+            return self._query_buffer(
+                event_type=event_type, domain=domain, source=source, limit=limit
+            )
 
         conditions = []
         params: list[Any] = []
@@ -235,13 +236,17 @@ class RuntimeEventBus:
         try:
             rows = self._db.execute(query_sql, params).fetchall()
         except sqlite3.OperationalError:
-            return self._query_buffer(event_type=event_type, domain=domain,
-                                      source=source, limit=limit)
+            return self._query_buffer(
+                event_type=event_type, domain=domain, source=source, limit=limit
+            )
 
         return [
             {
-                "event_id": r[0], "event_type": r[1], "source": r[2],
-                "timestamp": r[3], "payload": json.loads(r[4]) if r[4] else {},
+                "event_id": r[0],
+                "event_type": r[1],
+                "source": r[2],
+                "timestamp": r[3],
+                "payload": json.loads(r[4]) if r[4] else {},
                 "metadata": json.loads(r[5]) if r[5] else {},
             }
             for r in rows
@@ -321,9 +326,7 @@ class RuntimeEventBus:
                 "listener_calls": self._metrics.listener_calls,
                 "listener_failures": self._metrics.listener_failures,
                 "buffer_size": len(self._buffer),
-                "subscription_count": sum(
-                    len(v) for v in self._subscriptions.values()
-                ),
+                "subscription_count": sum(len(v) for v in self._subscriptions.values()),
                 "active_patterns": list(self._subscriptions.keys()),
                 "last_publish": self._metrics.last_publish_timestamp,
             }
@@ -358,7 +361,9 @@ class RuntimeEventBus:
                         self._metrics.listener_failures += 1
                         _log.debug(
                             "Listener failed for %s (pattern=%s)",
-                            envelope.event_type, pattern, exc_info=True,
+                            envelope.event_type,
+                            pattern,
+                            exc_info=True,
                         )
 
     @staticmethod
@@ -484,12 +489,11 @@ class RuntimeEventBus:
         except Exception as e:
             _log.warning("Failed to persist %d events: %s", len(batch), e)
             # Re-queue failed events (up to buffer limit)
-            self._pending_persist = (batch + self._pending_persist)[
-                -self._max_buffer:
-            ]
+            self._pending_persist = (batch + self._pending_persist)[-self._max_buffer :]
 
     def _start_persist_worker(self) -> None:
         """Start background thread that periodically flushes pending events."""
+
         def _worker() -> None:
             while not self._shutdown_flag.wait(timeout=self._persist_interval):
                 self._flush_pending()

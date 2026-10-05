@@ -210,6 +210,22 @@ class CTKRunner:
                 ],
             )
 
+        names = [test.name for test in suite.tests]
+        if len(set(names)) != len(names):
+            return SuiteResult(
+                suite_id=suite.suite_id,
+                interface=suite.interface,
+                version=suite.version,
+                level=self.target_level,
+                errors=1,
+                results=[
+                    TestResult(
+                        suite_id,
+                        TestStatus.ERROR,
+                        error="Conformance test names must be unique",
+                    )
+                ],
+            )
         started = time.monotonic()
         results: list[TestResult] = []
 
@@ -247,6 +263,10 @@ class CTKRunner:
             test_start = time.monotonic()
             try:
                 result = test.fn()
+                if not isinstance(result, TestResult) or result.name != test.name:
+                    raise ValueError(
+                        "Conformance result must identify its configured test"
+                    )
                 result.duration_ms = (time.monotonic() - test_start) * 1000
                 results.append(result)
             except Exception as exc:
@@ -271,16 +291,15 @@ class CTKRunner:
             for t in suite.tests
             if t.required and t.level.value <= self.target_level.value
         ]
-        required_results = [r for r in results if r.status != TestStatus.SKIP]
-        has_target_backed_results = any(
-            test.fn is not None
-            for test in suite.tests
-            if test.level.value <= self.target_level.value
-        )
-        certified = has_target_backed_results and len(required_results) >= len(required_tests) and all(
-            r.status == TestStatus.PASS
-            for r in required_results
-            if any(t.name == r.name and t.required for t in required_tests)
+        results_by_name = {result.name: result for result in results}
+        has_target_backed_results = any(test.fn is not None for test in required_tests)
+        certified = (
+            bool(required_tests)
+            and has_target_backed_results
+            and all(
+                results_by_name[test.name].status == TestStatus.PASS
+                for test in required_tests
+            )
         )
 
         return SuiteResult(
@@ -377,9 +396,12 @@ class CTKRunner:
             print(f"  Pass Rate: {sr.pass_rate:.0%}")
             print(f"  Duration: {sr.duration_ms:.0f}ms")
             for r in sr.results:
-                icon = {"PASS": "[PASS]", "FAIL": "[FAIL]", "SKIP": "[SKIP]", "ERROR": "[ERROR]"}[
-                    r.status.value.upper()
-                ]
+                icon = {
+                    "PASS": "[PASS]",
+                    "FAIL": "[FAIL]",
+                    "SKIP": "[SKIP]",
+                    "ERROR": "[ERROR]",
+                }[r.status.value.upper()]
                 print(f"    {icon} {r.name} ({r.duration_ms:.0f}ms)")
                 if r.detail:
                     print(f"       {r.detail}")

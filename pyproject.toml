@@ -7,7 +7,7 @@ name = "apeir-distribution"
 version = "0.1.0-rc1"
 description = "APEIR distribution for governed heterogeneous execution across models, software, nodes, and devices."
 readme = "README.md"
-license = "Apache-2.0"
+license = { text = "Apache-2.0" }
 authors = [
     {name = "Mao Yi"}
 ]
@@ -32,6 +32,9 @@ dependencies = [
     "pyyaml>=6.0",
     "jsonschema>=4.20",
     "pydantic>=2.0,<3",
+    "PyJWT>=2.10,<3",
+    "requests>=2.32,<3; platform_system != 'Windows' or platform_machine != 'ARM64'",
+    "authlib>=1.6,<2; platform_system != 'Windows' or platform_machine != 'ARM64'",
     "cryptography>=42,<47; platform_system != 'Windows' or platform_machine != 'ARM64'",
     "websockets>=14,<18",
     "python-docx>=1.0,<2",
@@ -47,6 +50,7 @@ Repository = "https://github.com/untrod/apeir.git"
 Issues = "https://github.com/untrod/apeir/issues"
 Changelog = "https://github.com/untrod/apeir/blob/main/CHANGELOG.md"
 [project.optional-dependencies]
+reality = ["pyserial>=3.5,<4"]
 # Heavy AI (Tier 1 only: amd64, arm64)
 ai-full = [
     "chromadb>=0.4",
@@ -122,6 +126,7 @@ ui = ["rich>=13.0"]
 [project.scripts]
 apeir = "nous_runtime.cli.main:app"
 apeir-node = "nous_runtime.node_runtime.cli:main"
+apeir-controller = "nous_runtime.node_runtime.relay_cli:main"
 apeir-relay = "nous_runtime.node_runtime.relay_cli:main"
 apeir-remote-provider = "nous_runtime.node_runtime.remote_provider:main"
 nous = "nous_runtime.cli.main:app"

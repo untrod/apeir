@@ -46,6 +46,7 @@ import { DetailDrawer, type DrawerView } from "./components/DetailDrawer";
 import { Inspector } from "./components/Inspector";
 import { ConnectScreen } from "./components/ConnectScreen";
 import { ChatView } from "./components/ChatView";
+import { OperationsConsole } from "./components/OperationsConsole";
 import { TaskCenter } from "./components/TaskCenter";
 import { CommandPalette, createDefaultCommands } from "./components/CommandPalette";
 import { RuntimeCard, TaskCard } from "./components/RuntimeCard";
@@ -707,7 +708,7 @@ function AppShell() {
   const [fatalDiag, setFatalDiag] = useState<DiagnosticState | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [page, setPage] = useState<NavPage>("chat");
+  const [page, setPage] = useState<NavPage>("operations");
   const [drawer, setDrawer] = useState<DrawerView>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -918,6 +919,10 @@ function AppShell() {
     );
   }
 
+  if (page === "operations" && !("__TAURI_INTERNALS__" in window)) {
+    return <OperationsConsole />;
+  }
+
   if (bootstrapStatus.state !== "ready" && !connected) {
     return (
       <BootstrapScreen
@@ -966,6 +971,7 @@ function AppShell() {
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ flex: inspectorOpen ? "40%" : "1", overflow: "hidden", transition: "flex 0.3s ease" }}>
             {page === "chat" && <ChatView conversationId={activeConversationId} onConversationCreated={setActiveConversationId} onCardClick={handleEventClick} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} />}
+            {page === "operations" && <OperationsConsole />}
             {page === "tasks" && <TaskCenter onTaskClick={(id) => setDrawer({ kind: "task", taskId: id })} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} />}
             {page === "develop" && <DeveloperPlatform />}
             {page === "documents" && <DocumentWorkbench />}

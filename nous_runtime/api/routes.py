@@ -76,6 +76,30 @@ def _authentication_context(auth: dict[str, Any] | None, *, surface: str):
         return None
     token = str(auth.get("token") or "")
     headers = auth.get("headers") or {}
+    if isinstance(headers, dict):
+        from http.cookies import SimpleCookie, CookieError
+
+        cookie = SimpleCookie()
+        try:
+            cookie.load(str(headers.get("cookie") or headers.get("Cookie") or ""))
+        except CookieError:
+            return None
+        human_cookie = cookie.get("apeir_human")
+        human_bearer = _extract_bearer(
+            str(headers.get("authorization") or headers.get("Authorization") or "")
+        )
+        human_token = (
+            human_cookie.value
+            if human_cookie
+            else (human_bearer if human_bearer.startswith("hums_") else "")
+        )
+        if human_token:
+            from nous_runtime.control_plane.human_sessions import get_human_auth
+
+            try:
+                return get_human_auth().authenticate(human_token)
+            except PermissionError:
+                return None
     if not token and isinstance(headers, dict):
         token = str(headers.get("x-auth-token") or headers.get("X-Auth-Token") or "")
         if not token:
@@ -166,7 +190,9 @@ def handle_status() -> dict[str, Any]:
                 # signal when the desktop sidecar owns the service lifecycle.
                 "running": True,
                 "providers": providers,
-                "capabilities": capability_availability.get("registered", s.capabilities),
+                "capabilities": capability_availability.get(
+                    "registered", s.capabilities
+                ),
                 "capability_availability": capability_availability,
                 "packs": count_packs(),
                 "devices": s.devices,
@@ -471,7 +497,9 @@ def handle_get_artifact(artifact_id: str) -> dict[str, Any]:
 # Approvals API
 
 
-def handle_approval_action(request_id: str, action: str) -> dict[str, Any]:
+def handle_approval_action(
+    request_id: str, action: str, *, authorization_context=None
+) -> dict[str, Any]:
     """Approve or deny an approval request."""
     if action not in ("approve", "deny"):
         return err_response(
@@ -482,6 +510,23 @@ def handle_approval_action(request_id: str, action: str) -> dict[str, Any]:
         from nous_runtime.governance.broker import get_broker
 
         broker = get_broker()
+
+        record = broker._store.get_approval_request(request_id)
+        if record and record.get("operation_governance"):
+            from nous_runtime.governance.gate import get_gate
+
+            # The existing bearer channel authenticates a service, not a human.
+            # Never construct human authority from request body or approver text.
+            response = broker.respond_operation(
+                request_id, action, authorization_context, gate=get_gate()
+            )
+            return ok_response(
+                {
+                    "request_id": request_id,
+                    "action": action,
+                    "response": response.to_dict(),
+                }
+            )
 
         if action == "approve":
             response = broker.approve(
@@ -507,6 +552,11 @@ def handle_approval_action(request_id: str, action: str) -> dict[str, Any]:
         )
     except ImportError:
         return err_response("NOT_AVAILABLE", "Approval broker not available")
+    except PermissionError:
+        return err_response(
+            "NOUS_HUMAN_APPROVAL_REQUIRED",
+            "A trusted human approval channel is required",
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
@@ -1405,6 +1455,27 @@ def handle_approvals() -> dict[str, Any]:
     return ok_response({"approvals": get_broker().get_pending()})
 
 
+def handle_operation_approvals() -> dict[str, Any]:
+    from nous_runtime.governance.broker import get_broker
+    from nous_runtime.governance.gate import get_gate
+
+    return ok_response(
+        {"approvals": get_broker().list_operation_approvals(gate=get_gate())}
+    )
+
+
+def handle_operation_approval(request_id: str) -> dict[str, Any]:
+    from nous_runtime.governance.broker import get_broker
+    from nous_runtime.governance.gate import get_gate
+
+    try:
+        return ok_response(
+            get_broker().get_operation_approval(request_id, gate=get_gate())
+        )
+    except (ValueError, PermissionError):
+        return err_response("NOUS_APPROVAL_NOT_FOUND", "Operation approval unavailable")
+
+
 def handle_workflow_run(body: dict[str, Any]) -> dict[str, Any]:
     """Start a registered workflow through the existing Workflow Runtime."""
     try:
@@ -1600,6 +1671,8 @@ ROUTES = {
     ("GET", "/api/v1/artifacts/{artifact_id}"): handle_get_artifact,
     # Approvals API (v1)
     ("POST", "/api/v1/approvals/{request_id}/{action}"): handle_approval_action,
+    ("GET", "/api/v1/approvals"): handle_operation_approvals,
+    ("GET", "/api/v1/approvals/{request_id}"): handle_operation_approval,
     # Events API (v1) — SSE streaming
     ("GET", "/api/v1/events/stream"): handle_events_stream,
     # Model observations API
@@ -1712,6 +1785,19 @@ except ImportError:
     pass
 
 # Task Center routes — timeline, graph, artifacts, verification
+try:
+    from nous_runtime.control_plane.operations import OPERATIONS_ROUTES
+
+    ROUTES.update(OPERATIONS_ROUTES)
+    PUBLIC_ROUTES.update(
+        {
+            ("POST", "/api/v1/control/human/challenge"),
+            ("POST", "/api/v1/control/human/session"),
+        }
+    )
+except ImportError:
+    OPERATIONS_ROUTES = {}
+
 try:
     from nous_runtime.api.task_center_routes import TASK_CENTER_ROUTES
 
@@ -2173,6 +2259,32 @@ def route(
 
     try:
         authorization_context = _authentication_context(auth, surface=surface)
+        if (
+            authorization_context is not None
+            and authorization_context.authn_method == "oidc_pkce"
+            and method_upper in MUTATION_METHODS
+            and path
+            not in {
+                "/api/v1/control/human/challenge",
+                "/api/v1/control/human/session",
+                "/api/v1/control/human/nonce",
+            }
+        ):
+            from nous_runtime.control_plane.human_sessions import get_human_auth
+
+            headers = (auth or {}).get("headers") or {}
+            nonce = str(
+                headers.get("x-control-nonce") or headers.get("X-Control-Nonce") or ""
+            )
+            try:
+                get_human_auth().admit_request(
+                    authorization_context, nonce, method_upper, path, body
+                )
+            except PermissionError:
+                return err_response(
+                    "NOUS_CONTROL_REPLAY",
+                    "Human request is expired, replayed or scope-mismatched",
+                )
         request_params = dict(path_params)
         for name, value in (params or {}).items():
             if name in request_params and request_params[name] != value:
@@ -2190,7 +2302,29 @@ def route(
         )
         if governance_error:
             return governance_error
-        if body is not None and handler in {
+        if handler in OPERATIONS_ROUTES.values():
+            parameters = inspect.signature(handler).parameters
+            arguments = {}
+            if "body" in parameters:
+                arguments["body"] = body or {}
+            if "params" in parameters:
+                arguments["params"] = request_params
+            if "authorization_context" in parameters:
+                arguments["authorization_context"] = authorization_context
+            try:
+                result = handler(**arguments)
+            except PermissionError:
+                return err_response(
+                    "NOUS_FORBIDDEN",
+                    "Human identity, permission or authority binding is invalid",
+                )
+        elif handler is handle_approval_action:
+            result = handler(
+                request_params["request_id"],
+                request_params["action"],
+                authorization_context=authorization_context,
+            )
+        elif body is not None and handler in {
             handle_run_capability,
             handle_runtime_run,
             handle_chat_runtime,

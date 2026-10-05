@@ -21,6 +21,7 @@ class TestModuleImports:
             detect_hardware,
             ConsoleSetupWizard,
         )
+
         assert HardwareInfo is not None
         assert SetupConfig is not None
         assert detect_hardware is not None
@@ -32,6 +33,7 @@ class TestModuleImports:
             HealthChecker,
             create_default_checks,
         )
+
         assert HealthStatus is not None
         assert HealthChecker is not None
         assert create_default_checks is not None
@@ -42,6 +44,7 @@ class TestModuleImports:
             CrashRecovery,
             create_default_recovery,
         )
+
         assert CrashRecord is not None
         assert CrashRecovery is not None
         assert create_default_recovery is not None
@@ -51,6 +54,7 @@ class TestModuleImports:
             Subject,
             LearningAssistant,
         )
+
         assert Subject is not None
         assert LearningAssistant is not None
 
@@ -59,6 +63,7 @@ class TestModuleImports:
             Project,
             ProjectAssistant,
         )
+
         assert Project is not None
         assert ProjectAssistant is not None
 
@@ -72,6 +77,7 @@ class TestModuleImports:
                 stop_service,
                 status,
             )
+
             for command in (install, remove, start_service, stop_service, status):
                 assert command is not None
         except ImportError:
@@ -138,14 +144,17 @@ class TestBackwardCompatibility:
     def test_core_imports_still_work(self):
         """Core nous_runtime imports should be unchanged."""
         from nous_runtime import __version__
+
         assert __version__ is not None
 
         from nous_runtime.kernel.runtime import Runtime
+
         assert Runtime is not None
 
     def test_cli_module_still_loads(self):
         """The CLI module should still import cleanly."""
         from nous_runtime.cli.main import app
+
         assert app is not None
         # The app name should still be "nous"
         assert app.info.name == "nous"
@@ -153,6 +162,7 @@ class TestBackwardCompatibility:
     def test_provider_registry_unaffected(self):
         """Provider system should be unaffected by productization changes."""
         from nous_runtime.provider.registry import ProviderRegistry
+
         assert ProviderRegistry is not None
 
     def test_governance_unaffected(self):
@@ -162,6 +172,7 @@ class TestBackwardCompatibility:
             DelegationManager,
             ExecutionAuthorizationGate,
         )
+
         assert ApprovalManager is not None
         assert DelegationManager is not None
         assert ExecutionAuthorizationGate is not None
@@ -171,23 +182,23 @@ class TestDocFilesExist:
     """Verify all documentation files were created."""
 
     def test_repository_audit_exists(self):
-        path = Path("docs/release/PUBLIC_RELEASE_CHECKLIST.md")
+        path = Path("docs/acceptance/PUBLIC_RELEASE_CHECKLIST.md")
         assert path.is_file(), f"Expected {path} to exist"
 
     def test_user_guide_exists(self):
-        path = Path("docs/USER_GUIDE.md")
+        path = Path("docs/operations/USER_GUIDE.md")
         assert path.is_file(), f"Expected {path} to exist"
 
     def test_install_guide_exists(self):
-        path = Path("docs/INSTALL.md")
+        path = Path("docs/operations/INSTALLATION.md")
         assert path.is_file(), f"Expected {path} to exist"
 
     def test_architecture_doc_exists(self):
-        path = Path("docs/ARCHITECTURE.md")
+        path = Path("docs/architecture/README.md")
         assert path.is_file(), f"Expected {path} to exist"
 
     def test_security_doc_exists(self):
-        path = Path("docs/SECURITY.md")
+        path = Path("SECURITY.md")
         assert path.is_file(), f"Expected {path} to exist"
 
     def test_roadmap_exists(self):

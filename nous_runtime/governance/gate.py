@@ -18,6 +18,7 @@ from nous_runtime.governance.constitution import evaluate_constitution
 from nous_runtime.governance.risk_engine import assess_risk
 from nous_runtime.governance.store import GovernanceStore
 from nous_runtime.governance.runtime_mode import should_fail_closed
+from nous_runtime.governance.operation_gate import OperationAuthorizationMixin
 from nous_runtime.governance.permission import (
     PermissionEngine,
     PermissionRequest,
@@ -39,7 +40,7 @@ def get_gate(store: GovernanceStore | None = None) -> "ExecutionAuthorizationGat
     return _gate_instance
 
 
-class ExecutionAuthorizationGate:
+class ExecutionAuthorizationGate(OperationAuthorizationMixin):
     """Single canonical enforcement point for all executable actions."""
 
     def __init__(
@@ -47,9 +48,24 @@ class ExecutionAuthorizationGate:
         store: GovernanceStore | None = None,
         *,
         permission_engine: PermissionEngine | None = None,
+        operation_contracts=None,
+        operation_policy=None,
+        operation_policy_provider=None,
     ):
         self.store = store or GovernanceStore()
         self.permission_engine = permission_engine
+        self.operation_policy_provider = operation_policy_provider
+        self._execution_admissions = {}
+        from nous_runtime.capability.contract import CapabilityContractRegistry
+        from nous_runtime.governance.broker import ApprovalPolicy
+
+        self.operation_contracts = operation_contracts or CapabilityContractRegistry()
+        self.operation_policy = operation_policy or ApprovalPolicy(
+            policy_id="reality-read-only-v1",
+            capability_id="device.state.read",
+            scope="policy_controlled",
+            auto_approve_read_only=True,
+        )
 
     def evaluate(
         self,
@@ -92,6 +108,7 @@ class ExecutionAuthorizationGate:
 
         if proposal.expires_at:
             from datetime import datetime, timezone
+
             now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             if proposal.expires_at < now:
                 return self._finalize_decision(
@@ -179,9 +196,7 @@ class ExecutionAuthorizationGate:
         # when no permission engine is configured; configured deployments are
         # deny-by-default for every declared required permission.
         if proposal.required_permissions and self.permission_engine is not None:
-            resources = proposal.affected_resources or (
-                proposal.capability_id,
-            )
+            resources = proposal.affected_resources or (proposal.capability_id,)
             permission_context = {
                 "subject_type": context.subject_type,
                 "locality": context.session_locality,
@@ -239,6 +254,7 @@ class ExecutionAuthorizationGate:
         lease_id = ""
         if lease:
             from datetime import datetime as _dt, timezone as _tz
+
             now = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             if lease.get("expires_at") and lease["expires_at"] < now:
                 self.store.update_lease_status(lease["lease_id"], "EXPIRED")
@@ -274,11 +290,19 @@ class ExecutionAuthorizationGate:
         elif action_mode == "ASK_APPROVAL":
             decision = self._ask_approval(proposal, context, risk_envelope)
         elif action_mode == "DENY":
-            decision = self._deny(proposal, context, "POLICY_DENIED",
-                                  "Policy evaluation resulted in denial")
+            decision = self._deny(
+                proposal,
+                context,
+                "POLICY_DENIED",
+                "Policy evaluation resulted in denial",
+            )
         else:
-            decision = self._escalate(proposal, context, risk_envelope,
-                                      "Policy evaluation requires escalation")
+            decision = self._escalate(
+                proposal,
+                context,
+                risk_envelope,
+                "Policy evaluation requires escalation",
+            )
 
         # Steps 14-16: persist proposal, decision, and audit evidence.
         return self._finalize_decision(proposal, context, decision)
@@ -346,6 +370,7 @@ class ExecutionAuthorizationGate:
         """
         try:
             from nous_runtime.compat.capability import get_capability
+
             cap = get_capability(capability_id)
             if cap:
                 if isinstance(cap, dict):
@@ -433,7 +458,9 @@ class ExecutionAuthorizationGate:
             allowed=False,
             reason_code=reason_code,
             reason_message=reason_message,
-            rule_class="NON_OVERRIDABLE" if "CONSTITUTION" in reason_code else "ADMIN_OVERRIDABLE",
+            rule_class="NON_OVERRIDABLE"
+            if "CONSTITUTION" in reason_code
+            else "ADMIN_OVERRIDABLE",
             constitution_rule=constitution_rule,
         )
 
@@ -469,8 +496,12 @@ class ExecutionAuthorizationGate:
                 reason_code,
                 "Governance persistence or audit store is unavailable",
             )
-        _log.warning("Governance store unavailable in compatibility mode: %s", reason_code)
-        return self._deny(proposal, context, reason_code, "Governance store unavailable")
+        _log.warning(
+            "Governance store unavailable in compatibility mode: %s", reason_code
+        )
+        return self._deny(
+            proposal, context, reason_code, "Governance store unavailable"
+        )
 
     def _finalize_decision(
         self,
@@ -489,9 +520,7 @@ class ExecutionAuthorizationGate:
                 proposal, context, "DECISION_STORE_UNAVAILABLE"
             )
         if not self._write_audit(decision, proposal, context):
-            return self._store_unavailable(
-                proposal, context, "AUDIT_STORE_UNAVAILABLE"
-            )
+            return self._store_unavailable(proposal, context, "AUDIT_STORE_UNAVAILABLE")
         return decision
 
     def _write_audit(

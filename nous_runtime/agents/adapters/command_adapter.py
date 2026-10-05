@@ -21,6 +21,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from nous_runtime.agents.adapters.policy_evaluator import CommandPolicyEvaluator
 from nous_runtime.agents.adapters.supervisor import ProcessSupervisor
@@ -43,12 +44,20 @@ class CommandAgentAdapter:
     The executable is configured via AgentDescriptor.executable_reference.
     """
 
-    def __init__(self, descriptor: AgentDescriptor):
+    def __init__(
+        self,
+        descriptor: AgentDescriptor,
+        *,
+        before_spawn: Callable[[], None] | None = None,
+        execution_runner: Callable | None = None,
+    ):
         errors = descriptor.validate()
         if errors:
             raise ValueError(f"Invalid agent descriptor: {'; '.join(errors)}")
         self._descriptor = descriptor
-        self._supervisor = ProcessSupervisor(descriptor)
+        self._supervisor = ProcessSupervisor(
+            descriptor, before_spawn=before_spawn, execution_runner=execution_runner
+        )
 
     @property
     def descriptor(self) -> AgentDescriptor:
@@ -68,7 +77,9 @@ class CommandAgentAdapter:
                 agent_id=request.agent_id,
                 status="FAILED",
                 exit_code=-1,
-                errors=(f"Agent ID mismatch: {request.agent_id} != {self._descriptor.agent_id}",),
+                errors=(
+                    f"Agent ID mismatch: {request.agent_id} != {self._descriptor.agent_id}",
+                ),
             )
 
         # Override request fields from descriptor

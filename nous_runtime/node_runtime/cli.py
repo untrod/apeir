@@ -14,8 +14,8 @@ from nous_runtime.node_runtime.paths import DEFAULT_NODE_STATE_DIR
 
 
 node_daemon_app = typer.Typer(
-    name="nous-node",
-    help="Run the LLM-independent Nous Node service.",
+    name="apeir-node",
+    help="Run the LLM-independent APEIR Compute Mesh Node service.",
     invoke_without_command=True,
 )
 
@@ -25,6 +25,7 @@ def run_node(
     state_dir: Path,
     name: str = "",
     heartbeat_seconds: float = 15.0,
+    identity_only: bool = False,
     once: bool = False,
     json_output: bool = False,
     relay_url: str = "",
@@ -38,6 +39,15 @@ def run_node(
             heartbeat_seconds=heartbeat_seconds,
         )
     )
+    if identity_only:
+        result = service.identity.to_dict()
+        if json_output:
+            typer.echo(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        else:
+            typer.echo(f"Node: {result['node_name']} ({result['node_id']})")
+            typer.echo(f"Public key: {result['public_key']}")
+            typer.echo(f"Identity: {service.identity_path}")
+        return result
     if once:
         result = service.run_once()
         if json_output:
@@ -48,18 +58,18 @@ def run_node(
             typer.echo(f"Devices: {len(result['devices'])}")
             typer.echo(f"Heartbeat: {result['heartbeat_sequence']}")
         return result
-    typer.echo(f"Nous Node starting: {service.identity.node_id}")
+    typer.echo(f"APEIR Node starting: {service.identity.node_id}")
     typer.echo(f"State directory: {service.state_dir}")
     if relay_url:
         if not server_public_key:
-            raise typer.BadParameter(
-                "--server-public-key is required with --relay-url"
-            )
+            raise typer.BadParameter("--server-public-key is required with --relay-url")
         from nous_runtime.node_runtime.relay import NodeRelayClient
 
         context = None
         if relay_url.lower().startswith("wss://"):
-            context = ssl.create_default_context(cafile=str(ca_file) if ca_file else None)
+            context = ssl.create_default_context(
+                cafile=str(ca_file) if ca_file else None
+            )
         client = NodeRelayClient(
             service,
             relay_url,
@@ -88,6 +98,11 @@ def node_daemon(
     state_dir: Path = typer.Option(DEFAULT_NODE_STATE_DIR, "--state-dir"),
     name: str = typer.Option("", "--name"),
     heartbeat_seconds: float = typer.Option(15.0, "--heartbeat-seconds", min=0.1),
+    identity_only: bool = typer.Option(
+        False,
+        "--identity-only",
+        help="Create or read the durable public Node identity without host probes.",
+    ),
     once: bool = typer.Option(False, "--once"),
     json_output: bool = typer.Option(False, "--json"),
     relay_url: str = typer.Option("", "--relay-url"),
@@ -98,6 +113,7 @@ def node_daemon(
         state_dir=state_dir,
         name=name,
         heartbeat_seconds=heartbeat_seconds,
+        identity_only=identity_only,
         once=once,
         json_output=json_output,
         relay_url=relay_url,

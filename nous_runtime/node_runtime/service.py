@@ -15,10 +15,11 @@ import struct
 import sys
 import threading
 import time
+from weakref import WeakValueDictionary
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -31,11 +32,147 @@ from nous_runtime.node_runtime.execution_host import (
     evaluate_execution_preflight,
 )
 from nous_runtime.node_runtime.protocol import workload_request_digest
+from nous_runtime.security.private_files import restrict_owner_only_file
 from nous_runtime.version import __version__
+from nous_runtime.core.redaction import redact_sensitive_data
+from nous_runtime.governance.contracts import AuthorizationContext
+
+_node_contexts: WeakValueDictionary[str, AuthorizationContext] = WeakValueDictionary()
+
+
+def _node_execution_context(node_id: str, workload_id: str) -> AuthorizationContext:
+    context = AuthorizationContext(
+        subject_type="node",
+        subject_id=node_id,
+        authn_method="node_key",
+        authn_confidence=1.0,
+        session_id=workload_id,
+        session_locality="local",
+    )
+    _node_contexts[context.context_id] = context
+    return context
+
+
+def _is_node_execution_context(context, node_id: str, workload_id: str) -> bool:
+    return (
+        isinstance(context, AuthorizationContext)
+        and _node_contexts.get(context.context_id) is context
+        and context.subject_id == node_id
+        and context.session_id == workload_id
+        and context.subject_type == "node"
+        and context.authn_method == "node_key"
+    )
 
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _zero_resource_vector() -> dict[str, int]:
+    return {
+        "cpu_cores_millis": 0,
+        "cpu_time_us": 0,
+        "ram_bytes": 0,
+        "pinned_ram_bytes": 0,
+        "device_memory_bytes": 0,
+        "kv_cache_bytes": 0,
+        "storage_bytes": 0,
+        "memory_bandwidth_bps": 0,
+        "interconnect_bandwidth_bps": 0,
+        "network_bandwidth_bps": 0,
+        "power_milliwatts": 0,
+        "thermal_budget_millic": 0,
+        "time_budget_us": 0,
+    }
+
+
+def _probe_jetson_cuda_device(root: Path = Path("/")) -> dict[str, Any] | None:
+    """Report an integrated Jetson GPU when the bounded OS evidence agrees."""
+    if platform.system().lower() != "linux":
+        return None
+    if platform.machine().lower() not in {"aarch64", "arm64"}:
+        return None
+
+    l4t_path = root / "etc" / "nv_tegra_release"
+    model_path = root / "proc" / "device-tree" / "model"
+    gpu_path = root / "dev" / "nvhost-gpu"
+    nvmap_path = root / "dev" / "nvmap"
+    if not all(path.exists() for path in (l4t_path, model_path, gpu_path, nvmap_path)):
+        return None
+
+    try:
+        model = (
+            model_path.read_bytes().decode("utf-8", errors="replace").strip("\x00\n ")
+        )
+        l4t_release = l4t_path.read_text(
+            encoding="utf-8", errors="replace"
+        ).splitlines()[0]
+    except (OSError, IndexError):
+        return None
+    if "nvidia" not in model.lower() or not any(
+        marker in model.lower() for marker in ("jetson", "orin", "xavier", "tegra")
+    ):
+        return None
+
+    cuda_version = ""
+    cuda_version_path = root / "usr" / "local" / "cuda" / "version.json"
+    try:
+        cuda_value = json.loads(cuda_version_path.read_text(encoding="utf-8"))
+        cuda_version = str(cuda_value.get("cuda", {}).get("version", ""))
+    except (OSError, TypeError, ValueError):
+        pass
+
+    machine_id = platform.node()
+    try:
+        machine_id = (root / "etc" / "machine-id").read_text(
+            encoding="utf-8"
+        ).strip() or machine_id
+    except OSError:
+        pass
+    stable_id = hashlib.sha256(f"{machine_id}:{model}".encode()).hexdigest()[:16]
+    resources = _zero_resource_vector()
+    return {
+        "device_id": f"dev-nvidia-jetson-{stable_id}",
+        "spec": {
+            "device_type": "CUDA",
+            "vendor": "NVIDIA",
+            "model": model,
+            "driver_version": (
+                f"CUDA {cuda_version}; {l4t_release}" if cuda_version else l4t_release
+            ),
+            "architecture": "integrated-jetson",
+            "total_resources": dict(resources),
+            "capabilities": ["cuda", "inference", "shared-memory"],
+            "supported_engines": ["tensorrt", "onnx", "llama.cpp"],
+            "supported_dtypes": ["fp32", "fp16", "int8"],
+            "compute_units": 0,
+            "numa_node": -1,
+            "pci_bus_id": "",
+        },
+        "status": {
+            "phase": "READY",
+            "available": dict(resources),
+            "temperature_celsius": 0.0,
+            "power_milliwatts": 0,
+            "utilization_percent": 0.0,
+            "memory_utilization_percent": 0.0,
+            "active_engines": [],
+            "active_workloads": [],
+            "topology": None,
+            "last_health_check": 0.0,
+            "error_count": 0,
+            "last_error": "",
+            "uptime_seconds": 0.0,
+        },
+        "device_class": "nvidia.jetson.edge",
+        "created_at": 0.0,
+        "labels": {
+            "hostname": platform.node(),
+            "integrated_memory": "true",
+            "evidence": "l4t+device-tree+nvhost-gpu+nvmap",
+        },
+        "probe_source": "nous.node_runtime.jetson",
+    }
 
 
 @dataclass(frozen=True)
@@ -55,10 +192,31 @@ class NodeRuntimeConfig:
             raise ValueError("artifact_max_bytes must be at least 1048576")
 
 
+class WorkloadResponseLost(ConnectionError):
+    """Simulation hook: persist the terminal result, then drop its response."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        output: Mapping[str, Any],
+        completed: bool,
+    ):
+        super().__init__(message)
+        self.output = dict(output)
+        self.completed = completed
+
+
 class NodeRuntimeService:
     """Own a Node's durable identity, probes, heartbeat and local workloads."""
 
-    def __init__(self, config: NodeRuntimeConfig):
+    def __init__(
+        self,
+        config: NodeRuntimeConfig,
+        *,
+        capability_handlers: Mapping[str, Callable[[dict[str, Any]], dict[str, Any]]]
+        | None = None,
+    ):
         self.config = config
         self.state_dir = config.state_dir.expanduser().resolve()
         self.artifact_store = ContentAddressedArtifactStore(
@@ -92,8 +250,15 @@ class NodeRuntimeService:
             "node.execution-host-evidence": self.execution_host_evidence,
             "node.execution-preflight": self.preflight_execution,
         }
+        for capability, handler in dict(capability_handlers or {}).items():
+            normalized = capability.strip().lower()
+            if not normalized or normalized in self._handlers:
+                raise ValueError(f"invalid or duplicate Node capability: {capability}")
+            self._handlers[normalized] = handler
         self._prepare_state()
         self.identity = self._load_or_create_identity()
+        if set(self._handlers) - set(self.identity.capabilities):
+            raise ValueError("durable Node identity does not declare all handlers")
         self._sequence = self._load_heartbeat_sequence()
         self._workloads = self._load_workloads()
         self._leases = self._load_leases()
@@ -141,14 +306,20 @@ class NodeRuntimeService:
         )
         _atomic_write_bytes(self.private_key_path, private_pem)
         try:
-            os.chmod(self.private_key_path, 0o600)
-        except OSError:
-            pass
+            restrict_owner_only_file(
+                self.private_key_path, subject="Node identity private key"
+            )
+        except Exception:
+            self.private_key_path.unlink(missing_ok=True)
+            raise
         _atomic_write_json(self.identity_path, identity.to_dict())
         self._verify_identity_key(identity)
         return identity
 
     def _verify_identity_key(self, identity: NodeIdentity) -> None:
+        restrict_owner_only_file(
+            self.private_key_path, subject="Node identity private key"
+        )
         try:
             key = serialization.load_pem_private_key(
                 self.private_key_path.read_bytes(), password=None
@@ -470,6 +641,14 @@ class NodeRuntimeService:
             value = device.to_dict()
             value["probe_source"] = "nous.kernel.hardware_discovery"
             devices.append(value)
+        has_cuda = any(
+            str(value.get("spec", {}).get("device_type", "")).upper() == "CUDA"
+            for value in devices
+        )
+        if not has_cuda:
+            jetson = _probe_jetson_cuda_device()
+            if jetson is not None:
+                devices.append(jetson)
         return devices
 
     def probe_execution_host(
@@ -593,6 +772,11 @@ class NodeRuntimeService:
                 return dict(existing)
             started = _utc_now()
             handler = self._handlers.get(capability)
+            if (
+                getattr(handler, "requires_at_most_once", False)
+                and delivery_semantics != "at_most_once"
+            ):
+                raise PermissionError("Capability requires at-most-once Node delivery")
             if delivery_semantics == "at_most_once":
                 executing = {
                     "workload_id": workload_id,
@@ -616,13 +800,48 @@ class NodeRuntimeService:
                 "finished_at": _utc_now(),
             }
         else:
+            response_loss: WorkloadResponseLost | None = None
             try:
-                output = handler(dict(arguments or {}))
+                execute_bound = getattr(handler, "execute_bound", None)
+                if callable(execute_bound):
+                    execution_context = (
+                        {
+                            "authorization_context": _node_execution_context(
+                                self.identity.node_id, workload_id
+                            )
+                        }
+                        if getattr(handler, "accepts_authorization_context", False)
+                        else {}
+                    )
+                    output = execute_bound(
+                        dict(arguments or {}),
+                        workload_id=workload_id,
+                        node_id=self.identity.node_id,
+                        binding=dict(binding or {}),
+                        **execution_context,
+                    )
+                else:
+                    output = handler(dict(arguments or {}))
                 result = {
                     "workload_id": workload_id,
                     "capability": capability,
                     "state": "COMPLETED",
                     "output": output,
+                    "started_at": started,
+                    "finished_at": _utc_now(),
+                }
+            except WorkloadResponseLost as exc:
+                response_loss = exc
+                result = {
+                    "workload_id": workload_id,
+                    "capability": capability,
+                    "state": "COMPLETED" if exc.completed else "FAILED",
+                    "output": dict(exc.output),
+                    "error_code": (
+                        "NOUS_NODE_RESPONSE_LOST"
+                        if exc.completed
+                        else "NOUS_NODE_EFFECT_NOT_APPLIED"
+                    ),
                     "started_at": started,
                     "finished_at": _utc_now(),
                 }
@@ -644,6 +863,7 @@ class NodeRuntimeService:
                     "delivery_semantics": delivery_semantics,
                 }
             )
+        result = redact_sensitive_data(result)
         output_bytes = json.dumps(
             result, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
@@ -682,6 +902,8 @@ class NodeRuntimeService:
             _atomic_write_json(self.workloads_path, staged)
             self._workloads = staged
         self._emit("node.workload.finished", result)
+        if handler is not None and response_loss is not None:
+            raise response_loss
         return dict(result)
 
     def run_once(self) -> dict[str, Any]:
@@ -782,7 +1004,7 @@ class NodeRuntimeService:
             "event_type": event_type,
             "timestamp": _utc_now(),
             "node_id": self.identity.node_id,
-            "payload": payload,
+            "payload": redact_sensitive_data(payload),
         }
         with self.telemetry_path.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")

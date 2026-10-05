@@ -1,4 +1,10 @@
-# Nous Foundation 1.0 architecture
+# Kernel Foundation reference
+
+This document summarizes the independently released Kernel scope. It is not the
+Distribution project constitution or a claim that every Runtime service traverses
+Kernel. Current scope ownership is defined by [Distribution boundary](DISTRIBUTION.md)
+and [State Ownership](STATE_OWNERSHIP.md). Native and physical qualification must
+be established separately; historical profile descriptions are not test results.
 
 Nous Foundation is an AI execution kernel, not an application framework. Chat,
 agents, retrieval, desktop UI and workflow products are clients or adapters.

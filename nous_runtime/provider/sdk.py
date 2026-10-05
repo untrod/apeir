@@ -17,7 +17,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Callable
 
 from nous_runtime.kernel.error_codes import ErrorCode, NousResult
 
@@ -26,20 +26,24 @@ log = logging.getLogger("nous.provider.sdk")
 
 # Compatibility Level
 
+
 class CompatibilityLevel(str, Enum):
     """How compatible a provider is with the Nous unified contract."""
-    NATIVE = "native"                # Full Nous contract support
-    COMPATIBLE = "compatible"       # OpenAI/Anthropic-compatible, minor gaps
-    PARTIAL = "partial"             # Some capabilities missing
-    EXPERIMENTAL = "experimental"   # Untested, may break
-    LEGACY = "legacy"              # Old adapter, needs migration
+
+    NATIVE = "native"  # Full Nous contract support
+    COMPATIBLE = "compatible"  # OpenAI/Anthropic-compatible, minor gaps
+    PARTIAL = "partial"  # Some capabilities missing
+    EXPERIMENTAL = "experimental"  # Untested, may break
+    LEGACY = "legacy"  # Old adapter, needs migration
 
 
 # Provider Manifest
 
+
 @dataclass
 class ProviderManifest:
     """Declares what a provider supports and how to use it."""
+
     provider_id: str = ""
     provider_name: str = ""
     version: str = "1.0.0"
@@ -49,7 +53,9 @@ class ProviderManifest:
     compatibility: CompatibilityLevel = CompatibilityLevel.COMPATIBLE
 
     # Supported capabilities
-    capabilities: list[str] = field(default_factory=list)  # model.chat, model.stream, etc.
+    capabilities: list[str] = field(
+        default_factory=list
+    )  # model.chat, model.stream, etc.
 
     # Connection
     endpoint: str = ""
@@ -58,7 +64,7 @@ class ProviderManifest:
 
     # Requirements
     requires_credential: bool = True
-    credential_type: str = "api_key"     # api_key | oauth | none
+    credential_type: str = "api_key"  # api_key | oauth | none
     requires_network: bool = True
 
     # Limits
@@ -73,18 +79,26 @@ class ProviderManifest:
             "version": self.version,
             "description": self.description,
             "author": self.author,
+            "homepage": self.homepage,
             "compatibility": self.compatibility.value,
             "capabilities": self.capabilities,
             "endpoint": self.endpoint,
             "default_model": self.default_model,
             "models": self.models,
+            "requires_credential": self.requires_credential,
+            "credential_type": self.credential_type,
+            "requires_network": self.requires_network,
+            "rate_limit_per_minute": self.rate_limit_per_minute,
             "max_context_tokens": self.max_context_tokens,
             "max_output_tokens": self.max_output_tokens,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ProviderManifest":
-        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+        fields = {k: v for k, v in data.items() if k in cls.__dataclass_fields__}
+        if "compatibility" in fields:
+            fields["compatibility"] = CompatibilityLevel(fields["compatibility"])
+        return cls(**fields)
 
     @classmethod
     def load(cls, path: str) -> "ProviderManifest":
@@ -93,6 +107,7 @@ class ProviderManifest:
 
 
 # Provider Adapter (ABC)
+
 
 class ProviderAdapter(ABC):
     """Standard base class for all Nous provider adapters.
@@ -108,8 +123,7 @@ class ProviderAdapter(ABC):
 
     @property
     @abstractmethod
-    def manifest(self) -> ProviderManifest:
-        ...
+    def manifest(self) -> ProviderManifest: ...
 
     @abstractmethod
     def invoke(self, capability_id: str, **params) -> dict:
@@ -132,7 +146,7 @@ class ProviderAdapter(ABC):
             yield {"error": result.get("error", "unknown")}
 
     def validate(self) -> NousResult[list[str]]:
-        """Run basic validation on this provider."""
+        """Validate metadata without executing a capability or granting authority."""
         issues = []
         m = self.manifest
 
@@ -143,23 +157,17 @@ class ProviderAdapter(ABC):
         if not m.capabilities:
             issues.append("At least one capability is required")
 
-        # Validate each capability
-        for cap in m.capabilities:
-            try:
-                result = self.invoke(cap, test_mode=True)
-                if not isinstance(result, dict):
-                    issues.append(f"invoke({cap}) returned non-dict: {type(result)}")
-            except Exception as e:
-                issues.append(f"invoke({cap}) raised: {e}")
-
         if issues:
-            return NousResult.err(ErrorCode.INVALID_ARGUMENT,
-                                  message=f"{len(issues)} validation issues",
-                                  details={"issues": issues})
+            return NousResult.err(
+                ErrorCode.INVALID_ARGUMENT,
+                message=f"{len(issues)} validation issues",
+                details={"issues": issues},
+            )
         return NousResult.ok([])
 
 
 # Conformance Tests
+
 
 class ConformanceTestSuite:
     """Standard tests to validate a provider implementation.
@@ -167,8 +175,24 @@ class ConformanceTestSuite:
     Run against any new provider to verify it meets the Nous contract.
     """
 
-    def __init__(self, adapter: ProviderAdapter):
+    def __init__(
+        self,
+        adapter: ProviderAdapter,
+        *,
+        execution_probe: Callable[[str], dict] | None = None,
+    ):
         self._adapter = adapter
+        self._execution_probe = execution_probe
+
+    def _probe(self, capability_id: str) -> dict:
+        """Use a host-supplied governed test target, never direct adapter invocation.
+
+        The callback must submit through the existing authorized Work path. Its
+        presence is not authority; Governance still admits each Operation.
+        """
+        if self._execution_probe is None:
+            raise RuntimeError("Governed execution test target is not configured")
+        return self._execution_probe(capability_id)
 
     def run_all(self) -> dict[str, bool]:
         """Run all conformance tests. Returns {test_name: passed}."""
@@ -197,7 +221,7 @@ class ConformanceTestSuite:
 
     def test_invoke_returns_dict(self) -> None:
         for cap in self._adapter.manifest.capabilities[:3]:
-            result = self._adapter.invoke(cap, test_mode=True)
+            result = self._probe(cap)
             assert isinstance(result, dict), f"invoke({cap}) must return dict"
             assert "ok" in result, f"invoke({cap}) must have 'ok' key"
 
@@ -209,15 +233,13 @@ class ConformanceTestSuite:
 
     def test_stream_yields_dicts(self) -> None:
         if "model.stream" in self._adapter.manifest.capabilities:
-            gen = self._adapter.stream_invoke("model.stream", test_mode=True,
-                                              messages=[{"role": "user", "content": "hi"}],
-                                              max_tokens=5)
-            items = list(gen)
-            if items:
-                assert isinstance(items[0], dict), "stream must yield dicts"
+            result = self._probe("model.stream")
+            items = result.get("items")
+            assert isinstance(items, list), "governed stream probe must return items"
+            assert all(isinstance(item, dict) for item in items), "invalid stream item"
 
     def test_error_response_format(self) -> None:
         """Invoke with invalid capability should return error dict."""
-        result = self._adapter.invoke("nonexistent.capability")
+        result = self._probe("nonexistent.capability")
         assert isinstance(result, dict)
         assert "ok" in result

@@ -2,7 +2,7 @@
 
 ## Role
 
-Nous Desktop is a native Tauri 2 control surface for Nous Runtime. It displays
+Nous Desktop is a native Tauri 2 control surface for APEIR Runtime. It displays
 Runtime state and submits governed user actions; it does not own task, model,
 approval, provider, or credential state.
 
@@ -76,7 +76,7 @@ Native Windows 10 X64 launcher and installer:
 
 This builds the embedded Runtime, the locked Kernel daemon and Provider Worker,
 the Tauri/React launcher, a portable bundle, and an NSIS installer. See
-[Windows 10 X64 Launcher build](../user/deployment/WINDOWS_10_X64_LAUNCHER.md).
+[Windows 10 X64 Launcher build](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md).
 
 Native Windows ARM64 package:
 
@@ -86,4 +86,4 @@ npm --prefix desktop run tauri:build:arm64
 
 Native builds require the matching Rust MSVC target, Visual Studio 2022 Build
 Tools, and a Windows SDK. See
-[Windows 10 ARM64 local deployment](../user/deployment/WINDOWS_10_ARM64_LOCAL.md).
+[Windows 10 ARM64 local deployment](../operations/deployment/WINDOWS_10_ARM64_LOCAL.md).

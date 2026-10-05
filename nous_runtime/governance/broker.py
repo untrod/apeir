@@ -103,8 +103,12 @@ class ApprovalPolicy:
         self.auto_approve_read_only = auto_approve_read_only
         self.auto_approve_tests = auto_approve_tests
         self.max_daily_approvals = max_daily_approvals
-        self.require_confirmation_for_policy_change = require_confirmation_for_policy_change
-        self.created_at = created_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.require_confirmation_for_policy_change = (
+            require_confirmation_for_policy_change
+        )
+        self.created_at = created_at or datetime.now(timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
         self.updated_at = updated_at or self.created_at
 
     def to_dict(self) -> dict[str, Any]:
@@ -133,7 +137,9 @@ class ApprovalPolicy:
             auto_approve_read_only=bool(data.get("auto_approve_read_only", False)),
             auto_approve_tests=bool(data.get("auto_approve_tests", False)),
             max_daily_approvals=int(data.get("max_daily_approvals") or 50),
-            require_confirmation_for_policy_change=bool(data.get("require_confirmation_for_policy_change", True)),
+            require_confirmation_for_policy_change=bool(
+                data.get("require_confirmation_for_policy_change", True)
+            ),
             created_at=str(data.get("created_at") or ""),
             updated_at=str(data.get("updated_at") or ""),
         )
@@ -196,6 +202,48 @@ class ApprovalBroker:
         """
         self._listeners.append(callback)
 
+    def request_operation(self, authorization_id, *, gate):
+        request = gate._request_operation_approval(authorization_id)
+        self._emit("approval.requested", request.to_dict())
+        return request
+
+    def approve_operation_once(self, request_id, context, *, gate):
+        response = gate._respond_operation_approval(request_id, context, approve=True)
+        self._emit("approval.granted", response.to_dict())
+        return response
+
+    def deny_operation(self, request_id, context, *, gate):
+        response = gate._respond_operation_approval(request_id, context, approve=False)
+        self._emit("approval.denied", response.to_dict())
+        return response
+
+    def list_operation_approvals(self, *, gate):
+        """Backend read contract for future remote UI; no human identity implied."""
+        return [
+            self.get_operation_approval(item["request_id"], gate=gate)
+            for item in self._store.list_pending_approvals()
+            if item.get("operation_governance")
+        ]
+
+    def get_operation_approval(self, request_id, *, gate):
+        record = self._store.get_approval_request(request_id)
+        if not record or not record.get("operation_governance"):
+            raise ValueError("Operation approval request not found")
+        request = gate.get_operation_request(record["governance_request_id"])
+        if request.authorization_id != record["proposal_hash"]:
+            raise PermissionError("Approval authority binding differs")
+        from nous_runtime.core.redaction import redact_sensitive_data
+
+        return redact_sensitive_data(record)
+
+    def respond_operation(self, request_id, action, context, *, gate):
+        """Only the existing authority may attest a human approval context."""
+        if action == "approve":
+            return self.approve_operation_once(request_id, context, gate=gate)
+        if action == "deny":
+            return self.deny_operation(request_id, context, gate=gate)
+        raise ValueError("Operation approval supports only Approve Once and Deny")
+
     def _emit(self, event_type: str, data: dict[str, Any]) -> None:
         for cb in self._listeners:
             try:
@@ -228,10 +276,14 @@ class ApprovalBroker:
             summary=f"{proposal.action_type}: {proposal.capability_id}",
             risk_summary=f"Risk: {risk.aggregate_risk_class}",
             scope_summary=f"Workspace: {proposal.target_workspace}, "
-                          f"Resources: {len(proposal.affected_resources)}",
+            f"Resources: {len(proposal.affected_resources)}",
             status=ApprovalStatus.PENDING.value,
             requested_by=requester or context.subject_id,
-            expires_at=(datetime.now(timezone.utc) + timedelta(hours=ttl_hours)).strftime("%Y-%m-%dT%H:%M:%SZ") if ttl_hours else "",
+            expires_at=(
+                datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            if ttl_hours
+            else "",
         )
 
         with self._lock:
@@ -245,15 +297,18 @@ class ApprovalBroker:
                 self._pending.pop(request.request_id, None)
             raise RuntimeError("Failed to persist approval request")
 
-        self._emit("approval.requested", {
-            "request_id": request.request_id,
-            "run_id": run_id,
-            "task_id": task_id,
-            "summary": request.summary,
-            "risk_summary": request.risk_summary,
-            "scope_summary": request.scope_summary,
-            "evidence": evidence.to_dict() if evidence else {},
-        })
+        self._emit(
+            "approval.requested",
+            {
+                "request_id": request.request_id,
+                "run_id": run_id,
+                "task_id": task_id,
+                "summary": request.summary,
+                "risk_summary": request.risk_summary,
+                "scope_summary": request.scope_summary,
+                "evidence": evidence.to_dict() if evidence else {},
+            },
+        )
 
         _log.info("Approval requested: %s for run %s", request.request_id, run_id)
         return request
@@ -273,6 +328,11 @@ class ApprovalBroker:
         If prevent_self_approval is True and approver_id matches requester_id,
         the approval is rejected.
         """
+        record = self._store.get_approval_request(request_id)
+        if record and record.get("operation_governance"):
+            raise PermissionError(
+                "Operation approval requires authenticated Approve Once"
+            )
         with self._lock:
             req = self._pending.get(request_id)
             if not req:
@@ -291,7 +351,9 @@ class ApprovalBroker:
             now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             if req.expires_at and req.expires_at <= now:
                 if not self._store.expire_approval(request_id):
-                    raise ValueError(f"Approval request {request_id} is no longer PENDING")
+                    raise ValueError(
+                        f"Approval request {request_id} is no longer PENDING"
+                    )
                 self._pending.pop(request_id, None)
                 self._emit("approval.expired", {"request_id": request_id})
                 raise ValueError(f"Approval request {request_id} has expired")
@@ -340,12 +402,15 @@ class ApprovalBroker:
                 raise ValueError(f"Approval request {request_id} is no longer PENDING")
             self._pending.pop(request_id, None)
 
-        self._emit("approval.granted", {
-            "request_id": request_id,
-            "approver_id": approver_id,
-            "scope": scope,
-            "reason": reason,
-        })
+        self._emit(
+            "approval.granted",
+            {
+                "request_id": request_id,
+                "approver_id": approver_id,
+                "scope": scope,
+                "reason": reason,
+            },
+        )
 
         _log.info("Approval granted: %s by %s", request_id, approver_id)
         return response
@@ -358,6 +423,11 @@ class ApprovalBroker:
         reason: str = "",
     ) -> ApprovalResponse:
         """Deny a pending approval request."""
+        record = self._store.get_approval_request(request_id)
+        if record and record.get("operation_governance"):
+            raise PermissionError(
+                "Operation denial requires authenticated human authority"
+            )
         with self._lock:
             req = self._pending.get(request_id)
             if not req:
@@ -390,11 +460,14 @@ class ApprovalBroker:
                 raise ValueError(f"Approval request {request_id} is no longer PENDING")
             self._pending.pop(request_id, None)
 
-        self._emit("approval.denied", {
-            "request_id": request_id,
-            "approver_id": approver_id,
-            "reason": reason,
-        })
+        self._emit(
+            "approval.denied",
+            {
+                "request_id": request_id,
+                "approver_id": approver_id,
+                "reason": reason,
+            },
+        )
 
         _log.info("Approval denied: %s by %s", request_id, approver_id)
         return response
@@ -430,7 +503,9 @@ class ApprovalBroker:
             self._policies[key] = policy
             self._store.save_approval_policy(policy.to_dict())
 
-    def get_policy(self, agent_id: str, capability_id: str = "") -> ApprovalPolicy | None:
+    def get_policy(
+        self, agent_id: str, capability_id: str = ""
+    ) -> ApprovalPolicy | None:
         """Get the approval policy for an agent/capability."""
         with self._lock:
             key = f"{agent_id}:{capability_id}"

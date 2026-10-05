@@ -38,6 +38,16 @@ from nous_runtime.agent.invocation import (
     ToolInvocationBoundary,
 )
 from nous_runtime.agent.runtime import AgentExecutionRuntime
+from nous_runtime.agent.coordination import (
+    AgentSessionCoordinator,
+    SessionPlanner,
+    SessionReplanner,
+)
+from nous_runtime.agent.session import (
+    AgentSession,
+    AgentSessionState,
+    AgentSessionStore,
+)
 from nous_runtime.agent.termination import (
     TerminationDecision,
     TerminationPolicy,
@@ -82,6 +92,12 @@ __all__ = [
     "AgentExecutionRecord",
     "AgentExecutionRuntime",
     "AgentExecutionState",
+    "AgentSession",
+    "AgentSessionCoordinator",
+    "AgentSessionState",
+    "AgentSessionStore",
+    "SessionPlanner",
+    "SessionReplanner",
     "AgentIdentity",
     "AgentManifest",
     "AgentProfile",

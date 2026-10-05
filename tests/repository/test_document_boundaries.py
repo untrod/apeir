@@ -15,10 +15,22 @@ PRIVATE_DOC_PATTERNS = [
 ]
 
 PUBLIC_DOC_DIRS = [
-    "docs/architecture", "docs/specs", "docs/development", "docs/user",
-    "docs/security", "docs/protocol", "docs/release", "docs/rfc",
-    "spec/", "README.md", "CHANGELOG.md", "ROADMAP.md", "CONTRIBUTING.md",
-    "SECURITY.md", "CODE_OF_CONDUCT.md", "MAINTAINERS.md",
+    "docs/architecture",
+    "docs/architecture/specs",
+    "docs/development",
+    "docs/operations",
+    "docs/architecture/security",
+    "docs/architecture/protocol",
+    "docs/acceptance",
+    "docs/rfc",
+    "spec/",
+    "README.md",
+    "CHANGELOG.md",
+    "ROADMAP.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
+    "MAINTAINERS.md",
 ]
 
 
@@ -59,8 +71,11 @@ def test_public_doc_no_private_data(docpath: Path):
 def test_no_ai_process_files_in_docs():
     """Docs directory should not contain AI process/execution reports."""
     ai_process_indicators = [
-        "task book", "execution report", "claude code executed",
-        "automated task completed", "AI progress report",
+        "task book",
+        "execution report",
+        "claude code executed",
+        "automated task completed",
+        "AI progress report",
     ]
     docs_dir = REPO_ROOT / "docs"
     for md_file in docs_dir.rglob("*.md"):

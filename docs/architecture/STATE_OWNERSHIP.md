@@ -1,55 +1,98 @@
-# State ownership
+# State ownership and failure semantics
 
-Each mutable state domain has one production owner. Mirrors and compatibility
-stores are non-authoritative.
+Each mutable domain has one authoritative owner within its explicitly selected
+execution scope. A view, graph, Provider response, UI status or model statement
+cannot override that owner. See the [project constitution](DISTRIBUTION.md).
 
-| State | Authoritative owner | Durable record | Other layers |
-|---|---|---|---|
-| Workload lifecycle | `nousd` state machine | `nous-state` journal | read through NKI |
-| Resource claims and leases | resource manager | journal transitions | scheduler proposes only |
-| Scheduling decisions | Scheduler Core | decision event and journal | policies are stateless inputs |
-| Semantic state | Semantic State Fabric | journal commit | clients use CAS generation |
-| Knowledge assertions | Knowledge Fabric | evidence and assertion records | retrieval is a derived index |
-| NKI Reality effect lifecycle | Kernel `DurableExecutor` | Journal Intent, accepted receipt, observation, verification, and commit | Distribution hosts Node transport, Adapter execution, and Artifact bytes but cannot self-commit |
-| Python Runtime service effect | Runtime authorization and service boundary | EventStream and Artifact records | does not claim Kernel execution |
-| Reality evidence bytes | `ContentAddressedArtifactStore` | immutable SHA-256 Artifact plus metadata | Kernel Journal stores only `EvidenceRef`, digest, identities, and verification facts |
-| Credentials | Credential Broker | references and audit metadata only | values stay in scoped leases |
-| Model, engine and device registration | `nousd` registries | journaled registration | SDKs submit through NKI |
-| Learning policy lifecycle | Learning Governance | evidence and promotion records | learning can only propose |
-| Safety policy | Safety Envelope authority | signed versioned envelope | learning cannot modify it |
+## Kernel-managed scope
 
-## Product Runtime projections
+For NKI workloads, the independently released Kernel owns Workload lifecycle,
+compute claims/resource leases, scheduling decisions, semantic state, knowledge
+assertions and durable effect admission/verification/commit in its journal.
+Distribution uses NKI and public ABI clients. Kernel receipt/effect facts cannot
+be synthesized by Python compatibility objects or a Controller projection.
+The Kernel's Python data models are not an independent production executor.
 
-The current Python product layer has explicit owners for state that has not yet
-moved behind `nousd`:
+## Distribution runtime-service scope
 
-| State | Owner | Record |
-|---|---|---|
-| Project and work item | Project Coordinator | `connectivity_projects` and `connectivity_work_items` |
-| Conversation execution cursor | Project Execution Service | `connectivity_runtime_bindings` |
-| Project checkpoint | Project Coordinator | `connectivity_checkpoints` |
-| Runtime run and event | EventStream | workspace `.nous/events` journal |
-| Work Harness recovery | Checkpoint Store | workspace `.nous/checkpoints.db`; `work_harness` and existing `agent_execution` checkpoints |
-| Work progress projection | EventStream | `work.*` events; UI and CLI do not own a second lifecycle |
-| Kernel recovery checkpoint | Checkpoint Store | kernel `checkpoints` table |
+These existing stores own Distribution state; they are not copies of a Kernel
+journal and do not imply Kernel traversal.
 
-These records are projections of Runtime activity. Provider responses and UI
-state cannot directly mark them successful; only the verified Runtime outcome
-path may do so.
+| State | Canonical owner | Durable record |
+| --- | --- | --- |
+| AgentSession coordination | `AgentSessionCoordinator` / session store | `.nous/agent_sessions.db` |
+| Plan execution, run, pause/resume | existing Workflow Runtime / WorkflowStore | `.nous/workflows.db` and its checkpoints |
+| Distributed Work lifecycle, placement and dispatch | `DistributedWorkStore` / `NodeRelayServer` | Controller `distributed-works.json` and relay spool |
+| Node identity, delivery and terminal execution evidence | Node Runtime | Node identity and workload journals |
+| Device lifecycle and stable identity | Reality `DeviceRegistry` | existing Reality device store |
+| Resource relationships | `ResourceGraph` | persisted projection of canonical IDs, not authority |
+| Operation policy, grants, approval and revocation | existing Governance Gate, Broker and Store | governance database and append-oriented audit chain |
+| Human sessions and bound mutation nonces | trusted Control Plane human boundary | existing GovernanceStore tables |
+| Credential handle references and leases | existing CredentialBroker | GovernanceStore lifecycle records; raw values stay in protected SecretBackend |
+| Artifact and evidence bytes | `ContentAddressedArtifactStore` | SHA-256-addressed immutable objects and provenance metadata |
+| OperationReceipt candidate | existing producer/validator | signed Node result, Node journal and Work evidence references |
+| Observation and EffectVerification | existing read Work and `EffectVerifier` | independently acquired Observation and bound verification evidence |
+| Events/activity | existing EventStream | durable per-run records; live bus/SSE are projections |
+| Work Harness deliberation/recovery | existing Work Harness / checkpoint store | workspace checkpoints and AgentExecutionRuntime records |
+| Project/conversation cursor | existing Project Coordinator/Execution Service | project, work-item, attempt and checkpoint tables |
 
-The desktop entity store, Python compatibility objects, OpenClaw session maps,
-ROS 2 state and OPC UA subscriptions are caches or adapters. They cannot create
-kernel truth.
+An SDK Agent definition, an AgentSession and a Work Harness checkpoint describe
+different existing concerns. They do not permit a new agent executor. Legacy
+Artifact metadata and CAS content also have distinct concerns; metadata alone
+is not evidence integrity. The Control Plane and Console read these stores and
+route supported mutations through existing Governance, never their own ledger.
 
-## Write rules
+## Admission, durability and commitment
 
-1. Every write has an owner, actor, generation and idempotency key.
-2. State transitions use compare-and-swap and fencing.
-3. The durable journal is written before a materialized view is updated.
-4. External effects require a verified receipt before commit.
-5. Credentials and secret values are never serialized into state or events.
-6. A signed Node result is only a candidate execution fact. Kernel independently
-   validates Node trust and operation, Intent, EffectContract, TargetBinding,
-   request, delivery, provider revision, and protocol bindings.
-7. The Kernel's in-memory `TransactionalEffectEngine` is a domain/test reference,
-   not a second production durability authority.
+1. Bind the current authenticated actor, Work, Operation, Node, Capability,
+   resource and Artifact IDs at the established boundary. Placement cannot
+   grant authority; discovery cannot establish trust.
+2. Revalidate grants, expiry, revocation, resource facts and credential scope
+   immediately before execution. Missing authority or UNKNOWN blocks admission.
+3. Use the existing store's transaction/lock and expected-state checks. Local
+   Work reads and mutations share its file lock; atomic replacement is not a
+   substitute for read/write exclusion. Kernel CAS/fencing remains Kernel-owned.
+4. Persist Node execution admission before an effect. Repeated original delivery
+   identities resolve to their recorded outcome; changed bindings are rejected.
+5. Validate signed result/receipt bindings and CAS digests. A receipt describes
+   execution evidence, not the independently observed state of a Device.
+6. Effectful Reality Work commits only on independent fresh MATCH. A successful
+   execution result cannot substitute for an Observation. MISMATCH and UNKNOWN
+   are uncommitted, including after a valid human approval.
+7. Raw credentials never enter ordinary state, audit, events or artifacts.
+   Audit is append-oriented with integrity checks, not a claim of resistance
+   to a privileged host administrator or immutable external storage.
+
+Read-only Work can verify its execution result and artifacts without claiming a
+physical effect. A `COMMITTED` label must be interpreted with its selected scope,
+Work policy and bound evidence; it cannot manufacture a different scope's proof.
+
+## Failure and recovery
+
+| Evidence condition | Required response |
+| --- | --- |
+| Missing/expired/revoked authority or credentials | Deny current execution; do not reuse after reconnect |
+| Explicit negative or contradictory independent state | MISMATCH; no effect commit |
+| Stale, missing, conflicting or unsupported state/evidence | UNKNOWN; fail closed |
+| Node disconnect or delayed response | Preserve original Work and delivery state; await/reconcile evidence |
+| Duplicate original receipt/result | Validate identical bindings and deduplicate; no new effect |
+| Effect occurred, acknowledgement lost | Reconcile persisted Node/Work evidence and acquire a fresh Observation |
+| Executing journal exists but terminal receipt is missing | RECOVERY_REQUIRED/UNKNOWN; no blind replay or fabricated receipt |
+| Approval remains valid during uncertain recovery | Authority still does not prove delivery safety; reconcile first |
+| Interrupted commit with durable MATCH evidence | Revalidate persisted bindings/evidence; commit the original verified outcome |
+| Device rediscovery/reconnect or locator change | Preserve stable identity/trust and terminal revocation |
+
+Do not interpret cancellation, interruption, failed execution or a missing
+response as proof that a physical effect stopped or never happened. An
+acknowledgement records operator attention; it does not resolve UNKNOWN. A new
+plan is explicit deliberation and must not silently replace the originally
+approved Operation. See [Compute Mesh recovery](../operations/compute-mesh/EXECUTION_RECOVERY.md)
+and the [Reality fault matrix](../acceptance/REALITY_ARCHITECTURE_AUDIT.md#recovery-and-faults).
+
+## Current deployment assumptions
+
+The accepted Cloud slices use one local durable Governance authority and
+Node-owned simulation state. Shared local file/SQLite transactions do not prove
+cross-site consistency, distributed consensus or Controller high availability.
+Remote secret transport, fleet/federation and physical faults require their
+own later acceptance evidence. M3.3-C remains PENDING.

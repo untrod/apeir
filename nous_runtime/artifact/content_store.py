@@ -16,14 +16,22 @@ from typing import Any, Iterable
 
 from nous_runtime.artifact.models import ArtifactType
 from nous_runtime.core.errors import ArtifactError
+from nous_runtime.core.redaction import (
+    contains_sensitive_value,
+    redact_sensitive_data,
+    redact_sensitive_text,
+    sensitive_overlap_bytes,
+)
 from nous_runtime.locking import file_lock
 
 _DIGEST = re.compile(r"^sha256:([0-9a-f]{64})$")
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace(
-        "+00:00", "Z"
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
     )
 
 
@@ -125,6 +133,8 @@ class ContentAddressedArtifactStore:
     ) -> dict[str, Any]:
         if not isinstance(content, bytes):
             raise ArtifactError("artifact content must be bytes")
+        if contains_sensitive_value(content):
+            raise ArtifactError("Secret material cannot enter Artifact content")
         digest = "sha256:" + hashlib.sha256(content).hexdigest()
         return self._commit(
             digest,
@@ -152,8 +162,13 @@ class ContentAddressedArtifactStore:
             raise ArtifactError("artifact source must be a regular file")
         hasher = hashlib.sha256()
         size = 0
+        overlap = sensitive_overlap_bytes()
+        tail = b""
         with source_path.open("rb") as handle:
             while chunk := handle.read(1024 * 1024):
+                if contains_sensitive_value(tail + chunk):
+                    raise ArtifactError("Secret material cannot enter Artifact content")
+                tail = (tail + chunk)[-overlap:] if overlap else b""
                 hasher.update(chunk)
                 size += len(chunk)
         digest = "sha256:" + hasher.hexdigest()
@@ -197,8 +212,14 @@ class ContentAddressedArtifactStore:
         value = self._index.get(digest)
         return ContentArtifact.from_dict(value) if value else None
 
-    def list(self, artifact_type: str | ArtifactType | None = None) -> list[ContentArtifact]:
-        normalized = artifact_type.value if isinstance(artifact_type, ArtifactType) else str(artifact_type or "")
+    def list(
+        self, artifact_type: str | ArtifactType | None = None
+    ) -> list[ContentArtifact]:
+        normalized = (
+            artifact_type.value
+            if isinstance(artifact_type, ArtifactType)
+            else str(artifact_type or "")
+        )
         values = [ContentArtifact.from_dict(value) for value in self._index.values()]
         if normalized:
             values = [value for value in values if value.artifact_type == normalized]
@@ -246,7 +267,13 @@ class ContentAddressedArtifactStore:
             protected = self._transitive_pin_closure()
             candidates = sorted(set(self._index) - protected)
             if dry_run:
-                return {"dry_run": True, "removed": [], "candidates": candidates, "protected": sorted(protected), "receipt": None}
+                return {
+                    "dry_run": True,
+                    "removed": [],
+                    "candidates": candidates,
+                    "protected": sorted(protected),
+                    "receipt": None,
+                }
             next_index = {
                 digest: record
                 for digest, record in self._index.items()
@@ -266,7 +293,13 @@ class ContentAddressedArtifactStore:
                 "COMPLETED",
                 effect={"removed": removed, "protected": sorted(protected)},
             )
-            return {"dry_run": False, "removed": removed, "candidates": candidates, "protected": sorted(protected), "receipt": receipt}
+            return {
+                "dry_run": False,
+                "removed": removed,
+                "candidates": candidates,
+                "protected": sorted(protected),
+                "receipt": receipt,
+            }
 
     def _commit(
         self,
@@ -283,7 +316,11 @@ class ContentAddressedArtifactStore:
         derived_from: Iterable[str] = (),
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        normalized_type = artifact_type.value if isinstance(artifact_type, ArtifactType) else str(artifact_type)
+        normalized_type = (
+            artifact_type.value
+            if isinstance(artifact_type, ArtifactType)
+            else str(artifact_type)
+        )
         if normalized_type not in {item.value for item in ArtifactType}:
             raise ArtifactError(f"unsupported artifact type: {normalized_type}")
         if not name.strip():
@@ -296,15 +333,15 @@ class ContentAddressedArtifactStore:
         record = ContentArtifact(
             digest=digest,
             artifact_type=normalized_type,
-            name=name.strip(),
+            name=redact_sensitive_text(name.strip()),
             size_bytes=size,
             created_at=_utc_now(),
             media_type=media_type,
-            produced_by=produced_by,
+            produced_by=redact_sensitive_text(produced_by),
             depends_on=dependencies,
             deployed_to=tuple(sorted(set(deployed_to))),
             derived_from=origins,
-            metadata=dict(metadata or {}),
+            metadata=redact_sensitive_data(dict(metadata or {})),
         )
         with self._lock, file_lock(str(self.index_path) + ".lock"):
             existing = self._index.get(digest)
@@ -351,7 +388,10 @@ class ContentAddressedArtifactStore:
         pending = list(protected)
         while pending:
             record = self._index.get(pending.pop(), {})
-            for linked in (*record.get("depends_on", []), *record.get("derived_from", [])):
+            for linked in (
+                *record.get("depends_on", []),
+                *record.get("derived_from", []),
+            ):
                 if linked not in protected:
                     protected.add(linked)
                     pending.append(linked)
@@ -379,7 +419,9 @@ class ContentAddressedArtifactStore:
             "timestamps": {"started_at": now, "finished_at": now},
             "policy_version": "artifact-local-v1",
             "executor": "content-addressed-store",
-            "effect_digest": hashlib.sha256(_canonical(effect or {"target": target})).hexdigest(),
+            "effect_digest": hashlib.sha256(
+                _canonical(effect or {"target": target})
+            ).hexdigest(),
         }
         with self.receipts_path.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(receipt, ensure_ascii=False, sort_keys=True) + "\n")
@@ -406,7 +448,11 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _atomic_write_json(path: Path, value: Any) -> None:
-    _atomic_write_bytes(path, json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8") + b"\n")
+    _atomic_write_bytes(
+        path,
+        json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8")
+        + b"\n",
+    )
 
 
 def _atomic_write_bytes(path: Path, content: bytes) -> None:

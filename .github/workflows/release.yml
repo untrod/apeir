@@ -1,0 +1,23 @@
+name: Release Preflight
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-integrity:
+    name: Native integrity (release blocking)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify candidate versions
+        run: python scripts/ci/verify_release_versions.py
+      - name: Verify actual locked binary hashes
+        run: python scripts/ci/verify_kernel_components.py --repo-root .
+      - name: Require subsequent maintainer qualification
+        shell: pwsh
+        run: |
+          'Hash preflight alone does not certify a release. Follow docs/acceptance/RELEASE_RUNBOOK.md for builds, platform acceptance, checksums, SBOM and provenance.' >> $env:GITHUB_STEP_SUMMARY
+# No release publication: native staging, reproducible build and signing are not qualified.

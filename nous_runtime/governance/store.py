@@ -12,9 +12,9 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+from nous_runtime.core.redaction import redact_sensitive_data
 
 _log = logging.getLogger("nous.governance.store")
-
 
 
 @contextmanager
@@ -62,6 +62,11 @@ class GovernanceStore:
             try:
                 with _db_connect(self.db_path) as db:
                     db.executescript("""
+                        CREATE TABLE IF NOT EXISTS governance_operations (
+                            authorization_id TEXT PRIMARY KEY,
+                            operation_id TEXT NOT NULL UNIQUE,
+                            request_json TEXT NOT NULL
+                        );
                         CREATE TABLE IF NOT EXISTS governance_proposals (
                             proposal_id TEXT PRIMARY KEY,
                             proposal_hash TEXT NOT NULL UNIQUE,
@@ -202,11 +207,83 @@ class GovernanceStore:
                             recorded_at TEXT NOT NULL DEFAULT '',
                             previous_audit_hash TEXT NOT NULL DEFAULT ''
                         );
+
+                        CREATE TABLE IF NOT EXISTS governance_secret_handles (
+                            handle_id TEXT PRIMARY KEY, reference_json TEXT NOT NULL,
+                            bindings_json TEXT NOT NULL, expires_at TEXT NOT NULL,
+                            status TEXT NOT NULL DEFAULT 'ACTIVE'
+                        );
+                        CREATE TABLE IF NOT EXISTS governance_human_challenges (
+                            challenge_id TEXT PRIMARY KEY,
+                            nonce_digest TEXT NOT NULL,
+                            pkce_challenge TEXT NOT NULL,
+                            expires_at INTEGER NOT NULL,
+                            consumed INTEGER NOT NULL DEFAULT 0
+                        );
+                        CREATE TABLE IF NOT EXISTS governance_human_sessions (
+                            session_id TEXT PRIMARY KEY,
+                            token_digest TEXT NOT NULL UNIQUE,
+                            subject_id TEXT NOT NULL,
+                            issuer TEXT NOT NULL,
+                            expires_at INTEGER NOT NULL,
+                            status TEXT NOT NULL,
+                            identity_json TEXT NOT NULL
+                        );
+                        CREATE TABLE IF NOT EXISTS governance_human_nonces (
+                            nonce_digest TEXT PRIMARY KEY,
+                            session_id TEXT NOT NULL,
+                            request_digest TEXT NOT NULL,
+                            expires_at INTEGER NOT NULL,
+                            consumed INTEGER NOT NULL DEFAULT 0
+                        );
+                        CREATE TABLE IF NOT EXISTS governance_credential_leases (
+                            lease_id TEXT PRIMARY KEY, authorization_id TEXT NOT NULL,
+                            handle_id TEXT NOT NULL, expires_at TEXT NOT NULL,
+                            status TEXT NOT NULL, lease_json TEXT NOT NULL,
+                            UNIQUE(authorization_id, handle_id)
+                        );
                     """)
             except Exception as e:
                 _log.warning("Failed to create governance tables: %s", e)
 
     # Proposal
+
+    @contextmanager
+    def operation_transaction(self):
+        """Serialize admission, approval and revocation across store instances."""
+        with self._lock, _db_connect(self.db_path) as db:
+            db.execute("BEGIN IMMEDIATE")
+            yield db
+
+    @staticmethod
+    def append_operation_audit(db, event_type: str, evidence: dict[str, Any]) -> None:
+        """Append to the existing audit chain in the caller's transaction."""
+        from nous_runtime.governance.contracts import _new_id, _utc_now
+
+        prev = db.execute(
+            "SELECT * FROM governance_audit ORDER BY rowid DESC LIMIT 1"
+        ).fetchone()
+        db.execute(
+            "INSERT INTO governance_audit VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                _new_id("aud"),
+                event_type,
+                evidence.get("authorization_id", ""),
+                evidence.get("authorization_id", ""),
+                json.dumps(redact_sensitive_data(evidence), sort_keys=True),
+                _utc_now(),
+                GovernanceStore._audit_row_hash(prev) if prev else "",
+            ),
+        )
+
+    def operation_audit(self) -> list[dict[str, Any]]:
+        with _db_connect(self.db_path, readonly=True) as db:
+            return [
+                dict(row)
+                for row in db.execute(
+                    "SELECT * FROM governance_audit ORDER BY rowid"
+                ).fetchall()
+            ]
 
     def save_proposal(self, proposal_dict: dict[str, Any]) -> bool:
         with self._lock:
@@ -219,19 +296,22 @@ class GovernanceStore:
                             target_workspace, data_classification, side_effect_class,
                             reversibility, created_at, expires_at, proposal_json)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (proposal_dict["proposal_id"], proposal_dict["proposal_hash"],
-                         proposal_dict.get("action_type", ""),
-                         proposal_dict.get("capability_id", ""),
-                         proposal_dict.get("parameter_hash", ""),
-                         proposal_dict.get("parameter_summary", ""),
-                         proposal_dict.get("target_node", ""),
-                         proposal_dict.get("target_workspace", ""),
-                         proposal_dict.get("data_classification", "internal"),
-                         proposal_dict.get("side_effect_class", "unknown"),
-                         proposal_dict.get("reversibility", "unknown"),
-                         proposal_dict.get("created_at", ""),
-                         proposal_dict.get("expires_at", ""),
-                         json.dumps(proposal_dict)),
+                        (
+                            proposal_dict["proposal_id"],
+                            proposal_dict["proposal_hash"],
+                            proposal_dict.get("action_type", ""),
+                            proposal_dict.get("capability_id", ""),
+                            proposal_dict.get("parameter_hash", ""),
+                            proposal_dict.get("parameter_summary", ""),
+                            proposal_dict.get("target_node", ""),
+                            proposal_dict.get("target_workspace", ""),
+                            proposal_dict.get("data_classification", "internal"),
+                            proposal_dict.get("side_effect_class", "unknown"),
+                            proposal_dict.get("reversibility", "unknown"),
+                            proposal_dict.get("created_at", ""),
+                            proposal_dict.get("expires_at", ""),
+                            json.dumps(proposal_dict),
+                        ),
                     )
                 return True
             except Exception as e:
@@ -265,21 +345,24 @@ class GovernanceStore:
                             constitution_rule, risk_json, lease_id, delegation_id,
                             decided_at, decision_ttl, decision_json)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (decision_dict["decision_id"], decision_dict["proposal_hash"],
-                         decision_dict.get("context_id", ""),
-                         decision_dict.get("action_mode", "DENY"),
-                         int(decision_dict.get("allowed", False)),
-                         decision_dict.get("reason_code", ""),
-                         decision_dict.get("reason_message", ""),
-                         decision_dict.get("rule_class", ""),
-                         decision_dict.get("policy_id", ""),
-                         decision_dict.get("constitution_rule", ""),
-                         json.dumps(decision_dict.get("risk_envelope")),
-                         decision_dict.get("lease_id", ""),
-                         decision_dict.get("delegation_id", ""),
-                         decision_dict.get("decided_at", ""),
-                         int(decision_dict.get("decision_ttl", 60)),
-                         json.dumps(decision_dict)),
+                        (
+                            decision_dict["decision_id"],
+                            decision_dict["proposal_hash"],
+                            decision_dict.get("context_id", ""),
+                            decision_dict.get("action_mode", "DENY"),
+                            int(decision_dict.get("allowed", False)),
+                            decision_dict.get("reason_code", ""),
+                            decision_dict.get("reason_message", ""),
+                            decision_dict.get("rule_class", ""),
+                            decision_dict.get("policy_id", ""),
+                            decision_dict.get("constitution_rule", ""),
+                            json.dumps(decision_dict.get("risk_envelope")),
+                            decision_dict.get("lease_id", ""),
+                            decision_dict.get("delegation_id", ""),
+                            decision_dict.get("decided_at", ""),
+                            int(decision_dict.get("decision_ttl", 60)),
+                            json.dumps(decision_dict),
+                        ),
                     )
                 return True
             except Exception as e:
@@ -312,16 +395,19 @@ class GovernanceStore:
                             scope_summary, status, requested_by, requested_at,
                             expires_at, priority, request_json)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (request_dict["request_id"], request_dict["proposal_hash"],
-                         request_dict.get("summary", ""),
-                         request_dict.get("risk_summary", ""),
-                         request_dict.get("scope_summary", ""),
-                         request_dict.get("status", "CREATED"),
-                         request_dict.get("requested_by", ""),
-                         request_dict.get("requested_at", ""),
-                         request_dict.get("expires_at", ""),
-                         request_dict.get("priority", "normal"),
-                         json.dumps(request_dict)),
+                        (
+                            request_dict["request_id"],
+                            request_dict["proposal_hash"],
+                            request_dict.get("summary", ""),
+                            request_dict.get("risk_summary", ""),
+                            request_dict.get("scope_summary", ""),
+                            request_dict.get("status", "CREATED"),
+                            request_dict.get("requested_by", ""),
+                            request_dict.get("requested_at", ""),
+                            request_dict.get("expires_at", ""),
+                            request_dict.get("priority", "normal"),
+                            json.dumps(request_dict),
+                        ),
                     )
                 return True
             except Exception as e:
@@ -469,14 +555,18 @@ class GovernanceStore:
                             scope_json, approver_id, approver_method, reason,
                             responded_at, response_json)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (response_dict["response_id"], response_dict["request_id"],
-                         response_dict["proposal_hash"], response_dict["decision"],
-                         json.dumps(response_dict.get("scope")),
-                         response_dict.get("approver_id", ""),
-                         response_dict.get("approver_method", "cli"),
-                         response_dict.get("reason", ""),
-                         response_dict.get("responded_at", ""),
-                         json.dumps(response_dict)),
+                        (
+                            response_dict["response_id"],
+                            response_dict["request_id"],
+                            response_dict["proposal_hash"],
+                            response_dict["decision"],
+                            json.dumps(response_dict.get("scope")),
+                            response_dict.get("approver_id", ""),
+                            response_dict.get("approver_method", "cli"),
+                            response_dict.get("reason", ""),
+                            response_dict.get("responded_at", ""),
+                            json.dumps(response_dict),
+                        ),
                     )
                 return True
             except Exception as e:
@@ -495,16 +585,19 @@ class GovernanceStore:
                             scope_json, max_uses, remaining_uses, issued_at,
                             expires_at, status, lease_json)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (lease_dict["lease_id"], lease_dict["proposal_hash"],
-                         lease_dict.get("approval_id", ""),
-                         lease_dict.get("subject_id", ""),
-                         json.dumps(lease_dict.get("scope")),
-                         int(lease_dict.get("max_uses", 1)),
-                         int(lease_dict.get("remaining_uses", 1)),
-                         lease_dict.get("issued_at", ""),
-                         lease_dict.get("expires_at", ""),
-                         lease_dict.get("status", "ACTIVE"),
-                         json.dumps(lease_dict)),
+                        (
+                            lease_dict["lease_id"],
+                            lease_dict["proposal_hash"],
+                            lease_dict.get("approval_id", ""),
+                            lease_dict.get("subject_id", ""),
+                            json.dumps(lease_dict.get("scope")),
+                            int(lease_dict.get("max_uses", 1)),
+                            int(lease_dict.get("remaining_uses", 1)),
+                            lease_dict.get("issued_at", ""),
+                            lease_dict.get("expires_at", ""),
+                            lease_dict.get("status", "ACTIVE"),
+                            json.dumps(lease_dict),
+                        ),
                     )
                 return True
             except Exception as e:
@@ -528,7 +621,9 @@ class GovernanceStore:
                 pass
         return None
 
-    def get_active_lease_for_proposal(self, proposal_hash: str, subject_id: str) -> dict[str, Any] | None:
+    def get_active_lease_for_proposal(
+        self, proposal_hash: str, subject_id: str
+    ) -> dict[str, Any] | None:
         with self._lock:
             try:
                 with _db_connect(self.db_path, readonly=True) as db:
@@ -575,6 +670,7 @@ class GovernanceStore:
                         return False, remaining
 
                     from datetime import datetime, timezone
+
                     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                     if expires_at and expires_at <= now:
                         db.execute(
@@ -591,6 +687,7 @@ class GovernanceStore:
                         (new_remaining, new_status, lease_id),
                     )
                     import uuid as _uuid
+
                     log_id = f"lcl_{_uuid.uuid4().hex[:12]}"
                     db.execute(
                         "INSERT OR IGNORE INTO governance_lease_consumption "
@@ -652,19 +749,22 @@ class GovernanceStore:
                             constraints_json, max_uses, used_count, issued_at,
                             expires_at, allow_sub_delegation, status, grant_json)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (grant_dict["grant_id"], grant_dict.get("issuer_id", ""),
-                         grant_dict.get("subject_id", ""),
-                         json.dumps(grant_dict.get("scope")),
-                         json.dumps(grant_dict.get("permitted_capabilities", [])),
-                         json.dumps(grant_dict.get("denied_capabilities", [])),
-                         json.dumps(grant_dict.get("constraints", [])),
-                         int(grant_dict.get("max_uses", 1)),
-                         int(grant_dict.get("used_count", 0)),
-                         grant_dict.get("issued_at", ""),
-                         grant_dict.get("expires_at", ""),
-                         int(grant_dict.get("allow_sub_delegation", False)),
-                         grant_dict.get("status", "DRAFT"),
-                         json.dumps(grant_dict)),
+                        (
+                            grant_dict["grant_id"],
+                            grant_dict.get("issuer_id", ""),
+                            grant_dict.get("subject_id", ""),
+                            json.dumps(grant_dict.get("scope")),
+                            json.dumps(grant_dict.get("permitted_capabilities", [])),
+                            json.dumps(grant_dict.get("denied_capabilities", [])),
+                            json.dumps(grant_dict.get("constraints", [])),
+                            int(grant_dict.get("max_uses", 1)),
+                            int(grant_dict.get("used_count", 0)),
+                            grant_dict.get("issued_at", ""),
+                            grant_dict.get("expires_at", ""),
+                            int(grant_dict.get("allow_sub_delegation", False)),
+                            grant_dict.get("status", "DRAFT"),
+                            json.dumps(grant_dict),
+                        ),
                     )
                 return True
             except Exception as e:
@@ -727,10 +827,16 @@ class GovernanceStore:
                            (revocation_id, target_type, target_id, revoked_by,
                             reason, revoked_at, cascaded_from, revocation_json)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (rev_dict["revocation_id"], rev_dict.get("target_type", ""),
-                         rev_dict["target_id"], rev_dict.get("revoked_by", ""),
-                         rev_dict.get("reason", ""), rev_dict.get("revoked_at", ""),
-                         rev_dict.get("cascaded_from", ""), json.dumps(rev_dict)),
+                        (
+                            rev_dict["revocation_id"],
+                            rev_dict.get("target_type", ""),
+                            rev_dict["target_id"],
+                            rev_dict.get("revoked_by", ""),
+                            rev_dict.get("reason", ""),
+                            rev_dict.get("revoked_at", ""),
+                            rev_dict.get("cascaded_from", ""),
+                            json.dumps(rev_dict),
+                        ),
                     )
                 return True
             except Exception:
@@ -742,6 +848,7 @@ class GovernanceStore:
         with self._lock:
             try:
                 with _db_connect(self.db_path) as db:
+                    db.execute("BEGIN IMMEDIATE")
                     prev = db.execute(
                         "SELECT * FROM governance_audit ORDER BY rowid DESC LIMIT 1"
                     ).fetchone()
@@ -751,12 +858,17 @@ class GovernanceStore:
                            (audit_id, event_type, decision_id, proposal_hash,
                             evidence_json, recorded_at, previous_audit_hash)
                            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                        (audit_dict["bundle_id"], audit_dict.get("event_type", ""),
-                         audit_dict.get("decision_id", ""),
-                         audit_dict.get("proposal_hash", ""),
-                         json.dumps(audit_dict.get("evidence", {})),
-                         audit_dict.get("recorded_at", ""),
-                         prev_hash),
+                        (
+                            audit_dict["bundle_id"],
+                            audit_dict.get("event_type", ""),
+                            audit_dict.get("decision_id", ""),
+                            audit_dict.get("proposal_hash", ""),
+                            json.dumps(
+                                redact_sensitive_data(audit_dict.get("evidence", {}))
+                            ),
+                            audit_dict.get("recorded_at", ""),
+                            prev_hash,
+                        ),
                     )
                 return True
             except Exception as e:
@@ -784,7 +896,9 @@ class GovernanceStore:
     @staticmethod
     def _audit_row_hash(row: Any) -> str:
         payload = {key: row[key] for key in row.keys()}
-        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode(
+            "utf-8"
+        )
         return hashlib.sha256(encoded).hexdigest()
 
     def get_audit_for_decision(self, decision_id: str) -> dict[str, Any] | None:
@@ -836,25 +950,33 @@ class GovernanceStore:
                             require_confirmation_for_policy_change,
                             created_at, updated_at, policy_json)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (policy_dict["policy_id"],
-                         policy_dict.get("agent_id", ""),
-                         policy_dict.get("capability_id", ""),
-                         policy_dict.get("scope", "ask_per_command"),
-                         policy_dict.get("max_auto_approve_risk", "low"),
-                         int(policy_dict.get("auto_approve_read_only", False)),
-                         int(policy_dict.get("auto_approve_tests", False)),
-                         int(policy_dict.get("max_daily_approvals", 50)),
-                         int(policy_dict.get("require_confirmation_for_policy_change", True)),
-                         policy_dict.get("created_at", ""),
-                         policy_dict.get("updated_at", ""),
-                         json.dumps(policy_dict)),
+                        (
+                            policy_dict["policy_id"],
+                            policy_dict.get("agent_id", ""),
+                            policy_dict.get("capability_id", ""),
+                            policy_dict.get("scope", "ask_per_command"),
+                            policy_dict.get("max_auto_approve_risk", "low"),
+                            int(policy_dict.get("auto_approve_read_only", False)),
+                            int(policy_dict.get("auto_approve_tests", False)),
+                            int(policy_dict.get("max_daily_approvals", 50)),
+                            int(
+                                policy_dict.get(
+                                    "require_confirmation_for_policy_change", True
+                                )
+                            ),
+                            policy_dict.get("created_at", ""),
+                            policy_dict.get("updated_at", ""),
+                            json.dumps(policy_dict),
+                        ),
                     )
                 return True
             except Exception as e:
                 _log.warning("save_approval_policy: %s", e)
                 return False
 
-    def get_approval_policy(self, agent_id: str, capability_id: str = "") -> dict[str, Any] | None:
+    def get_approval_policy(
+        self, agent_id: str, capability_id: str = ""
+    ) -> dict[str, Any] | None:
         with self._lock:
             try:
                 with _db_connect(self.db_path, readonly=True) as db:

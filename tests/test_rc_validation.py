@@ -22,7 +22,6 @@ from pathlib import Path
 import pytest
 
 
-
 # 1. ARCHITECTURE INTEGRITY
 
 
@@ -49,6 +48,7 @@ class TestArchitectureIntegrity:
 
     def test_kernel_runtime_unchanged(self):
         from nous_runtime.kernel.runtime import Runtime
+
         rt = Runtime()
         s = rt.status()
         assert hasattr(s, "version")
@@ -56,23 +56,28 @@ class TestArchitectureIntegrity:
 
     def test_kernel_tracing_unchanged(self):
         from nous_runtime.kernel.tracing import TraceContext, ExecutionTimeline
+
         assert TraceContext is not None
         assert ExecutionTimeline is not None
 
     def test_intelligence_engine_unchanged(self):
         from nous_runtime.intelligence.engine import IntelligenceEngine
+
         assert IntelligenceEngine is not None
 
     def test_provider_registry_unchanged(self):
         from nous_runtime.provider.registry import ProviderRegistry
+
         assert ProviderRegistry is not None
 
     def test_governance_gate_unchanged(self):
         from nous_runtime.governance import get_gate
+
         assert get_gate() is not None
 
     def test_capability_lifecycle_unchanged(self):
         from nous_runtime.capability.lifecycle import CapabilityLifecycle
+
         assert CapabilityLifecycle is not None
 
     def test_no_new_files_in_frozen_dirs(self):
@@ -97,7 +102,6 @@ class TestArchitectureIntegrity:
                 )
 
 
-
 # 2. API CONTRACT
 
 
@@ -106,10 +110,12 @@ class TestApiContract:
 
     def test_all_routes_registered(self):
         from nous_runtime.api.routes import ROUTES
+
         assert len(ROUTES) >= 110, f"Expected 110+ routes, got {len(ROUTES)}"
 
     def test_core_routes_present(self):
         from nous_runtime.api.routes import ROUTES
+
         core = [
             ("GET", "/api/v1/status"),
             ("GET", "/api/v1/health"),
@@ -125,6 +131,7 @@ class TestApiContract:
 
     def test_desktop_routes_present(self):
         from nous_runtime.api.routes import ROUTES
+
         desktop = [
             ("GET", "/api/tasks"),
             ("POST", "/api/tasks/action"),
@@ -145,6 +152,7 @@ class TestApiContract:
 
     def test_task_center_routes_present(self):
         from nous_runtime.api.routes import ROUTES
+
         tc = [
             ("GET", "/api/tasks/timeline"),
             ("GET", "/api/tasks/graph"),
@@ -154,6 +162,7 @@ class TestApiContract:
 
     def test_health_routes_present(self):
         from nous_runtime.api.routes import ROUTES
+
         health = [
             ("GET", "/api/health/dashboard"),
             ("GET", "/api/service/status"),
@@ -163,13 +172,13 @@ class TestApiContract:
 
     def test_all_handlers_callable(self):
         from nous_runtime.api.routes import ROUTES
+
         for (method, path), handler in ROUTES.items():
-            assert callable(handler), (
-                f"Handler for {method} {path} is not callable"
-            )
+            assert callable(handler), f"Handler for {method} {path} is not callable"
 
     def test_envelope_format_status(self):
         from nous_runtime.api.routes import handle_status
+
         r = handle_status()
         assert r["ok"] is True
         assert "data" in r
@@ -177,6 +186,7 @@ class TestApiContract:
 
     def test_envelope_format_error(self):
         from nous_runtime.api.routes import route
+
         r = route("GET", "/nonexistent")
         assert r["ok"] is False
         assert "error" in r
@@ -188,6 +198,7 @@ class TestApiContract:
             handle_devices_list,
             handle_dashboard_full,
         )
+
         for handler in [handle_tasks_list, handle_devices_list, handle_dashboard_full]:
             r = handler()
             assert r["ok"] is True, f"Handler {handler.__name__} failed"
@@ -198,6 +209,7 @@ class TestApiContract:
             handle_task_timeline,
             handle_task_graph,
         )
+
         for handler in [handle_task_timeline, handle_task_graph]:
             r = handler()
             assert r["ok"] is True, f"Handler {handler.__name__} failed"
@@ -207,6 +219,7 @@ class TestApiContract:
             handle_health_dashboard,
             handle_service_status,
         )
+
         r = handle_health_dashboard()
         assert r["ok"] is True
         assert "components" in r["data"]
@@ -214,7 +227,6 @@ class TestApiContract:
 
         r2 = handle_service_status()
         assert r2["ok"] is True
-
 
 
 # 3. FIRST-LAUNCH WORKFLOW
@@ -225,19 +237,23 @@ class TestFirstLaunchWorkflow:
 
     def test_is_first_launch_positive(self):
         from nous_runtime.deployment.first_launch import is_first_launch
+
         with tempfile.TemporaryDirectory() as tmp:
             assert is_first_launch(tmp) is True
 
     def test_mark_and_detect(self):
         from nous_runtime.deployment.first_launch import (
-            is_first_launch, mark_launched,
+            is_first_launch,
+            mark_launched,
         )
+
         with tempfile.TemporaryDirectory() as tmp:
             mark_launched(tmp)
             assert is_first_launch(tmp) is False
 
     def test_marker_file_contents(self):
         from nous_runtime.deployment.first_launch import mark_launched
+
         with tempfile.TemporaryDirectory() as tmp:
             mark_launched(tmp)
             marker = Path(tmp) / ".nous_initialized"
@@ -251,6 +267,7 @@ class TestFirstLaunchWorkflow:
         from nous_runtime.deployment.first_launch import (
             run_first_launch_if_needed,
         )
+
         with tempfile.TemporaryDirectory() as tmp:
             run_first_launch_if_needed(tmp)
             assert Path(tmp).is_dir()
@@ -260,12 +277,12 @@ class TestFirstLaunchWorkflow:
             run_first_launch_if_needed,
             is_first_launch,
         )
+
         with tempfile.TemporaryDirectory() as tmp:
             run_first_launch_if_needed(tmp)
             assert is_first_launch(tmp) is False
             # Second call should not re-run wizard
             assert run_first_launch_if_needed(tmp) is False
-
 
 
 # 4. INSTALLER CONFIGURATION
@@ -276,6 +293,7 @@ class TestInstallerConfig:
 
     def test_hardware_detection(self):
         from nous_runtime.deployment.setup_wizard import detect_hardware
+
         hw = detect_hardware()
         assert hw.cpu_cores >= 1
         assert hw.platform != ""
@@ -283,6 +301,7 @@ class TestInstallerConfig:
 
     def test_setup_config_defaults(self):
         from nous_runtime.deployment.setup_wizard import SetupConfig
+
         c = SetupConfig()
         assert c.runtime_mode in ("cloud_assisted", "local", "hybrid")
         assert isinstance(c.auto_start, bool)
@@ -290,8 +309,11 @@ class TestInstallerConfig:
 
     def test_save_load_cycle(self):
         from nous_runtime.deployment.setup_wizard import (
-            SetupConfig, save_setup_config, load_setup_config,
+            SetupConfig,
+            save_setup_config,
+            load_setup_config,
         )
+
         with tempfile.TemporaryDirectory() as tmp:
             config = SetupConfig(runtime_mode="hybrid", install_path=tmp)
             config.accepted_license = True
@@ -304,8 +326,10 @@ class TestInstallerConfig:
 
     def test_api_keys_stripped_on_save(self):
         from nous_runtime.deployment.setup_wizard import (
-            SetupConfig, save_setup_config,
+            SetupConfig,
+            save_setup_config,
         )
+
         with tempfile.TemporaryDirectory() as tmp:
             config = SetupConfig(
                 providers=[
@@ -333,7 +357,6 @@ class TestInstallerConfig:
         assert 'collect_submodules("compat")' not in spec
 
 
-
 # 5. CLI BACKWARD COMPATIBILITY
 
 
@@ -342,20 +365,28 @@ class TestCliBackwardCompat:
 
     def test_cli_app_loads(self):
         from nous_runtime.cli.main import app
+
         assert app.info.name == "nous"
 
     def test_all_original_commands_present(self):
         from nous_runtime.cli.main import app
+
         names = {cmd.name for cmd in app.registered_commands if cmd.name}
         required = {
-            "init", "demo", "version", "status", "doctor",
-            "trace", "chat",
+            "init",
+            "demo",
+            "version",
+            "status",
+            "doctor",
+            "trace",
+            "chat",
         }
         for name in required:
             assert name in names, f"CLI command missing: {name}"
 
     def test_new_commands_added(self):
         from nous_runtime.cli.main import app
+
         names = {cmd.name for cmd in app.registered_commands if cmd.name}
         names.update(group.name for group in app.registered_groups if group.name)
         new = {"setup", "learn", "my"}
@@ -364,20 +395,38 @@ class TestCliBackwardCompat:
 
     def test_subcommand_groups_present(self):
         from nous_runtime.cli.main import app
+
         group_names = set()
         for group in app.registered_groups:
             if group.name:
                 group_names.add(group.name)
         expected = {
-            "pack", "provider", "model", "profile", "capability",
-            "project", "memory", "retrieval", "decision", "policy",
-            "agent", "inspect", "debug", "dev", "server", "node",
-            "task", "install", "approval", "authorization", "delegation",
-            "learn", "my",
+            "pack",
+            "provider",
+            "model",
+            "profile",
+            "capability",
+            "project",
+            "memory",
+            "retrieval",
+            "decision",
+            "policy",
+            "agent",
+            "inspect",
+            "debug",
+            "dev",
+            "server",
+            "node",
+            "task",
+            "install",
+            "approval",
+            "authorization",
+            "delegation",
+            "learn",
+            "my",
         }
         for name in expected:
             assert name in group_names, f"CLI group missing: {name}"
-
 
 
 # 6. MODULE IMPORT COHERENCE
@@ -417,7 +466,6 @@ class TestModuleCoherence:
         assert True  # No ImportError = success
 
 
-
 # 7. DESKTOP API CONTRACT
 
 
@@ -428,6 +476,7 @@ class TestDesktopApiContract:
         from nous_runtime.api.desktop_routes import (
             handle_tasks_list,
         )
+
         r = handle_tasks_list()
         assert r["ok"] is True
         data = r["data"]
@@ -437,8 +486,10 @@ class TestDesktopApiContract:
 
     def test_devices_list_and_scan(self):
         from nous_runtime.api.desktop_routes import (
-            handle_devices_list, handle_devices_scan,
+            handle_devices_list,
+            handle_devices_scan,
         )
+
         r1 = handle_devices_list()
         assert r1["ok"] is True
         assert r1["data"]["total"] >= 1  # Local device always present
@@ -448,14 +499,20 @@ class TestDesktopApiContract:
 
     def test_automations_crud(self):
         from nous_runtime.api.desktop_routes import (
-            handle_automations_list, handle_automations_add,
+            handle_automations_list,
+            handle_automations_add,
             handle_automations_action,
         )
+
         # Add
-        r = handle_automations_add({
-            "name": "RC Test", "trigger": "schedule",
-            "schedule": "0 9 * * *", "action": "Test",
-        })
+        r = handle_automations_add(
+            {
+                "name": "RC Test",
+                "trigger": "schedule",
+                "schedule": "0 9 * * *",
+                "action": "Test",
+            }
+        )
         assert r["ok"] is True
         aid = r["data"]["id"]
 
@@ -471,12 +528,17 @@ class TestDesktopApiContract:
 
     def test_knowledge_crud(self):
         from nous_runtime.api.desktop_routes import (
-            handle_knowledge_list, handle_knowledge_add,
+            handle_knowledge_list,
+            handle_knowledge_add,
         )
-        r = handle_knowledge_add({
-            "title": "RC Test Doc", "category": "documents",
-            "content": "Validation test content.",
-        })
+
+        r = handle_knowledge_add(
+            {
+                "title": "RC Test Doc",
+                "category": "documents",
+                "content": "Validation test content.",
+            }
+        )
         assert r["ok"] is True
 
         r2 = handle_knowledge_list()
@@ -487,6 +549,7 @@ class TestDesktopApiContract:
         from nous_runtime.api.desktop_routes import (
             handle_security_permissions,
         )
+
         r = handle_security_permissions()
         assert r["ok"] is True
         perms = r["data"]["permissions"]
@@ -496,11 +559,11 @@ class TestDesktopApiContract:
 
     def test_dashboard_aggregation(self):
         from nous_runtime.api.desktop_routes import handle_dashboard_full
+
         r = handle_dashboard_full()
         assert r["ok"] is True
         for key in ("runtime", "models", "tasks", "devices", "memory"):
             assert key in r["data"], f"Dashboard missing: {key}"
-
 
 
 # 8. DOCUMENTATION EXISTENCE
@@ -518,12 +581,12 @@ class TestDocumentation:
         "SECURITY.md",
         "CONTRIBUTING.md",
         "docs/README.md",
-        "docs/user/README.md",
-        "docs/user/INSTALLATION.md",
+        "docs/operations/README.md",
+        "docs/operations/INSTALLATION.md",
         "docs/architecture/README.md",
-        "docs/security/README.md",
-        "docs/release/PUBLIC_RELEASE_CHECKLIST.md",
-        "docs/release/KNOWN_LIMITATIONS.md",
+        "docs/architecture/security/README.md",
+        "docs/acceptance/PUBLIC_RELEASE_CHECKLIST.md",
+        "docs/acceptance/KNOWN_LIMITATIONS.md",
     ]
 
     @pytest.mark.parametrize("doc", REQUIRED_DOCS)
@@ -543,7 +606,6 @@ class TestDocumentation:
         assert "0.1" in content
 
 
-
 # 9. BUILD ARTIFACTS
 
 
@@ -552,10 +614,12 @@ def _load_pyproject():
     text = Path("pyproject.toml").read_text(encoding="utf-8")
     try:
         import tomllib
+
         return tomllib.loads(text)
     except ImportError:
         try:
             import tomli
+
             return tomli.loads(text)
         except ImportError:
             # Fallback: manual parse for essential checks
