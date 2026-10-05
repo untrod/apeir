@@ -5,6 +5,12 @@ All notable changes to APEIR Distribution are recorded here. The project follows
 
 ## Unreleased
 
+- M3.6 additive public Work/Node/Reality/Provider SDK facade over canonical
+  contracts, independently installable SDK wheels, existing protocol/schema
+  rejection and seven opt-in CTK runtime contract suites. Metadata conformance
+  never invokes providers, and required skipped probes cannot certify. Native
+  provider and physical qualification remain pending.
+
 - M3.5 unified canonical Operations Control Plane, external OIDC/PKCE human
   identity with durable expiry/replay binding, existing governed controls, SSE
   transitions and a shared responsive Desktop/Web Operations Console. External

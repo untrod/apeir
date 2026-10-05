@@ -19,7 +19,7 @@ Usage:
 
 from __future__ import annotations
 
-__version__ = "1.0.0-beta1"
+__version__ = "1.0.0-beta2"
 __api_version__ = "v1beta1"
 
 

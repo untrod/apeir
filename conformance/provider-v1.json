@@ -18,5 +18,23 @@
     "plaintext_credential_storage",
     "state_authority",
     "effect_commit"
-  ]
+  ],
+  "distribution_runtime": {
+    "contract": "apeir.runtime/v1",
+    "sdk": "nous_provider.runtime",
+    "ctk": "nous_provider.conformance",
+    "suites": [
+      "work",
+      "node",
+      "device",
+      "provider",
+      "capability",
+      "execution",
+      "evidence"
+    ],
+    "validation_level": "contract",
+    "implicit_execution": false,
+    "missing_target": "SKIP",
+    "physical_acceptance": "PENDING"
+  }
 }

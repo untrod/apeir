@@ -1,4 +1,12 @@
-# Clean-Room Extension Test — RC7
+# Clean-Room Extension Tests
+
+## Current acceptance scope
+
+M3.6 validates Python SDK wheel installation and public Distribution contract
+consumers using existing governed simulation. See the
+[Developer Platform audit](../../docs/development/DEVELOPER_PLATFORM.md).
+The native NKI/ABI scenarios below are qualification plans, not claimed passes.
+Other language SDK availability must be checked before selecting an example.
 
 ## Purpose
 
@@ -9,7 +17,8 @@ specifications and the Provider SDK — without reading kernel internals.
 
 ### Allowed
 - `spec/public-api/v1beta1/` — all public specifications
-- `sdk/provider/` — Provider SDK (Rust, Python, TypeScript, C, WIT)
+- `sdk/provider/python/` — public Python Provider SDK
+- `sdk/python/` and `sdk/c/include/` — existing public NKI/C surfaces
 - `conformance/clean-room/examples/` — clean-room examples
 - `nous-ctk` CLI — conformance test kit
 - Public documentation
@@ -20,7 +29,8 @@ specifications and the Provider SDK — without reading kernel internals.
 - Importing `nous_runtime.kernel.*` private modules
 - Direct access to nousd journal/SQLite
 - Modifying kernel code
-- Bypassing NKI for any operation
+- Bypassing NKI for Kernel-managed operations
+- Bypassing Governance or Distributed Work admission for Reality operations
 
 ## Test Cases
 
@@ -56,18 +66,10 @@ For each test:
 - [ ] No direct journal access
 - [ ] All communication via NKI or stable Provider ABI
 
-## Directory Structure
+## Reference examples
 
-```
-conformance/clean-room/
-├── README.md              ← this file
-├── rules.md               ← detailed rules for testers
-├── examples/              ← allowed reference examples
-│   ├── remote-model/      ← Test 1 reference
-│   ├── cpu-onnx/          ← Test 2 reference
-│   ├── virtual-device/    ← Test 3 reference
-│   ├── scheduler-plugin/  ← Test 4 reference
-│   └── minimal-distro/    ← Test 5 reference
-├── results/               ← test result artifacts
-└── audit/                 ← audit scripts
-```
+The repository currently contains `examples/remote-model/provider.py` and
+`examples/cpu-onnx/provider.py`. They are native qualification examples, not M3.6
+acceptance evidence. Virtual-device, scheduler-plugin, minimal-distribution and
+additional language SDK references remain future work. Do not infer results from
+an example's presence or an unconfigured CTK declaration.

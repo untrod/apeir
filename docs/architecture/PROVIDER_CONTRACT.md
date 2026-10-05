@@ -104,3 +104,17 @@ register_adapter(OpenAIProvider())
 6. Provider failure does not crash the Runtime
 7. Model providers are just one type — nothing special
 8. Future providers (Robot, PLC, Browser) use the same interface
+
+## Public SDK and conformance boundary (M3.6)
+
+Distribution Work/Node/Reality contracts are exported by `nous_provider.runtime`;
+existing Kernel NPA types remain in `nous_provider`. They share canonical types
+rather than parallel implementations. See the authoritative
+[Developer Platform audit](../development/DEVELOPER_PLATFORM.md#m36-public-runtime-sdk-audit)
+and [Provider Development Guide](../development/PROVIDER_DEVELOPMENT.md).
+
+Provider metadata validation must not invoke Operations. CTK contract probes
+inspect supplied records; executable probes require an explicit governed host
+fixture. A required SKIP cannot certify, and a static declaration is not physical
+qualification. Neither a passing contract probe nor a Provider manifest grants
+trust, authorization, or effect commitment.
