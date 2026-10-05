@@ -40,6 +40,26 @@ _SAFE_REFERENCE_KEYS = {
     "authorization_context_id",
 }
 
+# Only this bounded metadata contract may retain the otherwise-sensitive
+# collection name. Unexpected fields or plaintext-shaped values fail closed.
+_CREDENTIAL_LEASE_METADATA_FIELDS = frozenset(
+    {
+        "lease_id",
+        "authorization_id",
+        "authorization_context_id",
+        "handle_id",
+        "subject_id",
+        "work_id",
+        "operation_id",
+        "node_id",
+        "capability_id",
+        "resource_id",
+        "expires_at",
+        "status",
+        "effective_status",
+    }
+)
+
 # Protected matcher memory, never serialized into Runtime evidence. Values remain
 # registered for late logs/errors after a lease closes; clearing them would leak.
 _known_values: set[str] = set()
@@ -111,6 +131,9 @@ def register_sensitive_value(value: str) -> None:
 
 
 _SECRET_VALUE_PATTERNS = (
+    re.compile(
+        r"""(?i)["'](?:access_token|refresh_token|id_token|authorization|password|api_key|client_secret)["']\s*:\s*["'][^"']+["']"""
+    ),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
     re.compile(r"\bAKIA[A-Z0-9]{16}\b"),
     re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]{16,}\b", re.IGNORECASE),
@@ -129,8 +152,18 @@ def redact_sensitive_data(value: Any) -> Any:
             numeric_token_counter = (
                 normalized == "tokens" or normalized.endswith("_tokens")
             ) and isinstance(item, (int, float))
+            lease_metadata = (
+                normalized == "credential_leases"
+                and isinstance(item, list)
+                and all(
+                    isinstance(lease, Mapping)
+                    and set(lease).issubset(_CREDENTIAL_LEASE_METADATA_FIELDS)
+                    for lease in item
+                )
+            )
             if (
-                normalized not in _SAFE_REFERENCE_KEYS
+                not lease_metadata
+                and normalized not in _SAFE_REFERENCE_KEYS
                 and not numeric_token_counter
                 and any(marker in normalized for marker in _SENSITIVE_MARKERS)
             ):

@@ -319,3 +319,61 @@ M3.4-B Credential Governance satisfies the local Distribution simulation gate.
 M3.3-A PASS and M3.3-B PASS remain unchanged. M3.3-C physical acceptance,
 authenticated remote-human approval and deployment of remote credential
 transport/key management remain pending.
+
+
+## M3.5 remote human boundary
+
+The [Control Plane audit and specification](CONTROL_CENTER_SPEC.md) classifies
+existing mechanisms as REUSE / EXTEND / MISSING. Human identity extends the
+existing AuthorizationContext and GovernanceStore; no second approval authority
+is introduced. External identity adapters establish identity only. The Gate
+alone issues grants after explicitly enrolled existing permission policy allows
+it. Models, planners, service bearers, Nodes and Providers cannot approve.
+
+OIDC code exchange uses Authlib; configured JWKS signatures, issuer, audience,
+nonce, enrolled subject, recent auth_time and MFA methods use PyJWT verification.
+PKCE challenge and IdP nonce are durable and single-use; uncertainty during code
+exchange cannot license reuse. Session tokens are random, hash-only persisted,
+expiry bounded to 15 minutes, and delivered only by Secure HttpOnly SameSite
+cookie. Session expiry/revocation is checked again inside approval/grant mutation
+transactions. Context object attestation cannot be copied from a serialized claim.
+Re-enrollment on restart rechecks allowed subjects. Runtime host configuration
+must be owner-controlled; Windows file enrollment fails closed pending verified
+ACL support. Real external IdP deployment is not Cloud-qualified.
+
+Every authenticated human mutation (except login/challenge/nonce issuance)
+requires a durable, 60-second, one-use nonce bound to session, method, canonical
+route and exact JSON body. Changed targets, bodies, paths, sessions and replay
+fail closed. Approval audit evidence retains human subject, session and
+AuthorizationContext IDs together with existing Operation/Work/resource binding.
+Audit and nonce persistence failures do not produce grants. Logging and response
+redaction cover OAuth-library token dictionaries before proof validation.
+
+Remote control actions also require explicit existing PermissionEngine rules.
+Interrupt fences future Operation admission, not already occurring effects.
+Reconciliation never grants execution authority; existing Reliability/Reality
+journals, receipts and fresh independent Observation remain authoritative.
+A valid grant cannot license replay of a possibly completed side effect.
+
+### M3.5 validation record
+
+Local directly affected M3.1–M3.4 and Control Plane regressions: **555 passed,
+3 skipped**. Full repository regression: **3581 passed, 35 skipped, 9 failed**.
+The same nine failures reproduce at the required starting Distribution
+`26256dd0cef1ca632625cf54a38e72157e676164`: **135 passed, 9 failed** in their four
+containing modules. They concern read-only default HOME, managed Python paths
+and container process cleanup. No unrelated failure is rewritten or hidden.
+New identity, control and simulated firmware acceptance coverage contains 43
+new Python cases; the Desktop suite has **47 passed in 25 files**.
+
+Ruff, formatting of 15 changed/new Python files, compilation, Desktop lint,
+typecheck/build, existing documentation/comment/identity/Git-metadata/security
+checks and all 245 current Markdown local-link checks pass. Security scan:
+zero findings. Component-lock contract tests: **3 passed**. Native component
+verification remains blocked by the baseline missing locked Windows Kernel
+binaries; no Kernel sources or component pin change. Relevant existing Desktop
+and Multi-Arch CI are checked against the pushed commit, not an earlier SHA.
+
+This qualifies the Distribution software/simulation boundary only. External
+IdP deployment, Windows file-based identity enrollment, native binary release
+qualification and M3.3-C physical hardware acceptance remain pending.

@@ -140,3 +140,14 @@ Approval list/detail and Once/Deny backend operations reuse ApprovalBroker.
 Existing API bearer authentication identifies a service and cannot approve
 high-risk Operations as a human; a trusted remote human identity channel remains
 pending. The accepted approval boundary continues to be the local owner CLI.
+
+
+## M3.5 remote-human control surface
+
+See the [Security Contract](SECURITY_CONTRACT.md#m35-remote-human-boundary) and
+[Control Plane specification](CONTROL_CENTER_SPEC.md). Trusted host enrollment
+selects the external IdP and explicit permission policy. Verified human sessions
+extend the existing Governance boundary; API service bearers remain services.
+Protected cookies, durable replay binding and transaction-time revalidation
+prevent serialized identity claims from upgrading themselves to approval.
+No native, external IdP or physical-device qualification is implied.

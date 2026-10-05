@@ -1486,3 +1486,99 @@ def test_credential_expires_during_device_delay_and_blocks_effect(
             assert_no_credential_on_disk(tmp_path)
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("answer", ["approve_once", "deny"])
+def test_control_plane_remote_human_resumes_original_firmware_or_denies_without_effect(
+    tmp_path, answer
+):
+    from nous_runtime.control_plane.human_sessions import (
+        HumanIdentity,
+        HumanSessionAuth,
+    )
+    from nous_runtime.control_plane.operations import OperationsPlane
+    from nous_runtime.governance.permission import PermissionEngine, PermissionRule
+    import base64
+    import hashlib
+    import time
+    from urllib.parse import parse_qs, urlsplit
+
+    class TrustedFakeIdP:
+        issuer = "https://fake-identity.example.test"
+        client_id = "apeir-test"
+        redirect_uri = "https://fake-console.example.test/callback"
+        authorization_endpoint = issuer + "/authorize"
+
+        def authenticate(self, code, verifier, nonce_digest):
+            assert code == "deterministic-fake-code"
+            assert nonce_digest == hashlib.sha256(self.nonce.encode()).hexdigest()
+            return HumanIdentity(
+                "human-console-test", self.issuer, int(time.time()) + 300, ("mfa",)
+            )
+
+    async def scenario():
+        async with simulation(tmp_path) as sim:
+            paused = await request_firmware(sim)
+            original = sim.work().to_dict()
+            provider = TrustedFakeIdP()
+            permissions = PermissionEngine(
+                (
+                    PermissionRule(
+                        "human-console-test", "governance.approve", sim.device.device_id
+                    ),
+                    PermissionRule(
+                        "human-console-test", "control.*", sim.device.device_id
+                    ),
+                )
+            )
+            auth = HumanSessionAuth(
+                sim.governance.store, provider, permissions=permissions
+            )
+            verifier = "p" * 64
+            challenge = auth.challenge(
+                base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+                .decode()
+                .rstrip("=")
+            )
+            provider.nonce = parse_qs(urlsplit(challenge["authorization_url"]).query)[
+                "nonce"
+            ][0]
+            issued = auth.login(
+                challenge["challenge_id"], "deterministic-fake-code", verifier
+            )
+            context = auth.authenticate(issued.session_cookie)
+            plane = OperationsPlane(
+                tmp_path,
+                gate=sim.governance,
+                controller_state=sim.controller_state,
+                device_state=sim.registry.state_dir,
+                controller=sim.server,
+                workflow_handlers=firmware_handlers(sim),
+                health_loader=lambda: {"ok": True},
+            )
+            result = plane.action(
+                {
+                    "kind": "approvals",
+                    "action": answer,
+                    "target_id": paused.pending_approvals[0],
+                },
+                context,
+            )
+            assert result["replanned"] is False
+            resumed = await resume_firmware(sim, paused.session_id)
+            assert sim.work().work_id == original["work_id"]
+            assert sim.work().provenance == original["provenance"]
+            if answer == "approve_once":
+                assert resumed.state is AgentSessionState.COMPLETED
+                assert sim.work().state is DistributedWorkState.COMMITTED
+                assert sim.work().effect_verification["verdict"] == "MATCH"
+                assert sim.provider.execution_count(WORK_ID) == 1
+            else:
+                assert sim.provider.execution_count(WORK_ID) == 0
+                assert sim.work().state is not DistributedWorkState.COMMITTED
+            snapshot = plane.snapshot()
+            assert snapshot["devices"][0]["device_id"] == sim.device.device_id
+            assert snapshot["nodes"][0]["node_id"] == sim.node.identity.node_id
+            assert issued.session_cookie not in json.dumps(snapshot)
+
+    asyncio.run(scenario())

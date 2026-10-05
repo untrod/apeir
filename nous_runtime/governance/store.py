@@ -213,6 +213,29 @@ class GovernanceStore:
                             bindings_json TEXT NOT NULL, expires_at TEXT NOT NULL,
                             status TEXT NOT NULL DEFAULT 'ACTIVE'
                         );
+                        CREATE TABLE IF NOT EXISTS governance_human_challenges (
+                            challenge_id TEXT PRIMARY KEY,
+                            nonce_digest TEXT NOT NULL,
+                            pkce_challenge TEXT NOT NULL,
+                            expires_at INTEGER NOT NULL,
+                            consumed INTEGER NOT NULL DEFAULT 0
+                        );
+                        CREATE TABLE IF NOT EXISTS governance_human_sessions (
+                            session_id TEXT PRIMARY KEY,
+                            token_digest TEXT NOT NULL UNIQUE,
+                            subject_id TEXT NOT NULL,
+                            issuer TEXT NOT NULL,
+                            expires_at INTEGER NOT NULL,
+                            status TEXT NOT NULL,
+                            identity_json TEXT NOT NULL
+                        );
+                        CREATE TABLE IF NOT EXISTS governance_human_nonces (
+                            nonce_digest TEXT PRIMARY KEY,
+                            session_id TEXT NOT NULL,
+                            request_digest TEXT NOT NULL,
+                            expires_at INTEGER NOT NULL,
+                            consumed INTEGER NOT NULL DEFAULT 0
+                        );
                         CREATE TABLE IF NOT EXISTS governance_credential_leases (
                             lease_id TEXT PRIMARY KEY, authorization_id TEXT NOT NULL,
                             handle_id TEXT NOT NULL, expires_at TEXT NOT NULL,

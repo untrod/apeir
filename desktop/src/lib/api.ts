@@ -227,7 +227,7 @@ export async function api<T = unknown>(
     ...((options.headers as Record<string, string>) || {}),
   };
 
-  const response = await fetch(`${url}${path}`, { ...options, headers });
+  const response = await fetch(`${url}${path}`, { credentials: "include", ...options, headers });
   const envelope = (await response.json()) as ApiEnvelope<T>;
 
   if (!response.ok || !envelope.ok) {

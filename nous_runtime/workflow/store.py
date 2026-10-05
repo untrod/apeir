@@ -149,6 +149,15 @@ class WorkflowStore:
             ).fetchall()
         return [self._run(json.loads(row[0])) for row in rows]
 
+    def list_runs(self, *, limit: int = 100) -> list[WorkflowRun]:
+        """Bounded projection for clients; the Workflow store remains authoritative."""
+        with self._db() as connection:
+            rows = connection.execute(
+                "SELECT run_json FROM workflow_runs ORDER BY rowid DESC LIMIT ?",
+                (max(1, min(limit, 500)),),
+            ).fetchall()
+        return [self._run(json.loads(row[0])) for row in rows]
+
     def checkpoint(self, run_id: str, step_id: str, data: dict[str, Any]) -> None:
         with self._db() as connection:
             connection.execute(

@@ -146,7 +146,7 @@ class CredentialContext:
 class CredentialBroker:
     """Credential delivery, not a second execution or authorization authority."""
 
-    def __init__(self, gate, backend: SecretBackend, *, lease_seconds=30):
+    def __init__(self, gate, backend: SecretBackend | None = None, *, lease_seconds=30):
         if not 0 < lease_seconds <= 300:
             raise ValueError("Credential lease expiry must be explicitly bounded")
         self.gate = gate
@@ -293,6 +293,8 @@ class CredentialBroker:
 
     @contextlib.contextmanager
     def execution(self, authorization_id, context: AuthorizationContext, *, admission):
+        if self._backend is None:
+            raise PermissionError("Secret backend is unavailable")
         db, request = self._admission(authorization_id, context, admission)
         handles = validate_secret_handles(request.secret_handles)
         if not handles:

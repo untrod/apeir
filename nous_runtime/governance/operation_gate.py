@@ -201,7 +201,9 @@ class OperationAuthorizationMixin:
             "external_write",
         }:
             return GovernanceDecision.DENY, None
-        if self._revoked(db, request.resource_id):
+        if self._revoked(db, request.resource_id) or self._revoked(
+            db, request.authorization_id
+        ):
             return GovernanceDecision.DENY, None
         approval = db.execute(
             "SELECT status,expires_at FROM governance_approval_requests WHERE request_id=?",
@@ -263,20 +265,35 @@ class OperationAuthorizationMixin:
         ):
             return GovernanceDecision.UNKNOWN
 
-    def _require_human(self, context: AuthorizationContext, request: GovernanceRequest):
+    def _require_human(
+        self, context: AuthorizationContext, request: GovernanceRequest, *, db=None
+    ):
         from nous_runtime.governance.cli import _build_context, _is_local_owner_context
         from nous_runtime.governance.permission import PermissionRequest
 
         owner = _build_context()
+        from nous_runtime.control_plane.human_sessions import (
+            is_human_session_context,
+            human_permission,
+        )
+
+        remote = is_human_session_context(
+            context, self.store, db=db
+        ) and human_permission(context, "governance.approve", request.resource_id)
         valid = (
             isinstance(context, AuthorizationContext)
-            and _is_local_owner_context(context)
             and context.subject_type == "user"
             and context.subject_id != request.subject_id
-            and context.subject_id == owner.subject_id
-            and context.authn_method == "cli_os_user"
             and context.authn_confidence >= 0.8
-            and context.session_locality == "local"
+            and (
+                remote
+                or (
+                    _is_local_owner_context(context)
+                    and context.subject_id == owner.subject_id
+                    and context.authn_method == "cli_os_user"
+                    and context.session_locality == "local"
+                )
+            )
         )
         if self.permission_engine is not None:
             valid = (
@@ -291,9 +308,10 @@ class OperationAuthorizationMixin:
                 ).allowed
             )
         if not valid:
-            with self.store.operation_transaction() as db:
+
+            def rejected(connection):
                 self.store.append_operation_audit(
-                    db,
+                    connection,
                     "authority.rejected",
                     self._evidence(
                         request,
@@ -302,8 +320,15 @@ class OperationAuthorizationMixin:
                         authorization_context_id=getattr(context, "context_id", ""),
                     ),
                 )
+
+            if db is None:
+                with self.store.operation_transaction() as connection:
+                    rejected(connection)
+            else:
+                rejected(db)
+                db.commit()
             raise PermissionError(
-                "Only the authenticated local human owner can grant authority"
+                "Only an authenticated enrolled human can grant authority"
             )
 
     def _request_operation_approval(self, authorization_id: str) -> ApprovalRequest:
@@ -416,7 +441,10 @@ class OperationAuthorizationMixin:
             ).strftime("%Y-%m-%dT%H:%M:%SZ"),
         )
         with self.store.operation_transaction() as db:
-            if self._revoked(db, request.resource_id):
+            self._require_human(context, request, db=db)
+            if self._revoked(db, request.resource_id) or self._revoked(
+                db, request.authorization_id
+            ):
                 raise PermissionError("Resource remains revoked")
             self._insert_grant(db, grant)
             self.store.append_operation_audit(
@@ -428,6 +456,7 @@ class OperationAuthorizationMixin:
                     scope=scope.value,
                     actor_id=context.subject_id,
                     authorization_context_id=context.context_id,
+                    human_session_id=context.session_id,
                 ),
             )
         return grant
@@ -447,13 +476,16 @@ class OperationAuthorizationMixin:
             scope=ApprovalScope(proposal_hash=request.authorization_id, max_uses=1),
         )
         with self.store.operation_transaction() as db:
+            self._require_human(context, request, db=db)
             row = db.execute(
                 "SELECT status,expires_at FROM governance_approval_requests WHERE request_id=?",
                 (request_id,),
             ).fetchone()
             if row[0] != "PENDING" or row[1] <= _utc_now():
                 raise PermissionError("Approval is no longer pending or has expired")
-            if self._revoked(db, request.resource_id):
+            if self._revoked(db, request.resource_id) or self._revoked(
+                db, request.authorization_id
+            ):
                 raise PermissionError("Resource remains revoked")
             grant = CapabilityGrant(
                 proposal_hash=request.authorization_id,
@@ -479,6 +511,7 @@ class OperationAuthorizationMixin:
                         scope="ONCE",
                         actor_id=context.subject_id,
                         authorization_context_id=context.context_id,
+                        human_session_id=context.session_id,
                     ),
                 )
             record["status"] = response.decision
@@ -507,6 +540,7 @@ class OperationAuthorizationMixin:
                     decision=response.decision,
                     actor_id=context.subject_id,
                     authorization_context_id=context.context_id,
+                    human_session_id=context.session_id,
                 ),
             )
         return response
@@ -525,6 +559,7 @@ class OperationAuthorizationMixin:
             revoked_by=context.subject_id,
         )
         with self.store.operation_transaction() as db:
+            self._require_human(context, request, db=db)
             if not resource:
                 db.execute(
                     "UPDATE governance_leases SET status='REVOKED' WHERE lease_id=?",
@@ -548,6 +583,7 @@ class OperationAuthorizationMixin:
                     target_id=target,
                     actor_id=context.subject_id,
                     authorization_context_id=context.context_id,
+                    human_session_id=context.session_id,
                 ),
             )
 
@@ -557,6 +593,45 @@ class OperationAuthorizationMixin:
             self.store.append_operation_audit(
                 db, event_type, self._evidence(request, **evidence)
             )
+
+    def interrupt_operation(self, authorization_id, context):
+        """Fence future admission; this never claims an existing effect stopped."""
+        request = self.get_operation_request(authorization_id)
+        self._require_human(context, request)
+        with self.store.operation_transaction() as db:
+            self._require_human(context, request, db=db)
+            if not self._revoked(db, authorization_id):
+                revocation = RevocationRecord(
+                    target_type="operation",
+                    target_id=authorization_id,
+                    revoked_by=context.subject_id,
+                )
+                db.execute(
+                    "INSERT INTO governance_revocations (revocation_id,target_type,target_id,revoked_by,revocation_json) VALUES(?,?,?,?,?)",
+                    (
+                        revocation.revocation_id,
+                        "operation",
+                        authorization_id,
+                        context.subject_id,
+                        json.dumps(revocation.to_dict()),
+                    ),
+                )
+            self.store.append_operation_audit(
+                db,
+                "operation.interrupted",
+                self._evidence(
+                    request,
+                    actor_id=context.subject_id,
+                    authorization_context_id=context.context_id,
+                    human_session_id=context.session_id,
+                    effect_stopped=False,
+                ),
+            )
+        return {
+            "authorization_id": authorization_id,
+            "future_admission_revoked": True,
+            "effect_stopped": False,
+        }
 
     def get_operation_request_from_admission(self, admission):
         return self._execution_admissions[admission][3]

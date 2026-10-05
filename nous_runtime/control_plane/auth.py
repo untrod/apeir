@@ -189,6 +189,7 @@ CORS_ALLOWED_HEADERS = [
     "X-Request-Id",
     "X-Correlation-Id",
     "X-Idempotency-Key",
+    "X-Control-Nonce",
 ]
 CORS_MAX_AGE = 3600
 
@@ -198,11 +199,29 @@ def add_cors_headers(
 ):
     """Add CORS headers to an HTTP response."""
     origin = request_origin or "tauri://localhost"
+    # Explicit host-owned deployment configuration, never request-supplied trust.
+    import json
+    from urllib.parse import urlsplit
+
+    configured_origins = json.loads(os.environ.get("NOUS_CONTROL_ORIGINS", "[]"))
+    if not isinstance(configured_origins, list) or any(
+        not isinstance(item, str)
+        or not item.startswith("https://")
+        or "*" in item
+        or not urlsplit(item).hostname
+        or urlsplit(item).username
+        or urlsplit(item).password
+        or urlsplit(item).path
+        or urlsplit(item).query
+        or urlsplit(item).fragment
+        for item in configured_origins
+    ):
+        raise ValueError("Remote console origins must be explicit HTTPS origins")
 
     # Wildcard entries match a numeric port only. Prefix-only matching would
     # incorrectly allow hosts such as localhost.example.com.
     allowed = False
-    for allowed_origin in CORS_ALLOWED_ORIGINS:
+    for allowed_origin in [*CORS_ALLOWED_ORIGINS, *configured_origins]:
         if allowed_origin.endswith(":*"):
             prefix = allowed_origin[:-1]
             if origin.startswith(prefix) and origin[len(prefix) :].isdigit():

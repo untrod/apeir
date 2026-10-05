@@ -76,6 +76,30 @@ def _authentication_context(auth: dict[str, Any] | None, *, surface: str):
         return None
     token = str(auth.get("token") or "")
     headers = auth.get("headers") or {}
+    if isinstance(headers, dict):
+        from http.cookies import SimpleCookie, CookieError
+
+        cookie = SimpleCookie()
+        try:
+            cookie.load(str(headers.get("cookie") or headers.get("Cookie") or ""))
+        except CookieError:
+            return None
+        human_cookie = cookie.get("apeir_human")
+        human_bearer = _extract_bearer(
+            str(headers.get("authorization") or headers.get("Authorization") or "")
+        )
+        human_token = (
+            human_cookie.value
+            if human_cookie
+            else (human_bearer if human_bearer.startswith("hums_") else "")
+        )
+        if human_token:
+            from nous_runtime.control_plane.human_sessions import get_human_auth
+
+            try:
+                return get_human_auth().authenticate(human_token)
+            except PermissionError:
+                return None
     if not token and isinstance(headers, dict):
         token = str(headers.get("x-auth-token") or headers.get("X-Auth-Token") or "")
         if not token:
@@ -1762,6 +1786,19 @@ except ImportError:
 
 # Task Center routes — timeline, graph, artifacts, verification
 try:
+    from nous_runtime.control_plane.operations import OPERATIONS_ROUTES
+
+    ROUTES.update(OPERATIONS_ROUTES)
+    PUBLIC_ROUTES.update(
+        {
+            ("POST", "/api/v1/control/human/challenge"),
+            ("POST", "/api/v1/control/human/session"),
+        }
+    )
+except ImportError:
+    OPERATIONS_ROUTES = {}
+
+try:
     from nous_runtime.api.task_center_routes import TASK_CENTER_ROUTES
 
     ROUTES.update(TASK_CENTER_ROUTES)
@@ -2222,6 +2259,32 @@ def route(
 
     try:
         authorization_context = _authentication_context(auth, surface=surface)
+        if (
+            authorization_context is not None
+            and authorization_context.authn_method == "oidc_pkce"
+            and method_upper in MUTATION_METHODS
+            and path
+            not in {
+                "/api/v1/control/human/challenge",
+                "/api/v1/control/human/session",
+                "/api/v1/control/human/nonce",
+            }
+        ):
+            from nous_runtime.control_plane.human_sessions import get_human_auth
+
+            headers = (auth or {}).get("headers") or {}
+            nonce = str(
+                headers.get("x-control-nonce") or headers.get("X-Control-Nonce") or ""
+            )
+            try:
+                get_human_auth().admit_request(
+                    authorization_context, nonce, method_upper, path, body
+                )
+            except PermissionError:
+                return err_response(
+                    "NOUS_CONTROL_REPLAY",
+                    "Human request is expired, replayed or scope-mismatched",
+                )
         request_params = dict(path_params)
         for name, value in (params or {}).items():
             if name in request_params and request_params[name] != value:
@@ -2239,7 +2302,23 @@ def route(
         )
         if governance_error:
             return governance_error
-        if handler is handle_approval_action:
+        if handler in OPERATIONS_ROUTES.values():
+            parameters = inspect.signature(handler).parameters
+            arguments = {}
+            if "body" in parameters:
+                arguments["body"] = body or {}
+            if "params" in parameters:
+                arguments["params"] = request_params
+            if "authorization_context" in parameters:
+                arguments["authorization_context"] = authorization_context
+            try:
+                result = handler(**arguments)
+            except PermissionError:
+                return err_response(
+                    "NOUS_FORBIDDEN",
+                    "Human identity, permission or authority binding is invalid",
+                )
+        elif handler is handle_approval_action:
             result = handler(
                 request_params["request_id"],
                 request_params["action"],

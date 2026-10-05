@@ -5,6 +5,11 @@ All notable changes to APEIR Distribution are recorded here. The project follows
 
 ## Unreleased
 
+- M3.5 unified canonical Operations Control Plane, external OIDC/PKCE human
+  identity with durable expiry/replay binding, existing governed controls, SSE
+  transitions and a shared responsive Desktop/Web Operations Console. External
+  IdP deployment, Windows file enrollment and physical acceptance remain pending.
+
 - M3.4-B credential delivery scoped to existing authorized Node Operations,
   with durable handle/lease expiry and revocation, centralized output redaction,
   credentialed firmware simulation and recovery without effect replay. Pending
