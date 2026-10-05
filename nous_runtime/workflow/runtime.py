@@ -17,6 +17,7 @@ from nous_runtime.workflow.models import (
     WorkflowStep,
 )
 from nous_runtime.workflow.store import WorkflowStore
+from nous_runtime.governance.operation_contracts import GovernanceApprovalRequired
 
 StepHandler = Callable[[WorkflowStep, dict[str, Any]], dict[str, Any]]
 
@@ -217,6 +218,8 @@ class WorkflowRuntime:
                     return "completed", dict(output or {}), ""
                 except FutureTimeout:
                     error = f"step timed out after {step.timeout_seconds} seconds"
+                except GovernanceApprovalRequired as exc:
+                    return "waiting_approval", exc.workflow_output, str(exc)
                 except Exception as exc:
                     error = str(exc)
                     failure_output = dict(getattr(exc, "workflow_output", {}) or {})

@@ -1,7 +1,7 @@
 # Security Boundary — Nous Runtime
 
 > **Where trust changes. What crosses boundaries. What must be verified.**
-> **Last updated:** 2026-08-28
+> **Last updated:** 2026-10-05
 
 ---
 
@@ -89,3 +89,30 @@
 - The bundled sidecars target Windows ARM64. An AMD64 release requires rebuilding/staging native sidecars and updating the component lock.
 - The current host lacks Visual Studio C++ Build Tools and Windows SDK libraries, so Rust link/test and Tauri native compilation must be rerun after installing that prerequisite.
 - Migration checksums describe the immutable pre-development transfer snapshot and are expected to differ after P0–P4 source changes.
+
+## M3.4-A governed Reality boundary
+
+The authoritative [Security Contract](SECURITY_CONTRACT.md#m34-a-operation-governance-audit)
+records the repository-wide REUSE / EXTEND / MISSING audit and deterministic
+Operation policy. The existing Gate, Broker and GovernanceStore own approvals
+and leases. Human authority comes from the existing trusted local CLI owner
+boundary, with a nonserialized context attestation; Work arguments and model
+claims cannot establish that authority. API bearer identity remains a service
+identity and cannot approve these Operations. Wider scope issuance is trusted
+runtime infrastructure, while the human approval surface offers only Once/Deny.
+
+Workflow pauses before scheduling; the actual Node effect boundary reloads and
+consumes authority. The shared local GovernanceStore transaction orders grant
+revocation against admission; DeviceRegistry lifecycle is freshly checked before
+the effect. Arbitrary host-file tampering and remote distributed revocation
+consensus are outside this local simulation gate. Node, controller and approval
+control plane in this slice use the same durable governance authority; deploying
+independent remote governance stores would require a separately authenticated
+control-plane protocol and is not qualified here.
+
+The firmware acceptance runs through signed Distributed Work on the existing
+simulated Reality Node path. It does not exercise a physical bootloader,
+credential broker, or Rust Kernel Effect Gate/StepCommit. Kernel remains pinned
+to `87fd1b2ff28ef14ab1a515a58162592b452fda2e`. M3.3-A PASS and M3.3-B PASS remain
+Distribution qualifications; M3.3-C Real Hardware Acceptance is PENDING.
+M3.4-B credential brokerage remains deferred.

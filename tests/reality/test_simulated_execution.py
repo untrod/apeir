@@ -15,6 +15,13 @@ from nous_runtime.agent import AgentSessionCoordinator, AgentSessionState
 from nous_runtime.artifact import ContentAddressedArtifactStore
 from nous_runtime.events.bus import RuntimeEventBus
 from nous_runtime.core.errors import ArtifactError
+from nous_runtime.governance import (
+    ExecutionAuthorizationGate,
+    GovernanceStore,
+    GovernanceRequest,
+    GrantScope,
+)
+from nous_runtime.governance.cli import _build_context
 from nous_runtime.intelligence.planning.models import PlanStep, TaskPlan
 from nous_runtime.node_runtime.distributed_work import (
     DistributedWork,
@@ -49,8 +56,12 @@ pytestmark = pytest.mark.integration
 DEFINITIONS = {
     "sim-actuator-001": {
         "device_type": "simulated-actuator",
-        "capabilities": ["device.state.read", "device.state.set"],
-        "state": {"enabled": False, "counter": 0},
+        "capabilities": [
+            "device.state.read",
+            "device.state.set",
+            "device.firmware.update",
+        ],
+        "state": {"enabled": False, "counter": 0, "firmware_version": "1.0.0"},
     }
 }
 STABLE = "sim-actuator-001"
@@ -65,21 +76,51 @@ class Simulation:
         self.bus = RuntimeEventBus(str(root))
         self.registry = DeviceRegistry(root / "devices", event_bus=self.bus)
         self.provider = SimulatedDeviceProvider(DEFINITIONS, state_dir=root / "device")
+        self.governance = ExecutionAuthorizationGate(
+            GovernanceStore(root / "governance")
+        )
         self.node_handler = SimulatedDeviceOperationHandler(
             self.provider,
             self.registry,
             ContentAddressedArtifactStore(root / "node" / "artifacts"),
+            governance=self.governance,
+        )
+        self.firmware_handler = SimulatedDeviceOperationHandler(
+            self.provider,
+            self.registry,
+            ContentAddressedArtifactStore(root / "node" / "artifacts"),
+            governance=self.governance,
+            capability_id="device.firmware.update",
         )
         self.node = NodeRuntimeService(
             NodeRuntimeConfig(root / "node"),
             capability_handlers={
                 "device.state.set": self.node_handler,
                 "device.state.read": self.node_handler.read,
+                "device.firmware.update": self.firmware_handler,
             },
         )
         device = self.provider.register_discovered(self.registry)[0]
         self.device = self.registry.register(
             replace(device, node_id=self.node.identity.node_id)
+        )
+        # M3.3 state-transition tests have explicit fixture-owned, bounded human
+        # authority. Firmware updates have no fixture grant and must pause.
+        fixture_request = GovernanceRequest(
+            operation_id="fixture-state-authority",
+            work_id="fixture-state-authority",
+            capability_id="device.state.set",
+            resource_id=self.device.device_id,
+            subject_id="simulation-agent",
+            node_id=self.node.identity.node_id,
+            capability_inputs=self.governance.capability_inputs("device.state.set"),
+        )
+        self.governance.register_operation(fixture_request)
+        self.governance.issue_operation_grant(
+            fixture_request.authorization_id,
+            _build_context(),
+            scope=GrantScope.RESOURCE,
+            max_uses=100,
         )
         if self.device.lifecycle is DeviceLifecycle.IDENTIFIED:
             self.registry.transition(device.device_id, DeviceLifecycle.TRUSTED)
@@ -96,6 +137,7 @@ class Simulation:
             provider=self.provider,
             registry=self.registry,
             poll_interval_seconds=0.01,
+            governance=self.governance,
         )
         self.single_connection = single_connection
         self.stop = asyncio.Event()
@@ -745,3 +787,415 @@ def test_unrelated_device_event_does_not_wake_targeted_session(tmp_path):
     finally:
         coordinator.close()
         bus.shutdown()
+
+
+def firmware_plan(sim, session, *, wait_timeout=10, expected="2.0.0"):
+    return TaskPlan(
+        task_id=session.session_id,
+        plan_id="plan-firmware-upgrade",
+        steps=(
+            PlanStep(
+                "inspect",
+                "Detect outdated firmware",
+                "reality.observe",
+                metadata={
+                    "device_id": sim.device.device_id,
+                    "capability": "device.state.read",
+                    "work_id": "firmware-inspect",
+                    "wait_timeout_seconds": 10,
+                    "timeout_seconds": 30,
+                },
+            ),
+            PlanStep(
+                "mutate",
+                "Upgrade simulated firmware",
+                "reality.operation",
+                metadata={
+                    "device_id": sim.device.device_id,
+                    "capability": "device.firmware.update",
+                    "work_id": WORK_ID,
+                    "mutation": {"state": {"firmware_version": "2.0.0"}},
+                    "expected_effect": {"firmware_version": expected},
+                    "wait_timeout_seconds": wait_timeout,
+                    "timeout_seconds": 30,
+                },
+            ),
+        ),
+        dependencies={"mutate": ("inspect",)},
+    )
+
+
+def firmware_handlers(sim):
+    return {"reality.observe": sim.handler, "reality.operation": sim.handler}
+
+
+async def request_firmware(sim, **kwargs):
+    session = sim.coordinator.create(
+        agent_id="simulation-agent",
+        model="deterministic-planner",
+        objective="Detect outdated firmware and upgrade to 2.0.0 with human authority",
+    )
+    paused = await asyncio.to_thread(
+        sim.coordinator.coordinate,
+        session.session_id,
+        lambda current: firmware_plan(sim, current, **kwargs),
+        handlers=firmware_handlers(sim),
+    )
+    assert paused.state is AgentSessionState.WAITING
+    assert len(paused.pending_approvals) == 1
+    assert sim.work().state is DistributedWorkState.CREATED
+    assert sim.provider.execution_count(WORK_ID) == 0
+    inspected = sim.server.results["firmware-inspect"]["output"]
+    assert inspected["data"]["state"]["firmware_version"] == "1.0.0"
+    return paused
+
+
+async def resume_firmware(sim, session_id, **kwargs):
+    return await asyncio.to_thread(
+        sim.coordinator.resume_plan,
+        session_id,
+        handlers=firmware_handlers(sim),
+        **kwargs,
+    )
+
+
+@pytest.mark.parametrize("restart", [False, True])
+def test_firmware_approve_once_resumes_original_plan_work_and_commits_match(
+    tmp_path, restart
+):
+    async def scenario():
+        async with simulation(tmp_path) as first:
+            paused = await request_firmware(first)
+            original = first.work().to_dict()
+            # Scheduler/Workflow hints are not approval authority.
+            still_paused = await resume_firmware(
+                first, paused.session_id, approved_steps=("mutate",)
+            )
+            assert still_paused.pending_approvals == paused.pending_approvals
+            assert first.provider.execution_count(WORK_ID) == 0
+            if not restart:
+                await accept(first, paused, original)
+        if restart:
+            async with simulation(tmp_path) as restored:
+                assert (
+                    restored.coordinator.require(paused.session_id).pending_approvals
+                    == paused.pending_approvals
+                )
+                await accept(restored, paused, original)
+
+    async def accept(sim, paused, original):
+        sim.handler.approvals.approve_operation_once(
+            paused.pending_approvals[0],
+            _build_context(),
+            gate=sim.governance,
+        )
+        completed = await resume_firmware(sim, paused.session_id)
+        work = sim.work()
+        assert completed.state is AgentSessionState.COMPLETED
+        assert completed.pending_approvals == ()
+        assert completed.workflow_run_id == paused.workflow_run_id
+        assert completed.plan_history == paused.plan_history
+        assert work.execution_arguments == original["execution_arguments"]
+        assert work.state is DistributedWorkState.COMMITTED
+        assert work.effect_verification["verdict"] == "MATCH"
+        assert sim.provider.execution_count(WORK_ID) == 1
+        assert (
+            sim.provider.read_state(sim.device).data["state"]["firmware_version"]
+            == "2.0.0"
+        )
+        receipt = work.result_summary["remote_execution_receipt"]
+        assert receipt["operation_id"] == WORK_ID
+        assert receipt["node_id"] == sim.node.identity.node_id
+        assert (
+            receipt["target_ref"]
+            == f"device://{sim.device.device_id}/capability/device.firmware.update"
+        )
+        rows = sim.governance.store.operation_audit()
+        evidence = [
+            json.loads(row["evidence_json"])
+            for row in rows
+            if row["decision_id"] == work.execution_arguments["authorization_id"]
+        ]
+        assert evidence
+        for item in evidence:
+            assert item["agent_session_id"] == completed.session_id
+            assert item["workflow_run_id"] == completed.workflow_run_id
+            assert item["plan_id"] == completed.plan_history[0]["plan_id"]
+            assert item["work_id"] == item["operation_id"] == WORK_ID
+            assert item["resource_id"] == sim.device.device_id
+            assert item["input_artifacts"] == list(work.input_artifacts)
+        events = {row["event_type"] for row in rows}
+        assert {
+            "approval.requested",
+            "approval.decided",
+            "grant.issued",
+            "execution.admitted",
+            "effect.verified",
+        } <= events
+        assert sim.governance.store.verify_audit_chain()
+
+    asyncio.run(scenario())
+
+
+def test_firmware_deny_is_durable_and_never_changes_device(tmp_path):
+    async def scenario():
+        async with simulation(tmp_path) as first:
+            paused = await request_firmware(first)
+            first.handler.approvals.deny_operation(
+                paused.pending_approvals[0],
+                _build_context(),
+                gate=first.governance,
+            )
+        async with simulation(tmp_path) as restored:
+            result = await resume_firmware(restored, paused.session_id)
+            assert result.state is AgentSessionState.WAITING
+            assert result.plan_history == paused.plan_history
+            assert restored.work().state is DistributedWorkState.CREATED
+            assert restored.provider.execution_count(WORK_ID) == 0
+            assert (
+                restored.provider.read_state(restored.device).data["state"][
+                    "firmware_version"
+                ]
+                == "1.0.0"
+            )
+            assert (
+                restored.governance.store.get_approval_request(
+                    paused.pending_approvals[0]
+                )["status"]
+                == "DENIED"
+            )
+            assert not any(
+                row["event_type"] == "execution.admitted"
+                and row["decision_id"]
+                == restored.work().execution_arguments["authorization_id"]
+                for row in restored.governance.store.operation_audit()
+            )
+
+    asyncio.run(scenario())
+
+
+def test_approved_firmware_lost_response_recovers_after_grant_revocation_without_replay(
+    tmp_path,
+):
+    async def scenario():
+        async with simulation(tmp_path, single_connection=True) as first:
+            paused = await request_firmware(first, wait_timeout=3)
+            first.provider.inject_fault(
+                STABLE, SimulationFault.EFFECT_THEN_RESPONSE_LOST
+            )
+            first.handler.approvals.approve_operation_once(
+                paused.pending_approvals[0],
+                _build_context(),
+                gate=first.governance,
+            )
+            waiting = await resume_firmware(first, paused.session_id)
+            await wait_for(first.client_task.done)
+            assert waiting.state is AgentSessionState.WAITING
+            assert isinstance(first.client_task.exception(), WorkloadResponseLost)
+            assert first.provider.execution_count(WORK_ID) == 1
+            assert WORK_ID not in first.server.results
+            auth_id = first.work().execution_arguments["authorization_id"]
+            with first.governance.store.operation_transaction() as db:
+                grant_id = db.execute(
+                    "SELECT lease_id FROM governance_leases WHERE proposal_hash=?",
+                    (auth_id,),
+                ).fetchone()[0]
+            first.governance.revoke_operation_authority(
+                auth_id, _build_context(), grant_id=grant_id
+            )
+        async with simulation(tmp_path) as restored:
+            completed = await resume_firmware(restored, paused.session_id)
+            assert completed.state is AgentSessionState.COMPLETED
+            assert completed.workflow_run_id == paused.workflow_run_id
+            assert restored.work().state is DistributedWorkState.COMMITTED
+            assert restored.work().effect_verification["verdict"] == "MATCH"
+            assert restored.provider.execution_count(WORK_ID) == 1
+
+    asyncio.run(scenario())
+
+
+def test_approved_firmware_missing_receipt_does_not_replay_even_with_valid_resource_grant(
+    tmp_path, monkeypatch
+):
+    from nous_runtime.node_runtime import service as node_service
+
+    async def scenario():
+        async with simulation(tmp_path, single_connection=True) as first:
+            paused = await request_firmware(first, wait_timeout=3)
+            auth_id = first.work().execution_arguments["authorization_id"]
+            first.governance.issue_operation_grant(
+                auth_id, _build_context(), scope=GrantScope.RESOURCE, max_uses=2
+            )
+            writer = node_service._atomic_write_json
+
+            def lose_terminal(path, value):
+                if (
+                    path == first.node.workloads_path
+                    and value.get(WORK_ID, {}).get("state") == "COMPLETED"
+                ):
+                    raise OSError("injected firmware terminal receipt loss")
+                return writer(path, value)
+
+            with monkeypatch.context() as patch:
+                patch.setattr(node_service, "_atomic_write_json", lose_terminal)
+                waiting = await resume_firmware(first, paused.session_id)
+                await wait_for(first.client_task.done)
+            assert waiting.state is AgentSessionState.WAITING
+            assert first.provider.execution_count(WORK_ID) == 1
+        async with simulation(tmp_path) as restored:
+            recovered = await resume_firmware(restored, paused.session_id)
+            assert recovered.state is AgentSessionState.WAITING
+            assert restored.work().state is DistributedWorkState.UNKNOWN
+            assert restored.node._workloads[WORK_ID]["state"] == "EXECUTING"
+            assert restored.provider.execution_count(WORK_ID) == 1
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "fault,expected,verdict",
+    [
+        (None, "3.0.0", "MISMATCH"),
+        (SimulationFault.STALE_OBSERVATION, "2.0.0", "UNKNOWN"),
+    ],
+)
+def test_firmware_approval_cannot_commit_without_independent_match(
+    tmp_path, fault, expected, verdict
+):
+    async def scenario():
+        async with simulation(tmp_path) as sim:
+            paused = await request_firmware(sim, expected=expected)
+            if fault:
+                sim.provider.inject_fault(STABLE, fault)
+            sim.handler.approvals.approve_operation_once(
+                paused.pending_approvals[0], _build_context(), gate=sim.governance
+            )
+            result = await resume_firmware(sim, paused.session_id)
+            assert result.state is AgentSessionState.WAITING
+            assert sim.work().state is DistributedWorkState.VERIFIED
+            assert sim.work().effect_verification["verdict"] == verdict
+            assert sim.provider.execution_count(WORK_ID) == 1
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("revoke", ["grant", "resource"])
+def test_node_rechecks_revocation_after_workflow_dispatch_approval(
+    tmp_path, monkeypatch, revoke
+):
+    async def scenario():
+        async with simulation(tmp_path) as sim:
+            paused = await request_firmware(sim)
+            auth_id = sim.work().execution_arguments["authorization_id"]
+            sim.handler.approvals.approve_operation_once(
+                paused.pending_approvals[0], _build_context(), gate=sim.governance
+            )
+            with sim.governance.store.operation_transaction() as db:
+                grant_id = db.execute(
+                    "SELECT lease_id FROM governance_leases WHERE proposal_hash=?",
+                    (auth_id,),
+                ).fetchone()[0]
+            original = sim.firmware_handler.execute_bound
+
+            def revoke_before_effect(arguments, **bindings):
+                sim.governance.revoke_operation_authority(
+                    auth_id,
+                    _build_context(),
+                    grant_id=grant_id,
+                    resource=revoke == "resource",
+                )
+                return original(arguments, **bindings)
+
+            monkeypatch.setattr(
+                sim.firmware_handler, "execute_bound", revoke_before_effect
+            )
+            result = await resume_firmware(sim, paused.session_id)
+            assert result.state is AgentSessionState.WAITING
+            assert sim.work().state is DistributedWorkState.FAILED
+            assert sim.provider.execution_count(WORK_ID) == 0
+            assert (
+                sim.provider.read_state(sim.device).data["state"]["firmware_version"]
+                == "1.0.0"
+            )
+            assert any(
+                row["event_type"] == "execution.denied"
+                for row in sim.governance.store.operation_audit()
+            )
+
+    asyncio.run(scenario())
+
+
+def test_simulated_operation_cannot_bypass_node_admission(tmp_path):
+    sim = Simulation(tmp_path)
+    try:
+        mutation = {
+            "schema": "apeir.reality-mutation-input/v1",
+            "operation_id": WORK_ID,
+            "device_id": sim.device.device_id,
+            "capability_id": "device.firmware.update",
+            "mutation": {"state": {"firmware_version": "2.0.0"}},
+        }
+        stored = sim.node.artifact_store.store_bytes(
+            json.dumps(mutation).encode(),
+            artifact_type="configuration",
+            name="mutation.json",
+        )
+        reference = (
+            f"artifact://sha256/{stored['artifact']['digest'].removeprefix('sha256:')}"
+        )
+        with pytest.raises(PermissionError, match="Node"):
+            sim.firmware_handler(
+                {
+                    "operation": {
+                        "operation_id": WORK_ID,
+                        "target_resource_id": sim.device.device_id,
+                        "capability_id": "device.firmware.update",
+                    },
+                    "mutation_artifact": reference,
+                }
+            )
+        assert sim.provider.execution_count(WORK_ID) == 0
+    finally:
+        sim.coordinator.close()
+        sim.bus.shutdown()
+
+
+def test_grant_expiring_during_provider_delay_is_rechecked_at_device_effect(
+    tmp_path, monkeypatch
+):
+    from nous_runtime.governance import operation_gate
+    from nous_runtime.reality import provider as provider_module
+
+    async def scenario():
+        async with simulation(tmp_path) as sim:
+            paused = await request_firmware(sim)
+            sim.handler.approvals.approve_operation_once(
+                paused.pending_approvals[0], _build_context(), gate=sim.governance
+            )
+            delayed = []
+            sleep = provider_module.time.sleep
+
+            def expire_during_delay(seconds):
+                if seconds == 3.14159:
+                    delayed.append(True)
+                    monkeypatch.setattr(
+                        operation_gate, "_utc_now", lambda: "9999-01-01T00:00:00Z"
+                    )
+                else:
+                    sleep(seconds)
+
+            monkeypatch.setattr(provider_module.time, "sleep", expire_during_delay)
+            sim.provider.inject_fault(
+                STABLE, SimulationFault.DELAYED_RESULT, delay_seconds=3.14159
+            )
+            result = await resume_firmware(sim, paused.session_id)
+            assert delayed == [True]
+            assert result.state is AgentSessionState.WAITING
+            assert sim.work().state is DistributedWorkState.FAILED
+            assert sim.provider.execution_count(WORK_ID) == 0
+            assert any(
+                json.loads(row["evidence_json"]).get("phase") == "before_effect"
+                for row in sim.governance.store.operation_audit()
+            )
+
+    asyncio.run(scenario())

@@ -191,6 +191,35 @@ class CapabilityContractRegistry:
         """Seed with standard capability contracts."""
         defaults = [
             CapabilityContract(
+                capability_id="device.state.read",
+                risk_level="low",
+                side_effect_class="read_only",
+                idempotency=Idempotency.IDEMPOTENT,
+                retry_strategy=RetryStrategy.NONE,
+                max_retries=0,
+                verification_method=VerificationMethod.ASSERTION,
+            ),
+            CapabilityContract(
+                capability_id="device.state.set",
+                risk_level="low",
+                side_effect_class="external_write",
+                idempotency=Idempotency.CONDITIONAL,
+                retry_strategy=RetryStrategy.NONE,
+                max_retries=0,
+                verification_method=VerificationMethod.ASSERTION,
+                observation_method="device.state.read",
+            ),
+            CapabilityContract(
+                capability_id="device.firmware.update",
+                risk_level="high",
+                side_effect_class="external_write",
+                idempotency=Idempotency.CONDITIONAL,
+                retry_strategy=RetryStrategy.NONE,
+                max_retries=0,
+                verification_method=VerificationMethod.ASSERTION,
+                observation_method="device.state.read",
+            ),
+            CapabilityContract(
                 capability_id="project.read_file",
                 name="Read File",
                 description="Read contents of a file in the workspace",

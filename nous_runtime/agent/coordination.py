@@ -161,6 +161,13 @@ class AgentSessionCoordinator:
         session = self.require(session_id)
         if session.terminal:
             raise ValueError("cannot submit a plan to a terminal Agent session")
+        from nous_runtime.core.redaction import redact_sensitive_data
+
+        for step in plan.steps:
+            if step.capability in {"reality.operation", "reality.observe"} and (
+                redact_sensitive_data(step.metadata) != dict(step.metadata)
+            ):
+                raise ValueError("Credential material cannot enter a Reality Plan")
         target = AgentSessionState.REPLANNING if replan else AgentSessionState.PLANNING
         session = transition_session(session, target, error="")
         session = replace(
@@ -199,6 +206,7 @@ class AgentSessionCoordinator:
             {
                 **dict(inputs or {}),
                 "_agent_session_id": session.session_id,
+                "_agent_id": session.agent_id,
                 "_plan_id": plan.plan_id,
                 "_workflow_id": definition.workflow_id,
             },
@@ -336,12 +344,13 @@ class AgentSessionCoordinator:
             session = replace(
                 session,
                 result={"workflow_outputs": dict(run.outputs)},
+                pending_approvals=(),
                 error="",
                 updated_at=session_timestamp(),
             )
         elif run.state is WorkflowState.WAITING_APPROVAL:
             pending = tuple(
-                step_id
+                str(run.outputs.get(step_id, {}).get("approval_request_id") or step_id)
                 for step_id, state in run.step_states.items()
                 if state == "waiting_approval"
             )

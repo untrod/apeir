@@ -34,10 +34,12 @@ class DistributedWorkflowAdapter:
             DistributedWork,
         ]
         | None = None,
+        work_admitter: Callable[[DistributedWork], None] | None = None,
     ):
         self.state_dir = Path(state_dir).expanduser().resolve()
         self.poll_interval_seconds = max(0.01, poll_interval_seconds)
         self.verified_work_finalizer = verified_work_finalizer
+        self.work_admitter = work_admitter
 
     def __call__(self, step: WorkflowStep, context: dict[str, Any]) -> dict[str, Any]:
         params = dict(step.params)
@@ -130,6 +132,8 @@ class DistributedWorkflowAdapter:
             DistributedWorkState.CREATED,
             DistributedWorkState.SCHEDULED,
         }:
+            if self.work_admitter is not None:
+                self.work_admitter(work)
             scheduled = controller.schedule_work(work_id)
             work = controller.work_store.get(work_id)
             if not scheduled["placement"]["selected_node"] or work is None:

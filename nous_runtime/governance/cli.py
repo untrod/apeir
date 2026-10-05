@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import getpass
+from weakref import WeakValueDictionary
 import typer
 
 from nous_runtime.governance import (
@@ -20,13 +21,18 @@ approval_app = typer.Typer(help="Approval management")
 authorization_app = typer.Typer(help="Authorization inspection")
 delegation_app = typer.Typer(help="Delegation management")
 
+# Attestation belongs to the trusted local CLI boundary, never serialized claims.
+_local_owner_contexts: WeakValueDictionary[str, AuthorizationContext] = (
+    WeakValueDictionary()
+)
+
 
 def _subject_id() -> str:
     return f"{getpass.getuser()}@{os.environ.get('COMPUTERNAME', 'localhost')}"
 
 
 def _build_context() -> AuthorizationContext:
-    return AuthorizationContext(
+    context = AuthorizationContext(
         subject_type="user",
         subject_id=_subject_id(),
         authn_method="cli_os_user",
@@ -34,15 +40,29 @@ def _build_context() -> AuthorizationContext:
         session_locality="local",
         session_device=os.environ.get("COMPUTERNAME", "localhost"),
     )
+    _local_owner_contexts[context.context_id] = context
+    return context
+
+
+def _is_local_owner_context(context: AuthorizationContext) -> bool:
+    return _local_owner_contexts.get(context.context_id) is context
 
 
 # Approval
 
+
 @approval_app.command("list")
-def approval_list(json_output: bool = typer.Option(False, "--json", help="Machine-readable output")):
+def approval_list(
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable output"),
+):
     """List pending approval requests."""
     mgr = ApprovalManager()
-    pending = mgr.get_pending(_subject_id())
+    pending = [
+        request
+        for request in mgr.get_pending()
+        if request.get("operation_governance")
+        or request.get("requested_by") == _subject_id()
+    ]
     if json_output:
         typer.echo(json.dumps({"pending": pending, "count": len(pending)}, indent=2))
     else:
@@ -50,7 +70,9 @@ def approval_list(json_output: bool = typer.Option(False, "--json", help="Machin
             typer.echo("No pending approvals.")
             return
         typer.echo("PENDING APPROVALS")
-        typer.echo(f"{'REQUEST ID':<14} {'ACTION':<28} {'PRIORITY':<10} {'EXPIRES':<20}")
+        typer.echo(
+            f"{'REQUEST ID':<14} {'ACTION':<28} {'PRIORITY':<10} {'EXPIRES':<20}"
+        )
         typer.echo("-" * 72)
         for r in pending:
             typer.echo(
@@ -59,12 +81,16 @@ def approval_list(json_output: bool = typer.Option(False, "--json", help="Machin
                 f"{r.get('priority', 'normal'):<10} "
                 f"{r.get('expires_at', '?'):<20}"
             )
-        typer.echo(f"\n{len(pending)} pending. Use 'nous approval show <id>' for details.")
+        typer.echo(
+            f"\n{len(pending)} pending. Use 'nous approval show <id>' for details."
+        )
 
 
 @approval_app.command("show")
-def approval_show(request_id: str = typer.Argument(..., help="Approval request ID"),
-                  json_output: bool = typer.Option(False, "--json")):
+def approval_show(
+    request_id: str = typer.Argument(..., help="Approval request ID"),
+    json_output: bool = typer.Option(False, "--json"),
+):
     """Show details of an approval request."""
     mgr = ApprovalManager()
     req = mgr.get_request(request_id)
@@ -103,13 +129,23 @@ def approval_approve(request_id: str = typer.Argument(..., help="Approval reques
         typer.echo(f"Request is {req['status']}, not PENDING.", err=True)
         raise typer.Exit(code=1)
 
-    response = mgr.approve(request_id, _subject_id())
+    if req.get("operation_governance"):
+        from nous_runtime.governance.gate import ExecutionAuthorizationGate
+        from nous_runtime.governance.broker import ApprovalBroker
+
+        response = ApprovalBroker(mgr.store).approve_operation_once(
+            request_id, _build_context(), gate=ExecutionAuthorizationGate(mgr.store)
+        )
+    else:
+        response = mgr.approve(request_id, _subject_id())
     typer.echo(f"Approved. Response: {response.response_id}")
 
 
 @approval_app.command("deny")
-def approval_deny(request_id: str = typer.Argument(..., help="Approval request ID"),
-                  reason: str = typer.Option("", "--reason", help="Reason for denial")):
+def approval_deny(
+    request_id: str = typer.Argument(..., help="Approval request ID"),
+    reason: str = typer.Option("", "--reason", help="Reason for denial"),
+):
     """Deny a pending approval request."""
     mgr = ApprovalManager()
     req = mgr.get_request(request_id)
@@ -120,13 +156,23 @@ def approval_deny(request_id: str = typer.Argument(..., help="Approval request I
         typer.echo(f"Request is {req['status']}, not PENDING.", err=True)
         raise typer.Exit(code=1)
 
-    response = mgr.deny(request_id, _subject_id(), reason=reason)
+    if req.get("operation_governance"):
+        from nous_runtime.governance.gate import ExecutionAuthorizationGate
+        from nous_runtime.governance.broker import ApprovalBroker
+
+        response = ApprovalBroker(mgr.store).deny_operation(
+            request_id, _build_context(), gate=ExecutionAuthorizationGate(mgr.store)
+        )
+    else:
+        response = mgr.deny(request_id, _subject_id(), reason=reason)
     typer.echo(f"Denied. Response: {response.response_id}")
 
 
 @approval_app.command("revoke")
-def approval_revoke(lease_id: str = typer.Argument(..., help="Lease ID to revoke"),
-                    reason: str = typer.Option("", "--reason")):
+def approval_revoke(
+    lease_id: str = typer.Argument(..., help="Lease ID to revoke"),
+    reason: str = typer.Option("", "--reason"),
+):
     """Revoke an active authorization lease."""
     mgr = LeaseManager()
     try:
@@ -139,9 +185,12 @@ def approval_revoke(lease_id: str = typer.Argument(..., help="Lease ID to revoke
 
 # Authorization
 
+
 @authorization_app.command("show")
-def authorization_show(decision_id: str = typer.Argument(..., help="Decision ID"),
-                       json_output: bool = typer.Option(False, "--json")):
+def authorization_show(
+    decision_id: str = typer.Argument(..., help="Decision ID"),
+    json_output: bool = typer.Option(False, "--json"),
+):
     """Show an authorization decision."""
     store = get_store()
     decision = store.get_decision(decision_id)
@@ -156,7 +205,9 @@ def authorization_show(decision_id: str = typer.Argument(..., help="Decision ID"
     typer.echo(f"Authorization Decision: {decision['decision_id']}")
     typer.echo(f"  Action mode: {decision.get('action_mode', '?')}")
     typer.echo(f"  Allowed:     {decision.get('allowed', False)}")
-    typer.echo(f"  Reason:      {decision.get('reason_code', '?')}: {decision.get('reason_message', '?')}")
+    typer.echo(
+        f"  Reason:      {decision.get('reason_code', '?')}: {decision.get('reason_message', '?')}"
+    )
     typer.echo(f"  Rule class:  {decision.get('rule_class', '?')}")
     typer.echo(f"  Lease:       {decision.get('lease_id', 'none')}")
     typer.echo(f"  Decided at:  {decision.get('decided_at', '?')}")
@@ -187,6 +238,7 @@ def authorization_leases(json_output: bool = typer.Option(False, "--json")):
 
 # Delegation
 
+
 @delegation_app.command("list")
 def delegation_list(json_output: bool = typer.Option(False, "--json")):
     """List active delegation grants."""
@@ -199,7 +251,9 @@ def delegation_list(json_output: bool = typer.Option(False, "--json")):
             typer.echo("No active delegations.")
             return
         typer.echo("ACTIVE DELEGATIONS")
-        typer.echo(f"{'GRANT ID':<14} {'ISSUER':<16} {'SUBJECT':<16} {'USES':<10} {'EXPIRES':<20}")
+        typer.echo(
+            f"{'GRANT ID':<14} {'ISSUER':<16} {'SUBJECT':<16} {'USES':<10} {'EXPIRES':<20}"
+        )
         typer.echo("-" * 76)
         for g in grants:
             typer.echo(
@@ -212,13 +266,17 @@ def delegation_list(json_output: bool = typer.Option(False, "--json")):
 
 
 @delegation_app.command("revoke")
-def delegation_revoke(grant_id: str = typer.Argument(..., help="Grant ID to revoke"),
-                      reason: str = typer.Option("", "--reason")):
+def delegation_revoke(
+    grant_id: str = typer.Argument(..., help="Grant ID to revoke"),
+    reason: str = typer.Option("", "--reason"),
+):
     """Revoke an active delegation grant."""
     mgr = DelegationManager()
     try:
         revocation = mgr.revoke(grant_id, _subject_id(), reason=reason)
-        typer.echo(f"Delegation {grant_id} revoked. Revocation: {revocation.revocation_id}")
+        typer.echo(
+            f"Delegation {grant_id} revoked. Revocation: {revocation.revocation_id}"
+        )
     except ValueError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(code=1)

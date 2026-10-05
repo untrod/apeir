@@ -192,3 +192,32 @@ existing repository hygiene/security checks passed.
 
 M3.3-C remains PENDING: no USB, serial, ESP32, physical actuator, hardware
 timing, power-loss durability, or field acceptance has been demonstrated.
+
+## M3.4-A firmware governance acceptance
+
+The existing [Security Contract](SECURITY_CONTRACT.md#m34-a-operation-governance-audit)
+is authoritative for the governance audit and approval semantics. Reality uses
+that Gate and Broker rather than a provider-specific authority. A deterministic
+Agent Goal produces a Plan that reads the current simulated firmware through a
+read-only Distributed Work, detects `1.0.0`, and proposes the high-risk
+`device.firmware.update` Operation to `2.0.0`. The original mutation Work persists
+at `CREATED` while its Workflow pauses for a durable human approval request.
+Approve Once then explicit `resume_plan` continues the same Plan, Workflow and
+Work through Node admission, the existing OperationReceipt, a new independent
+read Work, EffectVerification `MATCH` and `COMMITTED`. Deny, including after
+restart, leaves firmware at `1.0.0` and executes no mutation.
+
+Tests also cover copying human identity claims, legacy approval bypass,
+Workflow approval hints, Node-boundary revocation, scope/expiry, audit failure,
+restart during approval, effect followed by lost response with subsequent grant
+revocation, and missing terminal receipts while a broader grant remains valid.
+Reconciliation observes the persisted effect without reexecuting it. Both
+`MISMATCH` and `UNKNOWN` remain uncommitted. This firmware simulation changes only
+a version field; it does not flash hardware or validate a physical firmware image.
+
+M3.4-A local simulation gate: 687 directly affected tests passed, 3 skipped;
+68 Governance/Reality tests passed, including all 42 new governance/firmware
+tests. The full suite has 3497 passed, 35 skipped and the nine unchanged local
+environment failures reproduced at the M3.4-A starting baseline. See the
+[validation record](SECURITY_CONTRACT.md#m34-a-validation-record). M3.3-A PASS,
+M3.3-B PASS and M3.3-C Real Hardware Acceptance PENDING remain unchanged.

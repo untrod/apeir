@@ -35,23 +35,27 @@ class ApprovalManager:
         expires_in_hours: int = 24,
     ) -> ApprovalRequest:
         """Create an approval request from a proposal."""
-        expires = (datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        expires = (
+            datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
         request = ApprovalRequest(
             request_id=_new_id("apr"),
             proposal_hash=proposal.proposal_hash,
             summary=f"{proposal.action_type}: {proposal.capability_id}",
             risk_summary=risk_summary or proposal.side_effect_class,
             scope_summary=f"Workspace: {proposal.target_workspace}, "
-                          f"Resources: {len(proposal.affected_resources)}, "
-                          f"Cost: ${proposal.estimated_cost_usd:.4f}",
+            f"Resources: {len(proposal.affected_resources)}, "
+            f"Cost: ${proposal.estimated_cost_usd:.4f}",
             status="PENDING",
             requested_by=context.subject_id,
             expires_at=expires,
         )
         self.store.save_approval_request(request.to_dict())
-        _log.info("Approval request created: %s for %s", request.request_id, proposal.capability_id)
+        _log.info(
+            "Approval request created: %s for %s",
+            request.request_id,
+            proposal.capability_id,
+        )
         return request
 
     def approve(
@@ -64,10 +68,14 @@ class ApprovalManager:
     ) -> ApprovalResponse:
         """Approve a pending approval request."""
         req = self.store.get_approval_request(request_id)
+        if req and req.get("operation_governance"):
+            raise PermissionError("Use the authenticated Operation ApprovalBroker")
         if not req:
             raise ValueError(f"Approval request {request_id} not found")
         if req["status"] != "PENDING":
-            raise ValueError(f"Approval request {request_id} is not PENDING (status={req['status']})")
+            raise ValueError(
+                f"Approval request {request_id} is not PENDING (status={req['status']})"
+            )
 
         response = ApprovalResponse(
             request_id=request_id,
@@ -97,10 +105,14 @@ class ApprovalManager:
     ) -> ApprovalResponse:
         """Deny a pending approval request."""
         req = self.store.get_approval_request(request_id)
+        if req and req.get("operation_governance"):
+            raise PermissionError("Use the authenticated Operation ApprovalBroker")
         if not req:
             raise ValueError(f"Approval request {request_id} not found")
         if req["status"] != "PENDING":
-            raise ValueError(f"Approval request {request_id} is not PENDING (status={req['status']})")
+            raise ValueError(
+                f"Approval request {request_id} is not PENDING (status={req['status']})"
+            )
 
         response = ApprovalResponse(
             request_id=request_id,

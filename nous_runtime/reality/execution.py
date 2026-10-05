@@ -9,13 +9,15 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from nous_runtime.artifact.content_store import ContentAddressedArtifactStore
-from nous_runtime.capability.contract import (
-    CapabilityContract,
-    Idempotency,
-    RetryStrategy,
-    VerificationMethod,
-)
 from nous_runtime.connectivity.protocol.identity import NodeIdentity
+from nous_runtime.core.redaction import redact_sensitive_data
+from nous_runtime.governance.gate import ExecutionAuthorizationGate, get_gate
+from nous_runtime.governance.broker import ApprovalBroker
+from nous_runtime.governance.operation_contracts import (
+    GovernanceApprovalRequired,
+    GovernanceDecision,
+    GovernanceRequest,
+)
 from nous_runtime.planner.observation import Observation
 from nous_runtime.node_runtime.distributed_work import (
     DistributedWork,
@@ -52,12 +54,22 @@ class SimulatedDeviceOperationHandler:
         provider: SimulatedDeviceProvider,
         registry: DeviceRegistry,
         artifact_store: ContentAddressedArtifactStore,
+        *,
+        governance: ExecutionAuthorizationGate | None = None,
+        capability_id: str = "device.state.set",
     ):
         self.provider = provider
         self.registry = registry
         self.artifact_root = artifact_store.root
+        self.capability_id = capability_id
+        self.governance = governance or get_gate()
 
     def __call__(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        return self._execute(arguments, admitted=False)
+
+    def _execute(
+        self, arguments: dict[str, Any], *, admitted: bool, before_effect=None
+    ) -> dict[str, Any]:
         operation_value = arguments.get("operation")
         if not isinstance(operation_value, Mapping):
             raise ValueError("Reality operation binding is required")
@@ -83,12 +95,17 @@ class SimulatedDeviceOperationHandler:
             or not isinstance(payload.get("mutation"), Mapping)
         ):
             raise ValueError("Reality mutation Artifact binding is invalid")
+        if not admitted:
+            raise PermissionError(
+                "Reality mutation requires bound Node governance admission"
+            )
         try:
             result = self.provider.apply_operation(
                 device,
                 operation_id=operation_id,
                 capability_id=capability_id,
                 mutation=dict(payload["mutation"]),
+                before_effect=before_effect,
             )
         except SimulatedResponseLost as exc:
             raise WorkloadResponseLost(
@@ -101,6 +118,7 @@ class SimulatedDeviceOperationHandler:
             **result,
             "mutation_artifact": input_ref,
             "provenance": dict(payload.get("provenance") or {}),
+            "authorization_id": arguments["authorization_id"],
         }
 
     def execute_bound(
@@ -123,7 +141,27 @@ class SimulatedDeviceOperationHandler:
         device = self.registry.get(str(operation.get("target_resource_id") or ""))
         if device is not None and device.node_id and device.node_id != node_id:
             raise ValueError("Reality Device is hosted by a different Node")
-        return self(arguments)
+        authorization_id = str(arguments.get("authorization_id") or "")
+        request = self.governance.get_operation_request(authorization_id)
+        if (
+            request.operation_id != workload_id
+            or request.node_id != node_id
+            or request.capability_id != self.capability_id
+            or request.resource_id != operation.get("target_resource_id")
+            or request.agent_session_id != operation.get("agent_session_id")
+            or request.expected_effect != operation.get("expected_effect")
+            or list(request.input_artifacts) != operation.get("input_artifacts")
+            or list(request.input_artifacts) != [arguments.get("mutation_artifact")]
+        ):
+            raise PermissionError("Node Operation authorization binding differs")
+        with self.governance.admit_operation(
+            authorization_id,
+            resource_check=lambda: (
+                self.registry.get(request.resource_id).lifecycle
+                is DeviceLifecycle.AVAILABLE
+            ),
+        ) as revalidate:
+            return self._execute(arguments, admitted=True, before_effect=revalidate)
 
     def read(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Acquire a separate observation through a read-only Node Work."""
@@ -138,9 +176,23 @@ class SimulatedDeviceOperationHandler:
                 capability="device.state.read",
                 metadata={"device_id": device_id},
             ).to_dict()
-        return self.provider.read_state(
-            device, acquisition_id=str(arguments.get("acquisition_id") or "")
-        ).to_dict()
+        authorization_id = str(arguments.get("authorization_id") or "")
+        request = self.governance.get_operation_request(authorization_id)
+        if (
+            request.resource_id != device_id
+            or request.capability_id != "device.state.read"
+            or request.operation_id != arguments.get("acquisition_id")
+        ):
+            raise PermissionError("Observation authorization binding differs")
+        with self.governance.admit_operation(
+            authorization_id,
+            resource_check=lambda: (
+                self.registry.get(device_id).lifecycle is DeviceLifecycle.AVAILABLE
+            ),
+        ):
+            return self.provider.read_state(
+                device, acquisition_id=str(arguments.get("acquisition_id") or "")
+            ).to_dict()
 
 
 class RealityOperationWorkflowHandler:
@@ -154,10 +206,13 @@ class RealityOperationWorkflowHandler:
         registry: DeviceRegistry,
         graph: ResourceGraph | None = None,
         poll_interval_seconds: float = 0.05,
+        governance: ExecutionAuthorizationGate | None = None,
     ):
         self.controller_state = Path(controller_state).expanduser().resolve()
         self.provider = provider
         self.registry = registry
+        self.governance = governance or get_gate()
+        self.approvals = ApprovalBroker(self.governance.store)
         self.graph = graph or ResourceGraph(self.controller_state)
         self.artifacts = ContentAddressedArtifactStore(
             self.controller_state / "artifacts"
@@ -166,6 +221,7 @@ class RealityOperationWorkflowHandler:
             self.controller_state,
             poll_interval_seconds=poll_interval_seconds,
             verified_work_finalizer=self._finalize,
+            work_admitter=self._authorize_work,
         )
 
     def __call__(self, step: WorkflowStep, context: dict[str, Any]) -> dict[str, Any]:
@@ -179,8 +235,18 @@ class RealityOperationWorkflowHandler:
                 f"Reality target is not AVAILABLE: {device.lifecycle.value}"
             )
         capability_id = str(params.get("capability") or "device.state.set")
+        if capability_id == "device.state.read":
+            return self._observe_step(step, context, device)
         expected_effect = params.get("expected_effect")
         mutation = params.get("mutation")
+        if redact_sensitive_data(
+            {"mutation": mutation, "expected_effect": expected_effect}
+        ) != {"mutation": mutation, "expected_effect": expected_effect}:
+            raise ValueError(
+                "Credential material cannot enter Reality Work or Artifact inputs"
+            )
+        if capability_id == "device.firmware.update":
+            self.provider.validate_firmware_mutation(mutation)
         if not isinstance(expected_effect, Mapping) or not expected_effect:
             raise DistributedWorkError("Reality expected_effect must be non-empty")
         if not isinstance(mutation, Mapping) or not mutation:
@@ -243,6 +309,21 @@ class RealityOperationWorkflowHandler:
         operation = replace(operation, input_artifacts=(mutation_ref,))
         if existing is None or self.graph.get(work_id) is None:
             self._project_operation(device, operation)
+        request = GovernanceRequest(
+            operation_id=work_id,
+            work_id=work_id,
+            capability_id=capability_id,
+            resource_id=device_id,
+            subject_id=str(inputs.get("_agent_id") or "anonymous-agent"),
+            agent_session_id=operation.agent_session_id,
+            plan_id=operation.plan_id,
+            workflow_run_id=operation.workflow_run_id,
+            node_id=device.node_id,
+            input_artifacts=operation.input_artifacts,
+            expected_effect=dict(expected_effect),
+            capability_inputs=self.governance.capability_inputs(capability_id),
+        )
+        authorization_id = self.governance.register_operation(request)
         distributed_step = replace(
             step,
             action="distributed",
@@ -260,6 +341,7 @@ class RealityOperationWorkflowHandler:
                 "arguments": {
                     "operation": operation.to_dict(),
                     "mutation_artifact": mutation_ref,
+                    "authorization_id": authorization_id,
                 },
                 "input_artifacts": [mutation_ref],
                 "target_resource_id": device_id,
@@ -270,6 +352,8 @@ class RealityOperationWorkflowHandler:
         )
         try:
             output = self.distributed(distributed_step, context)
+        except GovernanceApprovalRequired:
+            raise
         except Exception as exc:
             current_controller = self.distributed._controller()
             assert current_controller.work_store is not None
@@ -297,6 +381,68 @@ class RealityOperationWorkflowHandler:
                 "kernel_traversed": False,
             }
         )
+        return output
+
+    def _authorize_work(self, work: DistributedWork) -> None:
+        authorization_id = work.execution_arguments["authorization_id"]
+        verdict = self.governance.evaluate_operation(authorization_id)
+        if verdict is GovernanceDecision.REQUIRE_APPROVAL:
+            approval = self.approvals.request_operation(
+                authorization_id, gate=self.governance
+            )
+            raise GovernanceApprovalRequired(
+                {
+                    **DistributedWorkflowAdapter._output(work.to_dict()),
+                    "approval_request_id": approval.request_id,
+                    "authorization_id": authorization_id,
+                    "governance_decision": verdict.value,
+                }
+            )
+        if verdict is not GovernanceDecision.ALLOW:
+            raise DistributedWorkError(f"Governance denied execution: {verdict.value}")
+
+    def _observe_step(self, step, context, device):
+        work_id = str(
+            step.params.get("work_id")
+            or DistributedWorkflowAdapter._work_id(step, context)
+        )
+        inputs = context.get("inputs") or {}
+        request = GovernanceRequest(
+            operation_id=work_id,
+            work_id=work_id,
+            capability_id="device.state.read",
+            resource_id=device.device_id,
+            subject_id=str(inputs.get("_agent_id") or "anonymous-agent"),
+            agent_session_id=str(inputs.get("_agent_session_id") or ""),
+            plan_id=str(inputs.get("_plan_id") or ""),
+            workflow_run_id=context.get("run_id", ""),
+            node_id=device.node_id,
+            capability_inputs=self.governance.capability_inputs("device.state.read"),
+        )
+        authorization_id = self.governance.register_operation(request)
+        adapter = DistributedWorkflowAdapter(
+            self.controller_state, work_admitter=self._authorize_work
+        )
+        output = adapter(
+            replace(
+                step,
+                action="distributed",
+                params={
+                    "work_id": work_id,
+                    "capability": "device.state.read",
+                    "arguments": {
+                        "device_id": device.device_id,
+                        "acquisition_id": work_id,
+                        "authorization_id": authorization_id,
+                    },
+                    "requirements": {"node_ids": [device.node_id]},
+                    "target_resource_id": device.device_id,
+                    "wait_timeout_seconds": step.params.get("wait_timeout_seconds", 30),
+                },
+            ),
+            context,
+        )
+        output["observation"] = adapter._controller().results[work_id]["output"]
         return output
 
     def recover_verified(self, work_id: str) -> DistributedWork:
@@ -349,6 +495,18 @@ class RealityOperationWorkflowHandler:
             raise DistributedWorkError("Reality target disappeared")
         acquisition_id = f"observe_{uuid.uuid4().hex}"
         operation = replace(operation, observation_request_id=acquisition_id)
+        original_request = self.governance.get_operation_request(
+            work.execution_arguments["authorization_id"]
+        )
+        read_request = replace(
+            original_request,
+            operation_id=acquisition_id,
+            work_id=acquisition_id,
+            capability_id="device.state.read",
+            expected_effect={},
+            capability_inputs=self.governance.capability_inputs("device.state.read"),
+        )
+        read_authorization = self.governance.register_operation(read_request)
         read_adapter = DistributedWorkflowAdapter(self.controller_state)
         read_step = replace(
             step,
@@ -359,6 +517,7 @@ class RealityOperationWorkflowHandler:
                 "arguments": {
                     "device_id": device.device_id,
                     "acquisition_id": acquisition_id,
+                    "authorization_id": read_authorization,
                 },
                 "requirements": {"node_ids": [work.assigned_node]},
                 "input_artifacts": list(work.input_artifacts),
@@ -455,6 +614,14 @@ class RealityOperationWorkflowHandler:
             verification.to_dict(),
             evidence_refs=(observation_ref, verification_ref),
         )
+        self.governance.record_operation_evidence(
+            work.execution_arguments["authorization_id"],
+            "effect.verified",
+            verdict=verification.verdict.value,
+            observation_ids=list(verification.observation_ids),
+            receipt_digest=verification.receipt_digest,
+            evidence_refs=[observation_ref, verification_ref],
+        )
         if verification.verdict is EffectVerdict.MATCH:
             return controller.work_store.transition(
                 recorded.work_id,
@@ -468,18 +635,17 @@ class RealityOperationWorkflowHandler:
     def _project_operation(self, device: Any, operation: Operation) -> None:
         self.graph.add_device(device)
         self.graph.add_transport(self.provider.transport.descriptor)
-        self.graph.add_capability(
-            CapabilityContract(
-                capability_id=operation.capability_id,
-                risk_level="LOW",
-                side_effect_class="external_write",
-                idempotency=Idempotency.CONDITIONAL,
-                retry_strategy=RetryStrategy.NONE,
-                max_retries=0,
-                observation_method="device.state.read",
-                verification_method=VerificationMethod.ASSERTION,
-            )
+        contract = next(
+            (
+                c
+                for c in self.governance.operation_contracts.list_all()
+                if c.capability_id == operation.capability_id
+            ),
+            None,
         )
+        if contract is None:
+            raise DistributedWorkError("Unknown Reality capability")
+        self.graph.add_capability(contract)
         self.graph.add_operation(operation)
         self.graph.relate(
             device.device_id,

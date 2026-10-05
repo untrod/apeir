@@ -251,6 +251,20 @@ class SimulatedDeviceProvider(DeviceProvider):
             self._save()
             return observation
 
+    @staticmethod
+    def validate_firmware_mutation(mutation) -> None:
+        import re
+
+        if not isinstance(mutation, Mapping) or set(mutation) != {"state"}:
+            raise ValueError("Firmware mutation requires only a semantic version")
+        state = mutation["state"]
+        if (
+            not isinstance(state, Mapping)
+            or set(state) != {"firmware_version"}
+            or not re.fullmatch(r"\d+\.\d+\.\d+", str(state["firmware_version"]))
+        ):
+            raise ValueError("Firmware mutation requires only a semantic version")
+
     def apply_operation(
         self,
         device: Device,
@@ -258,10 +272,13 @@ class SimulatedDeviceProvider(DeviceProvider):
         operation_id: str,
         capability_id: str,
         mutation: Mapping[str, Any],
+        before_effect=None,
     ) -> dict[str, Any]:
         """Apply one controlled state update with durable operation idempotency."""
-        if capability_id != "device.state.set":
-            raise ValueError("simulator only supports device.state.set mutations")
+        if capability_id not in {"device.state.set", "device.firmware.update"}:
+            raise ValueError("simulator does not support this mutating capability")
+        if capability_id == "device.firmware.update":
+            self.validate_firmware_mutation(mutation)
         if capability_id not in device.capability_ids:
             raise PermissionError("device does not expose the requested capability")
         if (
@@ -321,6 +338,8 @@ class SimulatedDeviceProvider(DeviceProvider):
                 raise ValueError("state mutation must be a non-empty object")
             if any(not isinstance(key, str) or not key for key in update):
                 raise ValueError("state mutation keys must be non-empty strings")
+            if before_effect is not None:
+                before_effect()
             self._previous_states[stable] = dict(self._states[stable])
             self._states[stable].update(dict(update))
             self.transport.replace_state(stable, self._states[stable])

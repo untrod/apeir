@@ -5,6 +5,11 @@ All notable changes to APEIR Distribution are recorded here. The project follows
 
 ## Unreleased
 
+- M3.4-A deterministic Operation governance through the existing Gate, Broker,
+  scoped durable leases and audit trail. High-risk simulated firmware updates
+  pause the original Workflow for human Approve Once or Deny; Node admission
+  rechecks expiry and revocation, and recovery never licenses effect replay.
+
 - M3.3-B stateful Reality simulation through existing AgentSession, Plan,
   Workflow, Distributed Work, Node and Artifact CAS paths. Device mutations
   commit only after independent fresh observation yields `MATCH`.
