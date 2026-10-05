@@ -124,6 +124,7 @@ Observation identifiers are deduplicated, not counted as extra evidence.
 | Device disconnect/reconnect | Persist lifecycle and publish events; restore previous trust without reviving revocation. |
 | Operation failure | Signed failed result; no commit and no automatic mutation retry. |
 | Delayed result | Bounded wait; resume consumes the existing persisted result. |
+| Delayed signed rejection after credential expiry | A bounded wait may leave Work RUNNING; await the original signed failure, then reconcile FAILED with zero credential resolutions and zero effects. |
 | Duplicate observation | Repeated identity does not establish a fresh acquisition. |
 | Stale observation | `UNKNOWN`; a later fresh read can reconcile without repeating mutation. |
 | Duplicate receipt | Existing Node-protocol duplicate handling accepts identical facts idempotently. |

@@ -1422,7 +1422,10 @@ def test_credential_lost_response_recovers_without_resolving_revoked_delivery_ag
     asyncio.run(scenario())
 
 
-def test_disconnected_node_cannot_resolve_expired_handle_after_reconnect(tmp_path):
+@pytest.mark.parametrize("delay_failure", [False, True])
+def test_disconnected_node_cannot_resolve_expired_handle_after_reconnect(
+    tmp_path, monkeypatch, delay_failure
+):
     async def scenario():
         async with simulation(tmp_path, credentials=True) as first:
             paused = await request_firmware(first, wait_timeout=3)
@@ -1440,11 +1443,51 @@ def test_disconnected_node_cannot_resolve_expired_handle_after_reconnect(tmp_pat
                 db.execute(
                     "UPDATE governance_secret_handles SET expires_at='2000-01-01T00:00:00Z'"
                 )
+        response_seen = asyncio.Event()
+        release_response = asyncio.Event()
+        original_send = NodeRelayClient._send
+        resolutions = []
+
+        async def send(self, websocket, message_type, payload, **kwargs):
+            if (
+                delay_failure
+                and message_type == "WORKLOAD_STATUS"
+                and payload.get("workload_id") == WORK_ID
+                and payload.get("state") == "FAILED"
+            ):
+                response_seen.set()
+                await release_response.wait()
+            await original_send(self, websocket, message_type, payload, **kwargs)
+
+        def forbidden_resolution(self, handle):
+            resolutions.append(handle)
+            raise AssertionError("Expired handles must not reach SecretBackend")
+
+        monkeypatch.setattr(NodeRelayClient, "_send", send)
+        monkeypatch.setattr(VaultSecretBackend, "resolve", forbidden_resolution)
         async with simulation(tmp_path, credentials=True) as restored:
             waiting = await resume_firmware(restored, paused.session_id)
             assert waiting.state is AgentSessionState.WAITING
             assert restored.provider.execution_count(WORK_ID) == 0
+            if delay_failure:
+                await wait_for(response_seen.is_set)
+                # A bounded Workflow wait is not a terminal Node receipt. Keep
+                # the original Work in flight until its signed denial arrives.
+                assert restored.work().state is DistributedWorkState.RUNNING
+            release_response.set()
+            await wait_for(
+                lambda: (
+                    restored.controller().results.get(WORK_ID, {}).get("state")
+                    == "FAILED"
+                )
+            )
+            waiting = await resume_firmware(restored, paused.session_id)
+            assert waiting.state is AgentSessionState.WAITING
+            assert waiting.workflow_run_id == paused.workflow_run_id
+            assert waiting.plan_history == paused.plan_history
+            assert restored.provider.execution_count(WORK_ID) == 0
             assert restored.work().state is DistributedWorkState.FAILED
+            assert resolutions == []
             assert_no_credential_on_disk(tmp_path)
 
     asyncio.run(scenario())

@@ -154,7 +154,7 @@ qualification remain PENDING.
 
 The explicit real-OCI interoperability suite has **25 passed**; directly affected
 Agent/Workflow/Node/Reality/Governance/Control Plane/SDK/recovery regressions have
-**709 passed**. Full Cloud regression with the OCI probe enabled has **3625 passed,
+**710 passed**. Full Cloud regression with the OCI probe enabled has **3626 passed,
 35 skipped and 9 unchanged baseline failures**. These are the previously reproduced
 managed-interpreter, read-only host-home/Desktop automation and orphan-process
 cleanup failures recorded in the existing security validation history; none is
@@ -171,3 +171,14 @@ repository under `python -I -O`. Relevant Desktop/Multi-Arch CI is evaluated on
 the pushed SHA before the M4 software Gate is reported. This record certifies the
 bounded software/reference flow, not authenticated Codex service integration,
 production Linux OCI, a remote authority topology or physical hardware.
+
+The original SDK-complete commit's Desktop CI passed, but its
+[Multi-Arch run](https://github.com/untrod/apeir/actions/runs/37303867700)
+retains a Windows Python 3.11 failure: the expired-handle reconnect test expected
+FAILED immediately after a bounded Workflow wait while Work was still RUNNING.
+A controlled delayed signed rejection reproduces that assertion failure without
+credential resolution or a device effect. The corrected normal/delayed cases
+await the original signed terminal evidence, resume the same Workflow/Plan and
+require FAILED, zero backend resolutions, zero effects and no leakage. Runtime
+admission/retry behavior is unchanged; the nine unrelated Cloud baseline failures
+remain intact. Corrective CI must pass before reporting the M4 software Gate.
