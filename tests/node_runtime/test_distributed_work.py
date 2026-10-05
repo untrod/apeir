@@ -133,3 +133,73 @@ def test_controller_cli_submits_and_reads_durable_work(tmp_path: Path):
     listing = runner.invoke(app, ["work-status", "--state-dir", str(state)])
     assert listing.exit_code == 0, listing.output
     assert json.loads(listing.stdout)["counts"] == {"CREATED": 1}
+
+
+@pytest.mark.parametrize("read", ["get", "list", "counts", "restart"])
+def test_work_readers_share_writer_lock_and_observe_complete_transition(
+    tmp_path, monkeypatch, read
+):
+    """A reader cannot replace the writer's working snapshot during admission."""
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+
+    store = DistributedWorkStore(tmp_path)
+    work = store.create(DistributedWork(intent="serialize canonical state"))
+    writing = threading.Event()
+    release = threading.Event()
+    reading = threading.Event()
+    loaded = threading.Event()
+    original_save = store._save
+    original_load = DistributedWorkStore._load
+
+    def save(works):
+        writing.set()
+        if not release.wait(5):
+            raise RuntimeError("test writer did not release")
+        return original_save(works)
+
+    def load(current):
+        if reading.is_set():
+            loaded.set()
+        return original_load(current)
+
+    monkeypatch.setattr(store, "_save", save)
+    monkeypatch.setattr(DistributedWorkStore, "_load", load)
+
+    def inspect():
+        reading.set()
+        if read == "restart":
+            return DistributedWorkStore(tmp_path).get(work.work_id)
+        return (
+            getattr(store, read)(work.work_id)
+            if read == "get"
+            else getattr(store, read)()
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        writer = pool.submit(
+            store.transition,
+            work.work_id,
+            DistributedWorkState.SCHEDULED,
+            reason="serialized transition",
+        )
+        try:
+            assert writing.wait(5)
+            reader = pool.submit(inspect)
+            assert reading.wait(5)
+            assert not loaded.wait(0.1), "reader entered the store during a write"
+            release.set()
+            assert writer.result(timeout=5).state is DistributedWorkState.SCHEDULED
+            observed = reader.result(timeout=5)
+        finally:
+            release.set()
+    if read in {"get", "restart"}:
+        assert observed.state is DistributedWorkState.SCHEDULED
+    elif read == "list":
+        assert observed[0].state is DistributedWorkState.SCHEDULED
+    else:
+        assert observed == {"SCHEDULED": 1}
+    assert (
+        DistributedWorkStore(tmp_path).get(work.work_id).state
+        is DistributedWorkState.SCHEDULED
+    )

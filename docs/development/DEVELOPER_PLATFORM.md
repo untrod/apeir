@@ -181,3 +181,27 @@ or Kernel code changed. Distribution, Provider SDK `1.0.0b2` and NKI SDK `0.1.1`
 wheels build and install in an isolated consumer; public imports and optimized
 Python fail-closed conformance pass. CI is checked after push and reported with the
 resulting Distribution SHA. Physical acceptance remains **PENDING**.
+
+### Canonical Work read correction
+
+The first SDK commit `9f829b004ec6ef68a2daa7894dab3b2242dbb755` passed Desktop CI
+(Windows **3607 passed, 28 skipped**; Linux/macOS **3600 passed, 35 skipped**).
+Its multi-architecture Windows job recorded **1 failed, 3318 passed, 28 skipped,
+272 deselected**: the existing firmware revocation test stopped before approval
+because the distributed Work store was unreadable. The failure is retained at
+[the original CI run](https://github.com/untrod/apeir/actions/runs/37282398853).
+The log does not expose the underlying Windows error number.
+
+Inspection identified a reproducible read/write exclusion defect: Work writers
+held the existing file lock while reads could concurrently replace the instance's
+working snapshot. Reads, counts, listing and restart loading now use that same
+canonical lock; mutation methods use an internal read under their already-held
+lock, avoiding recursive acquisition. This introduces neither a new lock system
+nor effect retries. Four concurrent-reader regression cases cover the correction;
+the pre-fix read path demonstrably enters during a write.
+
+Latest local validation: reader/revocation targets **6 passed**; affected
+regressions **650 passed, 3 skipped**; full repository **3600 passed, 35 skipped,
+9 unchanged baseline failures**. Ruff, changed-file formatting, compile and the
+isolated Distribution wheel build pass. The corrective SHA and its CI outcome
+are checked after push. Kernel and the component lock remain unchanged.

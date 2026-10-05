@@ -475,7 +475,8 @@ class DistributedWorkStore:
         self.state_dir = state_dir.expanduser().resolve()
         self.path = self.state_dir / "distributed-works.json"
         self.lock_path = self.state_dir / "distributed-works.lock"
-        self._works = self._load()
+        with file_lock(self.lock_path):
+            self._works = self._load()
 
     def create(self, work: DistributedWork) -> DistributedWork:
         with file_lock(self.lock_path):
@@ -489,16 +490,22 @@ class DistributedWorkStore:
         return DistributedWork.from_dict(work.to_dict())
 
     def get(self, work_id: str) -> DistributedWork | None:
+        with file_lock(self.lock_path):
+            return self._get_locked(work_id)
+
+    def _get_locked(self, work_id: str) -> DistributedWork | None:
+        """Read while the caller holds the canonical store lock."""
         self._works = self._load()
         value = self._works.get(work_id)
         return DistributedWork.from_dict(value.to_dict()) if value else None
 
     def list(self) -> list[DistributedWork]:
-        self._works = self._load()
-        return [
-            DistributedWork.from_dict(self._works[key].to_dict())
-            for key in sorted(self._works)
-        ]
+        with file_lock(self.lock_path):
+            self._works = self._load()
+            return [
+                DistributedWork.from_dict(self._works[key].to_dict())
+                for key in sorted(self._works)
+            ]
 
     def transition(
         self,
@@ -509,7 +516,7 @@ class DistributedWorkStore:
         assigned_node: str = "",
     ) -> DistributedWork:
         with file_lock(self.lock_path):
-            current = self.get(work_id)
+            current = self._get_locked(work_id)
             if current is None:
                 raise DistributedWorkError(f"Work does not exist: {work_id}")
             current.transition(target, reason=reason, assigned_node=assigned_node)
@@ -523,7 +530,7 @@ class DistributedWorkStore:
         self, work_id: str, decision: Mapping[str, Any]
     ) -> DistributedWork:
         with file_lock(self.lock_path):
-            current = self.get(work_id)
+            current = self._get_locked(work_id)
             if current is None:
                 raise DistributedWorkError(f"Work does not exist: {work_id}")
             if current.state is not DistributedWorkState.SCHEDULED:
@@ -544,7 +551,7 @@ class DistributedWorkStore:
 
     def assign(self, work_id: str, node_id: str) -> DistributedWork:
         with file_lock(self.lock_path):
-            current = self.get(work_id)
+            current = self._get_locked(work_id)
             if current is None:
                 raise DistributedWorkError(f"Work does not exist: {work_id}")
             if current.state is not DistributedWorkState.SCHEDULED:
@@ -564,7 +571,7 @@ class DistributedWorkStore:
         self, work_id: str, dispatch: Mapping[str, Any]
     ) -> DistributedWork:
         with file_lock(self.lock_path):
-            current = self.get(work_id)
+            current = self._get_locked(work_id)
             if current is None:
                 raise DistributedWorkError(f"Work does not exist: {work_id}")
             if (
@@ -600,7 +607,7 @@ class DistributedWorkStore:
         evidence_refs: tuple[str, ...] = (),
     ) -> DistributedWork:
         with file_lock(self.lock_path):
-            current = self.get(work_id)
+            current = self._get_locked(work_id)
             if current is None:
                 raise DistributedWorkError(f"Work does not exist: {work_id}")
             if result.get("schema") != "apeir.work-result-summary/v1":
@@ -628,7 +635,7 @@ class DistributedWorkStore:
     ) -> DistributedWork:
         """Persist the independent Reality verdict before any effect commit."""
         with file_lock(self.lock_path):
-            current = self.get(work_id)
+            current = self._get_locked(work_id)
             if current is None:
                 raise DistributedWorkError(f"Work does not exist: {work_id}")
             if current.state is not DistributedWorkState.VERIFIED:
@@ -680,12 +687,13 @@ class DistributedWorkStore:
         return DistributedWork.from_dict(current.to_dict())
 
     def counts(self) -> dict[str, int]:
-        self._works = self._load()
-        return {
-            state.value: sum(work.state is state for work in self._works.values())
-            for state in DistributedWorkState
-            if any(work.state is state for work in self._works.values())
-        }
+        with file_lock(self.lock_path):
+            self._works = self._load()
+            return {
+                state.value: sum(work.state is state for work in self._works.values())
+                for state in DistributedWorkState
+                if any(work.state is state for work in self._works.values())
+            }
 
     def _load(self) -> dict[str, DistributedWork]:
         if not self.path.exists():
