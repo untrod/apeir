@@ -139,6 +139,10 @@ closes the connection before `WORKLOAD_STATUS` reaches the Controller. The
 tests also interrupt terminal journal persistence to cover the harder missing
 receipt window. Recovery reuses existing Node journal, Controller
 reconciliation and Workflow checkpoints; it does not issue a new mutation.
+The cross-platform fault tests wait for actual Node connection termination
+before inspecting the durable receipt or incomplete journal. Relay timeouts
+allow filesystem persistence to finish; elapsed milliseconds alone do not
+establish that an injected effect or response loss occurred.
 
 Previous non-MATCH verification and Observation Artifacts remain in the CAS
 provenance graph when a fresh acquisition produces a new verdict. Binding or

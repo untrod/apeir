@@ -55,6 +55,7 @@ DEFINITIONS = {
 }
 STABLE = "sim-actuator-001"
 WORK_ID = "work-simulated-effect"
+RELAY_HEARTBEAT_SECONDS = 5
 
 
 class Simulation:
@@ -105,13 +106,16 @@ class Simulation:
             artifact_store=ContentAddressedArtifactStore(
                 self.controller_state / "artifacts"
             ),
-            heartbeat_seconds=0.1,
+            heartbeat_seconds=RELAY_HEARTBEAT_SECONDS,
         )
 
     async def start(self):
         url = await self.server.start()
         self.client = NodeRelayClient(
-            self.node, url, self.server.public_key, heartbeat_seconds=0.1
+            self.node,
+            url,
+            self.server.public_key,
+            heartbeat_seconds=RELAY_HEARTBEAT_SECONDS,
         )
         self.client_task = asyncio.create_task(
             self.client.run_session(self.stop)
@@ -134,7 +138,7 @@ class Simulation:
         self.coordinator.close()
         self.bus.shutdown()
 
-    def plan(self, session, *, expected=True, wait_timeout=3):
+    def plan(self, session, *, expected=True, wait_timeout=10):
         return TaskPlan(
             task_id=session.session_id,
             plan_id="plan-simulated-effect",
@@ -150,13 +154,13 @@ class Simulation:
                         "mutation": {"state": {"enabled": True}},
                         "expected_effect": {"enabled": expected},
                         "wait_timeout_seconds": wait_timeout,
-                        "timeout_seconds": 10,
+                        "timeout_seconds": 30,
                     },
                 ),
             ),
         )
 
-    async def execute(self, *, expected=True, wait_timeout=3):
+    async def execute(self, *, expected=True, wait_timeout=10):
         session = self.coordinator.create(
             agent_id="simulation-agent",
             model="deterministic-planner",
@@ -188,7 +192,7 @@ async def simulation(root: Path, **kwargs):
         await sim.close()
 
 
-async def wait_for(predicate, timeout=5):
+async def wait_for(predicate, timeout=15):
     deadline = asyncio.get_running_loop().time() + timeout
     while asyncio.get_running_loop().time() < deadline:
         if predicate():
@@ -357,7 +361,10 @@ def test_response_loss_restart_reconciles_persisted_result_and_fresh_observation
     async def scenario():
         async with simulation(tmp_path, single_connection=True) as first:
             first.provider.inject_fault(STABLE, fault)
-            waiting = await first.execute(wait_timeout=0.15)
+            waiting = await first.execute(wait_timeout=3)
+            # Receipt persistence and connection loss are the recovery boundary;
+            # filesystem speed is not evidence that the fault has occurred.
+            await wait_for(first.client_task.done)
             assert waiting.state is AgentSessionState.WAITING
             assert first.provider.execution_count(WORK_ID) == expected_count
             assert WORK_ID not in first.server.results
@@ -585,7 +592,8 @@ def test_effect_with_missing_terminal_receipt_stays_unknown_after_restart_withou
 
             with monkeypatch.context() as patch:
                 patch.setattr(node_service, "_atomic_write_json", lose_terminal)
-                waiting = await first.execute(wait_timeout=0.15)
+                waiting = await first.execute(wait_timeout=3)
+                await wait_for(first.client_task.done)
             assert waiting.state is AgentSessionState.WAITING
             assert first.provider.execution_count(WORK_ID) == 1
             session_id = waiting.session_id
