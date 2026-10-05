@@ -116,7 +116,26 @@ class SerialTransport(DeviceTransport):
                 raise SerialContractError(
                     "Install the optional pyserial driver on the hardware host"
                 ) from exc
-            opener = serial.Serial
+            # Configure control lines while closed; pyserial's port constructor
+            # opens immediately with its defaults. Physical line behavior still
+            # requires qualification on the actual board and USB bridge.
+            connection = serial.Serial(
+                port=None,
+                baudrate=self._baudrate,
+                timeout=self._timeout,
+                write_timeout=self._timeout,
+                rtscts=False,
+                dsrdtr=False,
+            )
+            try:
+                connection.dtr = False
+                connection.rts = False
+                connection.port = self._port
+                connection.open()
+            except Exception:
+                connection.close()
+                raise
+            return connection
         return opener(
             port=self._port,
             baudrate=self._baudrate,

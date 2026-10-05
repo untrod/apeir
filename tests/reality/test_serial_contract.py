@@ -1,8 +1,10 @@
 """Fake signed wire fixtures exercise contracts, never physical acceptance."""
 
 import json
+import sys
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -157,6 +159,14 @@ def test_invalid_evidence_is_not_an_observation_success(fixture, change):
         b'{"nonce":1,"nonce":2}\n',
         b"x" * (MAX_SERIAL_FRAME_BYTES + 1) + b"\n",
     ],
+    ids=[
+        "missing",
+        "unterminated",
+        "wrong-schema",
+        "invalid-utf8",
+        "duplicate-key",
+        "oversized",
+    ],
 )
 def test_truncated_duplicate_and_oversized_frames_fail_closed(fixture, raw):
     wire, provider, device = fixture
@@ -229,3 +239,39 @@ def test_wrong_signing_key_fails_even_when_nonce_and_resource_match(fixture):
     with pytest.raises(SerialContractError, match="signature is invalid"):
         provider.transport.exchange("observe", stable_identity=device.stable_identity)
     assert len(wire.requests) == wire.closed == 2
+
+
+def test_default_driver_configures_lines_before_opening(monkeypatch):
+    wire = FakeWire()
+    opened = []
+
+    class Driver:
+        def __init__(self, **kwargs):
+            assert kwargs["port"] is None
+            assert kwargs["rtscts"] is kwargs["dsrdtr"] is False
+            self.dtr = True
+            self.rts = True
+            self.port = None
+
+        def open(self):
+            assert self.dtr is self.rts is False
+            assert self.port == "/dev/fake-driver"
+            opened.append(self.port)
+
+        def write(self, encoded):
+            return wire.write(encoded)
+
+        def read_until(self, *args):
+            return wire.read_until(*args)
+
+        def close(self):
+            wire.close()
+
+    monkeypatch.setitem(sys.modules, "serial", SimpleNamespace(Serial=Driver))
+    public = wire.key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    transport = SerialTransport(
+        "/dev/fake-driver", public.hex(), transport_id="fake-driver"
+    )
+    assert transport.exchange("identify")["stable_identity"] == "esp32-fake-chip-001"
+    assert opened == ["/dev/fake-driver"]
+    assert wire.closed == 1

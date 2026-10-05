@@ -282,6 +282,11 @@ produce failed Observations. Read correlation IDs do not replace fresh wire
 challenges. Device, Node and transport bindings are checked before opening the
 port. Firmware mutation commands are rejected before I/O.
 
+The default pyserial driver is constructed closed, with flow control disabled;
+DTR/RTS are configured false before assigning and opening the fixed port. This
+avoids automatically opening with driver defaults. Actual control-line glitches,
+USB-bridge behavior and ESP32 reset behavior remain physical qualification items.
+
 ### Acceptance boundary
 
 Cloud tests use generated fake signing keys and an in-memory serial fixture.
@@ -312,3 +317,21 @@ also pass outside the repository under isolated optimized Python. Native
 component verification retains the existing missing locked Windows binary
 failure. Kernel and its lock remain unchanged. These results qualify software
 contract preparation only; physical acceptance remains PENDING.
+
+The first preparation CI runs failed on Windows in a new test's setup/teardown:
+pytest's automatically generated ID for the oversized frame exceeded Windows'
+32767-character environment-variable limit (`PYTEST_CURRENT_TEST`). Explicit
+short case IDs reduce the longest collected test identifier from 65600 to 111
+characters while retaining all 27 tests and the same oversized frame and
+assertions. Linux/macOS suites and frontend passed in those runs. The original
+[Desktop](https://github.com/untrod/apeir/actions/runs/37311108061) and
+[Multi-Arch](https://github.com/untrod/apeir/actions/runs/37311108170) failures
+remain visible. Corrective CI must pass before the host-contract Gate is reported.
+
+After the ID correction and closed-driver configuration, 28 focused contract
+tests and 738 directly affected regressions pass. Full regression has 3654
+passed, 35 skipped and the same nine local baseline failures. The installed
+public SDK also verifies canonical types and rejects mutation outside the
+repository under isolated optimized Python. The initial Windows jobs recorded
+3662 passed/29 skipped/two setup-teardown errors (Desktop) and 3374 passed/
+29 skipped/272 deselected/two errors (Multi-Arch); these were not hidden by reruns.
