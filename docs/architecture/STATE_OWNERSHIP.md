@@ -86,8 +86,8 @@ Do not interpret cancellation, interruption, failed execution or a missing
 response as proof that a physical effect stopped or never happened. An
 acknowledgement records operator attention; it does not resolve UNKNOWN. A new
 plan is explicit deliberation and must not silently replace the originally
-approved Operation. See [Compute Mesh recovery](../compute-mesh/EXECUTION_RECOVERY.md)
-and the [Reality fault matrix](REALITY_ARCHITECTURE_AUDIT.md#recovery-and-faults).
+approved Operation. See [Compute Mesh recovery](../operations/compute-mesh/EXECUTION_RECOVERY.md)
+and the [Reality fault matrix](../acceptance/REALITY_ARCHITECTURE_AUDIT.md#recovery-and-faults).
 
 ## Current deployment assumptions
 

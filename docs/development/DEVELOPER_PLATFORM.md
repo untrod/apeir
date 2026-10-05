@@ -1,5 +1,8 @@
 # Developer Platform
 
+Current overall milestone status is authoritative in [ROADMAP](../../ROADMAP.md).
+Acceptance counts below are dated, scoped records, not broader qualification.
+
 The Nous Developer Platform is a control surface over the Runtime. It does not
 own a second scheduler, project database, model registry, or execution path.
 
@@ -102,7 +105,7 @@ capability requires a complete immutable command and an installed executable;
 a node capability requires a connected execution node; a Runtime capability requires an importable built-in service authority.
 
 The Event Ledger authority and replay contract are defined in
-`docs/adr/ADR-0002-event-ledger-authority.md`.
+`docs/rfc/adr/ADR-0002-event-ledger-authority.md`.
 
 The governed outbound network boundary is defined in docs/architecture/GOVERNED_NETWORK_GATEWAY.md and ADR-0003.
 

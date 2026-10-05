@@ -101,5 +101,61 @@ and M3.6 SDK extend this same path. For Reality mutations, approval pauses the
 original run and exact Work/Operation. Approve Once resumes it without silently
 replanning. Delivery/Node journals precede execution; lost-response recovery
 reconciles persisted evidence and acquires a new independent Observation.
-MISMATCH and UNKNOWN cannot commit. See the [Reality audit](REALITY_ARCHITECTURE_AUDIT.md)
+MISMATCH and UNKNOWN cannot commit. See the [Reality audit](../acceptance/REALITY_ARCHITECTURE_AUDIT.md)
 and [Security Contract](SECURITY_CONTRACT.md). Physical acceptance remains PENDING.
+
+## Work Harness
+
+`apeir work` is the product-level entry for goal-directed work. The Harness is
+a thin composition layer over existing Runtime owners:
+
+```text
+Work request
+  -> TaskAnalyzer
+  -> Goal + optional versioned Plan
+  -> ModelGateway structured decision
+  -> AgentExecutionRuntime invocation boundary
+  -> existing governed tool/capability runtime
+  -> observation + verification
+  -> EventStream projection + SQLite checkpoint
+```
+
+The Harness is not an authority. Tool availability, model output, plan metadata,
+and skill guidance cannot grant permission or bypass Kernel/Runtime admission.
+Simple tasks may complete without a Plan. Long-running runs persist Goal, Plan
+revision history, observations, artifacts, blockers, and Agent checkpoints in the
+workspace and reassess current state before acting after resume.
+
+The Desktop Task Center reads those same Work checkpoints through a bounded
+projection: state, current step, versioned Plan tasks, progress, and Artifact
+references remain owned by `WorkHarness`. Desktop pause and cancel requests
+write back through `WorkHarness`; the UI does not maintain a competing Work
+state machine.
+
+`ToolCatalog` is the Work-facing discovery projection over existing tool
+runtimes. It publishes compact capability categories first and exposes full
+schemas only through `catalog_expand`. Invocation is delegated to the original
+Workspace or governed Extension/MCP executor; catalog metadata always carries
+`authority=none` and cannot make an unavailable or unauthorized action legal.
+The first concrete providers expose bounded workspace file discovery, read-only
+Git queries when strong sandboxing is available, and the existing workspace
+ContentAddressedArtifactStore. Catalog inspection itself does not initialize an
+Artifact store or execute a process.
+
+`SkillRegistry` is the corresponding progressive Skill projection. It reads
+legacy JSON Skills through the existing Extension adapters, discovers project
+and user `SKILL.md` packages, verifies installed packages through
+`ExtensionRegistry`, and exposes catalog entries as untrusted summaries. Full
+instructions and resource names enter Work context only after `skill_load`.
+Installation never executes packaged scripts: the existing Extension supply
+chain path validates and copies the package, while a deterministic bundle is
+stored and pinned in the existing workspace Artifact Runtime. Declared
+capabilities remain requests with `authority=none`.
+
+`WebRuntime` provides the Work-facing `search` and `fetch` seam. Its default
+executor traverses the existing `network.fetch` capability and
+`ResearchEvidenceService`/`WebGateway`; it does not issue direct HTTP requests.
+Every successful response is classified as untrusted external content and
+closed into the workspace `ContentAddressedArtifactStore` before a successful
+Tool result is returned. The model-facing response is bounded, while the full
+redacted evidence remains available by digest.

@@ -1,4 +1,4 @@
-# Nous Object Model v1.0
+# APEIR Object Model v1.0
 
 ## Purpose
 

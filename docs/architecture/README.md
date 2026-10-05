@@ -13,14 +13,14 @@ an alternative authority or execution model.
 | [Provider model](PROVIDER_CONTRACT.md) | Replaceable roles, canonical SDK boundaries and exercised conformance |
 
 Supporting contracts are [Runtime Coordination](RUNTIME_COORDINATION.md), the
-[Reality audit](REALITY_ARCHITECTURE_AUDIT.md),
-[Compute Mesh execution/recovery](../compute-mesh/EXECUTION_RECOVERY.md),
+[Reality audit](../acceptance/REALITY_ARCHITECTURE_AUDIT.md),
+[Compute Mesh execution/recovery](../operations/compute-mesh/EXECUTION_RECOVERY.md),
 [public Developer Platform](../development/DEVELOPER_PLATFORM.md) and
 [Control Plane specification](CONTROL_CENTER_SPEC.md).
-Wire formats remain in [`docs/protocol`](../protocol/); specialized specifications
-remain in [`docs/specs`](../specs/). The [Kernel Foundation reference](FOUNDATION_1_0.md)
-is scoped to the independently released Kernel. Root/legacy architecture pages
-are navigation or explicitly historical references, not competing specifications.
+Wire formats remain in [`architecture/protocol`](protocol/); specialized specifications
+remain in [`architecture/specs`](specs/). The [Kernel Foundation reference](FOUNDATION_1_0.md)
+is scoped to the independently released Kernel. Obsolete broad architecture summaries were merged or removed during repository
+consolidation; scoped implementation references do not override these contracts.
 
 ## Architecture Consolidation Gate audit
 

@@ -1,0 +1,49 @@
+name: Core CI
+on:
+  push:
+    branches: [main, 'feature/*', 'fix/*', 'docs/*', 'security/*', 'provider/*', 'platform/*', 'hardware/*', 'research/*', 'release/*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+jobs:
+  python-tests:
+    name: Core (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-22.04","python":"3.12"}]' || '[{"os":"ubuntu-22.04","python":"3.10"},{"os":"ubuntu-22.04","python":"3.12"},{"os":"windows-latest","python":"3.12"},{"os":"macos-14","python":"3.12"}]') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install ".[dev,a2a,mcp,scientific]"
+      - name: Full repository regression
+        run: python -m pytest --tb=short --timeout=60
+      - name: Verify collection floor
+        run: >-
+          python -c "import re, subprocess, sys;
+          p = subprocess.run([sys.executable, '-m', 'pytest', 'tests/', '--collect-only', '-q'], capture_output=True, text=True);
+          print(p.stdout);
+          m = re.search(r'(\d+) tests collected', p.stdout);
+          raise SystemExit(0 if p.returncode == 0 and m and int(m.group(1)) >= 2452 else 1)"
+  core-gate:
+    name: Core gate
+    if: always()
+    needs: [python-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every selected platform
+        env:
+          RESULT: ${{ needs.python-tests.result }}
+        run: test "$RESULT" = success

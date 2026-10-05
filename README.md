@@ -1,151 +1,86 @@
 # APEIR
 
-APEIR is an open, local-first distribution for governed execution across models,
-software tools, compute nodes, and device adapters. It combines a native
-desktop application, a headless Runtime API, provider and extension adapters,
-and deployment services with the independently released
-[APEIR Kernel](https://github.com/untrod/apeir-kernel).
+An open execution, governance and verification runtime for heterogeneous
+intelligence and real-world resources.
 
-APEIR Kernel is the authority for workloads admitted through NKI: admission,
-permits, resource leases, scheduling, durable Kernel state, governed effects,
-and execution proof. This repository owns the product experience, integrations,
-and bounded local services. It does not contain a second copy of the Rust Kernel.
+APEIR uses local-first durable state and replaceable Providers.
+It connects intelligence from models, external agents, algorithms or humans
+to governed Work on heterogeneous Nodes and Devices. It records authorization,
+execution evidence and independently observed effects so that recovery can
+reconcile what happened. A successful response alone does not prove an effect.
 
-[简体中文](README.zh-CN.md) · [Architecture](docs/architecture/README.md) ·
-[Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+[Roadmap and status](ROADMAP.md) · [Architecture](docs/architecture/README.md) ·
+[Operations](docs/operations/README.md) · [Developer SDK](docs/development/DEVELOPER_PLATFORM.md) ·
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [简体中文](README.zh-CN.md)
 
-## Release status
-
-The current line is **APEIR Distribution 0.1.0-rc1**. It is intended for
-development and evaluation on Windows 10 x64. It is not yet a general-
-availability release. Remote multi-host, Linux, Jetson, MCU, and physical
-device support remain qualification targets and are not implied by a local or
-simulated test result.
-
-## Components
-
-- **Desktop** — native Tauri application for setup, chat, tasks, documents,
-  development tools, environments, simulations, nodes, and diagnostics.
-- **Runtime API** — authenticated loopback service and product orchestration.
-- **Kernel client** — the only production route for Kernel-managed requests to NKI.
-- **Providers** — model, MCP, skill, document, scientific, and device adapters.
-- **Node services** — identity, relay, artifact transfer, deployment, health,
-  cancellation, and recovery.
-- **Cost control** — request limits, daily budgets, retry budgets, normalized
-  usage receipts, and per-task/model/credential-reference accounting.
-
-## Execution boundary
+## Architecture
 
 ```text
-Kernel-managed workload
-  Desktop / CLI / API / extension
-    → Runtime policy and cost preflight
-    → NKI authentication and version validation
-    → Kernel admission → permit → lease → execution → receipt
-    → Runtime projection and user-visible result
-
-Bounded local service
-  Desktop / CLI / API
-    → Runtime authorization and optional one-use approval
-    → local document / environment / network / simulation service
-    → Runtime event and artifact evidence
+Goal → AgentSession / Plan → durable Workflow
+                              ↓
+                     Governance / human approval
+                              ↓
+                Distributed Work → Node → Provider → Device
+                              ↓
+                    Receipt + Artifact evidence
+                              ↓
+             independent Observation → EffectVerification → COMMIT
 ```
 
-Production construction fails closed when the Kernel is unavailable or the NKI
-version is unsupported. Direct Provider execution exists only as an explicit
-compatibility/test mode and is never selected automatically.
+Models and placement are never authorities. Credentials are scoped to authorized
+execution. UNKNOWN fails closed, and uncertain effects are reconciled rather
+than blindly retried. Device identity is independent of its transport address.
+The [five canonical architecture contracts](docs/architecture/README.md) explain
+these boundaries and distinguish Runtime-service execution from Kernel-managed
+NKI workloads. The independently released [APEIR Kernel](https://github.com/untrod/apeir-kernel)
+is pinned by [component lock](runtime-components.lock.json).
 
-Local file, document, environment, network, simulation, and scientific services
-are governed by the Runtime authorization layer in this candidate. They report
-`execution_scope=runtime-service` and `kernel_traversed=false`; they are not
-represented as Kernel-executed operations.
+## Current status
 
-## Requirements
+Distribution is `0.1.0-rc1`, for development and evaluation. M3.1–M3.4 software,
+M3.5 Control Plane and M3.6 SDK software Gates have passed within their documented
+scope. A generic external-agent OCI reference is exercised; other M4 integrations
+remain incomplete. Serial/ESP32 host contracts are read-only preparation.
+**M3.3-C physical acceptance, M5 physical writes/power-loss and a second hardware
+family remain PENDING. M6/M7 are not accepted.** Native locked-binary hash
+verification is BLOCKED by missing binaries. See the [exact matrix](ROADMAP.md).
 
-- Windows 10 x64
-- Python 3.10–3.12 for source development
-- Node.js 20 and Rust stable for Desktop development
-- Visual Studio 2022 C++ Build Tools and a Windows 10/11 SDK for native builds
-- A separately checked out APEIR Kernel at the revision recorded in
-  [`runtime-components.lock.json`](runtime-components.lock.json)
+The Operations Console uses backend state for health, Work, Nodes, Devices,
+approvals, evidence and recovery, with responsive mobile controls. It does not
+grant authority. Real IdP deployment and native/physical qualification are
+separate from deterministic Cloud contract tests.
 
-## Quick Start
+## Source quick start
 
-```powershell
+Python 3.10–3.12 is supported for source development. Desktop development uses
+Node.js 22 and Rust stable; Windows native builds additionally require MSVC/SDK
+and the exact locked Kernel artifacts.
+
+```bash
 git clone https://github.com/untrod/apeir.git
 cd apeir
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -e ".[dev]"
-```
-
-Validate the Runtime:
-
-```powershell
+# Activate .venv for your shell
+python -m pip install -e ".[dev,a2a,mcp,scientific]"
 python -m pytest -q
-python -m ruff check nous_runtime tests scripts integrations sdk
-python scripts/security_scan.py
+apeir --help
 ```
 
-Validate the Desktop:
+For setup, Controller/Node launch and installation, use the
+[operations guides](docs/operations/README.md) and
+[Compute Mesh runbook](docs/operations/compute-mesh/OPERATIONS.md).
+Production Kernel-managed paths fail closed if Kernel is unavailable. Desktop:
 
-```powershell
-cd desktop
-npm ci
-npm run lint
-npm test
-npm run typecheck
-npm run build
+```bash
+npm --prefix desktop ci
+npm --prefix desktop run lint
+npm --prefix desktop test
+npm --prefix desktop run typecheck
+npm --prefix desktop run build
 ```
 
-Build the Windows x64 installer and portable bundle from the repository root:
+The public brand is APEIR / APEIR Runtime. `nous_runtime`, `nous`, `NOUS_*` and
+existing wire identifiers remain internal/compatibility names. Source archives
+exclude credentials, generated binaries, local databases and private evidence.
 
-```powershell
-$env:APEIR_KERNEL_ROOT = (Resolve-Path "..\apeir-kernel").Path
-.\scripts\build-windows-x64-launcher.ps1 -KernelRoot $env:APEIR_KERNEL_ROOT
-```
-
-The build refuses a Kernel checkout that does not match the locked revision.
-Generated sidecars, installers, databases, logs, credentials, and validation
-evidence are excluded from the public source tree.
-
-## Cost controls
-
-APEIR applies limits before a model request reaches the Kernel. Defaults can be
-changed through `APEIR_MAX_INPUT_TOKENS`, `APEIR_MAX_OUTPUT_TOKENS`,
-`APEIR_MAX_REQUEST_TOKENS`, `APEIR_MAX_DAILY_TOKENS`,
-`APEIR_MAX_DAILY_COST_USD`, `APEIR_MAX_MODEL_ATTEMPTS`,
-`APEIR_MAX_RETRY_TOKENS`, and `APEIR_MAX_RETRY_COST_USD`.
-
-Provider prices are intentionally configuration data because vendors change
-them independently of APEIR releases. Point `APEIR_MODEL_PRICING_FILE` to a
-reviewed catalog using [`config/model-pricing.example.json`](config/model-pricing.example.json).
-Unknown prices still receive Token limits, but cost estimates remain zero until
-a price is configured. Actual Provider usage is normalized and stored locally;
-credential values are never written to the usage database.
-
-## Compatibility
-
-The public brand, desktop title, package, and new command names use APEIR.
-The `nous_runtime` Python import, `nous` command aliases, `NOUS_*` environment
-variables, and `nous.*.v1` protocol identifiers remain available for migration
-and wire compatibility. Protocol identities are not renamed in place.
-
-## Security
-
-The Runtime API and NKI listener bind to loopback by default. Provider secrets
-are held by the operating-system credential store or referenced environment
-variables, never declarative source configuration. Effectful work requires
-explicit authority and produces evidence; unsupported or unverified paths fail
-closed.
-
-Report vulnerabilities privately through
-[GitHub Security Advisories](https://github.com/untrod/apeir/security/advisories/new).
-Do not place credentials, private prompts, runtime state, or exploit details in
-public issues.
-
-## License
-
-Apache License 2.0. See [LICENSE](LICENSE), [NOTICE](NOTICE), and the third-party
-notices generated for each release bundle.
+Apache-2.0: [LICENSE](LICENSE), [NOTICE](NOTICE), [third-party notices](THIRD_PARTY_NOTICES.md).

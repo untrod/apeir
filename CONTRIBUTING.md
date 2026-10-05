@@ -1,112 +1,71 @@
 # Contributing to APEIR
 
-Thank you for helping improve APEIR. Focused fixes, tests, provider
-adapters, platform validation, documentation, and security hardening are
-welcome.
+Read the [constitution and invariants](docs/architecture/DISTRIBUTION.md),
+[architecture owners](docs/architecture/README.md), [milestone status](ROADMAP.md)
+and [security policy](SECURITY.md) before changing execution or authority.
+Audit existing implementation and tests; prefer extending canonical owners over
+adding parallel systems. Open an RFC for broad boundary changes.
 
-## Before you begin
+## Branch and acceptance policy
 
-- Search existing issues and pull requests.
-- Open an issue or RFC before broad architecture work.
-- Keep Server Runtime ownership authoritative; do not create parallel task,
-  model, approval, credential, workspace, or event stores.
-- Never commit credentials, local Runtime state, databases, private prompts,
-  conversation logs, personal paths, or generated test output.
+`main` is the only permanent development branch. Start one coherent Gate from
+current main using `feature/`, `fix/`, `docs/`, `security/`, `provider/`,
+`platform/`, `hardware/` or `research/`. Milestone examples are in ROADMAP.
+No permanent develop or archive branch is needed: immutable tags and Git history
+retain accepted evidence. Branch names describe work, not models/tools.
 
-## Development setup
+Integrate by PR with passing required CI and resolved conversations. Use a
+normal merge when preserving acceptance SHAs; never squash/rebase accepted
+history, force-push published history or move published tags. Delete a completed
+branch only after all commits are reachable from main and no unresolved PR work
+or unpublished acceptance evidence remains. Single-maintainer PRs need no
+mandatory reviewer approval or unproven commit-signing requirement.
+
+Kernel is frozen at `87fd1b2ff28ef14ab1a515a58162592b452fda2e`. Do not change it
+or the component lock to bypass an unavailable native binary. Report a genuinely
+impossible external contract for explicit authorization.
+
+## Development and validation
 
 ```bash
 python -m venv .venv
-# Activate the environment for your shell
-python -m pip install --upgrade pip
-pip install -e ".[dev]"
-```
-
-Run the relevant tests while developing, then run the release gates before
-requesting review:
-
-```bash
+# Activate for your shell
+python -m pip install -e ".[dev,a2a,mcp,scientific]"
 python -m ruff check nous_runtime tests scripts integrations sdk
-pytest
-apeir doctor
-apeir status
-apeir models doctor
-npm --prefix desktop ci
-npm --prefix desktop run build
+# Check formatting on changed Python files; do not reformat unrelated baselines.
+python -m ruff format --check path/to/changed.py
+python -m compileall -q nous_runtime sdk/provider/python
+python -m pytest -q
+python scripts/document_hygiene_audit.py
+python scripts/markdown_link_check.py
+python scripts/comment_quality_audit.py
+python scripts/repository_identity_audit.py
+python scripts/git_metadata_audit.py
+python scripts/security_scan.py
+python scripts/ci/verify_release_versions.py
+python -m pytest -q tests/repository/test_kernel_component_lock.py
+python scripts/ci/verify_kernel_components.py --repo-root .
+git diff --check
 ```
 
-Changes that affect optional integrations should document which dependencies,
-providers, platforms, and network conditions were tested.
+Run directly affected contracts, integration, recovery and negative-security
+regressions before full tests. For the optional real OCI reference follow
+[Provider conformance](docs/architecture/PROVIDER_CONTRACT.md); use fake credentials.
+Run Desktop lint/tests/typecheck/build when affected. Record exact counts,
+platforms, dependency/provider availability, skipped items and baseline failures.
+A missing native binary means the hash verifier is BLOCKED, even when its contract
+tests pass. Do not weaken assertions, skip failures or invent physical success.
 
-## Change design
+## Completing work
 
-- Preserve public interfaces or provide a documented compatibility path.
-- Use the standard APEIR error, event, trace, metrics, credential, and
-  governance models.
-- Keep optional GUI, model, vector, and provider dependencies optional.
-- Add tests for new behavior and regressions; do not weaken existing assertions
-  to make a change pass.
-- Update user-facing documentation and `CHANGELOG.md` when behavior changes.
+Update canonical docs and status rather than creating competing summaries.
+Use semantic Conventional Commits (for example `fix(recovery): reconcile lost
+responses`). Push, verify CI and local/remote SHA agreement, and leave a clean
+worktree. Each Gate's report distinguishes exercised acceptance from prepared
+contracts, simulation, hardware pending and environmental blockers.
 
-## Commits
-
-New commits should follow Conventional Commits:
-
-```text
-fix(runtime): preserve checkpoint recovery state
-
-docs(user): clarify offline model setup
-```
-
-Use `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, or `chore`
-with an optional scope. Keep unrelated cleanup, behavior changes, and generated
-evidence in separate commits. Do not rewrite published history.
-
-## Branch naming
-
-Branch names describe the work, not the tools used. Use these prefixes:
-
-**Allowed:**
-```text
-feature/    — new capability or enhancement
-fix/        — bug fix
-refactor/   — code restructuring without behavior change
-docs/       — documentation only
-test/       — test additions or fixes
-release/    — release preparation
-experiment/ — short-lived exploration
-kernel/     — kernel subsystem
-provider/   — provider integration
-platform/   — platform support (Windows, ARM64, etc.)
-security/   — security fixes or hardening
-archive/    — archived or bookmarked work
-```
-
-**Forbidden:**
-```text
-codex/*     claude/*     gpt/*       ai/*
-agent-*     auto-*       chatgpt/*   copilot/*
-```
-
-Branch names must never reference AI tools, automation agents, or model names
-used during development. The public repository represents work that maintainers
-have reviewed, tested, and accepted responsibility for.
-
-## Pull requests
-
-A pull request should explain:
-
-- the problem and scope;
-- implementation and ownership boundaries;
-- compatibility and migration impact;
-- security and privacy impact;
-- tests and platforms exercised;
-- documentation changes and known limitations.
-
-Maintainers review and merge changes. Release, governance, and approval controls
-must not be bypassed for convenience.
-
-## Security reports
-
-Do not use a public issue or pull request for an undisclosed vulnerability.
-Follow [SECURITY.md](SECURITY.md).
+Never commit secrets, private prompts, local runtime databases, logs or generated
+binaries. Preserve backward compatibility where it does not violate security
+invariants. Report vulnerabilities privately under SECURITY, not public issues.
+Release publication requires its separate [runbook](docs/acceptance/RELEASE_RUNBOOK.md)
+and maintainer approval; checkpoint tags are not production releases.

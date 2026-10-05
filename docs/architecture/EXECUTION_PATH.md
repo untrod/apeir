@@ -84,7 +84,7 @@ Work/Node evidence; an effect that may already have happened is never blindly
 executed again merely because an approval/grant remains valid. See
 [Runtime Coordination](RUNTIME_COORDINATION.md),
 [State/failure semantics](STATE_OWNERSHIP.md) and
-[Reality acceptance](REALITY_ARCHITECTURE_AUDIT.md).
+[Reality acceptance](../acceptance/REALITY_ARCHITECTURE_AUDIT.md).
 
 ## Product execution projection
 

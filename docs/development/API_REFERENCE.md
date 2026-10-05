@@ -1,4 +1,4 @@
-# Nous Runtime API Reference v1.0
+# APEIR Runtime API Reference v1.0
 
 ## HTTP API
 

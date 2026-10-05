@@ -2,7 +2,7 @@
 
 ## Versioning
 
-Nous Runtime follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`
+APEIR Runtime follows Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`
 
 - **MAJOR**: Breaking API changes
 - **MINOR**: New features, backward-compatible

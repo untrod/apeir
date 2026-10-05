@@ -1,6 +1,6 @@
 # Development
 
-This section is the contributor and integration reference for Nous Runtime.
+This section is the contributor and integration reference for APEIR Runtime.
 
 ## Start here
 

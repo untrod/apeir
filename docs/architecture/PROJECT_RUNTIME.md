@@ -2,7 +2,7 @@
 
 ## What is .nous/?
 
-`.nous/` is the project-level data directory for Nous Runtime.  It lives
+`.nous/` is the project-level data directory for APEIR Runtime.  It lives
 in your project root and holds everything the Runtime knows about your
 project: configuration, goals, tasks, memory, file index, execution
 traces, and generated artifacts.
@@ -65,7 +65,7 @@ folder — nothing is uploaded, synced, or shared.  Add `.nous/` to your
 `.gitignore` if you don't want to commit it.
 
 ```gitignore
-# Nous Runtime workspace
+# APEIR Runtime workspace
 .nous/
 ```
 

@@ -1,4 +1,4 @@
-# Process Model — Nous Runtime
+# Process Model — APEIR Runtime
 
 > **How computation is organized, isolated, and managed.**
 > **Last updated:** 2026-08-06

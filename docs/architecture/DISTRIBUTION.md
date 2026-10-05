@@ -10,10 +10,15 @@ platforms are replaceable Providers, not competing authorities inside APEIR.
 ## Non-negotiable invariants
 
 - Model is never authority.
+- Planner is not authority.
+- Scheduler is placement-only and cannot grant authority.
+- Resource Graph is fact/projection state, not authority.
+- Node is not Device.
+- Capability is not permission.
 - Discovery is not trust; trust is not authorization.
 - Authorization is not execution; execution is not effect.
 - Receipt is not observation.
-- UNKNOWN is not success.
+- UNKNOWN fails closed and is not success.
 - An effect that may already have happened is reconciled, never blindly retried.
 
 A plan proposes intent. A scheduler proposes placement. A resource graph projects

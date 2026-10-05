@@ -1,4 +1,4 @@
-# Nous CLI Reference
+# APEIR CLI Reference
 
 ## Global Commands
 

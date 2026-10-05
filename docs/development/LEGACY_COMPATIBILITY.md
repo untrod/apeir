@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`nous_runtime.compat` is the temporary compatibility boundary between Nous Runtime 2.0 and the legacy core implementation.
+`nous_runtime.compat` is the temporary compatibility boundary between APEIR Runtime 2.0 and the legacy core implementation.
 
 Runtime modules must import legacy functionality through this package instead of importing `remote_terminal.nous_core` directly.
 

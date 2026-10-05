@@ -1,4 +1,4 @@
-# Nous Glossary
+# APEIR Glossary
 
 | Term | Definition |
 |------|-----------|
@@ -6,7 +6,7 @@
 | **Capability** | A named action: `model.reason`, `device.pc.shell` |
 | **Provider** | Backend that executes capabilities: GPT, PC Agent, ESP32 |
 | **Module** | Business logic grouping: Learning, Capture, Notification |
-| **NKP** | Nous Kernel Protocol — apps <-> brain |
+| **NKP** | APEIR Kernel Protocol — apps <-> brain |
 | **NEP** | Nous Edge Protocol — devices <-> brain |
 | **NFP** | Nous Federation Protocol — brain <-> brain |
 | **NSP** | Nous Skill Protocol — 3rd-party developer interface |

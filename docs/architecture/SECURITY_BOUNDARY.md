@@ -1,4 +1,4 @@
-# Security Boundary — Nous Runtime
+# Security Boundary — APEIR Runtime
 
 > **Where trust changes. What crosses boundaries. What must be verified.**
 > **Last updated:** 2026-10-05

@@ -1,5 +1,8 @@
 # Provider model and contract
 
+Current overall milestone status is authoritative in [ROADMAP](../../ROADMAP.md).
+Acceptance counts below are dated, scoped records, not broader qualification.
+
 A Provider supplies a bounded replaceable implementation. APEIR owns heterogeneous
 execution semantics, governance, Work/Operation lifecycle, evidence, observation,
 effect verification and recovery. Reuse mature external agent harnesses, cluster

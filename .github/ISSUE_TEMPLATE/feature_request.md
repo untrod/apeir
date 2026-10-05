@@ -1,18 +1,13 @@
 ---
-name: Feature Request
-about: Suggest a feature for Nous Runtime
+name: Feature
+about: One bounded milestone improvement
 title: "[Feature] "
 labels: enhancement
 ---
 
-**Problem**
-What problem would this feature solve?
-
-**Proposed Solution**
-Describe what you'd like.
-
-**Alternatives Considered**
-Any alternatives?
-
-**Would this require changes to the Kernel?**
-Yes / No — features that don't require kernel changes are preferred.
+Problem and milestone/Gate:
+Canonical subsystem to reuse/extend:
+Proposed behavior, compatibility and acceptance evidence:
+Authority, security and failure semantics impact:
+Dependencies/blockers and alternatives:
+Kernel change required? Explain; Kernel is frozen without explicit authorization.

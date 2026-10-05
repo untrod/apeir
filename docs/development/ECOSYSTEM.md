@@ -1,4 +1,4 @@
-# Nous Developer Ecosystem v1.0
+# APEIR Developer Ecosystem v1.0
 
 ## Getting Started
 

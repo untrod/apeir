@@ -1,11 +1,11 @@
 # APEIR Distribution desktop release build and validation.
 # Platform jobs build their own target-native Runtime sidecar.
 
-name: APEIR Distribution Desktop Build
+name: Desktop CI
 
 on:
   push:
-    branches: [main, 'kernel/*', 'feature/*', 'fix/*', 'release/*']
+    branches: [main, 'feature/*', 'fix/*', 'docs/*', 'security/*', 'provider/*', 'platform/*', 'hardware/*', 'research/*', 'release/*']
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -13,67 +13,12 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
 
 jobs:
-  repository-hygiene:
-    name: Public repository hygiene
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Document hygiene
-        run: python scripts/document_hygiene_audit.py
-      - name: Comment quality
-        run: python scripts/comment_quality_audit.py
-      - name: Repository identity
-        run: python scripts/repository_identity_audit.py
-      - name: Git metadata
-        run: python scripts/git_metadata_audit.py --repo .
-      - name: Security scan
-        run: python scripts/security_scan.py
-
-  # Python Tests (shared across all platforms)
-  python-tests:
-    name: Python Tests (${{ matrix.os }}, Python ${{ matrix.python }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            python: '3.10'
-          - os: ubuntu-22.04
-            python: '3.12'
-          - os: windows-latest
-            python: '3.12'
-          - os: macos-14
-            python: '3.12'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-      - name: Install dependencies
-        run: pip install ".[dev,a2a,mcp,scientific]"
-      - name: Ruff
-        run: ruff check nous_runtime tests
-      - name: Repository identity audit
-        run: python scripts/repository_identity_audit.py
-      - name: Python compile check
-        run: python -m compileall -q nous_runtime
-      - name: Run full test suite
-        run: pytest --tb=short --timeout=60
-      - name: Verify test collection baseline
-        run: >-
-          python -c "import re, subprocess, sys;
-          p = subprocess.run([sys.executable, '-m', 'pytest', 'tests/', '--collect-only', '-q'], capture_output=True, text=True);
-          print(p.stdout);
-          m = re.search(r'(\d+) tests collected', p.stdout);
-          raise SystemExit(0 if p.returncode == 0 and m and int(m.group(1)) >= 2452 else 1)"
   # Frontend Validation
   frontend-tests:
     name: Frontend Build Validation
@@ -98,7 +43,7 @@ jobs:
   build-windows-x64:
     if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true'
     name: Build Windows x86_64
-    needs: [repository-hygiene, python-tests, frontend-tests]
+    needs: [frontend-tests]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -106,6 +51,9 @@ jobs:
         with: { python-version: '3.11' }
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
+
+      - name: Verify native locked Kernel bytes before packaging
+        run: python scripts/ci/verify_kernel_components.py --repo-root .
 
       - name: Build embedded Runtime sidecar
         shell: pwsh
@@ -133,6 +81,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 14
           name: windows-x86_64
           path: |
             desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
@@ -142,7 +91,7 @@ jobs:
   build-windows-arm64:
     if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true'
     name: Build Windows ARM64
-    needs: [repository-hygiene, python-tests, frontend-tests]
+    needs: [frontend-tests]
     runs-on: windows-11-arm
     steps:
       - uses: actions/checkout@v4
@@ -154,8 +103,11 @@ jobs:
         with:
           targets: aarch64-pc-windows-msvc
 
-      - name: Verify RC3 release metadata
+      - name: Verify release candidate metadata
         run: python scripts/ci/verify_release_versions.py
+
+      - name: Verify native locked Kernel bytes before packaging
+        run: python scripts/ci/verify_kernel_components.py --repo-root .
 
       - name: Build embedded ARM64 Runtime sidecar
         shell: pwsh
@@ -213,6 +165,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 14
           name: windows-arm64-nsis
           if-no-files-found: error
           path: |
@@ -224,7 +177,7 @@ jobs:
   build-linux-x64:
     if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true'
     name: Build Linux x86_64
-    needs: [repository-hygiene, python-tests, frontend-tests]
+    needs: [frontend-tests]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -237,6 +190,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev
+
+      - name: Verify native locked Kernel bytes before packaging
+        run: python scripts/ci/verify_kernel_components.py --repo-root .
 
       - name: Build embedded Runtime sidecar
         run: |
@@ -266,6 +222,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 14
           name: linux-x86_64
           path: |
             desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
@@ -276,7 +233,7 @@ jobs:
   build-macos-arm64:
     if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true'
     name: Build macOS ARM64
-    needs: [repository-hygiene, python-tests, frontend-tests]
+    needs: [frontend-tests]
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -284,6 +241,9 @@ jobs:
         with: { python-version: '3.11' }
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
+
+      - name: Verify native locked Kernel bytes before packaging
+        run: python scripts/ci/verify_kernel_components.py --repo-root .
 
       - name: Build embedded Runtime sidecar
         run: |
@@ -309,37 +269,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 14
           name: macos-arm64
           path: |
             desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
             SHA256SUMS.txt
-
-  # 32-bit Rejection Test
-  test-32bit-rejection:
-    name: Test 32-bit Rejection
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - name: Verify 32-bit rejection
-        run: |
-          python -c "
-          import struct
-          # Simulate 32-bit detection
-          bits = 32
-          if bits < 64:
-              print('32-bit rejection: PASS')
-          else:
-              raise SystemExit('32-bit not rejected!')
-          "
-      - name: Verify platform check module
-        run: |
-          python -c "
-          from importlib import import_module
-          # Verify the platform support check exists and rejects 32-bit
-          import platform
-          arch = platform.machine()
-          assert arch in ('x86_64', 'AMD64', 'aarch64', 'arm64'), f'Unexpected arch: {arch}'
-          print(f'Architecture {arch} is 64-bit: OK')
-          "
