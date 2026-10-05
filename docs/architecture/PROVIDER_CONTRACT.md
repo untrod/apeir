@@ -93,6 +93,10 @@ SecretProvider to SecretBackend, IdentityProvider to HumanIdentityProvider, and
 reuses DeviceProvider. ExecutionProvider describes the existing bound Node handler;
 it differs from legacy NPA inference. PolicyProvider returns exactly the four
 Operation decisions. No parallel provider registry or authority is introduced.
+Matching request/result types and model enums are exported from that same public
+namespace, including GovernanceRequest/Decision, SecretHandle, HumanIdentity,
+ModelRequest/Response, AdapterProbe and ProviderExecutionResult. Third-party
+adapters can implement these contracts without importing internal Runtime modules.
 
 `ExternalAgentWorkflowHandler` fixes descriptor and Node in trusted host
 configuration. A Plan supplies an objective, Work identifier and bounded timeout,
