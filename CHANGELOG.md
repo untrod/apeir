@@ -5,6 +5,12 @@ All notable changes to APEIR Distribution are recorded here. The project follows
 
 ## Unreleased
 
+- M3.4-B credential delivery scoped to existing authorized Node Operations,
+  with durable handle/lease expiry and revocation, centralized output redaction,
+  credentialed firmware simulation and recovery without effect replay. Pending
+  approval list/detail and Once/Deny backend reuse the existing Governance
+  authority; trusted remote-human identity remains pending.
+
 - M3.4-A deterministic Operation governance through the existing Gate, Broker,
   scoped durable leases and audit trail. High-risk simulated firmware updates
   pause the original Workflow for human Approve Once or Deny; Node admission

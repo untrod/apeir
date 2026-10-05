@@ -22,6 +22,7 @@ from nous_runtime.governance import (
     GrantScope,
 )
 from nous_runtime.governance.cli import _build_context
+from nous_runtime.governance.credentials import CredentialBroker, VaultSecretBackend
 from nous_runtime.intelligence.planning.models import PlanStep, TaskPlan
 from nous_runtime.node_runtime.distributed_work import (
     DistributedWork,
@@ -67,10 +68,14 @@ DEFINITIONS = {
 STABLE = "sim-actuator-001"
 WORK_ID = "work-simulated-effect"
 RELAY_HEARTBEAT_SECONDS = 5
+FAKE_CREDENTIAL = "apeir-m34b-reality-opaque-fixture-material-924681"
+SECRET_HANDLE = "secret_" + "2" * 32
 
 
 class Simulation:
-    def __init__(self, root: Path, *, single_connection: bool = False):
+    def __init__(
+        self, root: Path, *, single_connection: bool = False, credentials=False
+    ):
         self.root = root
         self.controller_state = root / "controller"
         self.bus = RuntimeEventBus(str(root))
@@ -79,6 +84,15 @@ class Simulation:
         self.governance = ExecutionAuthorizationGate(
             GovernanceStore(root / "governance")
         )
+        self.credential_broker = None
+        if credentials:
+            self.secret_backend = VaultSecretBackend(
+                root / "secret-backend" / "vault.db", master_key=b"s" * 32
+            )
+            self.secret_handle = self.secret_backend.put(SECRET_HANDLE, FAKE_CREDENTIAL)
+            self.credential_broker = CredentialBroker(
+                self.governance, self.secret_backend
+            )
         self.node_handler = SimulatedDeviceOperationHandler(
             self.provider,
             self.registry,
@@ -91,6 +105,7 @@ class Simulation:
             ContentAddressedArtifactStore(root / "node" / "artifacts"),
             governance=self.governance,
             capability_id="device.firmware.update",
+            credential_broker=self.credential_broker,
         )
         self.node = NodeRuntimeService(
             NodeRuntimeConfig(root / "node"),
@@ -816,6 +831,11 @@ def firmware_plan(sim, session, *, wait_timeout=10, expected="2.0.0"):
                     "work_id": WORK_ID,
                     "mutation": {"state": {"firmware_version": "2.0.0"}},
                     "expected_effect": {"firmware_version": expected},
+                    **(
+                        {"secret_handles": [SECRET_HANDLE]}
+                        if sim.credential_broker
+                        else {}
+                    ),
                     "wait_timeout_seconds": wait_timeout,
                     "timeout_seconds": 30,
                 },
@@ -937,16 +957,30 @@ def test_firmware_approve_once_resumes_original_plan_work_and_commits_match(
     asyncio.run(scenario())
 
 
-def test_firmware_deny_is_durable_and_never_changes_device(tmp_path):
+@pytest.mark.parametrize("credentials", [False, True])
+def test_firmware_deny_is_durable_and_never_changes_device(tmp_path, credentials):
     async def scenario():
-        async with simulation(tmp_path) as first:
+        async with simulation(tmp_path, credentials=credentials) as first:
             paused = await request_firmware(first)
+            if credentials:
+                first.credential_broker.register_handle(
+                    first.secret_handle,
+                    first.work().execution_arguments["authorization_id"],
+                    _build_context(),
+                )
             first.handler.approvals.deny_operation(
                 paused.pending_approvals[0],
                 _build_context(),
                 gate=first.governance,
             )
-        async with simulation(tmp_path) as restored:
+        async with simulation(tmp_path, credentials=credentials) as restored:
+            if credentials:
+
+                class UnavailableBackend:
+                    def resolve(self, handle):
+                        pytest.fail("Denied Work attempted credential resolution")
+
+                restored.credential_broker._backend = UnavailableBackend()
             result = await resume_firmware(restored, paused.session_id)
             assert result.state is AgentSessionState.WAITING
             assert result.plan_history == paused.plan_history
@@ -1014,15 +1048,22 @@ def test_approved_firmware_lost_response_recovers_after_grant_revocation_without
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("credentials", [False, True])
 def test_approved_firmware_missing_receipt_does_not_replay_even_with_valid_resource_grant(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, credentials
 ):
     from nous_runtime.node_runtime import service as node_service
 
     async def scenario():
-        async with simulation(tmp_path, single_connection=True) as first:
+        async with simulation(
+            tmp_path, single_connection=True, credentials=credentials
+        ) as first:
             paused = await request_firmware(first, wait_timeout=3)
             auth_id = first.work().execution_arguments["authorization_id"]
+            if credentials:
+                first.credential_broker.register_handle(
+                    first.secret_handle, auth_id, _build_context()
+                )
             first.governance.issue_operation_grant(
                 auth_id, _build_context(), scope=GrantScope.RESOURCE, max_uses=2
             )
@@ -1042,12 +1083,21 @@ def test_approved_firmware_missing_receipt_does_not_replay_even_with_valid_resou
                 await wait_for(first.client_task.done)
             assert waiting.state is AgentSessionState.WAITING
             assert first.provider.execution_count(WORK_ID) == 1
-        async with simulation(tmp_path) as restored:
+        async with simulation(tmp_path, credentials=credentials) as restored:
+            if credentials:
+
+                class UnavailableBackend:
+                    def resolve(self, handle):
+                        pytest.fail("Incomplete-journal recovery resolved credentials")
+
+                restored.credential_broker._backend = UnavailableBackend()
             recovered = await resume_firmware(restored, paused.session_id)
             assert recovered.state is AgentSessionState.WAITING
             assert restored.work().state is DistributedWorkState.UNKNOWN
             assert restored.node._workloads[WORK_ID]["state"] == "EXECUTING"
             assert restored.provider.execution_count(WORK_ID) == 1
+            if credentials:
+                assert_no_credential_on_disk(tmp_path)
 
     asyncio.run(scenario())
 
@@ -1197,5 +1247,242 @@ def test_grant_expiring_during_provider_delay_is_rechecked_at_device_effect(
                 json.loads(row["evidence_json"]).get("phase") == "before_effect"
                 for row in sim.governance.store.operation_audit()
             )
+
+    asyncio.run(scenario())
+
+
+def approve_credential_firmware(sim, paused):
+    auth_id = sim.work().execution_arguments["authorization_id"]
+    sim.credential_broker.register_handle(sim.secret_handle, auth_id, _build_context())
+    sim.handler.approvals.approve_operation_once(
+        paused.pending_approvals[0], _build_context(), gate=sim.governance
+    )
+    return auth_id
+
+
+def assert_no_credential_on_disk(root):
+    for path in root.rglob("*"):
+        if path.is_file():
+            assert FAKE_CREDENTIAL.encode() not in path.read_bytes(), (
+                f"Credential leaked into {path.relative_to(root)}"
+            )
+
+
+def test_credential_goal_firmware_operation_receipt_observation_commit_and_leakage(
+    tmp_path, monkeypatch, caplog, capsys
+):
+    import logging
+    import os
+    import subprocess
+    import sys
+    from nous_runtime.core.redaction import REDACTED
+
+    async def scenario():
+        async with simulation(tmp_path, credentials=True) as sim:
+            paused = await request_firmware(sim)
+            auth_id = approve_credential_firmware(sim, paused)
+            saved = []
+            original = sim.provider.apply_operation
+
+            def leaky_provider(device, **kwargs):
+                context = kwargs["credential_context"]
+                saved.append(context)
+                value = context.get(SECRET_HANDLE)
+                assert value == FAKE_CREDENTIAL
+                assert not hasattr(context, "backend")
+                with pytest.raises(PermissionError):
+                    context.get("secret_" + "3" * 32)
+                logging.getLogger("apeir.sim-credential").warning("Echo %s", value)
+                print("Provider stdout " + value)
+                child = subprocess.run(
+                    [
+                        sys.executable,
+                        "-c",
+                        "import os,sys; v=os.environ['APEIR_FAKE_OPERATION_KEY']; print(v); print(v,file=sys.stderr)",
+                    ],
+                    env={**os.environ, "APEIR_FAKE_OPERATION_KEY": value},
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                sim.bus.publish("provider.fixture.output", payload={"echo": value})
+                sim.node.artifact_store.store_bytes(
+                    b"safe fixture",
+                    artifact_type="evidence",
+                    name="safe.txt",
+                    metadata={"echo": value},
+                )
+                return {
+                    **original(device, **kwargs),
+                    "provider_echo": value,
+                    "subprocess": {"stdout": child.stdout, "stderr": child.stderr},
+                    "provider_context": context,
+                }
+
+            monkeypatch.setattr(sim.provider, "apply_operation", leaky_provider)
+            completed = await resume_firmware(sim, paused.session_id)
+            assert completed.state is AgentSessionState.COMPLETED
+            assert completed.plan_history == paused.plan_history
+            assert completed.workflow_run_id == paused.workflow_run_id
+            assert sim.work().state is DistributedWorkState.COMMITTED
+            assert sim.work().effect_verification["verdict"] == "MATCH"
+            assert sim.provider.execution_count(WORK_ID) == 1
+            output = sim.node._workloads[WORK_ID]["output"]
+            assert output["provider_echo"] == REDACTED
+            assert output["provider_context"] == REDACTED
+            assert FAKE_CREDENTIAL not in json.dumps(output)
+            assert len(output["credential_lease_ids"]) == 1
+            with pytest.raises(PermissionError, match="closed"):
+                saved[0].get(SECRET_HANDLE)
+            with sim.governance.store.operation_transaction() as db:
+                row = db.execute(
+                    "SELECT authorization_id,status,lease_json FROM governance_credential_leases"
+                ).fetchone()
+                assert row[0] == auth_id and row[1] == "CLOSED"
+                assert json.loads(row[2])["node_id"] == sim.node.identity.node_id
+            assert FAKE_CREDENTIAL not in json.dumps(completed.to_dict())
+            assert_no_credential_on_disk(tmp_path)
+        assert_no_credential_on_disk(tmp_path)
+
+    with caplog.at_level(logging.WARNING):
+        asyncio.run(scenario())
+    captured = capsys.readouterr()
+    assert FAKE_CREDENTIAL not in captured.out + captured.err + caplog.text
+    assert REDACTED in captured.out
+
+
+def test_credential_provider_exception_cannot_leak_into_failed_receipt_or_events(
+    tmp_path, monkeypatch
+):
+    async def scenario():
+        async with simulation(tmp_path, credentials=True) as sim:
+            paused = await request_firmware(sim)
+            approve_credential_firmware(sim, paused)
+
+            def failed_provider(device, **kwargs):
+                raise RuntimeError(
+                    "Provider failure: "
+                    + kwargs["credential_context"].get(SECRET_HANDLE)
+                )
+
+            monkeypatch.setattr(sim.provider, "apply_operation", failed_provider)
+            waiting = await resume_firmware(sim, paused.session_id)
+            assert waiting.state is AgentSessionState.WAITING
+            assert sim.work().state is DistributedWorkState.FAILED
+            assert sim.provider.execution_count(WORK_ID) == 0
+            assert FAKE_CREDENTIAL not in json.dumps(sim.node._workloads[WORK_ID])
+            assert_no_credential_on_disk(tmp_path)
+
+    asyncio.run(scenario())
+
+
+def test_credential_lost_response_recovers_without_resolving_revoked_delivery_again(
+    tmp_path,
+):
+    class UnavailableBackend:
+        calls = 0
+
+        def resolve(self, handle):
+            self.calls += 1
+            raise AssertionError("Recovery must not resolve the mutation credential")
+
+    async def scenario():
+        async with simulation(
+            tmp_path, credentials=True, single_connection=True
+        ) as first:
+            paused = await request_firmware(first, wait_timeout=3)
+            auth_id = approve_credential_firmware(first, paused)
+            first.provider.inject_fault(
+                STABLE, SimulationFault.EFFECT_THEN_RESPONSE_LOST
+            )
+            waiting = await resume_firmware(first, paused.session_id)
+            await wait_for(first.client_task.done)
+            assert waiting.state is AgentSessionState.WAITING
+            assert first.provider.execution_count(WORK_ID) == 1
+            with first.governance.store.operation_transaction() as db:
+                lease_id = db.execute(
+                    "SELECT lease_id FROM governance_credential_leases"
+                ).fetchone()[0]
+            first.credential_broker.revoke(auth_id, _build_context(), lease_id=lease_id)
+            first.credential_broker.revoke(
+                auth_id, _build_context(), handle_id=SECRET_HANDLE
+            )
+            assert_no_credential_on_disk(tmp_path)
+        async with simulation(tmp_path, credentials=True) as restored:
+            backend = UnavailableBackend()
+            restored.credential_broker._backend = backend
+            completed = await resume_firmware(restored, paused.session_id)
+            assert completed.state is AgentSessionState.COMPLETED
+            assert restored.work().state is DistributedWorkState.COMMITTED
+            assert restored.work().effect_verification["verdict"] == "MATCH"
+            assert restored.provider.execution_count(WORK_ID) == 1
+            assert backend.calls == 0
+            assert_no_credential_on_disk(tmp_path)
+
+    asyncio.run(scenario())
+
+
+def test_disconnected_node_cannot_resolve_expired_handle_after_reconnect(tmp_path):
+    async def scenario():
+        async with simulation(tmp_path, credentials=True) as first:
+            paused = await request_firmware(first, wait_timeout=3)
+            approve_credential_firmware(first, paused)
+            first.client_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, OSError):
+                await first.client_task
+            await wait_for(
+                lambda: first.node.identity.node_id not in first.server.connections
+            )
+            waiting = await resume_firmware(first, paused.session_id)
+            assert waiting.state is AgentSessionState.WAITING
+            assert first.provider.execution_count(WORK_ID) == 0
+            with first.governance.store.operation_transaction() as db:
+                db.execute(
+                    "UPDATE governance_secret_handles SET expires_at='2000-01-01T00:00:00Z'"
+                )
+        async with simulation(tmp_path, credentials=True) as restored:
+            waiting = await resume_firmware(restored, paused.session_id)
+            assert waiting.state is AgentSessionState.WAITING
+            assert restored.provider.execution_count(WORK_ID) == 0
+            assert restored.work().state is DistributedWorkState.FAILED
+            assert_no_credential_on_disk(tmp_path)
+
+    asyncio.run(scenario())
+
+
+def test_credential_expires_during_device_delay_and_blocks_effect(
+    tmp_path, monkeypatch
+):
+    from datetime import datetime, timedelta, timezone
+    from nous_runtime.governance import operation_gate
+    from nous_runtime.reality import provider as provider_module
+
+    async def scenario():
+        async with simulation(tmp_path, credentials=True) as sim:
+            paused = await request_firmware(sim)
+            approve_credential_firmware(sim, paused)
+            sleep = provider_module.time.sleep
+            delayed = []
+
+            def expire(seconds):
+                if seconds == 3.14159:
+                    delayed.append(True)
+                    future = (
+                        datetime.now(timezone.utc) + timedelta(seconds=60)
+                    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+                    monkeypatch.setattr(operation_gate, "_utc_now", lambda: future)
+                else:
+                    sleep(seconds)
+
+            monkeypatch.setattr(provider_module.time, "sleep", expire)
+            sim.provider.inject_fault(
+                STABLE, SimulationFault.DELAYED_RESULT, delay_seconds=3.14159
+            )
+            waiting = await resume_firmware(sim, paused.session_id)
+            assert delayed == [True]
+            assert waiting.state is AgentSessionState.WAITING
+            assert sim.work().state is DistributedWorkState.FAILED
+            assert sim.provider.execution_count(WORK_ID) == 0
+            assert_no_credential_on_disk(tmp_path)
 
     asyncio.run(scenario())

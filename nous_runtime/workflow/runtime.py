@@ -215,13 +215,17 @@ class WorkflowRuntime:
                 future = executor.submit(handler, step, context)
                 try:
                     output = future.result(timeout=step.timeout_seconds)
-                    return "completed", dict(output or {}), ""
+                    from nous_runtime.core.redaction import redact_sensitive_data
+
+                    return "completed", redact_sensitive_data(dict(output or {})), ""
                 except FutureTimeout:
                     error = f"step timed out after {step.timeout_seconds} seconds"
                 except GovernanceApprovalRequired as exc:
                     return "waiting_approval", exc.workflow_output, str(exc)
                 except Exception as exc:
-                    error = str(exc)
+                    from nous_runtime.core.redaction import redact_sensitive_text
+
+                    error = redact_sensitive_text(str(exc))
                     failure_output = dict(getattr(exc, "workflow_output", {}) or {})
             if attempts > step.retries:
                 return "failed", failure_output, error

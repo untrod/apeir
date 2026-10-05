@@ -253,7 +253,9 @@ class AgentSessionStore:
             )
 
     def save(self, session: AgentSession) -> AgentSession:
-        payload = json.dumps(session.to_dict(), sort_keys=True)
+        from nous_runtime.core.redaction import redact_sensitive_data
+
+        payload = json.dumps(redact_sensitive_data(session.to_dict()), sort_keys=True)
         with self._lock, self._db() as connection:
             connection.execute(
                 "INSERT OR REPLACE INTO agent_sessions VALUES (?, ?, ?, ?)",

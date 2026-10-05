@@ -166,7 +166,9 @@ def handle_status() -> dict[str, Any]:
                 # signal when the desktop sidecar owns the service lifecycle.
                 "running": True,
                 "providers": providers,
-                "capabilities": capability_availability.get("registered", s.capabilities),
+                "capabilities": capability_availability.get(
+                    "registered", s.capabilities
+                ),
                 "capability_availability": capability_availability,
                 "packs": count_packs(),
                 "devices": s.devices,
@@ -471,7 +473,9 @@ def handle_get_artifact(artifact_id: str) -> dict[str, Any]:
 # Approvals API
 
 
-def handle_approval_action(request_id: str, action: str) -> dict[str, Any]:
+def handle_approval_action(
+    request_id: str, action: str, *, authorization_context=None
+) -> dict[str, Any]:
     """Approve or deny an approval request."""
     if action not in ("approve", "deny"):
         return err_response(
@@ -482,6 +486,23 @@ def handle_approval_action(request_id: str, action: str) -> dict[str, Any]:
         from nous_runtime.governance.broker import get_broker
 
         broker = get_broker()
+
+        record = broker._store.get_approval_request(request_id)
+        if record and record.get("operation_governance"):
+            from nous_runtime.governance.gate import get_gate
+
+            # The existing bearer channel authenticates a service, not a human.
+            # Never construct human authority from request body or approver text.
+            response = broker.respond_operation(
+                request_id, action, authorization_context, gate=get_gate()
+            )
+            return ok_response(
+                {
+                    "request_id": request_id,
+                    "action": action,
+                    "response": response.to_dict(),
+                }
+            )
 
         if action == "approve":
             response = broker.approve(
@@ -507,6 +528,11 @@ def handle_approval_action(request_id: str, action: str) -> dict[str, Any]:
         )
     except ImportError:
         return err_response("NOT_AVAILABLE", "Approval broker not available")
+    except PermissionError:
+        return err_response(
+            "NOUS_HUMAN_APPROVAL_REQUIRED",
+            "A trusted human approval channel is required",
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
@@ -1405,6 +1431,27 @@ def handle_approvals() -> dict[str, Any]:
     return ok_response({"approvals": get_broker().get_pending()})
 
 
+def handle_operation_approvals() -> dict[str, Any]:
+    from nous_runtime.governance.broker import get_broker
+    from nous_runtime.governance.gate import get_gate
+
+    return ok_response(
+        {"approvals": get_broker().list_operation_approvals(gate=get_gate())}
+    )
+
+
+def handle_operation_approval(request_id: str) -> dict[str, Any]:
+    from nous_runtime.governance.broker import get_broker
+    from nous_runtime.governance.gate import get_gate
+
+    try:
+        return ok_response(
+            get_broker().get_operation_approval(request_id, gate=get_gate())
+        )
+    except (ValueError, PermissionError):
+        return err_response("NOUS_APPROVAL_NOT_FOUND", "Operation approval unavailable")
+
+
 def handle_workflow_run(body: dict[str, Any]) -> dict[str, Any]:
     """Start a registered workflow through the existing Workflow Runtime."""
     try:
@@ -1600,6 +1647,8 @@ ROUTES = {
     ("GET", "/api/v1/artifacts/{artifact_id}"): handle_get_artifact,
     # Approvals API (v1)
     ("POST", "/api/v1/approvals/{request_id}/{action}"): handle_approval_action,
+    ("GET", "/api/v1/approvals"): handle_operation_approvals,
+    ("GET", "/api/v1/approvals/{request_id}"): handle_operation_approval,
     # Events API (v1) — SSE streaming
     ("GET", "/api/v1/events/stream"): handle_events_stream,
     # Model observations API
@@ -2190,7 +2239,13 @@ def route(
         )
         if governance_error:
             return governance_error
-        if body is not None and handler in {
+        if handler is handle_approval_action:
+            result = handler(
+                request_params["request_id"],
+                request_params["action"],
+                authorization_context=authorization_context,
+            )
+        elif body is not None and handler in {
             handle_run_capability,
             handle_runtime_run,
             handle_chat_runtime,

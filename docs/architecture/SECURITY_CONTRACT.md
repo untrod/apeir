@@ -208,3 +208,114 @@ files; the security scan reports zero findings. Relevant existing Desktop and
 Multi-Arch CI run against the milestone commit after push. Acceptance here is
 Distribution simulation only; remote human attestation, credential brokerage
 and physical firmware acceptance remain outside this gate.
+
+## M3.4-B credential governance audit
+
+This audit starts at Distribution `2fdea905729284abe0bc05d414656867b358d3b9`.
+Kernel remains pinned to `87fd1b2ff28ef14ab1a515a58162592b452fda2e`.
+
+| Existing authoritative mechanism | Classification | Milestone treatment |
+| --- | --- | --- |
+| Kernel `SecretRef`, NKI/provider credential references | REUSE | `SecretHandle` aliases the existing reference contract; Kernel and production model dispatch are unchanged. |
+| `security/vault.py`, native AES-GCM and owner-only files | EXTEND | Protected backend adapter requires an explicit stable 256-bit master key and restricts the vault file to its owner. No key is persisted in Runtime evidence. |
+| Provider environment/keyring/Credential Manager resolver; Desktop credential storage | REUSE | A protected reference backend maps opaque handles to existing configuration references. Legacy compatibility callers retain their contracts. |
+| Connector credential scopes and token vaults | REUSE | Existing connector storage remains authoritative; environment deletion alone is not durable revocation. |
+| Governance Gate, PermissionEngine, ApprovalBroker, scoped grants and local owner attestation | EXTEND | Operation admission binds the existing AuthorizationContext to the executing Node; the same authority owns handle registration and revocation. |
+| GovernanceStore, revocation ledger and append-oriented audit | EXTEND | Handle scope/expiry and one-delivery CredentialLease records live in the existing database and audit chain. |
+| Distributed Work, Node journal, Reality handler, Workflow/AgentSession and CAS | EXTEND | Credentials are delivered only inside admitted provider execution; existing recovery and independent verification remain authoritative. |
+| Central recursive redaction, EventStream and API envelopes | EXTEND | Exact resolved-value matching also protects logs, exceptions, captured provider output, Node results, Events and durable records; CAS rejects known secret payloads. |
+| Operation-scoped credential delivery and terminal delivery revocation | MISSING → implemented | CredentialBroker and transient CredentialContext adapt existing storage and admission; neither creates execution authority. |
+| Pending approval list/detail and Once/Deny backend | MISSING → implemented | Existing ApprovalBroker supplies details and decisions; existing API routes delegate to it. |
+| Trusted remote human attestation, remote secret transport/rotation, physical device qualification | MISSING / deferred | Service bearer authentication is not human approval. No authenticated remote-human acceptance is claimed. |
+
+### Delivery and recovery contract
+
+Plans, Work, Operation and mutation Artifact inputs may contain only opaque
+`secret_handles` identifiers (`secret_` plus 32 hexadecimal characters). Empty
+handle lists are omitted from existing canonical requests, preserving prior
+authorization digests. Human-controlled registration binds a handle to the
+subject, Capability, Node and target resource with an explicit expiry. A revoked
+handle cannot be revived by registration, restart, rediscovery or reconnect.
+
+Credential resolution requires the very same active Gate admission and the
+Node-origin AuthorizationContext, bound to the original Work and Operation.
+Constructed human/node claims, models, planners and providers cannot establish
+that admission or issue their own authority. Missing, expired, revoked or
+mismatched authorization/handles fail closed. Before resolving, the broker
+durably records a unique authorization/handle delivery and its audit evidence;
+audit failure prevents delivery. It reacquires the governance transaction and
+revalidates authority after committing delivery evidence.
+
+CredentialLease records identify authorization/context, handle, subject, Work,
+Operation, Node, Capability, resource and expiry. Their default lifetime is 30
+seconds, bounded by handle and grant expiry (maximum configured lifetime 300
+seconds). A provider receives only a transient CredentialContext for declared
+handles, never the backend or a general resolver. Access and the immediate
+effect callback reload current authorization, revocation, lifecycle and lease
+expiry. Contexts refuse serialization and close after the call; a unique delivery
+binding prevents a second credential delivery for that authorization. Leases
+are delivery evidence, never permission for another side effect.
+
+Node journals still precede credential resolution. A completed cached receipt
+is reconciled after reconnect without resolving credentials again, even if the
+handle and lease have subsequently been revoked. A fresh read-only Observation
+does not inherit the mutation's credentials. Only independent `MATCH` commits.
+Missing terminal evidence remains `UNKNOWN`, without replay or a second
+credential delivery, even while a broader grant remains valid. Disconnected
+Nodes cannot resolve expired handles after reconnect; expiry during a provider
+delay prevents the effect.
+
+### Redaction and approval backend boundary
+
+Resolved material exists only in protected storage/matcher memory and transient
+execution buffers. The central redactor retains exact matchers for late logs
+after context closure. Logging records, exception traces, provider errors,
+captured stdout/stderr and captured subprocess results, Node outputs/receipts,
+Events, audit/API/CLI records and durable Workflow/Work/AgentSession records are
+scrubbed. Artifact metadata is scrubbed; byte and streamed file payloads containing
+known resolved material are rejected, including a secret spanning read chunks.
+Deterministic fake values are used in tests; persisted simulation files and
+runtime evidence are scanned for those values, including encrypted backend files.
+
+This is a trusted-host execution boundary, not isolation from arbitrary host
+code, raw file-descriptor writes, uncooperative child processes or deliberate
+secret encoding. Existing direct provider/environment compatibility paths are
+not silently migrated into a second credential authority. Providers must use
+captured subprocess output inside the scoped boundary. Production distributed
+secret transport, managed key provisioning/rotation and external audit anchoring
+require further acceptance; the current slice uses the shared local authority.
+
+`GET /api/v1/approvals` and `GET /api/v1/approvals/{request_id}` expose pending
+Operation approvals and their bindings through the existing authenticated API.
+The existing `POST /api/v1/approvals/{request_id}/{approve|deny}` delegates to the
+same broker. Bearer-authenticated services cannot exercise these human actions;
+body identity claims are ignored. Trusted local `nous approval approve` (Once)
+and `nous approval deny` remain the accepted human boundary. Approval preserves
+the original Plan/Workflow/Work and requires explicit existing workflow resume.
+
+### M3.4-B validation record
+
+Local Python 3.12 validation: **746 passed, 3 skipped** in directly affected
+M3.1/M3.2/M3.3/M3.4-A, provider and security regressions. The Governance Core,
+credential contracts and Reality suites have **122 passed**, including 34 new
+credential/backend tests and seven additional credentialed simulation cases.
+The final full suite has **3538 passed, 35 skipped, 9 failed**. All nine failures
+reproduce at the required starting Distribution `2fdea905729284abe0bc05d414656867b358d3b9`
+(**135 passed, 9 failed** in the four containing modules): read-only default
+home storage, managed Python layout and container orphan-process cleanup. These
+failures are preserved; local full-suite PASS is not claimed.
+
+Ruff, formatting of all 23 changed/new Python files, compilation, document/comment/
+identity/Git-metadata audits and 245 Markdown link checks pass. Security scan has
+zero findings. The existing component-lock contract tests have **3 passed**;
+the actual native-binary verifier cannot run to completion in this checkout
+because locked `desktop/src-tauri/binaries/nousd-x86_64-pc-windows-msvc.exe` is
+not staged. The same missing artifact is confirmed at the starting baseline;
+no binary, component lock or Kernel source was changed. Relevant existing
+Desktop and Multi-Arch CI run after push; native packaging is not qualified by
+these local simulation checks.
+
+M3.4-B Credential Governance satisfies the local Distribution simulation gate.
+M3.3-A PASS and M3.3-B PASS remain unchanged. M3.3-C physical acceptance,
+authenticated remote-human approval and deployment of remote credential
+transport/key management remain pending.

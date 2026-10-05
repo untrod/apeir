@@ -15,6 +15,7 @@ import struct
 import sys
 import threading
 import time
+from weakref import WeakValueDictionary
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +34,34 @@ from nous_runtime.node_runtime.execution_host import (
 from nous_runtime.node_runtime.protocol import workload_request_digest
 from nous_runtime.security.private_files import restrict_owner_only_file
 from nous_runtime.version import __version__
+from nous_runtime.core.redaction import redact_sensitive_data
+from nous_runtime.governance.contracts import AuthorizationContext
+
+_node_contexts: WeakValueDictionary[str, AuthorizationContext] = WeakValueDictionary()
+
+
+def _node_execution_context(node_id: str, workload_id: str) -> AuthorizationContext:
+    context = AuthorizationContext(
+        subject_type="node",
+        subject_id=node_id,
+        authn_method="node_key",
+        authn_confidence=1.0,
+        session_id=workload_id,
+        session_locality="local",
+    )
+    _node_contexts[context.context_id] = context
+    return context
+
+
+def _is_node_execution_context(context, node_id: str, workload_id: str) -> bool:
+    return (
+        isinstance(context, AuthorizationContext)
+        and _node_contexts.get(context.context_id) is context
+        and context.subject_id == node_id
+        and context.session_id == workload_id
+        and context.subject_type == "node"
+        and context.authn_method == "node_key"
+    )
 
 
 def _utc_now() -> str:
@@ -770,11 +799,21 @@ class NodeRuntimeService:
             try:
                 execute_bound = getattr(handler, "execute_bound", None)
                 if callable(execute_bound):
+                    execution_context = (
+                        {
+                            "authorization_context": _node_execution_context(
+                                self.identity.node_id, workload_id
+                            )
+                        }
+                        if getattr(handler, "accepts_authorization_context", False)
+                        else {}
+                    )
                     output = execute_bound(
                         dict(arguments or {}),
                         workload_id=workload_id,
                         node_id=self.identity.node_id,
                         binding=dict(binding or {}),
+                        **execution_context,
                     )
                 else:
                     output = handler(dict(arguments or {}))
@@ -819,6 +858,7 @@ class NodeRuntimeService:
                     "delivery_semantics": delivery_semantics,
                 }
             )
+        result = redact_sensitive_data(result)
         output_bytes = json.dumps(
             result, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
@@ -959,7 +999,7 @@ class NodeRuntimeService:
             "event_type": event_type,
             "timestamp": _utc_now(),
             "node_id": self.identity.node_id,
-            "payload": payload,
+            "payload": redact_sensitive_data(payload),
         }
         with self.telemetry_path.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")

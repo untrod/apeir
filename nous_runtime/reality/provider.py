@@ -273,6 +273,7 @@ class SimulatedDeviceProvider(DeviceProvider):
         capability_id: str,
         mutation: Mapping[str, Any],
         before_effect=None,
+        credential_context=None,
     ) -> dict[str, Any]:
         """Apply one controlled state update with durable operation idempotency."""
         if capability_id not in {"device.state.set", "device.firmware.update"}:
@@ -340,6 +341,10 @@ class SimulatedDeviceProvider(DeviceProvider):
                 raise ValueError("state mutation keys must be non-empty strings")
             if before_effect is not None:
                 before_effect()
+            if credential_context is not None:
+                # Values are transient call inputs, never device-state metadata.
+                for lease in credential_context.leases:
+                    credential_context.get(lease.handle_id)
             self._previous_states[stable] = dict(self._states[stable])
             self._states[stable].update(dict(update))
             self.transport.replace_state(stable, self._states[stable])

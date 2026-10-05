@@ -201,6 +201,7 @@ class Operation:
     node_id: str = ""
     input_artifacts: tuple[str, ...] = ()
     observation_request_id: str = ""
+    secret_handles: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not all(
@@ -222,6 +223,10 @@ class Operation:
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
         value["input_artifacts"] = list(self.input_artifacts)
+        if self.secret_handles:
+            value["secret_handles"] = list(self.secret_handles)
+        else:
+            value.pop("secret_handles")
         return value
 
     @property

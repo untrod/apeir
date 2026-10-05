@@ -12,6 +12,7 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+from nous_runtime.core.redaction import redact_sensitive_data
 
 _log = logging.getLogger("nous.governance.store")
 
@@ -206,6 +207,18 @@ class GovernanceStore:
                             recorded_at TEXT NOT NULL DEFAULT '',
                             previous_audit_hash TEXT NOT NULL DEFAULT ''
                         );
+
+                        CREATE TABLE IF NOT EXISTS governance_secret_handles (
+                            handle_id TEXT PRIMARY KEY, reference_json TEXT NOT NULL,
+                            bindings_json TEXT NOT NULL, expires_at TEXT NOT NULL,
+                            status TEXT NOT NULL DEFAULT 'ACTIVE'
+                        );
+                        CREATE TABLE IF NOT EXISTS governance_credential_leases (
+                            lease_id TEXT PRIMARY KEY, authorization_id TEXT NOT NULL,
+                            handle_id TEXT NOT NULL, expires_at TEXT NOT NULL,
+                            status TEXT NOT NULL, lease_json TEXT NOT NULL,
+                            UNIQUE(authorization_id, handle_id)
+                        );
                     """)
             except Exception as e:
                 _log.warning("Failed to create governance tables: %s", e)
@@ -234,7 +247,7 @@ class GovernanceStore:
                 event_type,
                 evidence.get("authorization_id", ""),
                 evidence.get("authorization_id", ""),
-                json.dumps(evidence, sort_keys=True),
+                json.dumps(redact_sensitive_data(evidence), sort_keys=True),
                 _utc_now(),
                 GovernanceStore._audit_row_hash(prev) if prev else "",
             ),
@@ -827,7 +840,9 @@ class GovernanceStore:
                             audit_dict.get("event_type", ""),
                             audit_dict.get("decision_id", ""),
                             audit_dict.get("proposal_hash", ""),
-                            json.dumps(audit_dict.get("evidence", {})),
+                            json.dumps(
+                                redact_sensitive_data(audit_dict.get("evidence", {}))
+                            ),
                             audit_dict.get("recorded_at", ""),
                             prev_hash,
                         ),

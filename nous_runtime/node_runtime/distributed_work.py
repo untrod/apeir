@@ -709,6 +709,8 @@ class DistributedWorkStore:
         return works
 
     def _save(self, works: Mapping[str, DistributedWork]) -> None:
+        from nous_runtime.core.redaction import redact_sensitive_data
+
         self.state_dir.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_name(f"{self.path.name}.{uuid.uuid4().hex}.tmp")
         try:
@@ -716,7 +718,10 @@ class DistributedWorkStore:
                 json.dumps(
                     {
                         "schema": WORK_STORE_SCHEMA,
-                        "works": {key: works[key].to_dict() for key in sorted(works)},
+                        "works": {
+                            key: redact_sensitive_data(works[key].to_dict())
+                            for key in sorted(works)
+                        },
                     },
                     ensure_ascii=False,
                     indent=2,

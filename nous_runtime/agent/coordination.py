@@ -61,11 +61,16 @@ class AgentSessionCoordinator:
         budget: Mapping[str, Any] | None = None,
         policy_scope: Mapping[str, Any] | None = None,
     ) -> AgentSession:
+        from nous_runtime.core.redaction import (
+            redact_sensitive_data,
+            redact_sensitive_text,
+        )
+
         session = AgentSession.create(
             agent_id=agent_id,
             model=model,
-            objective=objective,
-            context=context,
+            objective=redact_sensitive_text(objective),
+            context=redact_sensitive_data(dict(context or {})),
             event_subscriptions=event_subscriptions,
             budget=budget,
             policy_scope=policy_scope,

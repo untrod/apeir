@@ -48,6 +48,7 @@ class SimulatedDeviceOperationHandler:
     """Node capability handler backed by the simulator and the Node-local CAS."""
 
     capability_id = "device.state.set"
+    accepts_authorization_context = True
 
     def __init__(
         self,
@@ -57,18 +58,25 @@ class SimulatedDeviceOperationHandler:
         *,
         governance: ExecutionAuthorizationGate | None = None,
         capability_id: str = "device.state.set",
+        credential_broker=None,
     ):
         self.provider = provider
         self.registry = registry
         self.artifact_root = artifact_store.root
         self.capability_id = capability_id
         self.governance = governance or get_gate()
+        self.credential_broker = credential_broker
 
     def __call__(self, arguments: dict[str, Any]) -> dict[str, Any]:
         return self._execute(arguments, admitted=False)
 
     def _execute(
-        self, arguments: dict[str, Any], *, admitted: bool, before_effect=None
+        self,
+        arguments: dict[str, Any],
+        *,
+        admitted: bool,
+        before_effect=None,
+        credential_context=None,
     ) -> dict[str, Any]:
         operation_value = arguments.get("operation")
         if not isinstance(operation_value, Mapping):
@@ -106,6 +114,11 @@ class SimulatedDeviceOperationHandler:
                 capability_id=capability_id,
                 mutation=dict(payload["mutation"]),
                 before_effect=before_effect,
+                **(
+                    {"credential_context": credential_context}
+                    if credential_context is not None
+                    else {}
+                ),
             )
         except SimulatedResponseLost as exc:
             raise WorkloadResponseLost(
@@ -128,6 +141,7 @@ class SimulatedDeviceOperationHandler:
         workload_id: str,
         node_id: str,
         binding: Mapping[str, str],
+        authorization_context=None,
     ) -> dict[str, Any]:
         operation = arguments.get("operation") or {}
         if (
@@ -152,6 +166,8 @@ class SimulatedDeviceOperationHandler:
             or request.expected_effect != operation.get("expected_effect")
             or list(request.input_artifacts) != operation.get("input_artifacts")
             or list(request.input_artifacts) != [arguments.get("mutation_artifact")]
+            or list(request.secret_handles) != operation.get("secret_handles", [])
+            or list(request.secret_handles) != arguments.get("secret_handles", [])
         ):
             raise PermissionError("Node Operation authorization binding differs")
         with self.governance.admit_operation(
@@ -160,7 +176,27 @@ class SimulatedDeviceOperationHandler:
                 self.registry.get(request.resource_id).lifecycle
                 is DeviceLifecycle.AVAILABLE
             ),
+            authorization_context=authorization_context,
         ) as revalidate:
+            if request.secret_handles:
+                if (
+                    self.credential_broker is None
+                    or self.credential_broker.gate is not self.governance
+                ):
+                    raise PermissionError(
+                        "CredentialBroker is unavailable at the Node boundary"
+                    )
+                return self.credential_broker.run_provider(
+                    authorization_id,
+                    authorization_context,
+                    admission=revalidate,
+                    call=lambda credentials: self._execute(
+                        arguments,
+                        admitted=True,
+                        before_effect=credentials.revalidate,
+                        credential_context=credentials,
+                    ),
+                )
             return self._execute(arguments, admitted=True, before_effect=revalidate)
 
     def read(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -226,6 +262,9 @@ class RealityOperationWorkflowHandler:
 
     def __call__(self, step: WorkflowStep, context: dict[str, Any]) -> dict[str, Any]:
         params = dict(step.params)
+        from nous_runtime.governance.credentials import validate_secret_handles
+
+        secret_handles = validate_secret_handles(params.get("secret_handles", ()))
         device_id = str(params.get("device_id") or "")
         device = self.registry.get(device_id)
         if device is None:
@@ -272,6 +311,7 @@ class RealityOperationWorkflowHandler:
             workflow_id=str(inputs.get("_workflow_id") or ""),
             workflow_run_id=str(context.get("run_id") or ""),
             requested_at=str((prior_operation or {}).get("requested_at") or utc_now()),
+            secret_handles=secret_handles,
         )
         provenance = {
             "agent_session_id": operation.agent_session_id,
@@ -292,6 +332,8 @@ class RealityOperationWorkflowHandler:
             "mutation": dict(mutation),
             "provenance": {key: value for key, value in provenance.items() if value},
         }
+        if secret_handles:
+            mutation_value["secret_handles"] = list(secret_handles)
         stored = self.artifacts.store_bytes(
             json.dumps(
                 mutation_value,
@@ -322,6 +364,7 @@ class RealityOperationWorkflowHandler:
             input_artifacts=operation.input_artifacts,
             expected_effect=dict(expected_effect),
             capability_inputs=self.governance.capability_inputs(capability_id),
+            secret_handles=secret_handles,
         )
         authorization_id = self.governance.register_operation(request)
         distributed_step = replace(
@@ -342,6 +385,11 @@ class RealityOperationWorkflowHandler:
                     "operation": operation.to_dict(),
                     "mutation_artifact": mutation_ref,
                     "authorization_id": authorization_id,
+                    **(
+                        {"secret_handles": list(secret_handles)}
+                        if secret_handles
+                        else {}
+                    ),
                 },
                 "input_artifacts": [mutation_ref],
                 "target_resource_id": device_id,
@@ -503,6 +551,7 @@ class RealityOperationWorkflowHandler:
             operation_id=acquisition_id,
             work_id=acquisition_id,
             capability_id="device.state.read",
+            secret_handles=(),
             expected_effect={},
             capability_inputs=self.governance.capability_inputs("device.state.read"),
         )

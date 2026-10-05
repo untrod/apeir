@@ -221,3 +221,23 @@ tests. The full suite has 3497 passed, 35 skipped and the nine unchanged local
 environment failures reproduced at the M3.4-A starting baseline. See the
 [validation record](SECURITY_CONTRACT.md#m34-a-validation-record). M3.3-A PASS,
 M3.3-B PASS and M3.3-C Real Hardware Acceptance PENDING remain unchanged.
+
+## M3.4-B credentialed firmware acceptance
+
+The [Security Contract](SECURITY_CONTRACT.md#m34-b-credential-governance-audit)
+owns credential policy and the repository-wide credential audit. The existing
+firmware Goal/Plan/Workflow acceptance now also runs with an opaque SecretHandle
+in its original mutation input. After local Approve Once, the existing Node
+admission resolves the credential into a transient provider context, obtains
+the existing OperationReceipt, independently observes firmware without the
+mutation credential, verifies `MATCH` and reaches Distribution `COMMITTED`.
+Lease IDs preserve delivery provenance without exposing values in receipts.
+
+Simulation tests cover provider logs/errors/stdout, captured subprocess output,
+Events, Artifact metadata, durable records and scans for fake-secret leakage.
+Credential expiry during delay or reconnect blocks mutation. Completed effects
+with lost responses reconcile after handle/lease revocation without resolving
+again. Missing terminal receipts remain `UNKNOWN` without replay despite a
+valid broader grant. These are software simulations, not credentialed physical
+firmware flashing or Rust Kernel StepCommit acceptance. Kernel remains unchanged;
+M3.3-C Real Hardware Acceptance remains PENDING.

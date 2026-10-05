@@ -47,6 +47,10 @@ class OperationAuthorizationMixin:
 
     def register_operation(self, request: GovernanceRequest) -> str:
         """Persist immutable bindings before approval or dispatch."""
+        if request.secret_handles:
+            from nous_runtime.governance.credentials import validate_secret_handles
+
+            validate_secret_handles(request.secret_handles)
         if redact_sensitive_data(request.to_dict()) != request.to_dict():
             raise ValueError("Credential material is not an Operation input")
         if not all(
@@ -265,7 +269,8 @@ class OperationAuthorizationMixin:
 
         owner = _build_context()
         valid = (
-            _is_local_owner_context(context)
+            isinstance(context, AuthorizationContext)
+            and _is_local_owner_context(context)
             and context.subject_type == "user"
             and context.subject_id != request.subject_id
             and context.subject_id == owner.subject_id
@@ -292,9 +297,9 @@ class OperationAuthorizationMixin:
                     "authority.rejected",
                     self._evidence(
                         request,
-                        actor_id=context.subject_id,
-                        actor_type=context.subject_type,
-                        authorization_context_id=context.context_id,
+                        actor_id=getattr(context, "subject_id", ""),
+                        actor_type=getattr(context, "subject_type", "unknown"),
+                        authorization_context_id=getattr(context, "context_id", ""),
                     ),
                 )
             raise PermissionError(
@@ -553,8 +558,13 @@ class OperationAuthorizationMixin:
                 db, event_type, self._evidence(request, **evidence)
             )
 
+    def get_operation_request_from_admission(self, admission):
+        return self._execution_admissions[admission][3]
+
     @contextmanager
-    def admit_operation(self, authorization_id, *, resource_check):
+    def admit_operation(
+        self, authorization_id, *, resource_check, authorization_context=None
+    ):
         """Revalidate at the effect boundary; reserve one use before execution.
 
         The existing Node EXECUTING journal is persisted before this call.
@@ -562,6 +572,15 @@ class OperationAuthorizationMixin:
         A crash never licenses replay of an incomplete Node journal.
         """
         request = self.get_operation_request(authorization_id)
+        if request.secret_handles:
+            from nous_runtime.node_runtime.service import _is_node_execution_context
+
+            if not _is_node_execution_context(
+                authorization_context, request.node_id, request.work_id
+            ):
+                raise PermissionError(
+                    "Credential Operation requires authenticated Node execution"
+                )
         with self.store.operation_transaction() as db:
             verdict, grant = self._evaluate_operation(db, request)
             prior_admission = db.execute(
@@ -629,4 +648,13 @@ class OperationAuthorizationMixin:
                     )
 
             revalidate()
-            yield revalidate
+            self._execution_admissions[revalidate] = (
+                authorization_id,
+                authorization_context,
+                db,
+                request,
+            )
+            try:
+                yield revalidate
+            finally:
+                self._execution_admissions.pop(revalidate, None)

@@ -217,6 +217,33 @@ class ApprovalBroker:
         self._emit("approval.denied", response.to_dict())
         return response
 
+    def list_operation_approvals(self, *, gate):
+        """Backend read contract for future remote UI; no human identity implied."""
+        return [
+            self.get_operation_approval(item["request_id"], gate=gate)
+            for item in self._store.list_pending_approvals()
+            if item.get("operation_governance")
+        ]
+
+    def get_operation_approval(self, request_id, *, gate):
+        record = self._store.get_approval_request(request_id)
+        if not record or not record.get("operation_governance"):
+            raise ValueError("Operation approval request not found")
+        request = gate.get_operation_request(record["governance_request_id"])
+        if request.authorization_id != record["proposal_hash"]:
+            raise PermissionError("Approval authority binding differs")
+        from nous_runtime.core.redaction import redact_sensitive_data
+
+        return redact_sensitive_data(record)
+
+    def respond_operation(self, request_id, action, context, *, gate):
+        """Only the existing authority may attest a human approval context."""
+        if action == "approve":
+            return self.approve_operation_once(request_id, context, gate=gate)
+        if action == "deny":
+            return self.deny_operation(request_id, context, gate=gate)
+        raise ValueError("Operation approval supports only Approve Once and Deny")
+
     def _emit(self, event_type: str, data: dict[str, Any]) -> None:
         for cb in self._listeners:
             try:

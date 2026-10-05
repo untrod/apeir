@@ -44,10 +44,16 @@ class GovernanceRequest:
     input_artifacts: tuple[str, ...] = ()
     expected_effect: dict[str, Any] = field(default_factory=dict)
     capability_inputs: dict[str, Any] = field(default_factory=dict)
+    secret_handles: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
         value["input_artifacts"] = list(self.input_artifacts)
+        if self.secret_handles:
+            value["secret_handles"] = list(self.secret_handles)
+        else:
+            # Preserve M3.4-A authorization hashes for existing persisted requests.
+            value.pop("secret_handles")
         return value
 
     @property
@@ -58,7 +64,11 @@ class GovernanceRequest:
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> GovernanceRequest:
         return cls(
-            **{**value, "input_artifacts": tuple(value.get("input_artifacts", ()))}
+            **{
+                **value,
+                "input_artifacts": tuple(value.get("input_artifacts", ())),
+                "secret_handles": tuple(value.get("secret_handles", ())),
+            }
         )
 
 

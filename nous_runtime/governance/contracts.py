@@ -22,6 +22,7 @@ from nous_runtime.schema_registry import GOVERNANCE_SCHEMA_VERSION as SCHEMA_VER
 
 # Helpers
 
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -81,31 +82,23 @@ def _normalize_scalar(val: Any) -> Any:
 
 def _redact_secrets(d: dict[str, Any]) -> dict[str, Any]:
     """Replace sensitive values with <REDACTED>."""
-    SENSITIVE = {"api_key", "authorization", "cookie", "password", "private_key",
-                  "secret", "token", "signing_key", "credential"}
-    result: dict[str, Any] = {}
-    for k, v in d.items():
-        if any(s in k.lower() for s in SENSITIVE):
-            result[k] = "<REDACTED>"
-        elif isinstance(v, dict):
-            result[k] = _redact_secrets(v)
-        elif isinstance(v, (list, tuple)):
-            result[k] = [_redact_secrets(i) if isinstance(i, dict) else i for i in v]
-        else:
-            result[k] = v
-    return result
+    from nous_runtime.core.redaction import redact_sensitive_data
+
+    return redact_sensitive_data(d)
 
 
 # Contracts
 
+
 @dataclass(frozen=True)
 class AuthorizationContext:
     """Immutable context established before authorization evaluation."""
+
     context_id: str = field(default_factory=lambda: _new_id("ctx"))
-    subject_type: str = ""           # "user" | "node" | "service" | "automation"
+    subject_type: str = ""  # "user" | "node" | "service" | "automation"
     subject_id: str = ""
     subject_claims: tuple[dict[str, Any], ...] = ()
-    authn_method: str = ""           # "cli_os_user" | "api_token" | "node_key" | "pairing_code"
+    authn_method: str = ""  # "cli_os_user" | "api_token" | "node_key" | "pairing_code"
     authn_confidence: float = 0.0
     session_id: str = ""
     session_started: str = ""
@@ -118,19 +111,27 @@ class AuthorizationContext:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "context_id": self.context_id, "subject_type": self.subject_type,
-            "subject_id": self.subject_id, "subject_claims": list(self.subject_claims),
-            "authn_method": self.authn_method, "authn_confidence": self.authn_confidence,
-            "session_id": self.session_id, "session_started": self.session_started,
-            "session_device": self.session_device, "session_locality": self.session_locality,
-            "request_id": self.request_id, "requested_at": self.requested_at,
-            "schema_version": self.schema_version, "runtime_version": self.runtime_version,
+            "context_id": self.context_id,
+            "subject_type": self.subject_type,
+            "subject_id": self.subject_id,
+            "subject_claims": list(self.subject_claims),
+            "authn_method": self.authn_method,
+            "authn_confidence": self.authn_confidence,
+            "session_id": self.session_id,
+            "session_started": self.session_started,
+            "session_device": self.session_device,
+            "session_locality": self.session_locality,
+            "request_id": self.request_id,
+            "requested_at": self.requested_at,
+            "schema_version": self.schema_version,
+            "runtime_version": self.runtime_version,
         }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "AuthorizationContext":
         return cls(
-            context_id=d.get("context_id", ""), subject_type=d.get("subject_type", ""),
+            context_id=d.get("context_id", ""),
+            subject_type=d.get("subject_type", ""),
             subject_id=d.get("subject_id", ""),
             subject_claims=tuple(d.get("subject_claims") or ()),
             authn_method=d.get("authn_method", ""),
@@ -139,7 +140,8 @@ class AuthorizationContext:
             session_started=d.get("session_started", ""),
             session_device=d.get("session_device", ""),
             session_locality=d.get("session_locality", "local"),
-            request_id=d.get("request_id", ""), requested_at=d.get("requested_at", ""),
+            request_id=d.get("request_id", ""),
+            requested_at=d.get("requested_at", ""),
             schema_version=d.get("schema_version", SCHEMA_VERSION),
             runtime_version=d.get("runtime_version", ""),
         )
@@ -148,10 +150,11 @@ class AuthorizationContext:
 @dataclass(frozen=True)
 class ActionProposal:
     """Immutable, hash-bound description of what the runtime wants to execute."""
+
     proposal_id: str = field(default_factory=lambda: _new_id("ap"))
     proposal_hash: str = ""
     action_id: str = field(default_factory=lambda: _new_id("act"))
-    action_type: str = ""            # "capability.execute" | "workspace.mutate" | ...
+    action_type: str = ""  # "capability.execute" | "workspace.mutate" | ...
     capability_id: str = ""
     provider_id: str = ""
     model_id: str = ""
@@ -166,13 +169,17 @@ class ActionProposal:
     target_project: str = ""
     target_work_item: str = ""
     affected_resources: tuple[str, ...] = ()
-    data_classification: str = "internal"  # "public"|"internal"|"confidential"|"restricted"
+    data_classification: str = (
+        "internal"  # "public"|"internal"|"confidential"|"restricted"
+    )
     external_recipients: tuple[str, ...] = ()
     estimated_cost_usd: float = 0.0
     estimated_duration_ms: int = 0
-    side_effect_class: str = "unknown"  # "none"|"read_only"|"local_write"|"external_write"|"destructive"
-    reversibility: str = "unknown"      # "reversible"|"partially_reversible"|"irreversible"
-    retry_behavior: str = "unknown"     # "idempotent"|"safe_with_key"|"unsafe"
+    side_effect_class: str = (
+        "unknown"  # "none"|"read_only"|"local_write"|"external_write"|"destructive"
+    )
+    reversibility: str = "unknown"  # "reversible"|"partially_reversible"|"irreversible"
+    retry_behavior: str = "unknown"  # "idempotent"|"safe_with_key"|"unsafe"
     required_permissions: tuple[str, ...] = ()
     evidence_references: tuple[str, ...] = ()
     created_at: str = field(default_factory=_utc_now)
@@ -193,9 +200,8 @@ class ActionProposal:
             "agent_id": self.agent_id,
             "deployment_channel": self.deployment_channel,
             "locality": self.locality,
-            "parameter_hash": self.parameter_hash or _sha256(
-                _deterministic_json(_normalize_params(self.params))
-            ),
+            "parameter_hash": self.parameter_hash
+            or _sha256(_deterministic_json(_normalize_params(self.params))),
             "target_node": self.target_node,
             "target_workspace": self.target_workspace,
             "target_project": self.target_project,
@@ -217,8 +223,10 @@ class ActionProposal:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "proposal_id": self.proposal_id, "proposal_hash": self.proposal_hash,
-            "action_id": self.action_id, "action_type": self.action_type,
+            "proposal_id": self.proposal_id,
+            "proposal_hash": self.proposal_hash,
+            "action_id": self.action_id,
+            "action_type": self.action_type,
             "capability_id": self.capability_id,
             "provider_id": self.provider_id,
             "model_id": self.model_id,
@@ -227,8 +235,10 @@ class ActionProposal:
             "locality": self.locality,
             "parameter_hash": self.parameter_hash,
             "parameter_summary": self.parameter_summary,
-            "target_node": self.target_node, "target_workspace": self.target_workspace,
-            "target_project": self.target_project, "target_work_item": self.target_work_item,
+            "target_node": self.target_node,
+            "target_workspace": self.target_workspace,
+            "target_project": self.target_project,
+            "target_work_item": self.target_work_item,
             "affected_resources": list(self.affected_resources),
             "data_classification": self.data_classification,
             "external_recipients": list(self.external_recipients),
@@ -239,7 +249,8 @@ class ActionProposal:
             "retry_behavior": self.retry_behavior,
             "required_permissions": list(self.required_permissions),
             "evidence_references": list(self.evidence_references),
-            "created_at": self.created_at, "expires_at": self.expires_at,
+            "created_at": self.created_at,
+            "expires_at": self.expires_at,
             "schema_version": self.schema_version,
         }
 
@@ -281,6 +292,7 @@ class ActionProposal:
 @dataclass(frozen=True)
 class ApprovalScope:
     """Exact boundaries of what was approved."""
+
     action_id: str = ""
     proposal_hash: str = ""
     project_id: str = ""
@@ -332,10 +344,14 @@ class ApprovalScope:
             _tuple_subset(self.external_recipients, other.external_recipients),
             _num_subset(self.cost_ceiling_usd, other.cost_ceiling_usd, "lte"),
             _num_subset(self.token_ceiling, other.token_ceiling, "lte"),
-            _num_subset(self.execution_time_ceiling_ms, other.execution_time_ceiling_ms, "lte"),
+            _num_subset(
+                self.execution_time_ceiling_ms, other.execution_time_ceiling_ms, "lte"
+            ),
             _num_subset(self.max_attempts, other.max_attempts, "lte"),
             _num_subset(self.max_uses, other.max_uses, "lte"),
-            _tuple_subset(self.allowed_side_effect_classes, other.allowed_side_effect_classes),
+            _tuple_subset(
+                self.allowed_side_effect_classes, other.allowed_side_effect_classes
+            ),
             _str_subset(self.deployment_channel, other.deployment_channel),
         ]
         return all(checks)
@@ -357,19 +373,27 @@ class ApprovalScope:
             cost_ceiling_usd=proposal.estimated_cost_usd,
             execution_time_ceiling_ms=proposal.estimated_duration_ms,
             max_uses=1,
-            allowed_side_effect_classes=(proposal.side_effect_class,) if proposal.side_effect_class else (),
+            allowed_side_effect_classes=(proposal.side_effect_class,)
+            if proposal.side_effect_class
+            else (),
         )
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "action_id": self.action_id, "proposal_hash": self.proposal_hash,
-            "project_id": self.project_id, "milestone_id": self.milestone_id,
-            "work_item_id": self.work_item_id, "task_id": self.task_id,
+            "action_id": self.action_id,
+            "proposal_hash": self.proposal_hash,
+            "project_id": self.project_id,
+            "milestone_id": self.milestone_id,
+            "work_item_id": self.work_item_id,
+            "task_id": self.task_id,
             "capability_id": self.capability_id,
             "allowed_capabilities": list(self.allowed_capabilities),
-            "provider_id": self.provider_id, "allowed_providers": list(self.allowed_providers),
-            "model_id": self.model_id, "allowed_models": list(self.allowed_models),
-            "agent_id": self.agent_id, "node_id": self.node_id,
+            "provider_id": self.provider_id,
+            "allowed_providers": list(self.allowed_providers),
+            "model_id": self.model_id,
+            "allowed_models": list(self.allowed_models),
+            "agent_id": self.agent_id,
+            "node_id": self.node_id,
             "workspace_path": self.workspace_path,
             "allowed_files": list(self.allowed_files),
             "allowed_directories": list(self.allowed_directories),
@@ -380,8 +404,10 @@ class ApprovalScope:
             "cost_ceiling_usd": self.cost_ceiling_usd,
             "token_ceiling": self.token_ceiling,
             "execution_time_ceiling_ms": self.execution_time_ceiling_ms,
-            "max_attempts": self.max_attempts, "max_uses": self.max_uses,
-            "valid_from": self.valid_from, "valid_until": self.valid_until,
+            "max_attempts": self.max_attempts,
+            "max_uses": self.max_uses,
+            "valid_from": self.valid_from,
+            "valid_until": self.valid_until,
             "allowed_side_effect_classes": list(self.allowed_side_effect_classes),
             "deployment_channel": self.deployment_channel,
         }
@@ -389,16 +415,20 @@ class ApprovalScope:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "ApprovalScope":
         return cls(
-            action_id=d.get("action_id", ""), proposal_hash=d.get("proposal_hash", ""),
-            project_id=d.get("project_id", ""), milestone_id=d.get("milestone_id", ""),
-            work_item_id=d.get("work_item_id", ""), task_id=d.get("task_id", ""),
+            action_id=d.get("action_id", ""),
+            proposal_hash=d.get("proposal_hash", ""),
+            project_id=d.get("project_id", ""),
+            milestone_id=d.get("milestone_id", ""),
+            work_item_id=d.get("work_item_id", ""),
+            task_id=d.get("task_id", ""),
             capability_id=d.get("capability_id", ""),
             allowed_capabilities=tuple(d.get("allowed_capabilities") or ()),
             provider_id=d.get("provider_id", ""),
             allowed_providers=tuple(d.get("allowed_providers") or ()),
             model_id=d.get("model_id", ""),
             allowed_models=tuple(d.get("allowed_models") or ()),
-            agent_id=d.get("agent_id", ""), node_id=d.get("node_id", ""),
+            agent_id=d.get("agent_id", ""),
+            node_id=d.get("node_id", ""),
             workspace_path=d.get("workspace_path", ""),
             allowed_files=tuple(d.get("allowed_files") or ()),
             allowed_directories=tuple(d.get("allowed_directories") or ()),
@@ -411,8 +441,11 @@ class ApprovalScope:
             execution_time_ceiling_ms=int(d.get("execution_time_ceiling_ms", 0)),
             max_attempts=int(d.get("max_attempts", 1)),
             max_uses=int(d.get("max_uses", 1)),
-            valid_from=d.get("valid_from", ""), valid_until=d.get("valid_until", ""),
-            allowed_side_effect_classes=tuple(d.get("allowed_side_effect_classes") or ()),
+            valid_from=d.get("valid_from", ""),
+            valid_until=d.get("valid_until", ""),
+            allowed_side_effect_classes=tuple(
+                d.get("allowed_side_effect_classes") or ()
+            ),
             deployment_channel=d.get("deployment_channel", ""),
         )
 
@@ -420,6 +453,7 @@ class ApprovalScope:
 @dataclass(frozen=True)
 class RiskEnvelope:
     """Multi-dimensional risk assessment."""
+
     envelope_id: str = field(default_factory=lambda: _new_id("re"))
     proposal_hash: str = ""
     data_sensitivity: float | None = None
@@ -448,7 +482,8 @@ class RiskEnvelope:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "envelope_id": self.envelope_id, "proposal_hash": self.proposal_hash,
+            "envelope_id": self.envelope_id,
+            "proposal_hash": self.proposal_hash,
             "data_sensitivity": self.data_sensitivity,
             "execution_risk": self.execution_risk,
             "external_side_effect_risk": self.external_side_effect_risk,
@@ -466,7 +501,8 @@ class RiskEnvelope:
             "deployment_impact": self.deployment_impact,
             "evidence_sources": list(self.evidence_sources),
             "unknown_dimensions": list(self.unknown_dimensions),
-            "assessed_at": self.assessed_at, "assessed_by": self.assessed_by,
+            "assessed_at": self.assessed_at,
+            "assessed_by": self.assessed_by,
             "aggregate_risk_class": self.aggregate_risk_class,
             "max_dimension": self.max_dimension,
             "max_dimension_value": self.max_dimension_value,
@@ -495,7 +531,8 @@ class RiskEnvelope:
             deployment_impact=d.get("deployment_impact"),
             evidence_sources=tuple(d.get("evidence_sources") or ()),
             unknown_dimensions=tuple(d.get("unknown_dimensions") or ()),
-            assessed_at=d.get("assessed_at", ""), assessed_by=d.get("assessed_by", "risk_engine"),
+            assessed_at=d.get("assessed_at", ""),
+            assessed_by=d.get("assessed_by", "risk_engine"),
             aggregate_risk_class=d.get("aggregate_risk_class", "medium"),
             max_dimension=d.get("max_dimension", ""),
             max_dimension_value=float(d.get("max_dimension_value", 0.0)),
@@ -506,6 +543,7 @@ class RiskEnvelope:
 @dataclass(frozen=True)
 class AuthorizationDecision:
     """Immutable decision produced by the Execution Authorization Gate."""
+
     decision_id: str = field(default_factory=lambda: _new_id("ad"))
     proposal_hash: str = ""
     context_id: str = ""
@@ -513,7 +551,9 @@ class AuthorizationDecision:
     allowed: bool = False
     reason_code: str = ""
     reason_message: str = ""
-    rule_class: str = ""       # NON_OVERRIDABLE | ADMIN_OVERRIDABLE | USER_APPROVABLE | AUTONOMOUS_ALLOWED
+    rule_class: str = (
+        ""  # NON_OVERRIDABLE | ADMIN_OVERRIDABLE | USER_APPROVABLE | AUTONOMOUS_ALLOWED
+    )
     policy_id: str = ""
     constitution_rule: str = ""
     risk_envelope: RiskEnvelope | None = None
@@ -525,14 +565,23 @@ class AuthorizationDecision:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "decision_id": self.decision_id, "proposal_hash": self.proposal_hash,
-            "context_id": self.context_id, "action_mode": self.action_mode,
-            "allowed": self.allowed, "reason_code": self.reason_code,
-            "reason_message": self.reason_message, "rule_class": self.rule_class,
-            "policy_id": self.policy_id, "constitution_rule": self.constitution_rule,
-            "risk_envelope": self.risk_envelope.to_dict() if self.risk_envelope else None,
-            "lease_id": self.lease_id, "delegation_id": self.delegation_id,
-            "decided_at": self.decided_at, "decision_ttl": self.decision_ttl,
+            "decision_id": self.decision_id,
+            "proposal_hash": self.proposal_hash,
+            "context_id": self.context_id,
+            "action_mode": self.action_mode,
+            "allowed": self.allowed,
+            "reason_code": self.reason_code,
+            "reason_message": self.reason_message,
+            "rule_class": self.rule_class,
+            "policy_id": self.policy_id,
+            "constitution_rule": self.constitution_rule,
+            "risk_envelope": self.risk_envelope.to_dict()
+            if self.risk_envelope
+            else None,
+            "lease_id": self.lease_id,
+            "delegation_id": self.delegation_id,
+            "decided_at": self.decided_at,
+            "decision_ttl": self.decision_ttl,
             "schema_version": self.schema_version,
         }
 
@@ -562,6 +611,7 @@ class AuthorizationDecision:
 @dataclass(frozen=True)
 class ApprovalRequest:
     """Request for human approval of an ActionProposal."""
+
     request_id: str = field(default_factory=lambda: _new_id("apr"))
     proposal_hash: str = ""
     summary: str = ""
@@ -576,22 +626,32 @@ class ApprovalRequest:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "request_id": self.request_id, "proposal_hash": self.proposal_hash,
-            "summary": self.summary, "risk_summary": self.risk_summary,
-            "scope_summary": self.scope_summary, "status": self.status,
-            "requested_by": self.requested_by, "requested_at": self.requested_at,
-            "expires_at": self.expires_at, "priority": self.priority,
+            "request_id": self.request_id,
+            "proposal_hash": self.proposal_hash,
+            "summary": self.summary,
+            "risk_summary": self.risk_summary,
+            "scope_summary": self.scope_summary,
+            "status": self.status,
+            "requested_by": self.requested_by,
+            "requested_at": self.requested_at,
+            "expires_at": self.expires_at,
+            "priority": self.priority,
             "schema_version": self.schema_version,
         }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "ApprovalRequest":
         return cls(
-            request_id=d.get("request_id", ""), proposal_hash=d.get("proposal_hash", ""),
-            summary=d.get("summary", ""), risk_summary=d.get("risk_summary", ""),
-            scope_summary=d.get("scope_summary", ""), status=d.get("status", "CREATED"),
-            requested_by=d.get("requested_by", ""), requested_at=d.get("requested_at", ""),
-            expires_at=d.get("expires_at", ""), priority=d.get("priority", "normal"),
+            request_id=d.get("request_id", ""),
+            proposal_hash=d.get("proposal_hash", ""),
+            summary=d.get("summary", ""),
+            risk_summary=d.get("risk_summary", ""),
+            scope_summary=d.get("scope_summary", ""),
+            status=d.get("status", "CREATED"),
+            requested_by=d.get("requested_by", ""),
+            requested_at=d.get("requested_at", ""),
+            expires_at=d.get("expires_at", ""),
+            priority=d.get("priority", "normal"),
             schema_version=d.get("schema_version", SCHEMA_VERSION),
         )
 
@@ -599,10 +659,11 @@ class ApprovalRequest:
 @dataclass(frozen=True)
 class ApprovalResponse:
     """Human response to an ApprovalRequest."""
+
     response_id: str = field(default_factory=lambda: _new_id("aprsp"))
     request_id: str = ""
     proposal_hash: str = ""
-    decision: str = ""           # APPROVED | DENIED | MODIFIED
+    decision: str = ""  # APPROVED | DENIED | MODIFIED
     scope: ApprovalScope | None = None
     approver_id: str = ""
     approver_method: str = "cli"
@@ -612,11 +673,15 @@ class ApprovalResponse:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "response_id": self.response_id, "request_id": self.request_id,
-            "proposal_hash": self.proposal_hash, "decision": self.decision,
+            "response_id": self.response_id,
+            "request_id": self.request_id,
+            "proposal_hash": self.proposal_hash,
+            "decision": self.decision,
             "scope": self.scope.to_dict() if self.scope else None,
-            "approver_id": self.approver_id, "approver_method": self.approver_method,
-            "reason": self.reason, "responded_at": self.responded_at,
+            "approver_id": self.approver_id,
+            "approver_method": self.approver_method,
+            "reason": self.reason,
+            "responded_at": self.responded_at,
             "schema_version": self.schema_version,
         }
 
@@ -624,12 +689,15 @@ class ApprovalResponse:
     def from_dict(cls, d: dict[str, Any]) -> "ApprovalResponse":
         scope_dict = d.get("scope")
         return cls(
-            response_id=d.get("response_id", ""), request_id=d.get("request_id", ""),
-            proposal_hash=d.get("proposal_hash", ""), decision=d.get("decision", ""),
+            response_id=d.get("response_id", ""),
+            request_id=d.get("request_id", ""),
+            proposal_hash=d.get("proposal_hash", ""),
+            decision=d.get("decision", ""),
             scope=ApprovalScope.from_dict(scope_dict) if scope_dict else None,
             approver_id=d.get("approver_id", ""),
             approver_method=d.get("approver_method", "cli"),
-            reason=d.get("reason", ""), responded_at=d.get("responded_at", ""),
+            reason=d.get("reason", ""),
+            responded_at=d.get("responded_at", ""),
             schema_version=d.get("schema_version", SCHEMA_VERSION),
         )
 
@@ -637,6 +705,7 @@ class ApprovalResponse:
 @dataclass(frozen=True)
 class AuthorizationLease:
     """Mutable lease issued after approval, consumed by execution."""
+
     lease_id: str = field(default_factory=lambda: _new_id("al"))
     proposal_hash: str = ""
     approval_id: str = ""
@@ -651,24 +720,32 @@ class AuthorizationLease:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "lease_id": self.lease_id, "proposal_hash": self.proposal_hash,
-            "approval_id": self.approval_id, "subject_id": self.subject_id,
+            "lease_id": self.lease_id,
+            "proposal_hash": self.proposal_hash,
+            "approval_id": self.approval_id,
+            "subject_id": self.subject_id,
             "scope": self.scope.to_dict() if self.scope else None,
-            "max_uses": self.max_uses, "remaining_uses": self.remaining_uses,
-            "issued_at": self.issued_at, "expires_at": self.expires_at,
-            "status": self.status, "schema_version": self.schema_version,
+            "max_uses": self.max_uses,
+            "remaining_uses": self.remaining_uses,
+            "issued_at": self.issued_at,
+            "expires_at": self.expires_at,
+            "status": self.status,
+            "schema_version": self.schema_version,
         }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "AuthorizationLease":
         scope_dict = d.get("scope")
         return cls(
-            lease_id=d.get("lease_id", ""), proposal_hash=d.get("proposal_hash", ""),
-            approval_id=d.get("approval_id", ""), subject_id=d.get("subject_id", ""),
+            lease_id=d.get("lease_id", ""),
+            proposal_hash=d.get("proposal_hash", ""),
+            approval_id=d.get("approval_id", ""),
+            subject_id=d.get("subject_id", ""),
             scope=ApprovalScope.from_dict(scope_dict) if scope_dict else None,
             max_uses=int(d.get("max_uses", 1)),
             remaining_uses=int(d.get("remaining_uses", 1)),
-            issued_at=d.get("issued_at", ""), expires_at=d.get("expires_at", ""),
+            issued_at=d.get("issued_at", ""),
+            expires_at=d.get("expires_at", ""),
             status=d.get("status", "ACTIVE"),
             schema_version=d.get("schema_version", SCHEMA_VERSION),
         )
@@ -677,15 +754,20 @@ class AuthorizationLease:
 @dataclass(frozen=True)
 class DelegationConstraint:
     """A single constraint on a delegation."""
-    constraint_type: str = ""    # "budget" | "time" | "node" | "workspace" | "cost" | "token"
+
+    constraint_type: str = (
+        ""  # "budget" | "time" | "node" | "workspace" | "cost" | "token"
+    )
     operator: str = "lte"
     value: Any = None
     unit: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "constraint_type": self.constraint_type, "operator": self.operator,
-            "value": self.value, "unit": self.unit,
+            "constraint_type": self.constraint_type,
+            "operator": self.operator,
+            "value": self.value,
+            "unit": self.unit,
         }
 
     @classmethod
@@ -693,13 +775,15 @@ class DelegationConstraint:
         return cls(
             constraint_type=d.get("constraint_type", ""),
             operator=d.get("operator", "lte"),
-            value=d.get("value"), unit=d.get("unit", ""),
+            value=d.get("value"),
+            unit=d.get("unit", ""),
         )
 
 
 @dataclass(frozen=True)
 class DelegationGrant:
     """Immutable delegation from a principal to a delegate."""
+
     grant_id: str = field(default_factory=lambda: _new_id("dg"))
     issuer_id: str = ""
     subject_id: str = ""
@@ -718,31 +802,40 @@ class DelegationGrant:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "grant_id": self.grant_id, "issuer_id": self.issuer_id,
+            "grant_id": self.grant_id,
+            "issuer_id": self.issuer_id,
             "subject_id": self.subject_id,
             "scope": self.scope.to_dict() if self.scope else None,
             "permitted_capabilities": list(self.permitted_capabilities),
             "denied_capabilities": list(self.denied_capabilities),
             "constraints": [c.to_dict() for c in self.constraints],
-            "max_uses": self.max_uses, "used_count": self.used_count,
-            "issued_at": self.issued_at, "expires_at": self.expires_at,
+            "max_uses": self.max_uses,
+            "used_count": self.used_count,
+            "issued_at": self.issued_at,
+            "expires_at": self.expires_at,
             "allow_sub_delegation": self.allow_sub_delegation,
             "max_sub_delegation_depth": self.max_sub_delegation_depth,
-            "status": self.status, "schema_version": self.schema_version,
+            "status": self.status,
+            "schema_version": self.schema_version,
         }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "DelegationGrant":
         scope_dict = d.get("scope")
         return cls(
-            grant_id=d.get("grant_id", ""), issuer_id=d.get("issuer_id", ""),
+            grant_id=d.get("grant_id", ""),
+            issuer_id=d.get("issuer_id", ""),
             subject_id=d.get("subject_id", ""),
             scope=ApprovalScope.from_dict(scope_dict) if scope_dict else None,
             permitted_capabilities=tuple(d.get("permitted_capabilities") or ()),
             denied_capabilities=tuple(d.get("denied_capabilities") or ()),
-            constraints=tuple(DelegationConstraint.from_dict(c) for c in (d.get("constraints") or ())),
-            max_uses=int(d.get("max_uses", 1)), used_count=int(d.get("used_count", 0)),
-            issued_at=d.get("issued_at", ""), expires_at=d.get("expires_at", ""),
+            constraints=tuple(
+                DelegationConstraint.from_dict(c) for c in (d.get("constraints") or ())
+            ),
+            max_uses=int(d.get("max_uses", 1)),
+            used_count=int(d.get("used_count", 0)),
+            issued_at=d.get("issued_at", ""),
+            expires_at=d.get("expires_at", ""),
             allow_sub_delegation=bool(d.get("allow_sub_delegation", False)),
             max_sub_delegation_depth=int(d.get("max_sub_delegation_depth", 0)),
             status=d.get("status", "DRAFT"),
@@ -753,8 +846,9 @@ class DelegationGrant:
 @dataclass(frozen=True)
 class RevocationRecord:
     """Immutable record of a revocation."""
+
     revocation_id: str = field(default_factory=lambda: _new_id("rev"))
-    target_type: str = ""        # "lease" | "delegation" | "credential"
+    target_type: str = ""  # "lease" | "delegation" | "credential"
     target_id: str = ""
     revoked_by: str = ""
     reason: str = ""
@@ -764,19 +858,26 @@ class RevocationRecord:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "revocation_id": self.revocation_id, "target_type": self.target_type,
-            "target_id": self.target_id, "revoked_by": self.revoked_by,
-            "reason": self.reason, "revoked_at": self.revoked_at,
-            "cascaded_from": self.cascaded_from, "schema_version": self.schema_version,
+            "revocation_id": self.revocation_id,
+            "target_type": self.target_type,
+            "target_id": self.target_id,
+            "revoked_by": self.revoked_by,
+            "reason": self.reason,
+            "revoked_at": self.revoked_at,
+            "cascaded_from": self.cascaded_from,
+            "schema_version": self.schema_version,
         }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "RevocationRecord":
         return cls(
             revocation_id=d.get("revocation_id", ""),
-            target_type=d.get("target_type", ""), target_id=d.get("target_id", ""),
-            revoked_by=d.get("revoked_by", ""), reason=d.get("reason", ""),
-            revoked_at=d.get("revoked_at", ""), cascaded_from=d.get("cascaded_from", ""),
+            target_type=d.get("target_type", ""),
+            target_id=d.get("target_id", ""),
+            revoked_by=d.get("revoked_by", ""),
+            reason=d.get("reason", ""),
+            revoked_at=d.get("revoked_at", ""),
+            cascaded_from=d.get("cascaded_from", ""),
             schema_version=d.get("schema_version", SCHEMA_VERSION),
         )
 
@@ -784,6 +885,7 @@ class RevocationRecord:
 @dataclass(frozen=True)
 class EscalationRecord:
     """Immutable record of an escalation."""
+
     escalation_id: str = field(default_factory=lambda: _new_id("esc"))
     proposal_hash: str = ""
     reason_code: str = ""
@@ -796,10 +898,14 @@ class EscalationRecord:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "escalation_id": self.escalation_id, "proposal_hash": self.proposal_hash,
-            "reason_code": self.reason_code, "reason_message": self.reason_message,
-            "escalated_at": self.escalated_at, "resolved_by": self.resolved_by,
-            "resolution": self.resolution, "resolved_at": self.resolved_at,
+            "escalation_id": self.escalation_id,
+            "proposal_hash": self.proposal_hash,
+            "reason_code": self.reason_code,
+            "reason_message": self.reason_message,
+            "escalated_at": self.escalated_at,
+            "resolved_by": self.resolved_by,
+            "resolution": self.resolution,
+            "resolved_at": self.resolved_at,
             "schema_version": self.schema_version,
         }
 
@@ -810,8 +916,10 @@ class EscalationRecord:
             proposal_hash=d.get("proposal_hash", ""),
             reason_code=d.get("reason_code", ""),
             reason_message=d.get("reason_message", ""),
-            escalated_at=d.get("escalated_at", ""), resolved_by=d.get("resolved_by", ""),
-            resolution=d.get("resolution", ""), resolved_at=d.get("resolved_at", ""),
+            escalated_at=d.get("escalated_at", ""),
+            resolved_by=d.get("resolved_by", ""),
+            resolution=d.get("resolution", ""),
+            resolved_at=d.get("resolved_at", ""),
             schema_version=d.get("schema_version", SCHEMA_VERSION),
         )
 
@@ -819,6 +927,7 @@ class EscalationRecord:
 @dataclass(frozen=True)
 class RiskAssessment:
     """Record of a single risk evaluation."""
+
     assessment_id: str = field(default_factory=lambda: _new_id("ra"))
     proposal_hash: str = ""
     envelope: RiskEnvelope | None = None
@@ -828,9 +937,11 @@ class RiskAssessment:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "assessment_id": self.assessment_id, "proposal_hash": self.proposal_hash,
+            "assessment_id": self.assessment_id,
+            "proposal_hash": self.proposal_hash,
             "envelope": self.envelope.to_dict() if self.envelope else None,
-            "assessed_at": self.assessed_at, "assessed_by": self.assessed_by,
+            "assessed_at": self.assessed_at,
+            "assessed_by": self.assessed_by,
             "schema_version": self.schema_version,
         }
 
@@ -841,7 +952,8 @@ class RiskAssessment:
             assessment_id=d.get("assessment_id", ""),
             proposal_hash=d.get("proposal_hash", ""),
             envelope=RiskEnvelope.from_dict(env_dict) if env_dict else None,
-            assessed_at=d.get("assessed_at", ""), assessed_by=d.get("assessed_by", "risk_engine"),
+            assessed_at=d.get("assessed_at", ""),
+            assessed_by=d.get("assessed_by", "risk_engine"),
             schema_version=d.get("schema_version", SCHEMA_VERSION),
         )
 
@@ -849,6 +961,7 @@ class RiskAssessment:
 @dataclass(frozen=True)
 class AuthorizationEvidenceBundle:
     """Immutable audit evidence for an authorization decision."""
+
     bundle_id: str = field(default_factory=lambda: _new_id("aeb"))
     decision_id: str = ""
     proposal_hash: str = ""
@@ -859,18 +972,24 @@ class AuthorizationEvidenceBundle:
     schema_version: str = SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, Any]:
-        return _redact_secrets({
-            "bundle_id": self.bundle_id, "decision_id": self.decision_id,
-            "proposal_hash": self.proposal_hash, "event_type": self.event_type,
-            "evidence": self.evidence, "recorded_at": self.recorded_at,
-            "previous_audit_hash": self.previous_audit_hash,
-            "schema_version": self.schema_version,
-        })
+        return _redact_secrets(
+            {
+                "bundle_id": self.bundle_id,
+                "decision_id": self.decision_id,
+                "proposal_hash": self.proposal_hash,
+                "event_type": self.event_type,
+                "evidence": self.evidence,
+                "recorded_at": self.recorded_at,
+                "previous_audit_hash": self.previous_audit_hash,
+                "schema_version": self.schema_version,
+            }
+        )
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "AuthorizationEvidenceBundle":
         return cls(
-            bundle_id=d.get("bundle_id", ""), decision_id=d.get("decision_id", ""),
+            bundle_id=d.get("bundle_id", ""),
+            decision_id=d.get("decision_id", ""),
             proposal_hash=d.get("proposal_hash", ""),
             event_type=d.get("event_type", "authorization_decision"),
             evidence=d.get("evidence") or {},
@@ -881,6 +1000,7 @@ class AuthorizationEvidenceBundle:
 
 
 # Scope Helpers
+
 
 def _str_subset(a: str, b: str) -> bool:
     """a is subset of b if a is empty or equal to b."""

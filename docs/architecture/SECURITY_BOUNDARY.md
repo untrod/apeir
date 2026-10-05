@@ -115,4 +115,28 @@ simulated Reality Node path. It does not exercise a physical bootloader,
 credential broker, or Rust Kernel Effect Gate/StepCommit. Kernel remains pinned
 to `87fd1b2ff28ef14ab1a515a58162592b452fda2e`. M3.3-A PASS and M3.3-B PASS remain
 Distribution qualifications; M3.3-C Real Hardware Acceptance is PENDING.
-M3.4-B credential brokerage remains deferred.
+M3.4-B now extends this Distribution boundary with scoped credential brokerage;
+the historical M3.4-A acceptance above did not exercise it.
+
+## M3.4-B credential execution boundary
+
+The [Security Contract](SECURITY_CONTRACT.md#m34-b-credential-governance-audit)
+records the credential/security REUSE / EXTEND / MISSING audit. SecretHandle
+reuses Kernel SecretRef. The existing Gate and GovernanceStore authorize and
+audit one delivery to an admitted Node Work; providers receive a short-lived
+CredentialContext rather than storage access. Handle and delivery revocation
+are durable. Node journals prevent effect replay during recovery; fresh
+verification reads are independently authorized without mutation credentials.
+
+The protected vault requires a stable externally supplied master key. Tests use
+deterministic fake secrets and scan runtime/persisted outputs; no Cloud test uses
+a real device credential. Central redaction protects cooperative execution
+outputs, not malicious arbitrary code running as the host owner. Shared local
+governance, existing legacy provider credential configuration and Kernel/NKI
+compatibility boundaries remain explicit. Remote secret transport, identity
+attestation and physical hardware qualification are not claimed.
+
+Approval list/detail and Once/Deny backend operations reuse ApprovalBroker.
+Existing API bearer authentication identifies a service and cannot approve
+high-risk Operations as a human; a trusted remote human identity channel remains
+pending. The accepted approval boundary continues to be the local owner CLI.
