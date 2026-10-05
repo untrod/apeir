@@ -198,6 +198,7 @@ class RuntimeAPIHandler(BaseHTTPRequestHandler):
             )
             return
         try:
+            self.request.settimeout(5.0)
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-store")
@@ -236,7 +237,12 @@ class RuntimeAPIHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b": heartbeat\n\n")
                 self.wfile.flush()
                 time.sleep(0.5)
-        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+        except (
+            BrokenPipeError,
+            ConnectionAbortedError,
+            ConnectionResetError,
+            TimeoutError,
+        ):
             pass
         finally:
             self.close_connection = True

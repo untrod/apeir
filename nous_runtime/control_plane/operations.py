@@ -212,11 +212,22 @@ class OperationsPlane:
             for work in works
             if work["state"] in {"UNKNOWN", "FAILED"}
         ]
-        acknowledged = {
-            item["evidence"].get("incident_id")
-            for item in activity
-            if item["event_type"] == "control.incident.acknowledged"
-        }
+        acknowledged = set()
+        if incidents:
+            # Activity is a bounded view, not the acknowledgement authority.
+            # Query only current incident IDs from the existing durable trail.
+            identifiers = [item["incident_id"] for item in incidents]
+            placeholders = ",".join("?" for _ in identifiers)
+            with self.gate.store.operation_transaction() as db:
+                acknowledged = {
+                    row[0]
+                    for row in db.execute(
+                        "SELECT DISTINCT json_extract(evidence_json,'$.incident_id') "
+                        "FROM governance_audit WHERE event_type='control.incident.acknowledged' "
+                        f"AND json_extract(evidence_json,'$.incident_id') IN ({placeholders})",
+                        identifiers,
+                    )
+                }
         for incident in incidents:
             incident["acknowledged"] = incident["incident_id"] in acknowledged
         if self.health_loader is None:

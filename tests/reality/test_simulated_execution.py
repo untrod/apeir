@@ -1517,9 +1517,16 @@ def test_control_plane_remote_human_resumes_original_firmware_or_denies_without_
             )
 
     async def scenario():
-        async with simulation(tmp_path) as sim:
+        async with simulation(tmp_path, credentials=True) as sim:
             paused = await request_firmware(sim)
             original = sim.work().to_dict()
+            # The trusted host provisions a scoped handle; the Agent only
+            # references its identifier and cannot enroll or resolve material.
+            sim.credential_broker.register_handle(
+                sim.secret_handle,
+                original["execution_arguments"]["authorization_id"],
+                _build_context(),
+            )
             provider = TrustedFakeIdP()
             permissions = PermissionEngine(
                 (
@@ -1580,5 +1587,9 @@ def test_control_plane_remote_human_resumes_original_firmware_or_denies_without_
             assert snapshot["devices"][0]["device_id"] == sim.device.device_id
             assert snapshot["nodes"][0]["node_id"] == sim.node.identity.node_id
             assert issued.session_cookie not in json.dumps(snapshot)
+            assert FAKE_CREDENTIAL not in json.dumps(snapshot)
+            assert isinstance(snapshot["credential_leases"], list)
+            if answer == "approve_once":
+                assert len(snapshot["credential_leases"]) == 1
 
     asyncio.run(scenario())

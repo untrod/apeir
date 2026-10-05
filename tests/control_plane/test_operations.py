@@ -177,6 +177,9 @@ def test_human_cookie_http_only_and_authenticated_sse(plane):
             assert stream.readline().startswith(b"id: ")
             assert stream.readline() == b"event: control.state.changed\n"
             assert b"control.state.changed" in stream.readline()
+            auth.logout(auth.authenticate(token.split("=", 1)[1]))
+            # The active stream revalidates revocation and closes promptly.
+            assert len(stream.read()) < 4096
     finally:
         server.shutdown()
         server.server_close()
@@ -263,3 +266,45 @@ def test_credential_collection_exposes_only_scoped_lease_metadata():
     assert material not in str(
         redact_sensitive_data({"credential_leases": [{"work_id": material}]})
     )
+
+
+def test_incident_acknowledgement_survives_activity_window_and_restart(plane):
+    from nous_runtime.node_runtime.distributed_work import (
+        DistributedWork,
+        DistributedWorkStore,
+        DistributedWorkState,
+    )
+
+    view, auth, client = plane
+    request, _ = operation(view.gate)
+    DistributedWorkStore(view.controller_state).create(
+        DistributedWork(
+            intent="Reconcile uncertain simulated firmware effect",
+            work_id=request.work_id,
+            state=DistributedWorkState.UNKNOWN,
+            target_resource_id=request.resource_id,
+            execution_arguments={"authorization_id": request.authorization_id},
+        )
+    )
+    _, context = login(auth, client)
+    incident = view.snapshot()["incidents"][0]
+    view.action(
+        {
+            "kind": "incidents",
+            "action": "acknowledge",
+            "target_id": incident["incident_id"],
+        },
+        context,
+    )
+    with view.gate.store.operation_transaction() as db:
+        for index in range(501):
+            view.gate.store.append_operation_audit(
+                db, "test.unrelated.activity", {"sequence": index}
+            )
+    restarted = OperationsPlane(
+        view.root, gate=view.gate, health_loader=lambda: {"ok": True}
+    )
+    snapshot = restarted.snapshot()
+    assert len(snapshot["activity"]) == 500
+    assert snapshot["incidents"][0]["acknowledged"]
+    assert snapshot["works"][0]["state"] == "UNKNOWN"

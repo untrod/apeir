@@ -357,13 +357,13 @@ A valid grant cannot license replay of a possibly completed side effect.
 
 ### M3.5 validation record
 
-Local directly affected M3.1–M3.4 and Control Plane regressions: **555 passed,
-3 skipped**. Full repository regression: **3581 passed, 35 skipped, 9 failed**.
+Local directly affected M3.1–M3.4 and Control Plane regressions: **556 passed,
+3 skipped**. Full repository regression: **3582 passed, 35 skipped, 9 failed**.
 The same nine failures reproduce at the required starting Distribution
 `26256dd0cef1ca632625cf54a38e72157e676164`: **135 passed, 9 failed** in their four
 containing modules. They concern read-only default HOME, managed Python paths
 and container process cleanup. No unrelated failure is rewritten or hidden.
-New identity, control and simulated firmware acceptance coverage contains 43
+New identity, control and simulated firmware acceptance coverage contains 44
 new Python cases; the Desktop suite has **47 passed in 25 files**.
 
 Ruff, formatting of 15 changed/new Python files, compilation, Desktop lint,

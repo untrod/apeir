@@ -54,13 +54,15 @@ existing Workflow/AgentSession. It does not promise to stop an effect already in
 progress. Reconcile invokes existing receipt recovery and cannot execute a
 Provider. Reality effect commit still requires an independently obtained fresh
 Observation and MATCH. Acknowledging an incident is an audit fact, not resolution.
-UNKNOWN and failed Work cannot be resumed blindly from this surface.
+Acknowledgement is queried from the durable audit for current incident IDs,
+independently of the bounded recent Activity window. UNKNOWN and failed Work
+cannot be resumed blindly from this surface.
 
 Realtime transitions use the existing durable EventStream, not another event
 ledger. Facts are hashed to avoid unchanged-poll noise; event IDs deduplicate
 concurrent projection delivery. SSE reauthenticates every batch, supports
 Last-Event-ID backfill, and has 32 concurrent streams with bounded 25-second
-connections. Clients reconnect; expired/revoked sessions lose access.
+connections, with a five-second socket write timeout. Clients reconnect; expired/revoked sessions lose access.
 
 ## Trusted remote human boundary
 
