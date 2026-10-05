@@ -143,6 +143,10 @@ The cross-platform fault tests wait for actual Node connection termination
 before inspecting the durable receipt or incomplete journal. Relay timeouts
 allow filesystem persistence to finish; elapsed milliseconds alone do not
 establish that an injected effect or response loss occurred.
+If a cached Node connection closes during Artifact transfer or Work dispatch,
+the existing provider spool retains the request and durable assignment rather
+than terminating or rejecting an uncertain effect. Reconnect continues the
+same operation identity under the existing at-most-once Node journal.
 
 Previous non-MATCH verification and Observation Artifacts remain in the CAS
 provenance graph when a fresh acquisition produces a new verdict. Binding or
@@ -175,9 +179,9 @@ formatting, compile, link, hygiene and security checks. See the existing
 [recovery](../compute-mesh/EXECUTION_RECOVERY.md) documentation for the reused
 execution contracts.
 
-Local acceptance on Python 3.12: 401 directly affected regressions passed and
-3 skipped, including all 25 new simulation tests. The full CI-style Python
-suite produced 3454 passed, 35 skipped and 9 failed. All nine failures were
+Local acceptance on Python 3.12: 402 directly affected regressions passed and
+3 skipped, including all 26 new simulation tests. The full CI-style Python
+suite produced 3455 passed, 35 skipped and 9 failed. All nine failures were
 also reproduced at the required starting Distribution baseline
 `701d053e1bfc97d1e4f77dbd1f1a3fdc89ba3a4e` (135 passed, 9 failed in the
 baseline reproduction): read-only default home storage, the managed Python

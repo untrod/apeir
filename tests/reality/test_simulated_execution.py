@@ -273,6 +273,35 @@ def test_result_delay_and_duplicate_receipt_commit_once(tmp_path, fault):
     asyncio.run(scenario())
 
 
+def test_closed_artifact_connection_keeps_spool_alive_and_commits_once(
+    tmp_path, monkeypatch
+):
+    from websockets.exceptions import ConnectionClosedError
+
+    async def scenario():
+        async with simulation(tmp_path) as sim:
+            queue_artifact = sim.server.queue_artifact
+            failures = 0
+
+            async def disconnect_once(*args, **kwargs):
+                nonlocal failures
+                if failures == 0:
+                    failures += 1
+                    raise ConnectionClosedError(None, None)
+                return await queue_artifact(*args, **kwargs)
+
+            monkeypatch.setattr(sim.server, "queue_artifact", disconnect_once)
+            completed = await sim.execute()
+            assert completed.state is AgentSessionState.COMPLETED
+            assert sim.work().state is DistributedWorkState.COMMITTED
+            assert sim.provider.execution_count(WORK_ID) == 1
+            assert failures == 1
+            assert not sim.server._provider_spool_task.done()
+            assert not (sim.server.provider_requests / f"{WORK_ID}.json").exists()
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize(
     "fault", [SimulationFault.STALE_OBSERVATION, SimulationFault.DUPLICATE_OBSERVATION]
 )

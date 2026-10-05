@@ -1349,6 +1349,11 @@ class NodeRelayServer:
                 binding=value.get("binding"),
             )
             self._publish_provider_result(operation_id)
+        except ConnectionClosed:
+            # A response-loss fault can close the cached socket while the spool
+            # transfers an input. Keep the request and persisted assignment for
+            # reconnect; at-most-once delivery still returns the Node journal.
+            return
         except (KeyError, OSError, TypeError, ValueError, NodeProtocolError) as exc:
             operation_id = request_path.stem
             _atomic_json(
