@@ -318,8 +318,8 @@ These are retained, not rewritten as part of repository governance. Hosted CI
 exercises its own environment and must pass independently. Native hash verifier
 was actually invoked and raised FileNotFoundError for the locked Windows x64
 Kernel binary; its status is BLOCKED, not success. The lock contract's three
-tests passed. Kernel/component lock and all Runtime/SDK implementation files
-remain unchanged.
+tests passed. Kernel/component lock and Runtime implementation remain unchanged.
+The follow-up SDK export change described below is formatting only.
 
 Final local full regression: **3657 passed, 35 skipped, 10 failed, 4 warnings**
 (3702 collected). Nine are the confirmed baseline failures above. The additional
@@ -341,3 +341,26 @@ passed. Ruff, changed-Python formatting (3 files), compile, document hygiene,
 Component-lock contract: **3 passed**; native verifier: **BLOCKED** as recorded.
 The three existing documentation contract tests files changed paths/format only;
 they continue asserting canonical files and public-data boundaries.
+
+## PR validation correction
+
+Initial PR Security CI [37336060701](https://github.com/untrod/apeir/actions/runs/37336060701)
+failed its new history-wide changed-file format check: 76 files were formatted,
+but the accepted SDK `nous_provider/__init__.py` still had noncanonical spacing/line wrapping.
+This formatting finding is preserved rather than suppressed. Only that file’s formatting
+was normalized; before/after Python ASTs are identical. No SDK contract or
+Runtime behavior changed. Public SDK regressions validate the correction.
+
+Previously published `Python Tests (...)` and `Public repository hygiene` check
+names are preserved in their new owner workflows so migration does not orphan
+existing required contexts. `Core gate` and `Repository checks` aggregate actual
+job results for the recommended future ruleset; they cannot pass failed/skipped
+validation. The new failed run and any earlier runs cancelled by the corrective
+push remain visible in GitHub. The intermittent recovery test is tracked in
+[issue 4](https://github.com/untrod/apeir/issues/4), separately from confirmed baselines.
+
+After the formatting-only correction, SDK/Reality regressions passed **102 tests**
+with loopback-network permission. An initial SDK-only invocation without that
+permission had **13 passed, 1 failed** because its simulation could not bind
+127.0.0.1; its original log is retained separately from test/code failures.
+History-wide changed-source formatting now passes **77 Python files**.

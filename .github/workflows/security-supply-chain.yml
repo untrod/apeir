@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   repository-checks:
-    name: Repository checks
+    name: Public repository hygiene
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -58,3 +58,13 @@ jobs:
         run: |
           echo 'Native component hash verification: BLOCKED / NOT RUN in source-only CI. Locked binaries are not staged.' >> "$GITHUB_STEP_SUMMARY"
           echo 'A passing lock contract is not a binary integrity claim. Release preflight runs the actual verifier.' >> "$GITHUB_STEP_SUMMARY"
+  repository-gate:
+    name: Repository checks
+    if: always()
+    needs: [repository-checks]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all repository checks
+        env:
+          RESULT: ${{ needs.repository-checks.result }}
+        run: test "$RESULT" = success
