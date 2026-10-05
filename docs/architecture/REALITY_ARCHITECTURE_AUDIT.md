@@ -242,3 +242,73 @@ again. Missing terminal receipts remain `UNKNOWN` without replay despite a
 valid broader grant. These are software simulations, not credentialed physical
 firmware flashing or Rust Kernel StepCommit acceptance. Kernel remains unchanged;
 M3.3-C Real Hardware Acceptance remains PENDING.
+
+## M5 serial preparation audit
+
+REUSE: DeviceProvider/DeviceTransport, stable Device identity, durable Registry
+and lifecycle Events, Node admission, Governance, CredentialBroker, Artifact CAS,
+OperationReceipt, independent Observation, EffectVerifier and Recovery remain
+the authoritative paths. The legacy DeviceAdapter remains a compatibility
+surface; it is not used as a new governed execution path.
+
+EXTEND: `reality/serial.py` prepares SerialTransport and ESP32DeviceProvider,
+exported through the public Provider SDK. The optional `reality` dependency uses
+pyserial rather than introducing a second serial stack. Host configuration fixes
+the local port, Node, transport and public peer key. Discovery does not probe or
+grant trust. Signed identification derives Device identity from provider and chip
+identity, excluding the transport locator. Registry rediscovery preserves trust
+and persisted revocation.
+
+MISSING: physical Jetson/ESP32 enrollment, matching on-device firmware,
+power-loss-durable operation evidence, physical firmware mutation, hardware
+credential handling, the complete physical acceptance fault matrix, and a second
+materially different device family. No physical mutation capability is advertised.
+
+### Prepared wire contract
+
+The draft `apeir.esp32-state/v1` request is newline-terminated JSON containing
+exactly `schema`, `kind` (`identify` or `observe`), a fresh `nonce`, and
+`stable_identity` (empty only for identification). The reply contains exactly
+those fields plus `state_revision` (nonnegative integer), `last_operation_id`
+(empty or an identifier), `state` (object), and `signature` (hex Ed25519). The
+signature covers the reply without `signature`, encoded as UTF-8 JSON with
+sorted keys, compact separators and no nonfinite numbers. A signature proves
+possession of the pinned peer key; it grants neither trust nor execution authority.
+
+Frames are bounded to 65536 bytes, one response per request, with a host timeout
+of at most ten seconds and no automatic retry. Missing, truncated, duplicate-key,
+oversized, stale-challenge, wrong-resource, unsafe or invalid-signature replies
+produce failed Observations. Read correlation IDs do not replace fresh wire
+challenges. Device, Node and transport bindings are checked before opening the
+port. Firmware mutation commands are rejected before I/O.
+
+### Acceptance boundary
+
+Cloud tests use generated fake signing keys and an in-memory serial fixture.
+Passing these tests validates the host contract only. All prepared Devices carry
+`hardware_acceptance: PENDING`; M3.3-C and M5 physical acceptance remain PENDING.
+Before adding a mutating transport, the existing distributed execution path must
+retain uncertain execution evidence and reconcile fresh, independently admitted
+state after response loss. A missing receipt must never become permission to
+replay an effect. Hardware acceptance must exercise WAN loss, Controller/Jetson
+restart, reconnect and locator change, response loss after effect, stale and
+tampered observations, and revocation, then repeat with a different device family.
+
+The M5 host-contract preparation run has 27 focused tests and 737 directly
+affected regressions passing, including the real OCI reference probe. Full
+regression has 3653 passed, 35 skipped and the same nine managed-Cloud baseline
+failures recorded at M3.5; none was hidden or rewritten. An initial affected
+run concurrent with full regression had 736 passed and one existing missing-
+receipt recovery test failure: it observed RUNNING rather than UNKNOWN at its
+wait deadline, while effect count remained one. The full run and subsequent
+sequential affected run both passed that case; the failed run is retained, not
+classified as a confirmed baseline defect. No production recovery logic or
+existing assertion was changed to accommodate it.
+
+Ruff, changed-file formatting, compilation, documentation and 245 local link
+checks, hygiene, security (zero findings), release-version consistency and the
+three component-lock contract tests pass. Installed-wheel public SDK imports
+also pass outside the repository under isolated optimized Python. Native
+component verification retains the existing missing locked Windows binary
+failure. Kernel and its lock remain unchanged. These results qualify software
+contract preparation only; physical acceptance remains PENDING.

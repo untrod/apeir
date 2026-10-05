@@ -50,6 +50,7 @@ Repository = "https://github.com/untrod/apeir.git"
 Issues = "https://github.com/untrod/apeir/issues"
 Changelog = "https://github.com/untrod/apeir/blob/main/CHANGELOG.md"
 [project.optional-dependencies]
+reality = ["pyserial>=3.5,<4"]
 # Heavy AI (Tier 1 only: amd64, arm64)
 ai-full = [
     "chromadb>=0.4",

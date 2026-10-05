@@ -53,6 +53,11 @@ from nous_runtime.reality.provider import (
     DeviceTransport,
 )
 from nous_runtime.reality.verification import EffectVerifier
+from nous_runtime.reality.serial import (
+    ESP32DeviceProvider,
+    SerialContractError,
+    SerialTransport,
+)
 from nous_runtime.schema_registry import OBSERVATION_SCHEMA_VERSION
 from nous_runtime.sdk.client import NousClient
 
@@ -78,6 +83,9 @@ __all__ = [
     "EffectVerdict",
     "EffectVerification",
     "EffectVerifier",
+    "ESP32DeviceProvider",
+    "SerialContractError",
+    "SerialTransport",
     "Idempotency",
     "ManagedDevice",
     "NodeIdentity",

@@ -5,6 +5,11 @@ All notable changes to APEIR Distribution are recorded here. The project follows
 
 ## Unreleased
 
+- M5 read-only SerialTransport/ESP32 DeviceProvider preparation through existing
+  Reality contracts and the public SDK: bounded signed state acquisition,
+  fresh challenges, explicit host bindings and no retry or mutation surface.
+  Physical firmware, fault-injection and second-family acceptance remain pending.
+
 - M4 public replaceable provider roles, restrictive external policy inside the
   existing Governance Gate, and an admitted external-agent Workflow/Node bridge
   over existing CAS, process supervision, isolated Environment Providers and
