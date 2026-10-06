@@ -6,21 +6,57 @@ End-to-end: Control Plane → pairing → node connection → heartbeat →
 system.echo task → delivery → execution → result → audit visibility.
 """
 
+import asyncio
+import threading
 import time
+from contextlib import ExitStack
 
 import pytest
+
+
+@pytest.fixture
+def node_cleanup():
+    with ExitStack() as cleanup:
+        yield cleanup
+
+
+def _welcome_ready(node, control_plane, prior_session_id="", prior_writer=None):
+    session_id = node.session_id
+    session = control_plane.session_registry.get(session_id)
+    return bool(
+        node.is_connected()
+        and session_id
+        and session_id != prior_session_id
+        and session is not None
+        and session.node_id == node.node_id
+        and session.status == "active"
+        and control_plane._node_writers.get(node.node_id) is not None
+        and control_plane._node_writers.get(node.node_id) is not prior_writer
+    )
+
+
+def _wait_for_welcome(node, control_plane, prior_session_id="", prior_writer=None):
+    # NodeDaemon already gives its WELCOME receive a ten-second protocol budget.
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        if _welcome_ready(node, control_plane, prior_session_id, prior_writer):
+            return
+        time.sleep(0.01)
+    raise AssertionError("No current WELCOME session established")
 
 
 class TestVerticalSlice:
     """Full connectivity vertical slice."""
 
-    def test_full_flow(self, control_plane):
+    def test_full_flow(self, control_plane, node_cleanup):
         """Complete 9-step vertical slice."""
         from nous_runtime.connectivity.node.daemon import NodeDaemon
         from nous_runtime.connectivity.protocol.identity import NodeIdentity
         from nous_runtime.connectivity.protocol.task import TaskState
         from nous_runtime.connectivity.control_plane.node_registry import NodeRegistry
-        from nous_runtime.connectivity.control_plane.task_coordinator import TaskCoordinator
+        from nous_runtime.connectivity.control_plane.task_coordinator import (
+            TaskCoordinator,
+        )
         import platform
         import secrets
 
@@ -54,6 +90,7 @@ class TestVerticalSlice:
             control_plane_port=cp.port,
             node_name="test-node",
         )
+        node_cleanup.callback(node.stop)
 
         # Step 4: Pair Node
         assert node.pair(code, identity), "Pairing failed"
@@ -66,9 +103,9 @@ class TestVerticalSlice:
         assert "system.echo" in registered["capabilities"]
         print("  Node registered ✓")
 
-        # Step 5: Establish authenticated session
+        # Step 5: Receive the paired legacy protocol's WELCOME session.
         node.start()
-        time.sleep(0.8)
+        _wait_for_welcome(node, cp)
         assert node.is_connected(), "Node failed to connect"
         assert node.session_id, "No session established"
         print(f"  Session: {node.session_id}")
@@ -96,8 +133,10 @@ class TestVerticalSlice:
         assert task_after is not None, f"Task {task_id} not found after execution"
         print(f"  Task state: {task_after['state']}")
         assert task_after["state"] in [
-            TaskState.COMPLETED.value, TaskState.RUNNING.value,
-            TaskState.ACCEPTED.value, TaskState.DELIVERED.value,
+            TaskState.COMPLETED.value,
+            TaskState.RUNNING.value,
+            TaskState.ACCEPTED.value,
+            TaskState.DELIVERED.value,
         ], f"Task stuck in {task_after['state']}"
 
         # Step 13: Verify result (if completed)
@@ -116,6 +155,8 @@ class TestVerticalSlice:
         print(f"  Tasks in system: {len(tasks)}")
 
         # Step 15: Disconnect Node
+        prior_session_id = node.session_id
+        prior_writer = cp._node_writers[identity.node_id]
         node.stop()
         time.sleep(0.3)
         assert not node.is_connected()
@@ -123,7 +164,7 @@ class TestVerticalSlice:
 
         # Step 16: Reconnect Node
         node.start()
-        time.sleep(1.5)  # Allow time for reconnect with backoff
+        _wait_for_welcome(node, cp, prior_session_id, prior_writer)
         assert node.is_connected(), "Node failed to reconnect"
         print("  Node reconnected ✓")
 
@@ -138,6 +179,98 @@ class TestVerticalSlice:
         print(f"  Final status: {status2}")
 
         node.stop()
+
+    @pytest.mark.parametrize("reconnect", [False, True])
+    def test_tcp_and_cached_session_do_not_complete_welcome(
+        self, control_plane, node_cleanup, monkeypatch, reconnect
+    ):
+        import platform
+        import secrets
+
+        from nous_runtime.connectivity.node.daemon import NodeDaemon
+        from nous_runtime.connectivity.protocol.identity import NodeIdentity
+        from nous_runtime.connectivity.protocol.task import TaskState
+
+        identity = NodeIdentity.create(
+            node_name="held-welcome",
+            node_role="personal_node",
+            platform_os=platform.system(),
+            platform_os_version=platform.release(),
+            platform_arch=platform.machine(),
+            platform_hostname=platform.node(),
+            public_key=secrets.token_hex(32),
+            capabilities=["system.echo"],
+        )
+        node = NodeDaemon(
+            control_plane_host=control_plane.host,
+            control_plane_port=control_plane.port,
+        )
+        node_cleanup.callback(node.stop)
+        assert node.pair(control_plane.pairing.create_code(), identity)
+        prior_session_id = ""
+        prior_writer = None
+        if reconnect:
+            node.start()
+            _wait_for_welcome(node, control_plane)
+            prior_session_id = node.session_id
+            prior_writer = control_plane._node_writers[identity.node_id]
+            node.stop()
+
+        held, release = threading.Event(), threading.Event()
+        send = control_plane._send_message
+
+        async def hold_welcome(writer, message):
+            if message.get("message_type") == "WELCOME":
+                held.set()
+                while not release.is_set():
+                    await asyncio.sleep(0.01)
+            await send(writer, message)
+
+        monkeypatch.setattr(control_plane, "_send_message", hold_welcome)
+        executions = []
+
+        async def echo(parameters):
+            executions.append(parameters)
+            return {"echo": parameters["message"]}
+
+        node.register_capability("system.echo", echo)
+        node.start()
+        try:
+            assert held.wait(10), "Native WELCOME was not produced"
+            assert node.is_connected()
+            assert node.session_id == prior_session_id
+            assert not _welcome_ready(node, control_plane, prior_session_id)
+            session = control_plane.session_registry.get_by_node(identity.node_id)
+            assert session is not None and session.status == "active"
+            assert session.session_id != prior_session_id
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                writer = control_plane._node_writers.get(identity.node_id)
+                if writer is not None and writer is not prior_writer:
+                    break
+                time.sleep(0.01)
+            assert writer is not None and writer is not prior_writer
+            task = control_plane.submit_task(
+                "system.echo",
+                {"message": "held-welcome"},
+                target_node=identity.node_id,
+            )
+            assert task is not None
+            assert executions == []
+            release.set()
+            _wait_for_welcome(node, control_plane, prior_session_id, prior_writer)
+            assert node.session_id == session.session_id
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                completed = control_plane.task_coordinator.get(task["task_id"])
+                if completed["state"] == TaskState.COMPLETED.value:
+                    break
+                time.sleep(0.01)
+            assert completed["state"] == TaskState.COMPLETED.value
+            assert completed["result"]["echo"] == "held-welcome"
+            assert executions == [{"message": "held-welcome"}]
+        finally:
+            release.set()
 
     def test_pairing_code_expiration(self, control_plane):
         """Pairing code expires and is rejected."""
@@ -183,20 +316,32 @@ class TestVerticalSlice:
         code = control_plane.pairing.create_code()
         pk = secrets.token_hex(32)
         identity = NodeIdentity.create(
-            node_name="dup-node", node_role="personal_node",
-            platform_os=platform.system(), platform_os_version=platform.release(),
-            platform_arch=platform.machine(), platform_hostname=platform.node(),
-            public_key=pk, capabilities=["system.echo"],
+            node_name="dup-node",
+            node_role="personal_node",
+            platform_os=platform.system(),
+            platform_os_version=platform.release(),
+            platform_arch=platform.machine(),
+            platform_hostname=platform.node(),
+            public_key=pk,
+            capabilities=["system.echo"],
         )
 
-        node1 = NodeDaemon(control_plane_host=control_plane.host, control_plane_port=control_plane.port, node_name="dup-node")
+        node1 = NodeDaemon(
+            control_plane_host=control_plane.host,
+            control_plane_port=control_plane.port,
+            node_name="dup-node",
+        )
         assert node1.pair(code, identity)
         node1.start()
         time.sleep(0.5)
         assert node1.is_connected()
 
         # Second node with same identity — connects and server terminates old session
-        node2 = NodeDaemon(control_plane_host=control_plane.host, control_plane_port=control_plane.port, node_name="dup-node")
+        node2 = NodeDaemon(
+            control_plane_host=control_plane.host,
+            control_plane_port=control_plane.port,
+            node_name="dup-node",
+        )
         node2.node_id = identity.node_id
         node2.start()
         time.sleep(0.5)
@@ -207,14 +352,18 @@ class TestVerticalSlice:
         active = [s for s in sessions if s.get("status") == "active"]
         # At most one active session per node
         node_sessions = [s for s in active if s.get("node_id") == identity.node_id]
-        assert len(node_sessions) <= 1, f"Expected ≤1 active session, got {len(node_sessions)}"
+        assert len(node_sessions) <= 1, (
+            f"Expected ≤1 active session, got {len(node_sessions)}"
+        )
 
         node1.stop()
         node2.stop()
 
     def test_task_cancellation(self, control_plane):
         """Task cancellation works."""
-        from nous_runtime.connectivity.control_plane.task_coordinator import TaskCoordinator
+        from nous_runtime.connectivity.control_plane.task_coordinator import (
+            TaskCoordinator,
+        )
         from nous_runtime.connectivity.protocol.task import TaskState, TaskSubmission
 
         tc = TaskCoordinator()
@@ -232,7 +381,9 @@ class TestVerticalSlice:
 
     def test_idempotency(self, control_plane):
         """Duplicate task with same idempotency key is not duplicated."""
-        from nous_runtime.connectivity.control_plane.task_coordinator import TaskCoordinator
+        from nous_runtime.connectivity.control_plane.task_coordinator import (
+            TaskCoordinator,
+        )
         from nous_runtime.connectivity.protocol.task import TaskSubmission
 
         tc = TaskCoordinator()
@@ -263,12 +414,20 @@ class TestVerticalSlice:
         # Register a node manually
         pk = secrets.token_hex(32)
         identity = NodeIdentity.create(
-            node_name="revoked-node", node_role="personal_node",
-            platform_os=platform.system(), platform_os_version=platform.release(),
-            platform_arch=platform.machine(), platform_hostname=platform.node(),
-            public_key=pk, capabilities=["system.echo"],
+            node_name="revoked-node",
+            node_role="personal_node",
+            platform_os=platform.system(),
+            platform_os_version=platform.release(),
+            platform_arch=platform.machine(),
+            platform_hostname=platform.node(),
+            public_key=pk,
+            capabilities=["system.echo"],
         )
-        nr.register(identity, credential_id="cred_test", credential_expires_at="2099-01-01T00:00:00Z")
+        nr.register(
+            identity,
+            credential_id="cred_test",
+            credential_expires_at="2099-01-01T00:00:00Z",
+        )
 
         # Revoke it
         assert nr.revoke(identity.node_id)
@@ -277,6 +436,7 @@ class TestVerticalSlice:
     def test_unknown_capability_rejected(self, control_plane):
         """Task with capability not in node manifest is flagged."""
         from nous_runtime.connectivity.control_plane.node_registry import NodeRegistry
+
         # Register a node without system.echo
         import platform
         import secrets
@@ -285,12 +445,20 @@ class TestVerticalSlice:
         nr = NodeRegistry()
         pk = secrets.token_hex(32)
         identity = NodeIdentity.create(
-            node_name="limited-node", node_role="personal_node",
-            platform_os=platform.system(), platform_os_version=platform.release(),
-            platform_arch=platform.machine(), platform_hostname=platform.node(),
-            public_key=pk, capabilities=[],  # No capabilities
+            node_name="limited-node",
+            node_role="personal_node",
+            platform_os=platform.system(),
+            platform_os_version=platform.release(),
+            platform_arch=platform.machine(),
+            platform_hostname=platform.node(),
+            public_key=pk,
+            capabilities=[],  # No capabilities
         )
-        nr.register(identity, credential_id="cred_test2", credential_expires_at="2099-01-01T00:00:00Z")
+        nr.register(
+            identity,
+            credential_id="cred_test2",
+            credential_expires_at="2099-01-01T00:00:00Z",
+        )
 
         # Node does NOT have system.echo
         assert not nr.has_capability(identity.node_id, "system.echo")
@@ -303,19 +471,24 @@ class TestSecurity:
     def test_invalid_signature(self, control_plane):
         """Message with invalid signature is detectable."""
         from nous_runtime.connectivity.protocol.envelope import ProtocolEnvelope
+
         env = ProtocolEnvelope(message_type="HEARTBEAT", source_id="n1", target_id="cp")
         env.sign("correct_key")
         assert not env.verify("wrong_key")
 
     def test_oversized_message(self):
         """Oversized payload is rejected."""
-        from nous_runtime.connectivity.protocol.serialization import validate_bounded_payload
+        from nous_runtime.connectivity.protocol.serialization import (
+            validate_bounded_payload,
+        )
+
         with pytest.raises(ValueError):
             validate_bounded_payload("x" * 2_000_000, max_bytes=1_000_000)
 
     def test_malformed_envelope(self):
         """Malformed envelope fails validation."""
         from nous_runtime.connectivity.protocol.envelope import ProtocolEnvelope
+
         env = ProtocolEnvelope()
         valid, err = env.is_valid()
         assert not valid
@@ -323,8 +496,11 @@ class TestSecurity:
     def test_expired_message(self):
         """Expired message is detected."""
         from nous_runtime.connectivity.protocol.envelope import ProtocolEnvelope
+
         env = ProtocolEnvelope(
-            message_type="HEARTBEAT", source_id="a", target_id="b",
+            message_type="HEARTBEAT",
+            source_id="a",
+            target_id="b",
             expires_at="2020-01-01T00:00:00Z",
         )
         assert env.is_expired()
@@ -332,6 +508,7 @@ class TestSecurity:
     def test_credential_redaction(self):
         """Credentials never appear in redacted output."""
         from nous_runtime.connectivity.protocol.pairing import PairingRequest
+
         req = PairingRequest(pairing_code="SECRET12", node_identity={"node_id": "n1"})
         redacted = req.to_redacted_dict()
         assert redacted["pairing_code"] == "<REDACTED>"
@@ -339,8 +516,11 @@ class TestSecurity:
     def test_version_mismatch(self):
         """Unsupported protocol version is rejected."""
         from nous_runtime.connectivity.protocol.envelope import ProtocolEnvelope
+
         env = ProtocolEnvelope(
-            message_type="HELLO", source_id="a", target_id="b",
+            message_type="HELLO",
+            source_id="a",
+            target_id="b",
             schema_version="99.0",
         )
         valid, err = env.is_valid()

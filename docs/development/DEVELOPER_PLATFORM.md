@@ -233,6 +233,34 @@ assertion or Runtime behavior was weakened. Actual native component hashes remai
 Windows sidecar. Kernel and the component lock are unchanged. Source/PR and
 resulting-main CI must pass before checkpoint publication and issue #9 closure.
 
+An additional Windows timing failure occurred on source `5ae10f4` Core CI:
+**1 failed, 3802 passed, 40 skipped, 4 warnings**. The legacy connectivity
+vertical slice slept 0.8 seconds after start and mistook TCP readiness for a
+received WELCOME/session. A controlled 1.1-second WELCOME delay reproduced the
+same assertion on unchanged Runtime (**1 failed, 2 warnings**). The test now
+awaits the current native session and actual send queue within the existing
+10-second receive budget, rejects prior session/queue state after reconnect,
+and always cleans up its Node. Hold/release cases retain zero echo invocations
+before WELCOME and require exactly one completed echo after delivery. Focused
+connectivity module: **16 passed**. Final controlled stress: **60 passed over
+20 rounds**; affected connectivity/Node/control-plane/Reality/governance
+regressions: **595 passed**. After the synchronization tests, full managed host
+regression recorded **3808 passed, 36 skipped, 2 unchanged bare-PID-1 failures,
+4 warnings**; full initialized-container regression recorded **3799 passed,
+47 skipped, 4 warnings**, exit zero. These supersede the earlier run counts
+for current qualification without erasing those historical results. Final whole
+Ruff lint, all six changed Python files' formatting, compile and standard
+docs/link/hygiene/identity/Git/version/security checks pass; the final security
+scan records zero findings in 1893 files. This is test synchronization, not a new
+authentication or execution contract.
+
+The first hold/release probes (**2 failed, 14 passed**) also exposed legacy
+Gateway assignment before send-queue readiness. Waiting for actual queue
+readiness preserves the handshake test's scope; the early-submission Runtime
+gap is not claimed repaired. Its evidence and broader latency qualification
+remain OPEN in [issue #4](https://github.com/untrod/apeir/issues/4#issuecomment-6012448219).
+The original nine Cloud failures and these additional failures are separate.
+
 ### M3.6 validation record
 
 Local focused SDK/CTK: **79 passed** (14 new milestone cases). Affected M3.1–M3.5,

@@ -159,7 +159,7 @@ Gate: zero unexplained failures in documented supported environments, with
 unsupported conditions stated explicitly. Existing baseline failures remain
 visible until resolved, not permanently accepted or skipped away.
 Local qualification now passes the complete initialized-container regression
-with **3796 passed, 47 skipped, 4 warnings**; the managed host records **3805
+with **3799 passed, 47 skipped, 4 warnings**; the managed host records **3808
 passed, 36 skipped, 2 failed, 4 warnings**. Seven original failures are repaired;
 the two orphan assertions require a supported init/reaper, which is independently
 verified without Kernel or assertion changes. See the
@@ -181,6 +181,11 @@ canonical Controller reconciliation; [evidence](https://github.com/untrod/apeir/
 remains open for latency qualification. Reruns passing cannot establish absence
 of other races. Preserve original
 persisted evidence and no-blind-replay behavior.
+Further Windows/controlled legacy-connectivity evidence distinguishes TCP,
+WELCOME, cached reconnect session and actual send-queue readiness. Test
+synchronization does not repair the legacy early-assignment gap; it remains
+[actionable OPEN evidence](https://github.com/untrod/apeir/issues/4#issuecomment-6012448219)
+outside the nine original environment failures.
 
 The separate [Windows relay shutdown timeout #8](https://github.com/untrod/apeir/issues/8)
 remains OPEN. [Environment cleanup #9](https://github.com/untrod/apeir/issues/9)
