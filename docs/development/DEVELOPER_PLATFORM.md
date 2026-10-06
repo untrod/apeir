@@ -168,6 +168,99 @@ Node → Device execution, then consumes the resulting evidence through public S
 imports. Wrong-operation receipts and missing observations fail conformance
 without executing the effect again.
 
+### Supported development environment
+
+The environment cleanup audit reuses the existing workspace configuration,
+daemon constructor, pytest fixtures and Kernel process identity semantics.
+The MCP adapter extends only trusted base-interpreter selection: CPython's
+actual base executable replaces the invalid `base_prefix/executable-name`
+layout assumption. Missing, relative or non-executable base paths fail closed;
+there is no PATH fallback. Existing strong isolation, `-I`/`-S`, explicit
+read-only package bootstrap and local permit boundaries remain intact.
+Behavioral tests launch that interpreter and reject cwd/PYTHONPATH shadowing.
+
+Persistence tests use independent temporary workspaces rather than shared HOME.
+Production defaults are unchanged. A supported local environment also needs a
+writable checkout, named user and resolvable hostname for existing state and
+identity/resource probes. A read-only checkout is not the full development
+environment: existing core bootstrap and compatibility tests write local state.
+For an offline container, supply a test user and local hostname mapping; these
+environment facts do not enroll a trusted identity or grant authority.
+
+Process lifecycle acceptance requires an init/reaper. On unchanged Runtime,
+the same two orphan-process assertions passed **2/2** with Docker `--init` and
+failed **2/2** without it. A dead orphan's retained creation identity is not
+permission to weaken the assertion or modify Kernel. Use an initialized Linux
+environment, for example `docker run --init --hostname apeir-test
+--add-host apeir-test:127.0.0.1 ...`, with a provisioned user, installed test
+dependencies and writable temporary storage. The ellipsis denotes normal image,
+mount and pytest arguments, not a separate validation framework.
+
+Local qualification on 2026-10-06: focused MCP/desktop/daemon cases **137 passed**;
+coordination, Work, Workflow, Reality, governance and extension regressions
+**679 passed, 17 skipped**; Node/control-plane/Artifact **228 passed**;
+repository checks **244 passed**, component-lock contracts **3 passed**.
+Full managed host regression (real OPA/OpenBao references enabled) recorded
+**3805 passed, 36 skipped, 2 failed, 4 warnings**. The two unchanged orphan
+identity assertions still fail under its bare PID 1; the original seven other
+failures no longer occur. No tests were skipped or weakened to hide them.
+
+Full initialized-container regression recorded **3796 passed, 47 skipped,
+4 warnings**, exit zero. It used pinned Python 3.12 image
+`python@sha256:ddb0207ae1f0356c2b724d740769b0c5f5f51cc54a0525178f721825f78fe74c`,
+UID 1000, fake local USER/LOGNAME, `apeir-test` hostname mapped to loopback,
+`--init`, no external network, dropped capabilities, no new privileges,
+read-only rootfs, writable checkout and temporary storage. Existing installed
+test dependencies and Git were mounted; no secret or Docker socket was supplied.
+The eleven real OPA/OpenBao service cases explicitly skip there, while the host
+run exercises them. These separate run counts must not be summed.
+
+An initial container with no named user/hostname was interrupted after **97
+failed, 1457 passed, 31 skipped, 32 errors, 1 warning**. After supplying those
+facts, a read-only checkout probe completed with **40 failed, 3756 passed,
+47 skipped, 4 warnings**, including read-only SQLite/state writes and resulting
+missing registration facts. Both unsuccessful configurations remain evidence;
+they are not hidden baseline regressions or qualified environments.
+
+Ruff lint, compile, 232-document links, hygiene, identity, Git metadata, version
+and security checks passed; security found zero findings in 1891 files. Source
+`55fc890` Security CI failed its existing changed-file format gate: full-file
+checks flagged `tests/conftest.py` and `tests/test_production_suite.py`, also
+reproduced on their untouched starting versions. The required formatter was then
+applied to those two already changed test files; ASTs before/after are identical.
+All five changed Python files now pass full-file formatting; no CI requirement,
+assertion or Runtime behavior was weakened. Actual native component hashes remain BLOCKED by the missing locked
+Windows sidecar. Kernel and the component lock are unchanged. Source/PR and
+resulting-main CI must pass before checkpoint publication and issue #9 closure.
+
+An additional Windows timing failure occurred on source `5ae10f4` Core CI:
+**1 failed, 3802 passed, 40 skipped, 4 warnings**. The legacy connectivity
+vertical slice slept 0.8 seconds after start and mistook TCP readiness for a
+received WELCOME/session. A controlled 1.1-second WELCOME delay reproduced the
+same assertion on unchanged Runtime (**1 failed, 2 warnings**). The test now
+awaits the current native session and actual send queue within the existing
+10-second receive budget, rejects prior session/queue state after reconnect,
+and always cleans up its Node. Hold/release cases retain zero echo invocations
+before WELCOME and require exactly one completed echo after delivery. Focused
+connectivity module: **16 passed**. Final controlled stress: **60 passed over
+20 rounds**; affected connectivity/Node/control-plane/Reality/governance
+regressions: **595 passed**. After the synchronization tests, full managed host
+regression recorded **3808 passed, 36 skipped, 2 unchanged bare-PID-1 failures,
+4 warnings**; full initialized-container regression recorded **3799 passed,
+47 skipped, 4 warnings**, exit zero. These supersede the earlier run counts
+for current qualification without erasing those historical results. Final whole
+Ruff lint, all six changed Python files' formatting, compile and standard
+docs/link/hygiene/identity/Git/version/security checks pass; the final security
+scan records zero findings in 1893 files. This is test synchronization, not a new
+authentication or execution contract.
+
+The first hold/release probes (**2 failed, 14 passed**) also exposed legacy
+Gateway assignment before send-queue readiness. Waiting for actual queue
+readiness preserves the handshake test's scope; the early-submission Runtime
+gap is not claimed repaired. Its evidence and broader latency qualification
+remain OPEN in [issue #4](https://github.com/untrod/apeir/issues/4#issuecomment-6012448219).
+The original nine Cloud failures and these additional failures are separate.
+
 ### M3.6 validation record
 
 Local focused SDK/CTK: **79 passed** (14 new milestone cases). Affected M3.1–M3.5,

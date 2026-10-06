@@ -323,8 +323,8 @@ has **3801 passed, 36 skipped, 4 warnings**; Ubuntu 3.10 and macOS each have
 4 warnings**. PR Ubuntu 3.12 has **3802 passed, 36 skipped, 4 warnings**.
 These are distinct platform runs, not summed counts. Desktop frontend tests,
 lint, typecheck and build passed; native builds remain intentionally unqualified.
-Final documentation-head and resulting-main CI must pass before the immutable
-software checkpoint is created. This is scoped reference acceptance, not full M4.
+Final documentation-head and repaired-main CI passed before the immutable
+software checkpoint was created. This is scoped reference acceptance, not full M4.
 
 Initial resulting-main validation on `630434c4f49b71ed0aba5b7f8ee55ed59c8c85d2`
 had all Core/Desktop/Security workflows pass, but Multi-Arch Windows Python 3.11
@@ -346,8 +346,16 @@ controlled rounds**, **784 affected passed**,
 **3797 passed, 35 skipped, 9 unchanged baseline failures, 4 warnings**.
 Ruff/changed-file format/compile and standard docs/link/hygiene/version/security
 checks pass with zero security findings. Broader Windows latency/root-cause
-qualification remains OPEN, not resolved by passing reruns. Final repaired-main
-CI is required before the software checkpoint.
+qualification remains OPEN, not resolved by passing reruns. Repaired main
+`c3eeeaca434118565f09300e96e1e9663b749c6e` passed Core, Desktop, Multi-Arch and
+Security/Supply-Chain CI, including SBOM collection. Core Ubuntu 3.12 recorded
+**3804 passed, 36 skipped, 4 warnings**; Windows 3.12 recorded **3800 passed,
+40 skipped, 4 warnings**. Multi-Arch Linux amd64/ARM64 each recorded platform
+**13 passed**, then **3502 passed, 48 skipped, 272 deselected, 4 warnings**;
+Windows amd64 recorded **3510 passed, 40 skipped, 272 deselected, 4 warnings**.
+The exact accepted main is frozen by `milestone/m4.4-openbao-kv2-reference` and
+`milestone/m3.2-terminal-projection-contract`. Windows ARM64 remains metadata
+validation, and native binary hashes remain BLOCKED; neither is physical acceptance.
 
 The real OCI reference probe is reproducible with an already installed image:
 

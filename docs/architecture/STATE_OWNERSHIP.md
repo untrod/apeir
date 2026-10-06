@@ -77,6 +77,14 @@ project it; do not manufacture a terminal state or resubmit an Operation merely
 because a wait deadline elapsed. Tests of denial must retain FAILED, zero-effect,
 unchanged-resource and audit assertions after that real projection.
 
+The legacy connectivity adapter's TCP `is_connected()` flag is distinct from
+processing WELCOME and from readiness of the current send queue. A cached session
+ID after reconnect is not a new handshake. Await the actual current session and
+queue before a transport integration test proceeds, within the existing protocol
+budget; fixed sleeps cannot establish these facts. A legacy WELCOME is not remote
+human identity qualification or permission for a governed Operation. Canonical
+Distributed Work still uses its signed Node admission and Governance boundaries.
+
 | Evidence condition | Required response |
 | --- | --- |
 | Missing/expired/revoked authority or credentials | Deny current execution; do not reuse after reconnect |

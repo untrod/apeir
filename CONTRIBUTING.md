@@ -51,6 +51,14 @@ git diff --check
 Run directly affected contracts, integration, recovery and negative-security
 regressions before full tests. For the optional real OCI reference follow
 [Provider conformance](docs/architecture/PROVIDER_CONTRACT.md); use fake credentials.
+Development requires an executable trusted CPython base interpreter, a writable
+checkout and per-test temporary storage, a resolvable hostname and named user.
+Containers running process lifecycle tests must use `--init` (or a proven
+equivalent reaper); bare PID 1 may retain orphan zombies. Keep HOME unchanged:
+desktop persistence tests use the existing `NOUS_WORKSPACE_ROOT` configuration,
+and daemon tests pass an explicit workspace. See
+[supported environment qualification](docs/development/DEVELOPER_PLATFORM.md#supported-development-environment)
+for the measured distinction between configured and unsupported environments.
 Run Desktop lint/tests/typecheck/build when affected. Record exact counts,
 platforms, dependency/provider availability, skipped items and baseline failures.
 A missing native binary means the hash verifier is BLOCKED, even when its contract

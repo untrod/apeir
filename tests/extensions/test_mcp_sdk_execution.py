@@ -4,6 +4,7 @@ import asyncio
 import gzip
 import json
 import ssl
+import subprocess
 import sys
 import threading
 from datetime import datetime, timedelta, timezone
@@ -27,8 +28,10 @@ from nous_runtime.extensions.executor import (
 )
 from nous_runtime.extensions.mcp_sdk import (
     McpSdkExecutionAdapter,
+    McpSdkExecutionError,
     McpTransportSecurityError,
     _PinnedHttpsTransport,
+    _isolated_python_command,
 )
 from nous_runtime.extensions.permissions import ExtensionPermissionService
 from nous_runtime.extensions.registry import ExtensionRegistry
@@ -377,11 +380,62 @@ def test_stdio_bridge_runs_only_through_strong_policy_without_permit_egress(
     assert policy.args[:3] == ["-I", "-S", "-c"]
     assert policy.args[4] == "path"
     assert Path(policy.args[5]).name == "mcp_stdio_bridge.py"
-    assert Path(policy.args[6]).samefile(
-        Path(sys.base_prefix) / Path(sys.executable).name
+    assert Path(policy.args[6]).is_file()
+    assert (
+        subprocess.run(
+            [
+                policy.args[6],
+                "-I",
+                "-S",
+                "-c",
+                "import sys; assert sys.flags.isolated and sys.flags.no_site",
+            ],
+            check=True,
+            capture_output=True,
+            timeout=10,
+        ).returncode
+        == 0
     )
     assert policy.args[7:10] == ["-I", "-S", "-c"]
     assert policy.args[11:] == ["module", "fixture_server"]
+
+
+def test_isolated_python_executes_bootstrap_without_cwd_or_pythonpath(
+    tmp_path: Path,
+    monkeypatch,
+):
+    package = tmp_path / "packages"
+    package.mkdir()
+    (package / "fixture_server.py").write_text(
+        "import json,sys; print(json.dumps({'isolated':sys.flags.isolated,"
+        "'no_site':sys.flags.no_site,'args':sys.argv[1:]}))"
+    )
+    (tmp_path / "fixture_server.py").write_text("raise RuntimeError('cwd shadow')")
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    monkeypatch.setenv("APEIR_SANDBOX_PACKAGES", str(package))
+    command, arguments = _isolated_python_command(
+        sys.executable, ["-I", "-m", "fixture_server", "opaque-input"]
+    )
+    result = subprocess.run(
+        [command, *arguments],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert json.loads(result.stdout) == {
+        "isolated": 1,
+        "no_site": 1,
+        "args": ["opaque-input"],
+    }
+
+
+@pytest.mark.parametrize("base", [None, "python", "/missing/apeir-python"])
+def test_missing_trusted_base_python_fails_closed(monkeypatch, base):
+    monkeypatch.setattr(sys, "_base_executable", base)
+    with pytest.raises(McpSdkExecutionError, match="trusted base Python"):
+        _isolated_python_command(sys.executable, ["-m", "fixture_server"])
 
 
 def test_stdio_credentials_fail_closed_without_local_provider(tmp_path: Path):
