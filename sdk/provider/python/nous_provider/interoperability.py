@@ -20,7 +20,7 @@ from nous_runtime.environments.contract import EnvironmentProvider
 from nous_runtime.environments.models import EnvironmentCommand, ExecutionEnvironment
 from nous_runtime.environments.providers import ProviderExecutionResult
 from nous_runtime.control_plane.human_sessions import HumanIdentity
-from nous_runtime.governance.credentials import SecretHandle
+from nous_runtime.governance.credentials import SecretHandle, OpenBaoKv2SecretBackend
 from nous_runtime.governance.operation_contracts import (
     GovernanceRequest,
     GovernanceDecision,
@@ -73,4 +73,5 @@ __all__ = [
     "ProviderExecutionResult",
     "SecretProvider",
     "SecretHandle",
+    "OpenBaoKv2SecretBackend",
 ]

@@ -22,7 +22,8 @@ instead of rebuilding them as competing authorities.
 
 These roles describe ownership boundaries, not six newly implemented systems.
 The exercised OPA software reference below does not qualify production remote
-policy deployment. External Codex, Ray/Kubernetes, OpenBao/Vault, SPIFFE/SPIRE and
+policy deployment. The KV-v2 OpenBao reference qualifies only scoped software
+reads. External Codex, Ray/Kubernetes, SPIFFE/SPIRE and
 Viam/ROS/KubeEdge integrations need explicit implementation and exercised
 conformance before being called supported. A local class named VaultSecretBackend
 is not evidence of an exercised external Vault service.
@@ -245,6 +246,73 @@ Windows binaries. Kernel and its component pin are unchanged. CI on the pushed
 and resulting main SHAs must pass before this scoped software Gate is reported.
 Without the explicit image configuration the real-service cases skip; protocol,
 security and public-SDK contracts still run. These skips do not claim live OPA.
+
+### M4.4 OpenBao KV-v2 reference under qualification
+
+Audit: REUSE the canonical SecretBackend, SecretHandle (Kernel SecretRef),
+CredentialBroker/Lease/Context, Operation Gate, Node journal and Reality recovery.
+EXTEND only a host-configured KV-v2 reader and public SDK export. MISSING remains
+production remote deployment/bootstrap rotation and dynamic server secret leases.
+The local AES-GCM VaultSecretBackend is distinct from this external integration.
+
+`nous_provider.interoperability.OpenBaoKv2SecretBackend` accepts an explicit
+protected store token and opaque handle bindings `(mount, path, field)`. Runtime
+Work carries handles only; the operator provisions the token read-only outside
+Work. Only the existing CredentialBroker resolves it after current authorization,
+Node, resource, capability, expiry and handle admission. Providers receive the
+current execution-only CredentialContext, never the backend or store token.
+The adapter has no writes, grant issuance, approval or renewal methods.
+
+HTTP is loopback-only; HTTPS keeps platform certificate validation. Origins and
+paths reject credentials/injection, ambient netrc lookup is suppressed while
+proxy/CA settings remain, redirects and implicit retries are forbidden. Responses
+are bounded to 64 KiB, socket timeouts to ten seconds; this is not a hard total
+RPC deadline. Health checks send no store token and convey availability only.
+Undefined/malformed/denied/unavailable values fail closed with generic errors.
+Static KV values use APEIR operation-scoped leases, not dynamic OpenBao leases.
+
+The centralized redactor registers the store token before transport and fetched
+material before delivery. Protected transport logging is thread-local and Python
+stdout/stderr is discarded during resolution; like existing Broker capture,
+stdout redirection is process-wide. It is not a native file-descriptor sandbox
+or protection against a malicious backend. Host configuration is nonserializable
+and redacted. Existing Broker sanitization covers provider outputs/errors and
+persisted evidence; no raw response/configuration is added to audit.
+
+```sh
+APEIR_OPENBAO_TEST_IMAGE=openbao/openbao@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf \
+  python -m pytest tests/interoperability/test_openbao_secret.py -q
+```
+
+Local validation: **40 OpenBao cases**, including **5 actual-service cases**,
+and **34 existing credential cases** pass together (**74 passed**). Affected
+regressions have **781 passed**, repository contracts **244 passed**, and component
+lock contracts **3 passed**. The full local run has **3792 passed, 35 skipped,
+9 known baseline failures, 4 warnings**; the final real-token-expiry case was
+added after its collection and is covered by the final 74-case run. The unchanged
+failures remain tracked in issue #9, not skipped or rewritten. Initial Deny
+fixture failure used an incorrect approval interface and was corrected to the
+existing canonical ApprovalBroker. No Runtime contract was weakened.
+Ruff/format/compile, 232 Markdown links and standard repository audits pass;
+security scanning finds zero issues. Actual native binary hash verification
+remains BLOCKED by absent locked Windows components; Kernel and lock are unchanged.
+
+Actual engine: OpenBao 2.7.1, upstream commit
+`a5db72cef75c24b920ade02065b18dd8eb666bac`. Tests provision an unprivileged,
+read-only local dev server and deterministic fake root/read tokens and material.
+Fixture administration creates a read-only exact-path policy; it is not an APEIR
+approval channel. Real service tests exercise denied writes/wrong paths, token
+revocation, original firmware Goal/approval/Work/receipt/fresh MATCH commitment,
+Deny with no mutation, and response loss/restart after store token revocation
+without credential re-resolution or repeated effect. Observation in that scenario
+is independently read-only and requires no mutation credential. This does not
+qualify credential-dependent observations when their credentials are unavailable.
+
+Core CI provisions the pinned image on Ubuntu 22.04/Python 3.12; other platforms
+explicitly skip actual service cases but run contracts. This reference does not
+qualify production authentication, dynamic leases, image provenance/signatures,
+physical hardware, remote human identity or complete M4. Acceptance requires
+pushed and resulting-main CI before a PASS checkpoint.
 
 The real OCI reference probe is reproducible with an already installed image:
 

@@ -28,6 +28,13 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install ".[dev,a2a,mcp,scientific]"
+      - name: Provision real OpenBao software reference
+        if: matrix.os == 'ubuntu-22.04' && matrix.python == '3.12'
+        env:
+          OPENBAO_REFERENCE_IMAGE: openbao/openbao@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf
+        run: |
+          docker pull "$OPENBAO_REFERENCE_IMAGE"
+          echo "APEIR_OPENBAO_TEST_IMAGE=$OPENBAO_REFERENCE_IMAGE" >> "$GITHUB_ENV"
       - name: Provision real OPA software reference
         if: matrix.os == 'ubuntu-22.04' && matrix.python == '3.12'
         env:

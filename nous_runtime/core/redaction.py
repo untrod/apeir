@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import contextlib
+import io
 import logging
 import threading
 import traceback
@@ -65,6 +67,8 @@ _CREDENTIAL_LEASE_METADATA_FIELDS = frozenset(
 _known_values: set[str] = set()
 _value_lock = threading.RLock()
 _logging_installed = False
+_sensitive_io = threading.local()
+_STANDARD_LOG_FIELDS = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__)
 
 
 def contains_sensitive_value(value: str | bytes) -> bool:
@@ -91,6 +95,15 @@ def redact_sensitive_text(value: str) -> str:
 
 
 def _sanitize_record(record: logging.LogRecord) -> None:
+    if getattr(_sensitive_io, "active", False):
+        record.msg = REDACTED
+        record.args = ()
+        record.exc_info = None
+        record.exc_text = None
+        for key in tuple(record.__dict__):
+            if key not in _STANDARD_LOG_FIELDS:
+                record.__dict__[key] = REDACTED
+        return
     record.msg = redact_sensitive_text(record.getMessage())
     record.args = ()
     if record.exc_info:
@@ -183,3 +196,23 @@ def redact_sensitive_data(value: Any) -> Any:
 
 
 __all__ = ["REDACTED", "redact_sensitive_data"]
+
+
+@contextlib.contextmanager
+def protected_sensitive_io():
+    """Discard transport output before newly resolved values can be registered.
+
+    Logging suppression is thread-local. Like the existing CredentialBroker
+    capture, Python stdout/stderr redirection is process-wide during this scope.
+    It does not sandbox native file-descriptor writes or malicious providers.
+    """
+    previous = getattr(_sensitive_io, "active", False)
+    _sensitive_io.active = True
+    try:
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            yield
+    finally:
+        _sensitive_io.active = previous

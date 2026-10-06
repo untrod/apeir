@@ -5,6 +5,11 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import ipaddress
+import math
+from urllib.parse import urlsplit
+
+import requests
 import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
@@ -87,6 +92,140 @@ class ReferenceSecretBackend:
             raise PermissionError("Secret backend value unavailable")
         register_sensitive_value(value)
         return value
+
+
+class OpenBaoKv2SecretBackend:
+    """Host-bound KV-v2 reads; only the existing CredentialBroker delivers values.
+
+    Static KV values do not acquire dynamic server leases. The explicit store
+    token must be provisioned read-only by the operator, outside runtime Work.
+    """
+
+    _sensitive_execution_context = True
+    max_response_bytes = 65_536
+
+    def __init__(self, endpoint, *, token, references, timeout_seconds=2.0):
+        try:
+            origin = urlsplit(endpoint)
+            port = origin.port
+            timeout = float(timeout_seconds)
+        except (ValueError, TypeError):
+            raise ValueError("Secret service configuration is invalid") from None
+        if (
+            origin.scheme not in {"https", "http"}
+            or not origin.hostname
+            or origin.username is not None
+            or origin.password is not None
+            or origin.path not in {"", "/"}
+            or origin.query
+            or origin.fragment
+            or redact_sensitive_text(endpoint) != endpoint
+            or (port is not None and port == 0)
+            or not math.isfinite(timeout)
+            or not 0 < timeout <= 10
+        ):
+            raise ValueError("Secret service configuration is invalid")
+        if origin.scheme == "http":
+            try:
+                loopback = ipaddress.ip_address(origin.hostname).is_loopback
+            except ValueError:
+                loopback = origin.hostname == "localhost"
+            if not loopback:
+                raise ValueError("Plaintext secret transport requires loopback")
+        if not isinstance(token, str) or not token or any(c.isspace() for c in token):
+            raise ValueError("An explicit protected store token is required")
+        validate_secret_handles(tuple(references))
+        bindings = {}
+        segment = re.compile(r"[A-Za-z0-9_-]+")
+        for handle_id, reference in references.items():
+            if not isinstance(reference, (tuple, list)) or len(reference) != 3:
+                raise ValueError("Secret binding must specify mount, path and field")
+            mount, path, field = reference
+            if (
+                not all(isinstance(item, str) and item for item in reference)
+                or not segment.fullmatch(mount)
+                or not all(segment.fullmatch(item) for item in path.split("/"))
+                or not segment.fullmatch(field)
+                or any(len(item) > 256 for item in reference)
+                or any(redact_sensitive_text(item) != item for item in reference)
+            ):
+                raise ValueError("Secret binding is invalid")
+            bindings[handle_id] = (mount, path, field)
+        register_sensitive_value(token)
+        self._token = token
+        self._endpoint = endpoint.rstrip("/")
+        self._references = bindings
+        self._timeout = timeout
+
+    def __repr__(self):
+        return "OpenBaoKv2SecretBackend(<REDACTED>)"
+
+    def __reduce__(self):
+        raise TypeError("SecretBackend is protected host configuration")
+
+    def discover(self):
+        return {
+            "provider_id": "openbao.kv-v2",
+            "role": "secret",
+            "protocol_revision": "kv-v2",
+            "capabilities": ["secret.resolve"],
+            "authority": False,
+            "dynamic_leases": False,
+        }
+
+    def _read(self, path, *, authenticated):
+        # Newly fetched material is not known to the matcher yet. Suppress
+        # transport diagnostics inside the protected resolution boundary.
+        from nous_runtime.core.redaction import protected_sensitive_io
+
+        with protected_sensitive_io(), requests.Session() as session:
+            session.auth = lambda prepared: prepared  # No implicit netrc identity.
+            headers = {"Accept": "application/json", "Accept-Encoding": "identity"}
+            if authenticated:
+                headers["X-Vault-Token"] = self._token
+            with session.get(
+                self._endpoint + path,
+                headers=headers,
+                stream=True,
+                allow_redirects=False,
+                timeout=(self._timeout, self._timeout),
+            ) as response:
+                if response.status_code != 200 or (
+                    response.headers.get("Content-Type", "").split(";", 1)[0]
+                    != "application/json"
+                ):
+                    raise PermissionError("Secret backend value unavailable")
+                body = bytearray()
+                for chunk in response.iter_content(chunk_size=1024):
+                    body.extend(chunk)
+                    if len(body) > self.max_response_bytes:
+                        raise PermissionError("Secret backend value unavailable")
+                value = json.loads(bytes(body))
+                if not isinstance(value, dict):
+                    raise PermissionError("Secret backend value unavailable")
+                return value
+
+    def health(self):
+        try:
+            self._read("/v1/sys/health", authenticated=False)
+        except (requests.RequestException, OSError, ValueError, TypeError):
+            return {"state": "unavailable", "verified_live": False}
+        return {"state": "healthy", "verified_live": True}
+
+    def resolve(self, handle: SecretHandle) -> str:
+        try:
+            binding = self._references.get(handle.vault_path)
+            if binding is None:
+                raise PermissionError("Secret backend value unavailable")
+            mount, path, field = binding
+            result = self._read(f"/v1/{mount}/data/{path}", authenticated=True)
+            value = result["data"]["data"][field]
+            if not isinstance(value, str) or not value:
+                raise PermissionError("Secret backend value unavailable")
+            register_sensitive_value(value)
+            return value
+        except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
+            raise PermissionError("Secret backend value unavailable") from None
 
 
 @dataclass(frozen=True)
