@@ -39,7 +39,8 @@ is pinned by [component lock](runtime-components.lock.json).
 
 Distribution is `0.1.0-rc1`, for development and evaluation. M3.1–M3.4 software,
 M3.5 Control Plane and M3.6 SDK software Gates have passed within their documented
-scope. Generic external-agent OCI and OPA policy software references are exercised;
+scope. Generic external-agent OCI, OPA policy and OpenBao KV-v2 software references
+are exercised within their documented scopes;
 other M4 integrations remain incomplete. Serial/ESP32 host contracts are read-only
 preparation.
 **M3.3-C physical acceptance, M5 physical writes/power-loss and a second hardware

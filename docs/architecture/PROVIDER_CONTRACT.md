@@ -22,7 +22,8 @@ instead of rebuilding them as competing authorities.
 
 These roles describe ownership boundaries, not six newly implemented systems.
 The exercised OPA software reference below does not qualify production remote
-policy deployment. External Codex, Ray/Kubernetes, OpenBao/Vault, SPIFFE/SPIRE and
+policy deployment. The KV-v2 OpenBao reference qualifies only scoped software
+reads. External Codex, Ray/Kubernetes, SPIFFE/SPIRE and
 Viam/ROS/KubeEdge integrations need explicit implementation and exercised
 conformance before being called supported. A local class named VaultSecretBackend
 is not evidence of an exercised external Vault service.
@@ -91,7 +92,9 @@ PENDING. Cloud uses deterministic fake secrets and never claims physical results
 | Artifacts, receipts, observation and recovery | REUSE | Existing CAS, Node journal, Work evidence and Reality verification |
 | Public replaceable role contracts | EXTEND | `nous_provider.interoperability` exports canonical types |
 | OPA Data API software reference | EXTEND | Real OPA service plus existing Governance/approval/Work/Node/evidence/Recovery; production authenticated remote-policy deployment remains PENDING |
-| Real Codex, Ray/Kubernetes, OpenBao/Vault, SPIFFE/SPIRE, Viam/ROS/KubeEdge | MISSING | Specific external integrations PENDING; interfaces are preparation, not qualification |
+| OpenBao KV-v2 software reference | EXTEND | Real read-only KV-v2 service through canonical CredentialBroker, leases and Work recovery; production deployment and dynamic server leases remain PENDING |
+| Production secret deployment, dynamic server leases and external Vault | MISSING | Static OpenBao KV-v2 software reads do not qualify these separate acceptance items |
+| Real Codex, Ray/Kubernetes, SPIFFE/SPIRE, Viam/ROS/KubeEdge | MISSING | Specific external integrations PENDING; interfaces are preparation, not qualification |
 
 The public interoperability SDK aliases IntelligenceProvider to ModelBackendAdapter,
 SecretProvider to SecretBackend, IdentityProvider to HumanIdentityProvider, and
@@ -245,6 +248,83 @@ Windows binaries. Kernel and its component pin are unchanged. CI on the pushed
 and resulting main SHAs must pass before this scoped software Gate is reported.
 Without the explicit image configuration the real-service cases skip; protocol,
 security and public-SDK contracts still run. These skips do not claim live OPA.
+
+### M4.4 OpenBao KV-v2 software reference
+
+Audit: REUSE the canonical SecretBackend, SecretHandle (Kernel SecretRef),
+CredentialBroker/Lease/Context, Operation Gate, Node journal and Reality recovery.
+EXTEND only a host-configured KV-v2 reader and public SDK export. MISSING remains
+production remote deployment/bootstrap rotation and dynamic server secret leases.
+The local AES-GCM VaultSecretBackend is distinct from this external integration.
+
+`nous_provider.interoperability.OpenBaoKv2SecretBackend` accepts an explicit
+protected store token and opaque handle bindings `(mount, path, field)`. Runtime
+Work carries handles only; the operator provisions the token read-only outside
+Work. Only the existing CredentialBroker resolves it after current authorization,
+Node, resource, capability, expiry and handle admission. Providers receive the
+current execution-only CredentialContext, never the backend or store token.
+The adapter has no writes, grant issuance, approval or renewal methods.
+
+HTTP is loopback-only; HTTPS keeps platform certificate validation. Origins and
+paths reject credentials/injection, ambient netrc lookup is suppressed while
+proxy/CA settings remain, redirects and implicit retries are forbidden. Responses
+are bounded to 64 KiB, socket timeouts to ten seconds; this is not a hard total
+RPC deadline. Health checks send no store token and convey availability only.
+Undefined/malformed/denied/unavailable values fail closed with generic errors.
+Static KV values use APEIR operation-scoped leases, not dynamic OpenBao leases.
+Store token expiration/revocation fences new reads; it does not revoke an already
+fetched static target credential. Native Handle/Grant/CredentialLease revocation
+and expiry remain the use fence; dynamic server lease coupling is unqualified.
+
+The centralized redactor registers the store token before transport and fetched
+material before delivery. Protected transport logging is thread-local and Python
+stdout/stderr is discarded during resolution; like existing Broker capture,
+stdout redirection is process-wide. It is not a native file-descriptor sandbox
+or protection against a malicious backend. Host configuration is nonserializable
+and redacted. Existing Broker sanitization covers provider outputs/errors and
+persisted evidence; no raw response/configuration is added to audit.
+
+```sh
+APEIR_OPENBAO_TEST_IMAGE=openbao/openbao@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf \
+  python -m pytest tests/interoperability/test_openbao_secret.py -q
+```
+
+Local validation: **40 OpenBao cases**, including **5 actual-service cases**,
+and **34 existing credential cases** pass together (**74 passed**). Affected
+regressions have **781 passed**, repository contracts **244 passed**, and component
+lock contracts **3 passed**. The full local run has **3792 passed, 35 skipped,
+9 known baseline failures, 4 warnings**; the final real-token-expiry case was
+added after its collection and is covered by the final 74-case run. The unchanged
+failures remain tracked in issue #9, not skipped or rewritten. Initial Deny
+fixture failure used an incorrect approval interface and was corrected to the
+existing canonical ApprovalBroker. No Runtime contract was weakened.
+Ruff/format/compile, 232 Markdown links and standard repository audits pass;
+security scanning finds zero issues. Actual native binary hash verification
+remains BLOCKED by absent locked Windows components; Kernel and lock are unchanged.
+
+Actual engine: OpenBao 2.7.1, upstream commit
+`a5db72cef75c24b920ade02065b18dd8eb666bac`. Tests provision an unprivileged,
+read-only local dev server and deterministic fake root/read tokens and material.
+Fixture administration creates a read-only exact-path policy; it is not an APEIR
+approval channel. Real service tests exercise denied writes/wrong paths, token
+revocation, original firmware Goal/approval/Work/receipt/fresh MATCH commitment,
+Deny with no mutation, and response loss/restart after store token revocation
+without credential re-resolution or repeated effect. Observation in that scenario
+is independently read-only and requires no mutation credential. This does not
+qualify credential-dependent observations when their credentials are unavailable.
+
+Core CI provisions the pinned image on Ubuntu 22.04/Python 3.12; other platforms
+explicitly skip actual service cases but run contracts. This reference does not
+qualify production authentication, dynamic leases, image provenance/signatures,
+physical hardware, remote human identity or complete M4. Source `5d47e29196cd16617ad5bee864ec9d8cf9d073d3` and PR #12 Core,
+Desktop and Security workflows all passed. Source Ubuntu 3.12 (real services)
+has **3801 passed, 36 skipped, 4 warnings**; Ubuntu 3.10 and macOS each have
+**3790 passed, 47 skipped, 4 warnings**; Windows has **3797 passed, 40 skipped,
+4 warnings**. PR Ubuntu 3.12 has **3802 passed, 36 skipped, 4 warnings**.
+These are distinct platform runs, not summed counts. Desktop frontend tests,
+lint, typecheck and build passed; native builds remain intentionally unqualified.
+Final documentation-head and resulting-main CI must pass before the immutable
+software checkpoint is created. This is scoped reference acceptance, not full M4.
 
 The real OCI reference probe is reproducible with an already installed image:
 
