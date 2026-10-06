@@ -394,3 +394,152 @@ async def _wait_for(predicate, timeout: float = 5.0) -> None:
             return
         await asyncio.sleep(0.02)
     raise AssertionError("timed out waiting for distributed execution")
+
+
+def _assigned_dispatch_work(tmp_path):
+    server = NodeRelayServer(
+        state_dir=tmp_path,
+        artifact_store=ContentAddressedArtifactStore(tmp_path / "artifacts"),
+    )
+    store = server.work_store
+    store.create(
+        DistributedWork(
+            work_id="work-dispatch-order",
+            intent="Preserve dispatch evidence before signed ACK",
+            requirements=WorkRequirements(capabilities=("system.echo",)),
+            execution_capability="system.echo",
+        )
+    )
+    store.transition(
+        "work-dispatch-order", DistributedWorkState.SCHEDULED, reason="test placement"
+    )
+    store.assign("work-dispatch-order", "node-test")
+    return server
+
+
+def test_dispatch_binding_is_durable_before_spool_publication(tmp_path, monkeypatch):
+    from nous_runtime.node_runtime import relay
+
+    server = _assigned_dispatch_work(tmp_path)
+    original_write = relay._atomic_json
+    publications = []
+
+    def publish(path, payload):
+        if path.parent == server.provider_requests:
+            work = server.work_store.get("work-dispatch-order")
+            assert (
+                work.dispatch_record["assignment_id"] == work.assignment.assignment_id
+            )
+            publications.append(work.dispatch_record)
+            original_write(path, payload)
+            server._mark_work_running(work.work_id, work.assigned_node)
+        else:
+            original_write(path, payload)
+
+    monkeypatch.setattr(relay, "_atomic_json", publish)
+    staged = server.stage_work_dispatch("work-dispatch-order")
+    assert publications == [staged["dispatch"]]
+    assert (
+        server.work_store.get("work-dispatch-order").state
+        is DistributedWorkState.RUNNING
+    )
+
+
+@pytest.mark.parametrize("tamper", [False, True])
+@pytest.mark.parametrize("state", ["RUNNING", "SUCCEEDED", "VERIFIED", "COMMITTED"])
+def test_started_dispatch_only_reconciles_and_never_recreates_spool(
+    tmp_path, tamper, state
+):
+    from nous_runtime.node_runtime.distributed_work import DistributedWorkError
+
+    server = _assigned_dispatch_work(tmp_path)
+    first = server.stage_work_dispatch("work-dispatch-order")
+    request = server.provider_requests / "work-dispatch-order.json"
+    request.unlink()
+    server._mark_work_running("work-dispatch-order", "node-test")
+    for advanced in ["SUCCEEDED", "VERIFIED", "COMMITTED"]:
+        if server.work_store.get("work-dispatch-order").state.value == state:
+            break
+        server.work_store.transition(
+            "work-dispatch-order",
+            DistributedWorkState(advanced),
+            reason="test evidence progression",
+        )
+    if tamper:
+        request.write_text('{"operation_id":"different-operation"}', encoding="utf-8")
+        with pytest.raises(
+            DistributedWorkError, match="staged Work dispatch binding changed"
+        ):
+            server.stage_work_dispatch("work-dispatch-order")
+    else:
+        repeated = server.stage_work_dispatch("work-dispatch-order")
+        assert repeated["dispatch"] == first["dispatch"]
+        assert repeated["work"]["state"] == state
+        assert not request.exists()
+
+
+@pytest.mark.parametrize("state", ["RUNNING", "UNKNOWN", "FAILED", "RECOVERING"])
+def test_dispatch_cannot_admit_unrecorded_or_uncertain_started_work(tmp_path, state):
+    from nous_runtime.node_runtime.distributed_work import DistributedWorkError
+
+    server = _assigned_dispatch_work(tmp_path)
+    if state != "RUNNING":
+        server.stage_work_dispatch("work-dispatch-order")
+        (server.provider_requests / "work-dispatch-order.json").unlink()
+    server.work_store.transition(
+        "work-dispatch-order", DistributedWorkState(state), reason="test recovery state"
+    )
+    with pytest.raises(
+        DistributedWorkError, match="dispatch requires an ASSIGNED Work"
+    ):
+        server.stage_work_dispatch("work-dispatch-order")
+    assert not (server.provider_requests / "work-dispatch-order.json").exists()
+
+
+def test_dispatch_recovers_publication_failure_from_same_durable_binding(
+    tmp_path, monkeypatch
+):
+    from nous_runtime.node_runtime import relay
+
+    server = _assigned_dispatch_work(tmp_path)
+    original_write = relay._atomic_json
+
+    def fail_publication(path, payload):
+        if path.parent == server.provider_requests:
+            raise OSError("fixture publication interrupted")
+        return original_write(path, payload)
+
+    monkeypatch.setattr(relay, "_atomic_json", fail_publication)
+    with pytest.raises(OSError, match="fixture publication interrupted"):
+        server.stage_work_dispatch("work-dispatch-order")
+    recorded = server.work_store.get("work-dispatch-order").dispatch_record
+    assert recorded
+    assert not (server.provider_requests / "work-dispatch-order.json").exists()
+    monkeypatch.setattr(relay, "_atomic_json", original_write)
+    recovered = server.stage_work_dispatch("work-dispatch-order")
+    assert recovered["dispatch"] == recorded
+    assert (server.provider_requests / "work-dispatch-order.json").is_file()
+
+
+def test_started_dispatch_tolerates_spool_consumption_during_read(
+    tmp_path, monkeypatch
+):
+    server = _assigned_dispatch_work(tmp_path)
+    first = server.stage_work_dispatch("work-dispatch-order")
+    server._mark_work_running("work-dispatch-order", "node-test")
+    request = server.provider_requests / "work-dispatch-order.json"
+    original_read = Path.read_text
+    consumed = []
+
+    def consume_before_read(path, *args, **kwargs):
+        if path == request:
+            path.unlink()
+            consumed.append(path)
+        return original_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", consume_before_read)
+    reconciled = server.stage_work_dispatch("work-dispatch-order")
+    assert consumed == [request]
+    assert reconciled["dispatch"] == first["dispatch"]
+    assert reconciled["work"]["state"] == "RUNNING"
+    assert not request.exists()

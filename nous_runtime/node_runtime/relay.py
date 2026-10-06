@@ -555,7 +555,15 @@ class NodeRelayServer:
         work = self.work_store.get(work_id)
         if work is None:
             raise DistributedWorkError(f"Work does not exist: {work_id}")
-        if work.state is not DistributedWorkState.ASSIGNED or not work.assignment:
+        reconciling = work.state in {
+            DistributedWorkState.RUNNING,
+            DistributedWorkState.SUCCEEDED,
+            DistributedWorkState.VERIFIED,
+            DistributedWorkState.COMMITTED,
+        } and bool(work.dispatch_record)
+        if not work.assignment or (
+            work.state is not DistributedWorkState.ASSIGNED and not reconciling
+        ):
             raise DistributedWorkError("dispatch requires an ASSIGNED Work")
         if work.execution_policy.delivery != "at_most_once":
             raise DistributedWorkError(
@@ -627,17 +635,20 @@ class NodeRelayServer:
         if work.dispatch_record:
             if work.dispatch_record.get("provider_request_digest") != request_digest:
                 raise DistributedWorkError("recorded Work dispatch binding changed")
-            if request_path.exists():
-                if _read_json(request_path) != request:
-                    raise DistributedWorkError("staged Work dispatch binding changed")
+            try:
+                staged_request = json.loads(request_path.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                # A terminal result can consume the spool while recovery reads
+                # it. Missing transport staging is not a changed Work binding.
+                if not reconciling:
+                    _atomic_json(request_path, request)
             else:
-                _atomic_json(request_path, request)
+                if staged_request != request:
+                    raise DistributedWorkError("staged Work dispatch binding changed")
             return {"work": work.to_dict(), "dispatch": work.dispatch_record}
         if request_path.exists():
             if _read_json(request_path) != request:
                 raise DistributedWorkError("staged Work dispatch binding changed")
-        else:
-            _atomic_json(request_path, request)
         dispatch = {
             "schema": "apeir.work-dispatch/v1",
             "work_id": work.work_id,
@@ -649,6 +660,10 @@ class NodeRelayServer:
             "delivery": "at_most_once",
         }
         updated = self.work_store.record_dispatch(work.work_id, dispatch)
+        # The spool is visible to the running relay immediately. Persist its
+        # binding before publication so a signed ACK cannot outrun admission.
+        if not request_path.exists():
+            _atomic_json(request_path, request)
         return {"work": updated.to_dict(), "dispatch": dispatch}
 
     def reconcile_work(self, work_id: str) -> dict[str, Any]:

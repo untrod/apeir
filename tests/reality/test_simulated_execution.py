@@ -441,9 +441,35 @@ def test_operation_failure_disconnect_never_commit_or_reexecute(tmp_path, fault)
         (SimulationFault.LOST_RESPONSE, 0, DistributedWorkState.FAILED),
     ],
 )
+@pytest.mark.parametrize("ack_interleaving", [False, True])
 def test_response_loss_restart_reconciles_persisted_result_and_fresh_observation_without_replay(
-    tmp_path, fault, expected_count, expected_state
+    tmp_path, monkeypatch, fault, expected_count, expected_state, ack_interleaving
 ):
+    interleavings = []
+    if ack_interleaving:
+        original_mark = NodeRelayServer._mark_work_running
+        original_stage = NodeRelayServer.stage_work_dispatch
+
+        def defer_mark(server, work_id, node_id):
+            if work_id != WORK_ID:
+                return original_mark(server, work_id, node_id)
+
+        def stage_after_ack(server, work_id):
+            work = server.work_store.get(work_id)
+            if (
+                work_id == WORK_ID
+                and work.dispatch_record
+                and work.state is DistributedWorkState.ASSIGNED
+            ):
+                # Force the validated ACK's transition between the Workflow's
+                # ASSIGNED snapshot and staging's canonical read, without sleep.
+                original_mark(server, work_id, work.assigned_node)
+                interleavings.append(work.assignment.assignment_id)
+            return original_stage(server, work_id)
+
+        monkeypatch.setattr(NodeRelayServer, "_mark_work_running", defer_mark)
+        monkeypatch.setattr(NodeRelayServer, "stage_work_dispatch", stage_after_ack)
+
     async def scenario():
         async with simulation(tmp_path, single_connection=True) as first:
             first.provider.inject_fault(STABLE, fault)
@@ -480,6 +506,8 @@ def test_response_loss_restart_reconciles_persisted_result_and_fresh_observation
                 assert recovered.state is AgentSessionState.WAITING
 
     asyncio.run(scenario())
+    if ack_interleaving:
+        assert len(interleavings) == 1
 
 
 def test_device_available_event_wakes_restored_session_and_resumes_same_workflow(
