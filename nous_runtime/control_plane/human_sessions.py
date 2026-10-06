@@ -127,6 +127,7 @@ class OIDCHumanIdentityProvider:
                 code=code,
                 code_verifier=verifier,
                 timeout=5,
+                allow_redirects=False,
             )
             assertion = token["id_token"]
             register_sensitive_value(assertion)
@@ -171,15 +172,15 @@ class OIDCHumanIdentityProvider:
 
 _contexts: WeakValueDictionary[str, AuthorizationContext] = WeakValueDictionary()
 _context_stores: dict[str, str] = {}
-_context_permissions: dict[str, PermissionEngine] = {}
+_context_auths: WeakValueDictionary[str, HumanSessionAuth] = WeakValueDictionary()
 
 
 def human_permission(context, action, resource):
-    policy = _context_permissions.get(getattr(context, "context_id", ""))
+    auth = _context_auths.get(getattr(context, "context_id", ""))
     return bool(
-        policy
+        auth
         and _contexts.get(context.context_id) is context
-        and policy.check(
+        and auth.permissions.check(
             PermissionRequest(
                 context.subject_id, action, resource, {"subject_type": "user"}
             )
@@ -195,6 +196,9 @@ def is_human_session_context(context, store, *, db=None) -> bool:
         or _context_stores.get(context.context_id) != str(Path(store.db_path).resolve())
     ):
         return False
+    auth = _context_auths.get(context.context_id)
+    if auth is None:
+        return False
 
     def check(connection):
         row = connection.execute(
@@ -203,8 +207,7 @@ def is_human_session_context(context, store, *, db=None) -> bool:
         ).fetchone()
         return bool(
             row
-            and row["status"] == "ACTIVE"
-            and row["expires_at"] > int(time.time())
+            and auth._session_is_current(row)
             and row["subject_id"] == context.subject_id
             and context.subject_type == "user"
             and context.authn_method == "oidc_pkce"
@@ -245,6 +248,33 @@ class HumanSessionAuth:
         self.store.append_operation_audit(
             db, event, {"schema": "apeir.human-auth/v1", **evidence}
         )
+
+    def _session_is_current(self, row):
+        """Revalidate enrollment and proof requirements, including inside admission."""
+        if (
+            row["status"] != "ACTIVE"
+            or row["expires_at"] <= int(self.clock())
+            or row["issuer"] != self.provider.issuer
+        ):
+            return False
+        subjects = getattr(self.provider, "subjects", None)
+        if subjects is not None and not any(
+            row["subject_id"]
+            == "oidc:" + _digest(self.provider.issuer)[:16] + ":" + subject
+            for subject in subjects
+        ):
+            return False
+        try:
+            methods = json.loads(row["identity_json"])["methods"]
+            return (
+                isinstance(methods, list)
+                and all(isinstance(method, str) for method in methods)
+                and getattr(self.provider, "required_methods", frozenset()).issubset(
+                    methods
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            return False
 
     def challenge(self, pkce_challenge: str):
         if not re.fullmatch(r"[A-Za-z0-9_-]{43}", pkce_challenge):
@@ -366,23 +396,8 @@ class HumanSessionAuth:
                 "SELECT * FROM governance_human_sessions WHERE token_digest=?",
                 (_digest(token),),
             ).fetchone()
-            if (
-                not row
-                or row["status"] != "ACTIVE"
-                or row["expires_at"] <= int(self.clock())
-                or row["issuer"] != self.provider.issuer
-            ):
+            if not row or not self._session_is_current(row):
                 return None
-        enrolled = getattr(self.provider, "subjects", None)
-        if enrolled is not None and not any(
-            row["subject_id"]
-            == "oidc:"
-            + hashlib.sha256(self.provider.issuer.encode()).hexdigest()[:16]
-            + ":"
-            + subject
-            for subject in enrolled
-        ):
-            return None
         context = AuthorizationContext(
             subject_type="user",
             subject_id=row["subject_id"],
@@ -393,10 +408,25 @@ class HumanSessionAuth:
         )
         _contexts[context.context_id] = context
         _context_stores[context.context_id] = str(Path(self.store.db_path).resolve())
-        _context_permissions[context.context_id] = self.permissions
+        _context_auths[context.context_id] = self
         finalize(context, _context_stores.pop, context.context_id, None)
-        finalize(context, _context_permissions.pop, context.context_id, None)
+        finalize(context, _context_auths.pop, context.context_id, None)
         return context
+
+    def session(self, context):
+        """Restore the existing cookie session without renewing it or issuing authority."""
+        with self.store.operation_transaction() as db:
+            if not is_human_session_context(context, self.store, db=db):
+                raise PermissionError("Human session is not active")
+            row = db.execute(
+                "SELECT * FROM governance_human_sessions WHERE session_id=?",
+                (context.session_id,),
+            ).fetchone()
+            return {
+                "session_id": row["session_id"],
+                "subject_id": row["subject_id"],
+                "expires_at": row["expires_at"],
+            }
 
     def nonce(self, context, method: str, path: str, body):
         if (

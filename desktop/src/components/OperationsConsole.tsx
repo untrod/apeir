@@ -33,8 +33,24 @@ export function OperationsConsole() {
   useEffect(() => {
     if (callbackHandled.current) return;
     const query = new URLSearchParams(window.location.search);
+    if (query.has("error")) {
+      callbackHandled.current = true;
+      sessionStorage.removeItem(pkceKey);
+      window.history.replaceState({}, "", window.location.pathname);
+      setError("Human authentication was rejected by the identity provider");
+      return;
+    }
     const code = query.get("code");
-    if (!code) return;
+    if (!code) {
+      const controller = getConfig().url;
+      let active = true;
+      void api<Human>("/api/v1/control/human/session")
+        .then(value => {
+          if (active && getConfig().url === controller && typeof value.subject_id === "string" && Number.isFinite(value.expires_at) && value.expires_at * 1000 > Date.now()) setHuman(value);
+        })
+        .catch(() => { if (active) setHuman(null); });
+      return () => { active = false; };
+    }
     callbackHandled.current = true;
     const saved = sessionStorage.getItem(pkceKey);
     sessionStorage.removeItem(pkceKey);
@@ -83,10 +99,21 @@ export function OperationsConsole() {
     } catch (err) { setError(err instanceof Error ? err.message : "Governed action rejected"); }
     finally { setBusy(false); }
   }
+  async function signOut() {
+    setBusy(true);
+    try {
+      const path = "/api/v1/control/human/logout";
+      const { nonce } = await api<{ nonce: string }>("/api/v1/control/human/nonce", { method: "POST", body: JSON.stringify({ method: "POST", path, body: {} }) });
+      await api(path, { method: "POST", headers: { "X-Control-Nonce": nonce }, body: JSON.stringify({}) });
+      setHuman(null);
+      setError("");
+    } catch (err) { setError(err instanceof Error ? err.message : "Sign out could not be confirmed"); }
+    finally { setBusy(false); }
+  }
   const enabled = !!human && human.expires_at * 1000 > Date.now() && !busy;
   return <main className="operations-console" aria-label="Operations console">
     <header className="operations-header"><div><p className="operations-eyebrow">APEIR / OPERATIONS</p><h1>Execution &amp; reality</h1><p>Observe state, inspect evidence, govern the next action.</p></div>
-      <div className="operations-controls"><button onClick={() => void reload()} disabled={busy}>Refresh</button><button onClick={() => void signIn()} disabled={busy}>{human ? "Renew human session" : "Sign in as human"}</button></div>
+      <div className="operations-controls"><button onClick={() => void reload()} disabled={busy}>Refresh</button><button onClick={() => void signIn()} disabled={busy}>{human ? "Renew human session" : "Sign in as human"}</button>{human && <button onClick={() => void signOut()} disabled={busy}>Sign out</button>}</div>
     </header>
     <details><summary>Controller connection</summary><form onSubmit={event => { event.preventDefault(); try { const address = new URL(endpoint); if (address.username || address.password || !(address.protocol === "https:" || (address.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(address.hostname)))) throw new Error("Controller requires HTTPS or loopback HTTP"); setConfig({ url: endpoint, token: endpoint === getConfig().url ? getConfig().token : "" }); setHuman(null); setSnapshot(null); void reload(); } catch (err) { setError(err instanceof Error ? err.message : "Invalid controller URL"); } }}><label>API URL <input aria-label="API URL" value={endpoint} onChange={event => setEndpoint(event.target.value)} /></label><button>Connect</button></form></details>
     {error && <p role="alert" className="operations-error">{error}</p>}

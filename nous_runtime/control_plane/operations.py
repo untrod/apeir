@@ -533,6 +533,10 @@ def human_login_route(body):
     )
 
 
+def human_session_route(*, authorization_context):
+    return ok_response(get_human_auth().session(authorization_context))
+
+
 def human_nonce_route(body, *, authorization_context):
     return ok_response(
         get_human_auth().nonce(
@@ -554,6 +558,7 @@ OPERATIONS_ROUTES = {
     ("POST", "/api/v1/control/operations/actions"): action_route,
     ("POST", "/api/v1/control/human/challenge"): human_challenge_route,
     ("POST", "/api/v1/control/human/session"): human_login_route,
+    ("GET", "/api/v1/control/human/session"): human_session_route,
     ("POST", "/api/v1/control/human/nonce"): human_nonce_route,
     ("POST", "/api/v1/control/human/logout"): human_logout_route,
 }
