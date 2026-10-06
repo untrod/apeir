@@ -92,7 +92,9 @@ PENDING. Cloud uses deterministic fake secrets and never claims physical results
 | Artifacts, receipts, observation and recovery | REUSE | Existing CAS, Node journal, Work evidence and Reality verification |
 | Public replaceable role contracts | EXTEND | `nous_provider.interoperability` exports canonical types |
 | OPA Data API software reference | EXTEND | Real OPA service plus existing Governance/approval/Work/Node/evidence/Recovery; production authenticated remote-policy deployment remains PENDING |
-| Real Codex, Ray/Kubernetes, OpenBao/Vault, SPIFFE/SPIRE, Viam/ROS/KubeEdge | MISSING | Specific external integrations PENDING; interfaces are preparation, not qualification |
+| OpenBao KV-v2 software reference | EXTEND | Real read-only KV-v2 service through canonical CredentialBroker, leases and Work recovery; production deployment and dynamic server leases remain PENDING |
+| Production secret deployment, dynamic server leases and external Vault | MISSING | Static OpenBao KV-v2 software reads do not qualify these separate acceptance items |
+| Real Codex, Ray/Kubernetes, SPIFFE/SPIRE, Viam/ROS/KubeEdge | MISSING | Specific external integrations PENDING; interfaces are preparation, not qualification |
 
 The public interoperability SDK aliases IntelligenceProvider to ModelBackendAdapter,
 SecretProvider to SecretBackend, IdentityProvider to HumanIdentityProvider, and
