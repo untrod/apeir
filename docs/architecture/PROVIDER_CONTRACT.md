@@ -21,7 +21,8 @@ instead of rebuilding them as competing authorities.
 | Device | existing DeviceProvider/DeviceTransport and Reality contracts | Discovery is not trust; a locator is not identity; receipt is not state observation |
 
 These roles describe ownership boundaries, not six newly implemented systems.
-External Codex, Ray/Kubernetes, OPA, OpenBao/Vault, SPIFFE/SPIRE and
+The exercised OPA software reference below does not qualify production remote
+policy deployment. External Codex, Ray/Kubernetes, OpenBao/Vault, SPIFFE/SPIRE and
 Viam/ROS/KubeEdge integrations need explicit implementation and exercised
 conformance before being called supported. A local class named VaultSecretBackend
 is not evidence of an exercised external Vault service.
@@ -89,7 +90,8 @@ PENDING. Cloud uses deterministic fake secrets and never claims physical results
 | Secrets and identity | REUSE | SecretBackend/CredentialBroker and HumanIdentityProvider |
 | Artifacts, receipts, observation and recovery | REUSE | Existing CAS, Node journal, Work evidence and Reality verification |
 | Public replaceable role contracts | EXTEND | `nous_provider.interoperability` exports canonical types |
-| Real Codex, Ray/Kubernetes, OPA, OpenBao/Vault, SPIFFE/SPIRE, Viam/ROS/KubeEdge | MISSING | Specific external integrations PENDING; interfaces are preparation, not qualification |
+| OPA Data API software reference | EXTEND | Real OPA service plus existing Governance/approval/Work/Node/evidence/Recovery; production authenticated remote-policy deployment remains PENDING |
+| Real Codex, Ray/Kubernetes, OpenBao/Vault, SPIFFE/SPIRE, Viam/ROS/KubeEdge | MISSING | Specific external integrations PENDING; interfaces are preparation, not qualification |
 
 The public interoperability SDK aliases IntelligenceProvider to ModelBackendAdapter,
 SecretProvider to SecretBackend, IdentityProvider to HumanIdentityProvider, and
@@ -137,7 +139,106 @@ or missing grants. DENY/UNKNOWN, malformed results and exceptions fail closed.
 REQUIRE_APPROVAL suppresses read-only auto-approval. Policy is re-evaluated at
 admission and immediately before execution, recorded in the existing audit trail
 as `provider.policy.evaluated`. Trusted hosts must choose bounded-I/O adapters;
-the hook does not itself provide an OPA transport or remote authority.
+the hook itself does not supply remote authority.
+
+### M4.3 OPA Data API software reference
+
+`OpaPolicyProvider` extends that existing `PolicyProvider` protocol. Its trusted
+host selects a credential-free service origin and policy path; neither Work nor
+model output can select them. Plaintext is restricted to loopback. HTTPS uses
+the platform trust store, redirects are refused, connect/read socket timeouts
+are explicit, and response bodies are limited to 65,536 bytes. This is not a
+hard end-to-end RPC deadline or authenticated production policy-service claim.
+No implicit retry, secret-store access, approval API or grant issuance is added.
+
+The public SDK consumer imports only the published boundary:
+
+```python
+from nous_provider.interoperability import OpaPolicyProvider
+
+policy = OpaPolicyProvider("http://127.0.0.1:8181", policy_path="apeir/decision")
+# Trusted controller host: supply this object as operation_policy_provider
+# to the existing ExecutionAuthorizationGate, never to a model as authority.
+```
+
+The adapter posts to `/v1/data/apeir/decision` with an OPA `input` object:
+
+```json
+{
+  "schema": "apeir.opa-policy/v1",
+  "authorization_id": "gov_<sha256-of-exact-canonical-request>",
+  "request": {"operation_id": "work-example", "work_id": "work-example"}
+}
+```
+
+The request shown is abbreviated: actual detached facts include subject,
+AgentSession/Plan/Workflow, Node, Capability 2.0 risk/side-effect/idempotency/
+verification metadata, resource, expected effect, CAS references and optional
+SecretHandle identifiers. Raw secret material is rejected before transmission.
+The OPA response must bind its result to that exact authorization ID:
+
+```json
+{"result":{"decision":"REQUIRE_APPROVAL","authorization_id":"gov_<same-request-hash>"}}
+```
+
+Only ALLOW, DENY, REQUIRE_APPROVAL and UNKNOWN are accepted. Missing/stale binding,
+extra authority fields, malformed output, service/TLS/timeout errors and oversized
+responses become UNKNOWN. Error bodies and exceptions do not enter Work/audit.
+Core still owns current capability facts, explicit read-only policy, grants,
+expiry, revocation, human approval and before-effect admission. An OPA ALLOW
+cannot authorize an unapproved mutation; REQUIRE_APPROVAL cannot issue approval.
+The existing append-oriented audit binds the evaluated verdict and host-selected
+implementation type to the canonical request and its complete provenance. It
+does not dump endpoint configuration or provider-authored authority fields.
+Discovery's `policy.evaluate` capability describes a role, never trust/permission.
+
+The focused audit classified Governance Gate/Store/Broker, Capability 2.0,
+CredentialBroker, Work/Node journal, CAS, fresh Observation/EffectVerification
+and public SDK as **REUSE**; policy transport/health and SDK exposure as
+**EXTEND**; actual remote service identity/authentication and production rollout
+as **MISSING**. No additional authority, policy ledger or execution system exists.
+
+Reproduce actual software acceptance using an already installed image:
+
+```sh
+APEIR_OPA_TEST_IMAGE=openpolicyagent/opa:1.21.1-static \
+  python -m pytest tests/interoperability/test_opa_policy.py -q
+```
+
+The exercised engine was OPA **1.21.1**, image digest
+`sha256:4675ab04ad1627f74741d2d9c5142698c79e18b7b09f192587d31d6dba20838e`.
+The actual binary reported build commit `2a109e54103370d2ef288782ef3cb4c8a37902b2-dirty`,
+platform `linux/amd64`, Rego v1 and Go 1.27.1. These are upstream binary metadata,
+not a claim of reproducible/signature/CVE qualification. Core CI's Ubuntu 3.12
+lane provisions this exact image digest and runs the real-service cases; other
+lanes still run contracts and explicitly skip unavailable service qualification.
+The pytest fixture provisions a local read-only, unprivileged service. It tests
+real Rego evaluation, health/disconnection, the four decisions, firmware Goal →
+approval → Credential → Distributed Work/Node → Receipt → fresh Observation →
+MATCH/COMMIT, DENY after approval and immediately before effect, and response
+loss/restart reconciliation without another mutation. Pausing the actual OPA
+process during recovery blocks commitment; restoring it permits a fresh read
+and MATCH, not replay of the mutation. Accounts, credentials and devices are fake.
+
+M4.3 local acceptance: **50 focused tests passed**, including six actual-service
+cases; the final OPA/Governance audit combination has **270 passed**. Affected
+regressions have **853 passed, 1 skipped** (unavailable strong process sandbox).
+Full regression with the actual OPA and OCI references enabled has **3752 passed,
+35 skipped, 9 unchanged managed-Cloud baseline failures, 4 warnings**. The original
+interpreter/persistence/daemon/orphan-process failures remain visible in issues
+#9 and the existing validation history. Initial real-OPA fixture runs failed due
+to missing fixture credential registration, conflicting Rego provisioning and
+incorrect read-only policy classification; those fixtures were corrected without
+weakening runtime admission. The paused-service response-loss stress has **10
+passed across five rounds**, with one effect and fresh MATCH after recovery.
+Repository contracts have **244 passed**. Ruff, formatting of four changed Python
+files, compile, 232 Markdown link checks, standard hygiene/version/security checks
+pass; the security scan has zero findings. Component-lock contracts have **3
+passed**; the actual native hash verifier remains **BLOCKED** by missing locked
+Windows binaries. Kernel and its component pin are unchanged. CI on the pushed
+and resulting main SHAs must pass before this scoped software Gate is reported.
+Without the explicit image configuration the real-service cases skip; protocol,
+security and public-SDK contracts still run. These skips do not claim live OPA.
 
 The real OCI reference probe is reproducible with an already installed image:
 
@@ -150,7 +251,7 @@ approval pause, the original Distributed Work/Node receipt, and separate simulat
 firmware approval, CredentialLease, Observation and MATCH. Without this explicit
 environment only the real OCI probe skips; contract/security tests still run.
 Cloud has a Codex CLI, but no authenticated Codex model/remote egress integration
-was exercised. That specific provider, other external services and all physical
+was exercised. That specific provider, remaining external services and all physical
 qualification remain PENDING.
 
 ### M4 Cloud validation record

@@ -28,6 +28,13 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install ".[dev,a2a,mcp,scientific]"
+      - name: Provision real OPA software reference
+        if: matrix.os == 'ubuntu-22.04' && matrix.python == '3.12'
+        env:
+          OPA_REFERENCE_IMAGE: openpolicyagent/opa@sha256:4675ab04ad1627f74741d2d9c5142698c79e18b7b09f192587d31d6dba20838e
+        run: |
+          docker pull "$OPA_REFERENCE_IMAGE"
+          echo "APEIR_OPA_TEST_IMAGE=$OPA_REFERENCE_IMAGE" >> "$GITHUB_ENV"
       - name: Full repository regression
         run: python -m pytest --tb=short --timeout=60
       - name: Verify collection floor

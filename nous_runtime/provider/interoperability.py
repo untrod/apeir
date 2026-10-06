@@ -8,10 +8,16 @@ the existing Node journal owns execution receipts and uncertain-effect recovery.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
+import math
+import re
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import urlsplit
+
+import requests
 
 from nous_runtime.agents.adapters.command_adapter import CommandAgentAdapter
 from nous_runtime.agents.external.models import (
@@ -44,6 +50,153 @@ class PolicyProvider(Protocol):
     """Restrict Core policy; ALLOW cannot grant authority or bypass Core denial."""
 
     def evaluate(self, request: GovernanceRequest) -> GovernanceDecision: ...
+
+
+class OpaPolicyProvider:
+    """Host-selected OPA Data API adapter; decisions only restrict Core.
+
+    Service authentication and production remote-policy qualification are not
+    supplied here. HTTPS uses the platform trust store; plaintext transport is
+    limited to loopback. Neither Work nor model output selects this endpoint.
+    """
+
+    provider_id = "opa.data-api.v1"
+    protocol_revision = "apeir.opa-policy/v1"
+    max_response_bytes = 65_536
+
+    def __init__(
+        self,
+        endpoint: str,
+        *,
+        policy_path: str = "apeir/decision",
+        timeout_seconds: float = 2.0,
+    ):
+        configuration = {"endpoint": endpoint, "policy_path": policy_path}
+        if redact_sensitive_data(configuration) != configuration:
+            raise ValueError("OPA configuration must not contain credential material")
+        try:
+            parsed = urlsplit(endpoint)
+        except ValueError:
+            raise ValueError("OPA service origin is invalid") from None
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or parsed.path not in {"", "/"}
+        ):
+            raise ValueError("OPA requires a credential-free service origin")
+        # Validate the port now, rather than treating a malformed origin as an
+        # unavailable policy during an Operation's authorization transaction.
+        try:
+            _ = parsed.port
+        except ValueError:
+            raise ValueError("OPA service port is invalid") from None
+        if parsed.scheme == "http":
+            try:
+                loopback = ipaddress.ip_address(parsed.hostname).is_loopback
+            except ValueError:
+                loopback = parsed.hostname == "localhost"
+            if not loopback:
+                raise ValueError("OPA plaintext transport requires loopback")
+        if (
+            not re.fullmatch(
+                r"[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)*",
+                policy_path,
+            )
+            or len(policy_path) > 256
+        ):
+            raise ValueError("OPA policy path is invalid")
+        try:
+            timeout = float(timeout_seconds)
+        except (ValueError, TypeError):
+            raise ValueError("OPA socket timeout is invalid") from None
+        if not math.isfinite(timeout) or not 0 < timeout <= 10:
+            raise ValueError("OPA socket timeout must be between zero and ten seconds")
+        self._endpoint = endpoint.rstrip("/")
+        self._policy_path = policy_path
+        self._timeout = timeout
+
+    def discover(self) -> dict:
+        return {
+            "provider_id": self.provider_id,
+            "role": "policy",
+            "capabilities": ["policy.evaluate"],
+            "protocol_revision": self.protocol_revision,
+            "policy_path": self._policy_path,
+            "decisions": [decision.value for decision in GovernanceDecision],
+            "authority": False,
+        }
+
+    def _query(self, method: str, path: str, payload: dict | None = None) -> dict:
+        with requests.Session() as session:
+            # No redirects, response-body logging, credential store access,
+            # caller-supplied headers or implicit policy retry.
+            with session.request(
+                method,
+                self._endpoint + path,
+                json=payload,
+                timeout=(self._timeout, self._timeout),
+                allow_redirects=False,
+                stream=True,
+                headers={"Accept": "application/json", "Accept-Encoding": "identity"},
+            ) as response:
+                if response.status_code != 200:
+                    raise ValueError("OPA service did not return a policy result")
+                if (
+                    response.headers.get("Content-Type", "").split(";", 1)[0]
+                    != "application/json"
+                ):
+                    raise ValueError("OPA response content type is invalid")
+                body = bytearray()
+                for chunk in response.iter_content(chunk_size=1024):
+                    body.extend(chunk)
+                    if len(body) > self.max_response_bytes:
+                        raise ValueError("OPA response exceeds its bound")
+                value = json.loads(bytes(body))
+                if not isinstance(value, dict):
+                    raise ValueError("OPA response must be an object")
+                return value
+
+    def health(self) -> dict:
+        try:
+            self._query("GET", "/health")
+        except (requests.RequestException, OSError, ValueError, TypeError):
+            return {"state": "unavailable", "verified_live": False}
+        return {"state": "healthy", "verified_live": True}
+
+    def evaluate(self, request: GovernanceRequest) -> GovernanceDecision:
+        try:
+            facts = request.to_dict()
+            if redact_sensitive_data(facts) != facts:
+                return GovernanceDecision.UNKNOWN
+            authorization_id = request.authorization_id
+            value = self._query(
+                "POST",
+                "/v1/data/" + self._policy_path,
+                {
+                    "input": {
+                        "schema": self.protocol_revision,
+                        "authorization_id": authorization_id,
+                        "request": facts,
+                    }
+                },
+            )
+            result = value.get("result")
+            if (
+                not isinstance(result, dict)
+                or set(result) != {"decision", "authorization_id"}
+                or result["authorization_id"] != authorization_id
+                or not isinstance(result["decision"], str)
+            ):
+                return GovernanceDecision.UNKNOWN
+            return GovernanceDecision(result["decision"])
+        except (requests.RequestException, OSError, ValueError, TypeError):
+            # Errors are availability/evidence failures, never an ALLOW. Their
+            # raw bodies and exceptions never enter ordinary audit or Work.
+            return GovernanceDecision.UNKNOWN
 
 
 class ExecutionProvider(Protocol):
