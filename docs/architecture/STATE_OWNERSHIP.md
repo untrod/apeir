@@ -69,6 +69,14 @@ Work policy and bound evidence; it cannot manufacture a different scope's proof.
 
 ## Failure and recovery
 
+A bounded Workflow wait returning WAITING does not guarantee Controller Work is
+terminal. Node journal state, signed terminal delivery and Controller projection
+are separate points: Node can have persisted FAILED while Controller Work is
+still RUNNING. Await the actual result and use the canonical reconciler to
+project it; do not manufacture a terminal state or resubmit an Operation merely
+because a wait deadline elapsed. Tests of denial must retain FAILED, zero-effect,
+unchanged-resource and audit assertions after that real projection.
+
 | Evidence condition | Required response |
 | --- | --- |
 | Missing/expired/revoked authority or credentials | Deny current execution; do not reuse after reconnect |
