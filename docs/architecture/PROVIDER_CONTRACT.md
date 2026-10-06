@@ -326,6 +326,29 @@ lint, typecheck and build passed; native builds remain intentionally unqualified
 Final documentation-head and resulting-main CI must pass before the immutable
 software checkpoint is created. This is scoped reference acceptance, not full M4.
 
+Initial resulting-main validation on `630434c4f49b71ed0aba5b7f8ee55ed59c8c85d2`
+had all Core/Desktop/Security workflows pass, but Multi-Arch Windows Python 3.11
+had **1 failed, 3507 passed, 40 skipped, 272 deselected, 4 warnings**. The existing
+revocation test expected FAILED immediately after a bounded Workflow wait, while
+signed ACK/projection was delayed; this is additional timing evidence, not one
+of the nine confirmed local environment failures. SBOM aggregation skipped and
+no OpenBao checkpoint was created for that incomplete Gate. Evidence remains in
+[issue #4](https://github.com/untrod/apeir/issues/4#issuecomment-6011144748).
+A controlled delivery experiment reproduced the ordering in both grant/resource
+cases. The test-only correction awaits actual signed result delivery and uses
+canonical reconciliation; it retains FAILED, zero-effect, old firmware and audit
+assertions. Explicit hold/release tests verify Node FAILED versus Controller
+RUNNING before delivery and denied terminal projection afterward, without
+resubmission or changed Operation inputs. No Runtime or Kernel behavior changes.
+Local projection correction: **4 focused passed** and **40 passed over 10
+controlled rounds**, **784 affected passed**,
+**246 repository passed**, **3 component-lock contracts passed**; full local
+**3797 passed, 35 skipped, 9 unchanged baseline failures, 4 warnings**.
+Ruff/changed-file format/compile and standard docs/link/hygiene/version/security
+checks pass with zero security findings. Broader Windows latency/root-cause
+qualification remains OPEN, not resolved by passing reruns. Final repaired-main
+CI is required before the software checkpoint.
+
 The real OCI reference probe is reproducible with an already installed image:
 
 ```sh

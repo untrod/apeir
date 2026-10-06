@@ -1189,6 +1189,11 @@ def test_node_rechecks_revocation_after_workflow_dispatch_approval(
             )
             result = await resume_firmware(sim, paused.session_id)
             assert result.state is AgentSessionState.WAITING
+            # A bounded Workflow wait can finish before the signed Node terminal
+            # result arrives. Project the persisted result through the canonical
+            # reconciler; recording denial must never resubmit the Operation.
+            await wait_for(lambda: WORK_ID in sim.server.results)
+            sim.controller().reconcile_work(WORK_ID)
             assert sim.work().state is DistributedWorkState.FAILED
             assert sim.provider.execution_count(WORK_ID) == 0
             assert (
@@ -1662,5 +1667,82 @@ def test_control_plane_remote_human_resumes_original_firmware_or_denies_without_
             assert isinstance(snapshot["credential_leases"], list)
             if answer == "approve_once":
                 assert len(snapshot["credential_leases"]) == 1
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("revoke", ["grant", "resource"])
+def test_revoked_firmware_late_signed_terminal_is_not_effect_or_success(
+    tmp_path, monkeypatch, revoke
+):
+    async def scenario():
+        async with simulation(tmp_path) as sim:
+            paused = await request_firmware(sim, wait_timeout=0.05)
+            auth_id = sim.work().execution_arguments["authorization_id"]
+            sim.handler.approvals.approve_operation_once(
+                paused.pending_approvals[0], _build_context(), gate=sim.governance
+            )
+            with sim.governance.store.operation_transaction() as db:
+                grant_id = db.execute(
+                    "SELECT lease_id FROM governance_leases WHERE proposal_hash=?",
+                    (auth_id,),
+                ).fetchone()[0]
+            execute = sim.firmware_handler.execute_bound
+            send = sim.client._send
+            held = asyncio.Event()
+            release = asyncio.Event()
+
+            def revoked(arguments, **bindings):
+                sim.governance.revoke_operation_authority(
+                    auth_id,
+                    _build_context(),
+                    grant_id=grant_id,
+                    resource=revoke == "resource",
+                )
+                return execute(arguments, **bindings)
+
+            async def delayed_terminal(websocket, message_type, payload, **kwargs):
+                if (
+                    message_type == "WORKLOAD_STATUS"
+                    and payload.get("workload_id") == WORK_ID
+                ):
+                    held.set()
+                    await release.wait()
+                return await send(websocket, message_type, payload, **kwargs)
+
+            monkeypatch.setattr(sim.firmware_handler, "execute_bound", revoked)
+            monkeypatch.setattr(sim.client, "_send", delayed_terminal)
+            try:
+                waiting = await resume_firmware(sim, paused.session_id)
+                await wait_for(held.is_set)
+                await wait_for(lambda: sim.work().state is DistributedWorkState.RUNNING)
+                assert waiting.state is AgentSessionState.WAITING
+                assert sim.node._workloads[WORK_ID]["state"] == "FAILED"
+                assert sim.work().state is DistributedWorkState.RUNNING
+                assert sim.provider.execution_count(WORK_ID) == 0
+                assert (
+                    sim.provider.read_state(sim.device).data["state"][
+                        "firmware_version"
+                    ]
+                    == "1.0.0"
+                )
+                assert any(
+                    row["event_type"] == "execution.denied"
+                    for row in sim.governance.store.operation_audit()
+                )
+                original_arguments = sim.work().execution_arguments.copy()
+            finally:
+                release.set()
+            await wait_for(lambda: WORK_ID in sim.server.results)
+            assert sim.server.results[WORK_ID]["state"] == "FAILED"
+            sim.controller().reconcile_work(WORK_ID)
+            assert sim.work().state is DistributedWorkState.FAILED
+            assert sim.work().execution_arguments == original_arguments
+            assert sim.provider.execution_count(WORK_ID) == 0
+            assert (
+                sim.provider.read_state(sim.device).data["state"]["firmware_version"]
+                == "1.0.0"
+            )
+            assert sim.governance.store.verify_audit_chain()
 
     asyncio.run(scenario())

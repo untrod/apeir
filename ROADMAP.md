@@ -166,7 +166,12 @@ interleaving reproduced a real ASSIGNED-snapshot/RUNNING-admission race in both
 response-loss cases. The focused repair validates an existing dispatch without
 republishing started Work and persists initial dispatch evidence before spool
 publication; see [execution recovery](docs/operations/compute-mesh/EXECUTION_RECOVERY.md).
-Reruns passing cannot establish absence of other races. Preserve original
+A subsequent main Multi-Arch Windows run exposed a revoked firmware test
+expecting terminal projection before signed delivery. Controlled hold/release
+coverage distinguishes persisted Node denial, bounded Workflow waiting and
+canonical Controller reconciliation; [evidence](https://github.com/untrod/apeir/issues/4#issuecomment-6011144748)
+remains open for latency qualification. Reruns passing cannot establish absence
+of other races. Preserve original
 persisted evidence and no-blind-replay behavior.
 
 The separate [Windows relay shutdown timeout #8](https://github.com/untrod/apeir/issues/8)
