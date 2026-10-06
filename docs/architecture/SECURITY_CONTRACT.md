@@ -367,7 +367,13 @@ exchange cannot license reuse. Session tokens are random, hash-only persisted,
 expiry bounded to 15 minutes, and delivered only by Secure HttpOnly SameSite
 cookie. Session expiry/revocation is checked again inside approval/grant mutation
 transactions. Context object attestation cannot be copied from a serialized claim.
-Re-enrollment on restart rechecks allowed subjects. Runtime host configuration
+Every retained Context rechecks the current trusted adapter's issuer, subject
+enrollment, required methods and permission policy at admission, including the
+approval transaction. Removing enrollment or replacing permissions cannot leave
+old Context authority active. Re-enrollment on restart also rechecks subjects.
+Host file configuration changes require a controller restart to load the new
+configuration; use explicit session/grant revocation when immediate fencing is
+required. Runtime host configuration
 must be owner-controlled; Windows file enrollment fails closed pending verified
 ACL support. Real external IdP deployment is not Cloud-qualified.
 
@@ -378,6 +384,14 @@ fail closed. Approval audit evidence retains human subject, session and
 AuthorizationContext IDs together with existing Operation/Work/resource binding.
 Audit and nonce persistence failures do not produce grants. Logging and response
 redaction cover OAuth-library token dictionaries before proof validation.
+
+Explicit untrusted browser Origins are rejected on the canonical Operations and
+human-session surface before exchange or nonce consumption. Origin allowlisting
+reuses configured CORS policy and is an additional browser boundary, never proof
+of human identity. No-Origin clients still require valid authentication and the
+same bound nonce. OAuth token exchange does not follow redirects. Session lookup
+returns current nonsecret metadata without renewing expiry; logout revocation
+survives restart and expires the HttpOnly cookie.
 
 Remote control actions also require explicit existing PermissionEngine rules.
 Interrupt fences future Operation admission, not already occurring effects.

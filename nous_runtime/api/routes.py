@@ -2253,6 +2253,25 @@ def route(
     if not handler:
         return err_response("NOUS_INVALID_REQUEST", f"No route: {method} {path}")
 
+    if (
+        surface in {"server", "api", "control_plane"}
+        and handler in OPERATIONS_ROUTES.values()
+    ):
+        from nous_runtime.control_plane.auth import add_cors_headers
+
+        headers = (auth or {}).get("headers") or {}
+        origin = headers.get("origin") or headers.get("Origin")
+        if origin:
+            allowed = {}
+            try:
+                add_cors_headers(allowed, origin)
+            except (TypeError, ValueError):
+                return err_response(
+                    "NOUS_FORBIDDEN", "Console origin configuration is invalid"
+                )
+            if "Access-Control-Allow-Origin" not in allowed:
+                return err_response("NOUS_FORBIDDEN", "Console origin is not allowed")
+
     auth_error = _authorize_api_request(method_upper, path, auth, surface=surface)
     if auth_error:
         return auth_error

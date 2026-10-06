@@ -299,6 +299,64 @@ def test_restart_revalidates_enrolled_subject_not_only_original_session(human_en
     assert restarted.authenticate(issued.session_cookie) is None
 
 
+@pytest.mark.parametrize("change", ["subject", "issuer", "methods", "permissions"])
+def test_existing_context_revalidates_current_identity_and_permission(
+    human_env, change
+):
+    gate, auth, client, _ = human_env
+    _, context = login(auth, client)
+    _, pending = operation(gate)
+    if change == "subject":
+        auth.provider.subjects = frozenset({"bob"})
+    elif change == "issuer":
+        auth.provider.issuer = "https://replacement.example.test"
+    elif change == "methods":
+        auth.provider.required_methods = frozenset({"hardware-key"})
+    else:
+        auth.permissions = PermissionEngine()
+    with pytest.raises(PermissionError):
+        ApprovalBroker(gate.store).respond_operation(
+            pending.request_id, "approve", context, gate=gate
+        )
+    assert gate.store.get_approval_request(pending.request_id)["status"] == "PENDING"
+    assert gate.store.list_active_leases() == []
+
+
+def test_enrollment_removed_between_check_and_approval_transaction_is_denied(
+    human_env, monkeypatch
+):
+    gate, auth, client, _ = human_env
+    _, context = login(auth, client)
+    _, pending = operation(gate)
+    original = gate._require_human
+
+    def change_after_precheck(context, request, *, db=None):
+        original(context, request, db=db)
+        if db is None:
+            auth.provider.subjects = frozenset()
+
+    monkeypatch.setattr(gate, "_require_human", change_after_precheck)
+    with pytest.raises(PermissionError):
+        ApprovalBroker(gate.store).respond_operation(
+            pending.request_id, "approve", context, gate=gate
+        )
+    assert gate.store.get_approval_request(pending.request_id)["status"] == "PENDING"
+    assert gate.store.list_active_leases() == []
+
+
+def test_session_restore_never_extends_expiration_or_leaks_cookie(human_env):
+    gate, auth, client, _ = human_env
+    issued, context = login(auth, client)
+    restored = HumanSessionAuth(gate.store, auth.provider, permissions=auth.permissions)
+    restored_context = restored.authenticate(issued.session_cookie)
+    assert restored.session(restored_context) == dict(issued["data"])
+    assert issued.session_cookie not in json.dumps(restored.session(restored_context))
+    auth.logout(context)
+    assert restored.authenticate(issued.session_cookie) is None
+    with pytest.raises(PermissionError):
+        restored.session(restored_context)
+
+
 def test_oauth_library_token_logs_are_redacted_before_proof_validation(
     human_env, caplog
 ):
