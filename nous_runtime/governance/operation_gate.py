@@ -235,7 +235,14 @@ class OperationAuthorizationMixin:
             self.store.append_operation_audit(
                 db,
                 "provider.policy.evaluated",
-                self._evidence(request, verdict=external.value),
+                self._evidence(
+                    request,
+                    verdict=external.value,
+                    policy_provider_type=(
+                        f"{type(self.operation_policy_provider).__module__}."
+                        f"{type(self.operation_policy_provider).__qualname__}"
+                    ),
+                ),
             )
             if external in {GovernanceDecision.DENY, GovernanceDecision.UNKNOWN}:
                 return external, None

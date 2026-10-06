@@ -38,7 +38,8 @@ Future targets below are requirements, not claims of implemented integrations.
 | Architecture Consolidation Gate | PASS | `070640b`: five canonical documents cover constitution, authority, execution, ownership/failure and Provider model. This consolidation reduces redundant navigation and stale status. |
 | M4 Interoperability (complete target) | PARTIAL | Six Provider seams and exercised generic external-agent reference exist; industrial/reference integrations below remain unimplemented/unqualified. |
 | M4 generic external-agent / restrictive policy reference | PASS | `05cfbc8`: actual isolated OCI subprocess plus canonical approval/Work/evidence/recovery and simulated downstream Reality; `tests/interoperability`. An external proposal never grants authority. |
-| M4 authenticated Codex / industrial Providers | PENDING | Codex CLI discovery/help is not an integration. Ray/Kubernetes, OPA, Vault/OpenBao, SPIFFE/SPIRE, Viam/ROS/KubeEdge are prepared boundaries, not exercised services. |
+| M4.3 OPA Data API software reference | PASS | Real OPA 1.21.1 evaluation through existing restrictive PolicyProvider/Governance, exact-request binding, health/errors, approval/credential/Work/Node/evidence and paused-service/lost-response recovery; [reference scope](docs/architecture/PROVIDER_CONTRACT.md#m43-opa-data-api-software-reference). Fake credentials and simulated device effects; authenticated production remote-policy deployment remains PENDING. |
+| M4 authenticated Codex / remaining industrial Providers | PENDING | Codex CLI discovery currently requires authentication; no authenticated service integration is qualified. Ray/Kubernetes, Vault/OpenBao, SPIFFE/SPIRE and Viam/ROS/KubeEdge remain unexercised. OPA reference does not complete M4 or authenticate remote human approval. |
 | M5 Reality & Hardware (complete target) | PARTIAL | Read-only signed SerialTransport/ESP32 host contracts exist. Physical mutation, firmware persistence and a second device family remain missing. |
 | M5 serial/ESP32 host-contract preparation | PASS | `ff4d7b4`: 28 focused tests, bounded signed frames/fresh nonce/stable identity/trust preservation; `tests/reality/test_serial_contract.py`. No firmware-write capability advertised. |
 | M5 physical ESP32 write / power-loss acceptance | PENDING | Requires real Jetson/ESP32, firmware/NVS behavior and physical fault-injection evidence. |
@@ -158,13 +159,19 @@ unsupported conditions stated explicitly. Existing baseline failures remain
 visible until resolved, not permanently accepted or skipped away.
 
 [Recovery timing issue #4](https://github.com/untrod/apeir/issues/4) remains open
-pending independent CI acceptance. Baseline timing traces and deterministic ACK
+for continued cross-platform timing qualification after [PR #7](https://github.com/untrod/apeir/pull/7)
+repaired two deterministically reproduced ordering faults. Baseline timing traces and deterministic ACK
 interleaving reproduced a real ASSIGNED-snapshot/RUNNING-admission race in both
 response-loss cases. The focused repair validates an existing dispatch without
 republishing started Work and persists initial dispatch evidence before spool
 publication; see [execution recovery](docs/operations/compute-mesh/EXECUTION_RECOVERY.md).
 Reruns passing cannot establish absence of other races. Preserve original
 persisted evidence and no-blind-replay behavior.
+
+The separate [Windows relay shutdown timeout #8](https://github.com/untrod/apeir/issues/8)
+and [supported environment cleanup #9](https://github.com/untrod/apeir/issues/9)
+remain OPEN. Five persistence cases pass with the existing NOUS_WORKSPACE_ROOT
+configuration; the original nine unconfigured Cloud failures remain recorded.
 
 [Native component-lock issue #2](https://github.com/untrod/apeir/issues/2) requires
 the actual pinned binaries, a documented build/download origin and comparison

@@ -8,6 +8,7 @@ from nous_runtime.provider.interoperability import (
     IdentityProvider,
     IntelligenceProvider,
     PolicyProvider,
+    OpaPolicyProvider,
     SecretProvider,
 )
 from nous_runtime.agents.external.models import (
@@ -68,6 +69,7 @@ __all__ = [
     "PrivacyClass",
     "RoutingMode",
     "PolicyProvider",
+    "OpaPolicyProvider",
     "ProviderExecutionResult",
     "SecretProvider",
     "SecretHandle",

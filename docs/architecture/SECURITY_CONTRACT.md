@@ -434,3 +434,16 @@ credentials nor authority objects. A provider-authored approval or completion
 claim cannot authorize a device mutation or substitute for independent effect
 verification. The [Provider contract and M4 audit](PROVIDER_CONTRACT.md#m4-interoperability-audit)
 documents the real OCI reference scope and unexercised integrations.
+
+The OPA Data API reference uses the same restrictive hook. Exact authorization
+hash binding prevents acceptance of another request's decision; extra grant or
+approval fields and undefined/malformed results fail closed. Only a trusted host
+configures the service origin/path. URLs with credentials are rejected, HTTP is
+loopback-only, HTTPS verification remains enabled, redirects are refused and
+response bodies/socket waits are bounded. No service credential broker or remote
+policy identity qualification is claimed. Raw responses/errors are not audit
+content; existing audit records contain the verdict and canonical request facts.
+Actual OPA process pause/disconnection stops admission/commitment. After an
+effect with a lost response, restoring policy availability permits reconciliation
+and a new read-only Observation, never a second mutation. A live OPA service and
+simulated firmware effect do not qualify real hardware or a remote human IdP.

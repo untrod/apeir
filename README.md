@@ -39,8 +39,9 @@ is pinned by [component lock](runtime-components.lock.json).
 
 Distribution is `0.1.0-rc1`, for development and evaluation. M3.1–M3.4 software,
 M3.5 Control Plane and M3.6 SDK software Gates have passed within their documented
-scope. A generic external-agent OCI reference is exercised; other M4 integrations
-remain incomplete. Serial/ESP32 host contracts are read-only preparation.
+scope. Generic external-agent OCI and OPA policy software references are exercised;
+other M4 integrations remain incomplete. Serial/ESP32 host contracts are read-only
+preparation.
 **M3.3-C physical acceptance, M5 physical writes/power-loss and a second hardware
 family remain PENDING. M6/M7 are not accepted.** Native locked-binary hash
 verification is BLOCKED by missing binaries. See the [exact matrix](ROADMAP.md).
