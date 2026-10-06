@@ -150,6 +150,9 @@ the platform trust store, redirects are refused, connect/read socket timeouts
 are explicit, and response bodies are limited to 65,536 bytes. This is not a
 hard end-to-end RPC deadline or authenticated production policy-service claim.
 No implicit retry, secret-store access, approval API or grant issuance is added.
+Ambient `.netrc` service credentials are explicitly suppressed while platform
+proxy/CA configuration remains enabled. A negative test reproduces the default
+Requests credential lookup before the corrective transport guard.
 
 The public SDK consumer imports only the published boundary:
 
@@ -220,11 +223,14 @@ loss/restart reconciliation without another mutation. Pausing the actual OPA
 process during recovery blocks commitment; restoring it permits a fresh read
 and MATCH, not replay of the mutation. Accounts, credentials and devices are fake.
 
-M4.3 local acceptance: **50 focused tests passed**, including six actual-service
-cases; the final OPA/Governance audit combination has **270 passed**. Affected
-regressions have **853 passed, 1 skipped** (unavailable strong process sandbox).
-Full regression with the actual OPA and OCI references enabled has **3752 passed,
-35 skipped, 9 unchanged managed-Cloud baseline failures, 4 warnings**. The original
+M4.3 local acceptance: the initial focused suite had **50 passed**, including six
+actual-service cases; the initial OPA/Governance audit combination had **270 passed**.
+Post-merge credentialless transport audit added a failing ambient-netrc negative;
+the corrected Interoperability/Governance combination has **296 passed**, including
+all **51 OPA cases**. Initial affected regressions had **853 passed, 1 skipped**
+(unavailable strong process sandbox). Final full regression after that correction,
+with the actual OPA and OCI references enabled, has **3754 passed, 35 skipped,
+9 unchanged managed-Cloud baseline failures, 4 warnings**. The original
 interpreter/persistence/daemon/orphan-process failures remain visible in issues
 #9 and the existing validation history. Initial real-OPA fixture runs failed due
 to missing fixture credential registration, conflicting Rego provisioning and

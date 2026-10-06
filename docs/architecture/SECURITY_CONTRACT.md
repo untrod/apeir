@@ -440,7 +440,8 @@ hash binding prevents acceptance of another request's decision; extra grant or
 approval fields and undefined/malformed results fail closed. Only a trusted host
 configures the service origin/path. URLs with credentials are rejected, HTTP is
 loopback-only, HTTPS verification remains enabled, redirects are refused and
-response bodies/socket waits are bounded. No service credential broker or remote
+response bodies/socket waits are bounded. Ambient `.netrc` service credentials
+are not resolved; platform proxy/CA settings are preserved. No service credential broker or remote
 policy identity qualification is claimed. Raw responses/errors are not audit
 content; existing audit records contain the verdict and canonical request facts.
 Actual OPA process pause/disconnection stops admission/commitment. After an
