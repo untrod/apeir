@@ -183,9 +183,9 @@ of other races. Preserve original
 persisted evidence and no-blind-replay behavior.
 
 The separate [Windows relay shutdown timeout #8](https://github.com/untrod/apeir/issues/8)
-and [supported environment cleanup #9](https://github.com/untrod/apeir/issues/9)
-remain OPEN. The original nine unconfigured Cloud failures remain historical
-evidence; current configured qualification and its remaining unsupported host
+remains OPEN. [Environment cleanup #9](https://github.com/untrod/apeir/issues/9)
+tracks the qualification above and closes only after its checkpoint prerequisites.
+The original nine unconfigured Cloud failures remain historical evidence; current configured qualification and its remaining unsupported host
 conditions are recorded above, rather than retaining nine failures as permanent
 current status.
 
