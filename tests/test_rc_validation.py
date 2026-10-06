@@ -497,7 +497,7 @@ class TestDesktopApiContract:
         r2 = handle_devices_scan()
         assert r2["ok"] is True
 
-    def test_automations_crud(self):
+    def test_automations_crud(self, desktop_workspace):
         from nous_runtime.api.desktop_routes import (
             handle_automations_list,
             handle_automations_add,
@@ -526,7 +526,7 @@ class TestDesktopApiContract:
         assert r3["ok"] is True
         assert r3["data"]["enabled"] is False
 
-    def test_knowledge_crud(self):
+    def test_knowledge_crud(self, desktop_workspace):
         from nous_runtime.api.desktop_routes import (
             handle_knowledge_list,
             handle_knowledge_add,

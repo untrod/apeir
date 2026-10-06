@@ -18,6 +18,14 @@ def isolate_apeir_state(tmp_path, monkeypatch):
 
 
 @pytest.fixture
+def desktop_workspace(tmp_path, monkeypatch):
+    """Exercise persistent desktop APIs without sharing the user's home."""
+    workspace = tmp_path / "desktop-workspace"
+    monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(workspace))
+    return workspace
+
+
+@pytest.fixture
 def tmp_pack_dir():
     """Create a temporary pack directory with a valid pack.yaml."""
     with tempfile.TemporaryDirectory() as d:

@@ -56,7 +56,15 @@ def _isolated_python_command(
         trailing = remaining[1:]
     else:
         return command, arguments
-    base_command = str((Path(sys.base_prefix) / Path(sys.executable).name).resolve())
+    base_executable = getattr(sys, "_base_executable", None)
+    if (
+        not isinstance(base_executable, str)
+        or not Path(base_executable).is_absolute()
+        or not Path(base_executable).is_file()
+        or not os.access(base_executable, os.X_OK)
+    ):
+        raise McpSdkExecutionError("trusted base Python executable is unavailable")
+    base_command = str(Path(base_executable).resolve())
     return base_command, [
         "-I",
         "-S",

@@ -88,7 +88,7 @@ class TestDesktopApiEndpoints:
         result = handle_devices_scan()
         assert result["ok"] is True
 
-    def test_automations_crud(self):
+    def test_automations_crud(self, desktop_workspace):
         from nous_runtime.api.desktop_routes import (
             handle_automations_list,
             handle_automations_add,
@@ -125,7 +125,7 @@ class TestDesktopApiEndpoints:
         assert action_result["ok"] is True
         assert action_result["data"]["enabled"] is True
 
-    def test_knowledge_crud(self):
+    def test_knowledge_crud(self, desktop_workspace):
         from nous_runtime.api.desktop_routes import (
             handle_knowledge_list,
             handle_knowledge_add,
@@ -255,9 +255,10 @@ class TestFirstLaunch:
 
 
 class TestDaemonStability:
-    def test_service_start_stop(self):
+    def test_service_start_stop(self, tmp_path):
         from nous_runtime.daemon.service import DaemonService
-        svc = DaemonService()
+
+        svc = DaemonService(workspace=str(tmp_path / "daemon-workspace"))
         assert svc.start() is True
         assert svc.is_running is True
         assert svc.stop() is True
@@ -498,7 +499,7 @@ class TestLongRunningStability:
         recovery.reset_failure_count()
         assert recovery.should_restart() is True
 
-    def test_automations_persistence_under_stress(self):
+    def test_automations_persistence_under_stress(self, desktop_workspace):
         """Verify automations store survives rapid add/toggle cycles."""
         from nous_runtime.api.desktop_routes import (
             handle_automations_add,
