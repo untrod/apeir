@@ -247,7 +247,7 @@ and resulting main SHAs must pass before this scoped software Gate is reported.
 Without the explicit image configuration the real-service cases skip; protocol,
 security and public-SDK contracts still run. These skips do not claim live OPA.
 
-### M4.4 OpenBao KV-v2 reference under qualification
+### M4.4 OpenBao KV-v2 software reference
 
 Audit: REUSE the canonical SecretBackend, SecretHandle (Kernel SecretRef),
 CredentialBroker/Lease/Context, Operation Gate, Node journal and Reality recovery.
@@ -270,6 +270,9 @@ are bounded to 64 KiB, socket timeouts to ten seconds; this is not a hard total
 RPC deadline. Health checks send no store token and convey availability only.
 Undefined/malformed/denied/unavailable values fail closed with generic errors.
 Static KV values use APEIR operation-scoped leases, not dynamic OpenBao leases.
+Store token expiration/revocation fences new reads; it does not revoke an already
+fetched static target credential. Native Handle/Grant/CredentialLease revocation
+and expiry remain the use fence; dynamic server lease coupling is unqualified.
 
 The centralized redactor registers the store token before transport and fetched
 material before delivery. Protected transport logging is thread-local and Python
@@ -311,8 +314,15 @@ qualify credential-dependent observations when their credentials are unavailable
 Core CI provisions the pinned image on Ubuntu 22.04/Python 3.12; other platforms
 explicitly skip actual service cases but run contracts. This reference does not
 qualify production authentication, dynamic leases, image provenance/signatures,
-physical hardware, remote human identity or complete M4. Acceptance requires
-pushed and resulting-main CI before a PASS checkpoint.
+physical hardware, remote human identity or complete M4. Source `5d47e29196cd16617ad5bee864ec9d8cf9d073d3` and PR #12 Core,
+Desktop and Security workflows all passed. Source Ubuntu 3.12 (real services)
+has **3801 passed, 36 skipped, 4 warnings**; Ubuntu 3.10 and macOS each have
+**3790 passed, 47 skipped, 4 warnings**; Windows has **3797 passed, 40 skipped,
+4 warnings**. PR Ubuntu 3.12 has **3802 passed, 36 skipped, 4 warnings**.
+These are distinct platform runs, not summed counts. Desktop frontend tests,
+lint, typecheck and build passed; native builds remain intentionally unqualified.
+Final documentation-head and resulting-main CI must pass before the immutable
+software checkpoint is created. This is scoped reference acceptance, not full M4.
 
 The real OCI reference probe is reproducible with an already installed image:
 

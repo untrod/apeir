@@ -459,4 +459,4 @@ are suppressed even before new material is known to the matcher. Backend health
 is not permission. Static KV-v2 reads do not qualify dynamic server leases or
 production deployment. Lost-response reconciliation consumes persisted evidence
 and a fresh independent observation, never another mutation credential resolution.
-See the [reference limitations](PROVIDER_CONTRACT.md#m44-openbao-kv-v2-reference-under-qualification).
+See the [reference limitations](PROVIDER_CONTRACT.md#m44-openbao-kv-v2-software-reference).
