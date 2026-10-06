@@ -40,6 +40,7 @@ corrupt components are UNKNOWN and degrade health rather than inventing success.
 | `POST /api/v1/control/operations/actions` | Explicit `kind`, `action`, `target_id`; delegates to existing Governance and lifecycle paths. |
 | `POST /api/v1/control/human/challenge` | Public bounded PKCE challenge, selected by trusted host configuration. |
 | `POST /api/v1/control/human/session` | Single-use code exchange, verified external identity; HttpOnly session cookie. |
+| `GET /api/v1/control/human/session` | Restore the current authenticated human session metadata without renewing expiry or issuing authority; service identities are rejected. |
 | `POST /api/v1/control/human/nonce` | Bind the authenticated session to one exact method, path and JSON body. |
 | `POST /api/v1/control/human/logout` | Revoke the authenticated session; requires a bound nonce. |
 
@@ -73,6 +74,8 @@ and permission rules are enrolled by the trusted host owner. Authentication is
 not authorization: existing PermissionEngine rules and the Governance Gate
 still deny by default. Proof of MFA, recent authentication, audience, issuer,
 nonce and signature are required; arbitrary token claims cannot grant authority.
+Token exchange rejects redirects: provision the actual canonical token endpoint,
+so authorization codes and PKCE verifiers are not forwarded to another location.
 
 On a POSIX controller, provision `.nous/human-identity.json` as an owner-controlled
 file. No client secret is needed for this public PKCE client. Required fields:
@@ -109,6 +112,11 @@ session storage and are removed at callback. The backend issues a protected
 cookie, never a JSON bearer credential. API origin is bound to the login attempt;
 changing controllers clears the previous service token. Mobile layout prioritizes
 Observe, Approve Once/Deny, Interrupt and Acknowledge with touch-sized controls.
+Reload restores current cookie session metadata from the backend. Sign out uses
+a request-bound nonce, durably revokes the same session and clears its cookie;
+failure is shown rather than claiming confirmed revocation. Restoring a session
+does not extend its original expiry. Denied/mismatched callbacks discard local
+PKCE state and remove callback parameters from browser history.
 Existing chat/developer surfaces remain compatible; the console does not add a
 coding IDE. Native packaging is governed by existing Desktop component locks.
 
@@ -118,3 +126,54 @@ Cloud acceptance uses signed deterministic fake identity proofs and stateful
 simulated Reality. No production credentials or external IdP account is used.
 Real IdP deployment, native binary release qualification and physical-device
 acceptance are separate pending acceptance items; no physical success is claimed.
+
+## M3.5-Q qualification preparation audit
+
+Starting main: `d9c642d89930fcb8682aeab91fedf626610a765c`.
+Kernel stays `87fd1b2ff28ef14ab1a515a58162592b452fda2e`.
+
+| Existing mechanism | Classification | Qualification work |
+| --- | --- | --- |
+| Authlib/PyJWT OIDC/PKCE, HumanIdentity and host-enrolled subjects | REUSE | Exercise real library code over verified local TLS with fake IdP material; no password store or identity authority added. |
+| GovernanceStore sessions/challenges/nonces, Gate/Broker and durable audit | REUSE | Keep approval, grant and exact Work/Operation owners; stale or duplicate approval remains rejected. |
+| Context attestation, subject enrollment and PermissionEngine | EXTEND | Recheck current issuer, enrolled subject, required authentication methods, session expiry/revocation and current permission engine for retained Contexts, including within approval transactions. |
+| CORS and canonical Operations routes | EXTEND | Reject an explicit untrusted browser Origin before identity exchange, nonce consumption or governed actions; use the existing origin configuration. Absence of Origin is not identity and cannot bypass authentication/nonce checks. |
+| Responsive Console session lifecycle | EXTEND | Restore session metadata after reload and expose durable Sign out; never put cookie material in JSON or browser storage. |
+| Real deployed IdP and authenticated human/browser/mobile acceptance | MISSING | Requires actual deployment and a human to perform the approval; fake TLS protocol tests do not satisfy this Gate. |
+
+Four negative cases reproduced the old retained-Context gap before correction:
+subject removal, issuer replacement, raised method requirements and permission
+engine replacement could still approve. Those facts now fail closed, including
+a change between the outer check and approval transaction. No new authority,
+credential broker, execution path or verification system is introduced.
+
+The [deployment procedure](../operations/deployment/DEPLOYMENT.md#remote-human-trust-qualification)
+specifies the real acceptance evidence still required. Real deployed-human
+acceptance remains PENDING until that flow is exercised; qualification preparation
+is PARTIAL and does not upgrade that acceptance item.
+
+### Qualification preparation validation
+
+Local affected M3.1–M4 suites: **622 passed**, including the existing real OCI
+reference with `python:3.11-slim`. Full repository: **3685 passed, 35 skipped,
+9 recorded managed-Cloud baseline failures, 4 warnings**. Repository checks:
+**244 passed**; Desktop: **51 tests across 25 files passed**, lint/typecheck/build
+passed. Ruff, six changed Python formatting checks, compilation, documentation,
+232 Markdown link targets, identity/comment/Git metadata and version checks pass.
+Security scan: **0 findings**. Component-lock contract: **3 passed**; actual
+native hash verification remains BLOCKED by missing locked Windows binaries.
+
+An initial affected run had **619 passed, 1 skipped, 1 failed**: the unchanged
+effect-then-response-lost restart test returned RUNNING at its bounded recovery
+deadline instead of COMMITTED. The isolated unchanged main comparison had
+**600 passed, 1 skipped**; it did not reproduce that failure. Later affected and
+full runs passed that case. Five instrumented runs of the unchanged main's two
+parameters produced **9 passed, 1 failed**: the lost-response/no-effect parameter
+also returned RUNNING instead of FAILED. The trace recorded its signed FAILED
+response at the Controller, with effect count zero. All five effect-then-response-
+lost traces had exactly one mutation; no second effect was observed. Instrumentation
+was temporary and recorded message types, times, Work IDs and effect counts only.
+These observations do not establish the root cause or absence of a persistence
+race: [issue #4](https://github.com/untrod/apeir/issues/4) remains open, and both
+failures are retained. No timeout/assertion or Reality code was changed to hide
+them. These counts are overlapping suites and must not be summed.

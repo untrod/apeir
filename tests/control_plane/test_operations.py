@@ -128,6 +128,115 @@ def test_authenticated_service_cannot_approve_its_own_request(plane, monkeypatch
     )
 
 
+@pytest.mark.parametrize("path", ["challenge", "session", "nonce"])
+def test_untrusted_origin_rejected_before_identity_or_nonce_creation(plane, path):
+    view, auth, client = plane
+    issued, context = login(auth, client)
+    response = route_server(
+        "POST",
+        "/api/v1/control/human/" + path,
+        body={"code_challenge": "x" * 43},
+        auth={
+            "headers": {
+                "origin": "https://evil.example.test",
+                "cookie": "apeir_human=" + issued.session_cookie,
+            }
+        },
+    )
+    assert not response["ok"]
+    assert response["error"]["code"] == "NOUS_FORBIDDEN"
+    assert auth.session(context)["session_id"] == context.session_id
+    with view.gate.store.operation_transaction() as db:
+        assert (
+            db.execute("SELECT count(*) FROM governance_human_nonces").fetchone()[0]
+            == 0
+        )
+
+
+def test_origin_rejection_does_not_consume_nonce_or_approve(plane, monkeypatch):
+    view, auth, client = plane
+    monkeypatch.setenv("NOUS_CONTROL_ORIGINS", '["https://console.example.test"]')
+    issued, context = login(auth, client)
+    _, pending = operation(view.gate)
+    path = "/api/v1/control/operations/actions"
+    body = {
+        "kind": "approvals",
+        "action": "approve_once",
+        "target_id": pending.request_id,
+    }
+    nonce = auth.nonce(context, "POST", path, body)["nonce"]
+    headers = {
+        "cookie": "apeir_human=" + issued.session_cookie,
+        "x-control-nonce": nonce,
+        "origin": "https://evil.example.test",
+    }
+    assert not route_server("POST", path, body=body, auth={"headers": headers})["ok"]
+    assert (
+        view.gate.store.get_approval_request(pending.request_id)["status"] == "PENDING"
+    )
+    headers["origin"] = "https://console.example.test"
+    assert route_server("POST", path, body=body, auth={"headers": headers})["ok"]
+    assert not route_server("POST", path, body=body, auth={"headers": headers})["ok"]
+
+
+def test_cookie_session_lookup_does_not_accept_service_identity(plane, monkeypatch):
+    _, auth, client = plane
+    issued, _ = login(auth, client)
+    path = "/api/v1/control/human/session"
+    headers = {"cookie": "apeir_human=" + issued.session_cookie}
+    response = route_server("GET", path, auth={"headers": headers})
+    assert response["ok"] and response["data"] == issued["data"]
+    assert issued.session_cookie not in json.dumps(response)
+    monkeypatch.setenv("NOUS_API_TOKEN", "m35q.fake.service.token")
+    assert not route_server("GET", path, auth={"token": "m35q.fake.service.token"})[
+        "ok"
+    ]
+
+
+@pytest.mark.parametrize("state", ["expired", "approved", "denied", "revoked"])
+def test_fresh_remote_nonce_cannot_revive_stale_approval(plane, state):
+    view, auth, client = plane
+    issued, context = login(auth, client)
+    request, pending = operation(view.gate)
+    if state in {"approved", "denied"}:
+        ApprovalBroker(view.gate.store).respond_operation(
+            pending.request_id,
+            "approve" if state == "approved" else "deny",
+            context,
+            gate=view.gate,
+        )
+    elif state == "expired":
+        with view.gate.store.operation_transaction() as db:
+            db.execute(
+                "UPDATE governance_approval_requests SET expires_at='2000-01-01T00:00:00Z'"
+            )
+    else:
+        view.gate.revoke_operation_authority(
+            request.authorization_id, context, resource=True
+        )
+    previous = len(view.gate.store.list_active_leases())
+    body = {
+        "kind": "approvals",
+        "action": "approve_once",
+        "target_id": pending.request_id,
+    }
+    path = "/api/v1/control/operations/actions"
+    nonce = auth.nonce(context, "POST", path, body)["nonce"]
+    response = route_server(
+        "POST",
+        path,
+        body=body,
+        auth={
+            "headers": {
+                "cookie": "apeir_human=" + issued.session_cookie,
+                "x-control-nonce": nonce,
+            }
+        },
+    )
+    assert not response["ok"]
+    assert len(view.gate.store.list_active_leases()) == previous
+
+
 def test_event_backfill_is_durable_monotonic_and_not_polling_noise(plane):
     view, _, _ = plane
     first = view.transitions()
