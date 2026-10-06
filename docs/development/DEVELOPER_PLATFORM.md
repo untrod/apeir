@@ -222,12 +222,14 @@ facts, a read-only checkout probe completed with **40 failed, 3756 passed,
 missing registration facts. Both unsuccessful configurations remain evidence;
 they are not hidden baseline regressions or qualified environments.
 
-Ruff lint, formatting of complete formatted files and changed ranges in legacy
-files, compile, 232-document links, hygiene, identity, Git metadata, version and
-security checks passed; security found zero findings in 1891 files. Full-file
-format checks still flag `tests/conftest.py` and `tests/test_production_suite.py`,
-reproduced on their untouched starting versions; unrelated formatting was not
-rewritten. Actual native component hashes remain BLOCKED by the missing locked
+Ruff lint, compile, 232-document links, hygiene, identity, Git metadata, version
+and security checks passed; security found zero findings in 1891 files. Source
+`55fc890` Security CI failed its existing changed-file format gate: full-file
+checks flagged `tests/conftest.py` and `tests/test_production_suite.py`, also
+reproduced on their untouched starting versions. The required formatter was then
+applied to those two already changed test files; ASTs before/after are identical.
+All five changed Python files now pass full-file formatting; no CI requirement,
+assertion or Runtime behavior was weakened. Actual native component hashes remain BLOCKED by the missing locked
 Windows sidecar. Kernel and the component lock are unchanged. Source/PR and
 resulting-main CI must pass before checkpoint publication and issue #9 closure.
 

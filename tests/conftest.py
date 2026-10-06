@@ -96,6 +96,8 @@ def mock_provider():
             return {"status": "ok"}
 
     return MockProvider()
+
+
 _TEST_TIER_BY_PREFIX = {
     "context": "integration",
     "evaluation": "integration",
