@@ -157,10 +157,13 @@ unsupported conditions stated explicitly. Existing baseline failures remain
 visible until resolved, not permanently accepted or skipped away.
 
 [Recovery timing issue #4](https://github.com/untrod/apeir/issues/4) remains open
-until stress tests, timing instrumentation, event ordering and lease/reconnect
-traces establish whether the response-loss deadline failure is test scheduling
-or a real race. Reruns passing cannot establish absence of a race. Preserve
-original persisted evidence and no-blind-replay behavior while investigating.
+pending independent CI acceptance. Baseline timing traces and deterministic ACK
+interleaving reproduced a real ASSIGNED-snapshot/RUNNING-admission race in both
+response-loss cases. The focused repair validates an existing dispatch without
+republishing started Work and persists initial dispatch evidence before spool
+publication; see [execution recovery](docs/operations/compute-mesh/EXECUTION_RECOVERY.md).
+Reruns passing cannot establish absence of other races. Preserve original
+persisted evidence and no-blind-replay behavior.
 
 [Native component-lock issue #2](https://github.com/untrod/apeir/issues/2) requires
 the actual pinned binaries, a documented build/download origin and comparison
