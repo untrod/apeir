@@ -611,3 +611,38 @@ def test_opa_configuration_material_cannot_leak_into_http_logging(
         OpaPolicyProvider(**configuration)
     assert FAKE_SECRET not in str(rejected.value) + caplog.text
     assert observed == []
+
+
+def test_opa_never_reads_ambient_netrc_credentials(monkeypatch):
+    request = request_facts()
+
+    def netrc(*args, **kwargs):
+        pytest.fail("policy transport attempted ambient credential resolution")
+
+    def send(session, prepared, **kwargs):
+        assert session.trust_env  # Preserve platform proxy/CA behavior.
+        assert "Authorization" not in prepared.headers
+        assert (
+            json.loads(prepared.body)["input"]["authorization_id"]
+            == request.authorization_id
+        )
+        response = requests.Response()
+        response.status_code = 200
+        response.headers["Content-Type"] = "application/json"
+        response._content = json.dumps(
+            {
+                "result": {
+                    "decision": "ALLOW",
+                    "authorization_id": request.authorization_id,
+                }
+            }
+        ).encode()
+        response._content_consumed = True
+        return response
+
+    monkeypatch.setattr(requests.sessions, "get_netrc_auth", netrc)
+    monkeypatch.setattr(requests.Session, "send", send)
+    assert (
+        OpaPolicyProvider("https://opa.example.test").evaluate(request)
+        is GovernanceDecision.ALLOW
+    )

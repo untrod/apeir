@@ -132,6 +132,10 @@ class OpaPolicyProvider:
 
     def _query(self, method: str, path: str, payload: dict | None = None) -> dict:
         with requests.Session() as session:
+            # Suppress implicit netrc service credentials while retaining the
+            # platform's proxy/CA environment. This policy role has no credential
+            # resolution authority; explicit callable auth leaves requests intact.
+            session.auth = lambda prepared: prepared
             # No redirects, response-body logging, credential store access,
             # caller-supplied headers or implicit policy retry.
             with session.request(
