@@ -37,7 +37,7 @@ from nous_runtime.provider.interoperability import ExternalAgentOperationHandler
 pytestmark = pytest.mark.unit
 
 
-def setup_agent(root, runner, *, policy=None):
+def setup_agent(root, runner, *, policy=None, descriptor=None):
     gate = ExecutionAuthorizationGate(
         GovernanceStore(root / "governance"), operation_policy_provider=policy
     )
@@ -56,7 +56,7 @@ def setup_agent(root, runner, *, policy=None):
     ).unwrap()
     workspace = root / "workspace"
     workspace.mkdir(exist_ok=True)
-    descriptor = AgentDescriptor(
+    descriptor = descriptor or AgentDescriptor(
         agent_id="reference-agent",
         executable_reference=shlex.quote(sys.executable),
         default_timeout_ms=5000,

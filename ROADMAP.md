@@ -40,6 +40,7 @@ Future targets below are requirements, not claims of implemented integrations.
 | M4 generic external-agent / restrictive policy reference | PASS | `05cfbc8`: actual isolated OCI subprocess plus canonical approval/Work/evidence/recovery and simulated downstream Reality; `tests/interoperability`. An external proposal never grants authority. |
 | M4.3 OPA Data API software reference | PASS | Real OPA 1.21.1 evaluation through existing restrictive PolicyProvider/Governance, exact-request binding, ambient credential denial, health/errors, approval/credential/Work/Node/evidence and paused-service/lost-response recovery; [reference scope](docs/architecture/PROVIDER_CONTRACT.md#m43-opa-data-api-software-reference). Fake credentials and simulated device effects; authenticated production remote-policy deployment remains PENDING. |
 | M4.4 OpenBao KV-v2 software reference | PASS | Real OpenBao 2.7.1 read-only scoped resolution through existing CredentialBroker, expiration/revocation, original firmware approval/denial and response-loss/restart without another credential fetch or effect; [scoped evidence](docs/architecture/PROVIDER_CONTRACT.md#m44-openbao-kv-v2-software-reference). Source/PR and repaired main CI passed; `milestone/m4.4-openbao-kv2-reference` freezes main `c3eeeaca`. Production deployment, rotation and dynamic server leases remain PENDING. |
+| M4.6 bounded Ray diagnostic | PARTIAL | Explicit local PID64..256 exception measured actual Ray2.49.2 startup/task/resource/cleanup; existing Governance/Node recovery tests use a bound diagnostic profile. Normal OCI PID64 is unchanged. [Diagnostic scope](docs/architecture/PROVIDER_CONTRACT.md#m46-bounded-ray-qualification-diagnostic); production Ray Provider admission, complete effect verification, remote cluster/GPU/platform qualification remain PENDING. |
 | M4 authenticated Codex / remaining industrial Providers | PENDING | Codex CLI discovery currently requires authentication; no authenticated service integration is qualified. Ray/Kubernetes, SPIFFE/SPIRE and Viam/ROS/KubeEdge remain unexercised. OPA reference does not complete M4 or authenticate remote human approval. |
 | M5 Reality & Hardware (complete target) | PARTIAL | Read-only signed SerialTransport/ESP32 host contracts exist. Physical mutation, firmware persistence and a second device family remain missing. |
 | M5 serial/ESP32 host-contract preparation | PASS | `ff4d7b4`: 28 focused tests, bounded signed frames/fresh nonce/stable identity/trust preservation; `tests/reality/test_serial_contract.py`. No firmware-write capability advertised. |
@@ -190,15 +191,17 @@ synchronization does not repair the legacy early-assignment gap; it remains
 outside the nine original environment failures. The subsequent routing repair
 binds a route to actual accepted WELCOME, revalidates before assignment and
 preserves successor routes on old-connection EOF; [state semantics](docs/architecture/STATE_OWNERSHIP.md)
-remain transport-only. Its source/PR/main validation and checkpoint are still
-required; #4 remains open for broader timing qualification.
+remain transport-only. Its source/PR/main CI passed and immutable checkpoint
+`milestone/m3.2-delivery-and-stop-recovery` freezes main `583387ea`; #4 remains open
+for broader timing qualification.
 
 The separate [Windows relay shutdown timeout #8](https://github.com/untrod/apeir/issues/8)
 remains OPEN. Source Core `37552829192` preserved another Windows keepalive-close /
 stop timeout (**1 failed, 3818 passed, 40 skipped**). A deterministic reconnect
 backoff stop defect is now isolated and narrowly repaired without increasing the
 existing stop timeout; [evidence](docs/architecture/STATE_OWNERSHIP.md) and required
-final CI remain separate from proving the keepalive timing origin.
+final CI (all source/PR and merged-main workflows passed) remain separate from
+proving the keepalive timing origin.
 [Environment cleanup #9](https://github.com/untrod/apeir/issues/9)
 tracks the qualification above and closes only after its checkpoint prerequisites.
 The original nine unconfigured Cloud failures remain historical evidence; current configured qualification and its remaining unsupported host
