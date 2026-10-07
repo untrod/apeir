@@ -17,6 +17,7 @@ import logging
 import os
 import struct
 import threading
+from dataclasses import dataclass
 
 from .node_registry import NodeRegistry
 from .session_registry import SessionRegistry
@@ -25,8 +26,11 @@ from .task_coordinator import TaskCoordinator
 from ..protocol.envelope import ProtocolEnvelope
 from ..protocol.pairing import PairingRequest
 from ..protocol.task import (
-    TaskState, TaskSubmission, TaskAcknowledgement,
-    TaskEvent, TaskResult,
+    TaskState,
+    TaskSubmission,
+    TaskAcknowledgement,
+    TaskEvent,
+    TaskResult,
 )
 from ..protocol.error import ErrorCode
 
@@ -35,6 +39,13 @@ _log = logging.getLogger("nous.control_plane.gateway")
 # Transport protocol: 4-byte big-endian length prefix + JSON message
 HEADER_FMT = "!I"
 MAX_MESSAGE_BYTES = 1_048_576  # 1 MB
+
+
+@dataclass(frozen=True)
+class _DeliveryRoute:
+    session_id: str
+    queue: asyncio.Queue
+    writer: asyncio.StreamWriter
 
 
 class ControlPlaneGateway:
@@ -46,10 +57,14 @@ class ControlPlaneGateway:
       - TCP message protocol for Node connections
     """
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 9770, signing_key: str = ""):
+    def __init__(
+        self, host: str = "127.0.0.1", port: int = 9770, signing_key: str = ""
+    ):
         self.host = host
         self.port = port
-        self.signing_key = signing_key or os.environ.get("NOUS_CONTROL_PLANE_SIGNING_KEY", "")
+        self.signing_key = signing_key or os.environ.get(
+            "NOUS_CONTROL_PLANE_SIGNING_KEY", ""
+        )
         self.node_registry = NodeRegistry()
         self.session_registry = SessionRegistry()
         self.pairing = PairingService()
@@ -59,12 +74,19 @@ class ControlPlaneGateway:
         self._start_error: Exception | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
-        self._node_writers: dict[str, asyncio.Queue] = {}  # node_id -> send_queue
+        self._delivery_routes: dict[str, _DeliveryRoute] = {}
         self._background_tasks: set[asyncio.Task] = set()
         self._connection_writers: set[asyncio.StreamWriter] = set()
         self._seen_message_ids: set[str] = set()
         self._seen_nonces: set[str] = set()
         self._last_sequence_by_source: dict[str, int] = {}
+
+    @property
+    def _node_writers(self) -> dict[str, asyncio.Queue]:
+        """Compatibility projection of current transport routes, not authority."""
+        return {
+            node: route.queue for node, route in self._delivery_routes.copy().items()
+        }
 
     # Lifecycle
 
@@ -82,13 +104,20 @@ class ControlPlaneGateway:
         self._running = False
         if self._loop and self._loop.is_running():
             try:
-                future = asyncio.run_coroutine_threadsafe(self._shutdown_async(), self._loop)
+                future = asyncio.run_coroutine_threadsafe(
+                    self._shutdown_async(), self._loop
+                )
                 future.result(timeout=3.0)
             except Exception:
                 pass
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=3.0)
-        if self._thread and self._thread.is_alive() and self._loop and self._loop.is_running():
+        if (
+            self._thread
+            and self._thread.is_alive()
+            and self._loop
+            and self._loop.is_running()
+        ):
             self._loop.call_soon_threadsafe(self._loop.stop)
             self._thread.join(timeout=1.0)
         _log.info("Control Plane Gateway stopped")
@@ -104,16 +133,24 @@ class ControlPlaneGateway:
         except OSError as exc:
             self._start_error = exc
             self._running = False
-            _log.error("Control Plane Gateway failed to start on %s:%d: %s", self.host, self.port, exc)
+            _log.error(
+                "Control Plane Gateway failed to start on %s:%d: %s",
+                self.host,
+                self.port,
+                exc,
+            )
         finally:
             if self._loop:
-                pending = [task for task in asyncio.all_tasks(self._loop) if not task.done()]
+                pending = [
+                    task for task in asyncio.all_tasks(self._loop) if not task.done()
+                ]
                 for task in pending:
                     task.cancel()
                 if pending:
-                    self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    self._loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
                 self._loop.close()
-
 
     async def _shutdown_async(self) -> None:
         """Close server, active writers, and background tasks on the event loop."""
@@ -135,6 +172,7 @@ class ControlPlaneGateway:
         if self._background_tasks:
             await asyncio.gather(*self._background_tasks, return_exceptions=True)
             self._background_tasks.clear()
+
     async def _serve(self) -> None:
         """Start the TCP server."""
         self._server = await asyncio.start_server(
@@ -150,18 +188,21 @@ class ControlPlaneGateway:
 
     # Connection Handling
 
-    async def _handle_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    async def _handle_connection(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
         """Handle an incoming TCP connection from a Node."""
-        addr = writer.get_extra_info('peername')
+        addr = writer.get_extra_info("peername")
         self._connection_writers.add(writer)
         _log.info("Connection from %s", addr)
-        node_id = None  # Set after HELLO
+        node_id = None  # Set only after accepted HELLO
+        route = None
 
         # Create an outgoing queue for pushing messages to this connection
         send_queue: asyncio.Queue[dict] = asyncio.Queue()
 
         async def _reader_loop():
-            nonlocal node_id
+            nonlocal node_id, route
             while self._running:
                 msg = await self._read_message(reader)
                 if msg is None:
@@ -169,11 +210,27 @@ class ControlPlaneGateway:
                 response = await self._dispatch(msg, addr)
                 if response:
                     await send_queue.put(response)
-                # Track node_id for push routing
-                if not node_id:
-                    env = ProtocolEnvelope.from_dict(msg) if isinstance(msg, dict) else None
-                    if env and env.message_type == "HELLO":
-                        node_id = env.source_id
+                if response and response.get("message_type") == "WELCOME":
+                    source = msg.get("source_id", "")
+                    session = self.session_registry.get_by_node(source)
+                    session_id = response.get("payload", {}).get("session_id", "")
+                    if (
+                        (node_id is None or node_id == source)
+                        and session is not None
+                        and session.status == "active"
+                        and session.session_id == session_id
+                        and not writer.is_closing()
+                    ):
+                        node_id = source
+                        route = _DeliveryRoute(session_id, send_queue, writer)
+                        self._delivery_routes[node_id] = route
+                        # Only never-delivered tasks enter a newly ready route.
+                        # WELCOME is already first in this connection's FIFO.
+                        self.task_coordinator.check_deadlines()
+                        for task in self.task_coordinator.list_all(
+                            TaskState.QUEUED.value
+                        ):
+                            self._try_deliver(task)
 
         async def _writer_loop():
             while self._running:
@@ -183,26 +240,20 @@ class ControlPlaneGateway:
                 except asyncio.TimeoutError:
                     continue
 
-        # Register writer for push delivery
-        async def _register():
-            # Wait briefly for HELLO to set node_id
-            await asyncio.sleep(0.5)
-            if node_id:
-                self._node_writers[node_id] = send_queue
-        register_task = asyncio.create_task(_register())
-        self._background_tasks.add(register_task)
-        register_task.add_done_callback(self._background_tasks.discard)
-
+        reader_task = asyncio.create_task(_reader_loop())
+        writer_task = asyncio.create_task(_writer_loop())
         try:
-            # Run reader and writer concurrently
-            reader_task = asyncio.create_task(_reader_loop())
-            writer_task = asyncio.create_task(_writer_loop())
-            await asyncio.gather(reader_task, writer_task, return_exceptions=True)
+            await asyncio.wait(
+                {reader_task, writer_task}, return_when=asyncio.FIRST_COMPLETED
+            )
         except Exception as e:
             _log.warning("Connection error from %s: %s", addr, e)
         finally:
-            if node_id:
-                self._node_writers.pop(node_id, None)
+            for task in (reader_task, writer_task):
+                task.cancel()
+            await asyncio.gather(reader_task, writer_task, return_exceptions=True)
+            if node_id and self._delivery_routes.get(node_id) is route:
+                self._delivery_routes.pop(node_id, None)
             self._connection_writers.discard(writer)
             writer.close()
             try:
@@ -237,16 +288,25 @@ class ControlPlaneGateway:
             envelope = ProtocolEnvelope.from_dict(msg)
         except Exception:
             return ProtocolEnvelope.error(
-                ProtocolEnvelope(message_type="UNKNOWN", source_id="unknown", target_id="control_plane"),
-                ErrorCode.INVALID_MESSAGE, "Failed to parse envelope"
+                ProtocolEnvelope(
+                    message_type="UNKNOWN",
+                    source_id="unknown",
+                    target_id="control_plane",
+                ),
+                ErrorCode.INVALID_MESSAGE,
+                "Failed to parse envelope",
             ).to_dict()
 
         valid, err = envelope.is_valid()
         if not valid:
-            return ProtocolEnvelope.error(envelope, ErrorCode.INVALID_MESSAGE, err).to_dict()
+            return ProtocolEnvelope.error(
+                envelope, ErrorCode.INVALID_MESSAGE, err
+            ).to_dict()
 
         if envelope.is_expired():
-            return ProtocolEnvelope.error(envelope, ErrorCode.TASK_EXPIRED, "Message expired").to_dict()
+            return ProtocolEnvelope.error(
+                envelope, ErrorCode.TASK_EXPIRED, "Message expired"
+            ).to_dict()
 
         # Signature verification (if signing key is configured)
         if self.signing_key:
@@ -257,21 +317,33 @@ class ControlPlaneGateway:
 
             if not skip_verify:
                 if not envelope.signature:
-                    _log.warning("Rejected unsigned message type=%s from=%s",
-                                 envelope.message_type, envelope.source_id)
+                    _log.warning(
+                        "Rejected unsigned message type=%s from=%s",
+                        envelope.message_type,
+                        envelope.source_id,
+                    )
                     return ProtocolEnvelope.error(
-                        envelope, ErrorCode.INVALID_MESSAGE, "Message signature required"
+                        envelope,
+                        ErrorCode.INVALID_MESSAGE,
+                        "Message signature required",
                     ).to_dict()
                 if not envelope.verify(self.signing_key):
-                    _log.warning("Rejected invalid signature type=%s from=%s",
-                                 envelope.message_type, envelope.source_id)
+                    _log.warning(
+                        "Rejected invalid signature type=%s from=%s",
+                        envelope.message_type,
+                        envelope.source_id,
+                    )
                     return ProtocolEnvelope.error(
-                        envelope, ErrorCode.INVALID_MESSAGE, "Message signature verification failed"
+                        envelope,
+                        ErrorCode.INVALID_MESSAGE,
+                        "Message signature verification failed",
                     ).to_dict()
 
         replay_error = self._check_replay_and_sequence(envelope)
         if replay_error:
-            return ProtocolEnvelope.error(envelope, replay_error[0], replay_error[1]).to_dict()
+            return ProtocolEnvelope.error(
+                envelope, replay_error[0], replay_error[1]
+            ).to_dict()
 
         handlers = {
             "HELLO": self._handle_hello,
@@ -287,12 +359,17 @@ class ControlPlaneGateway:
             result = await handler(envelope, addr)
             return result.to_dict() if result else None
 
-        return ProtocolEnvelope.error(envelope, ErrorCode.INVALID_MESSAGE,
-                                       f"Unknown message type: {envelope.message_type}").to_dict()
+        return ProtocolEnvelope.error(
+            envelope,
+            ErrorCode.INVALID_MESSAGE,
+            f"Unknown message type: {envelope.message_type}",
+        ).to_dict()
 
     # Handlers
 
-    def _check_replay_and_sequence(self, envelope: ProtocolEnvelope) -> tuple[str, str] | None:
+    def _check_replay_and_sequence(
+        self, envelope: ProtocolEnvelope
+    ) -> tuple[str, str] | None:
         """Reject duplicate message ids, duplicate nonces, and sequence rollback."""
         if envelope.message_id in self._seen_message_ids:
             return ErrorCode.TASK_DUPLICATE, "Duplicate message_id"
@@ -312,16 +389,22 @@ class ControlPlaneGateway:
             self._seen_nonces.add(f"{envelope.source_id}:{envelope.nonce}")
         return None
 
-    async def _handle_hello(self, env: ProtocolEnvelope, addr: tuple) -> ProtocolEnvelope:
+    async def _handle_hello(
+        self, env: ProtocolEnvelope, addr: tuple
+    ) -> ProtocolEnvelope:
         """Handle HELLO from a Node."""
         node_id = env.source_id
         node = self.node_registry.get(node_id)
 
         if not node:
-            return ProtocolEnvelope.error(env, ErrorCode.NODE_UNKNOWN, f"Node {node_id} not registered")
+            return ProtocolEnvelope.error(
+                env, ErrorCode.NODE_UNKNOWN, f"Node {node_id} not registered"
+            )
 
         if node.get("credential_status") == "revoked":
-            return ProtocolEnvelope.error(env, ErrorCode.NODE_REVOKED, f"Node {node_id} is revoked")
+            return ProtocolEnvelope.error(
+                env, ErrorCode.NODE_REVOKED, f"Node {node_id} is revoked"
+            )
 
         session = self.session_registry.create_session(
             node_id=node_id,
@@ -330,29 +413,43 @@ class ControlPlaneGateway:
         )
         self.node_registry.set_online(node_id, True)
 
-        return ProtocolEnvelope.response(env, "WELCOME", {
-            "session_id": session.session_id,
-            "protocol_version": session.protocol_version,
-            "server_time": session.created_at,
-            "heartbeat_interval_ms": 15000,
-            "liveness_timeout_ms": 45000,
-        })
+        return ProtocolEnvelope.response(
+            env,
+            "WELCOME",
+            {
+                "session_id": session.session_id,
+                "protocol_version": session.protocol_version,
+                "server_time": session.created_at,
+                "heartbeat_interval_ms": 15000,
+                "liveness_timeout_ms": 45000,
+            },
+        )
 
-    async def _handle_heartbeat(self, env: ProtocolEnvelope, addr: tuple) -> ProtocolEnvelope:
+    async def _handle_heartbeat(
+        self, env: ProtocolEnvelope, addr: tuple
+    ) -> ProtocolEnvelope:
         """Handle HEARTBEAT from a Node."""
         payload = env.payload
         session_id = payload.get("session_id", "")
         session = self.session_registry.heartbeat(session_id)
         if not session:
-            return ProtocolEnvelope.error(env, ErrorCode.SESSION_EXPIRED, "Session not found or expired")
+            return ProtocolEnvelope.error(
+                env, ErrorCode.SESSION_EXPIRED, "Session not found or expired"
+            )
 
         self.node_registry.set_online(session.node_id, True)
-        return ProtocolEnvelope.response(env, "HEARTBEAT_ACK", {
-            "sequence_number": payload.get("sequence_number", 0),
-            "server_time": session.last_heartbeat,
-        })
+        return ProtocolEnvelope.response(
+            env,
+            "HEARTBEAT_ACK",
+            {
+                "sequence_number": payload.get("sequence_number", 0),
+                "server_time": session.last_heartbeat,
+            },
+        )
 
-    async def _handle_pairing_request(self, env: ProtocolEnvelope, addr: tuple) -> ProtocolEnvelope:
+    async def _handle_pairing_request(
+        self, env: ProtocolEnvelope, addr: tuple
+    ) -> ProtocolEnvelope:
         """Handle PAIRING_REQUEST from a Node."""
         payload = env.payload
         request = PairingRequest.from_dict(payload)
@@ -364,6 +461,7 @@ class ControlPlaneGateway:
         # Parse and register node identity
         identity = request.node_identity
         from ..protocol.identity import NodeIdentity as NI
+
         node_identity = NI.from_dict(identity)
 
         self.node_registry.register(
@@ -374,7 +472,9 @@ class ControlPlaneGateway:
 
         return ProtocolEnvelope.response(env, "PAIRING_APPROVAL", approval.to_dict())
 
-    async def _handle_task_ack(self, env: ProtocolEnvelope, addr: tuple) -> ProtocolEnvelope | None:
+    async def _handle_task_ack(
+        self, env: ProtocolEnvelope, addr: tuple
+    ) -> ProtocolEnvelope | None:
         """Handle TASK_ACKNOWLEDGEMENT from a Node."""
         ack = TaskAcknowledgement.from_dict(env.payload)
         self.task_coordinator.acknowledge(ack)
@@ -383,13 +483,17 @@ class ControlPlaneGateway:
             self.task_coordinator.add_event(ack.task_id, TaskEvent.started(ack.task_id))
         return None  # No response needed for ACK
 
-    async def _handle_task_event(self, env: ProtocolEnvelope, addr: tuple) -> ProtocolEnvelope | None:
+    async def _handle_task_event(
+        self, env: ProtocolEnvelope, addr: tuple
+    ) -> ProtocolEnvelope | None:
         """Handle TASK_EVENT from a Node."""
         event = TaskEvent.from_dict(env.payload)
         self.task_coordinator.add_event(event.task_id, event)
         return None
 
-    async def _handle_task_result(self, env: ProtocolEnvelope, addr: tuple) -> ProtocolEnvelope | None:
+    async def _handle_task_result(
+        self, env: ProtocolEnvelope, addr: tuple
+    ) -> ProtocolEnvelope | None:
         """Handle TASK_RESULT from a Node."""
         result = TaskResult.from_dict(env.payload)
         self.task_coordinator.complete(result.task_id, result)
@@ -421,9 +525,14 @@ class ControlPlaneGateway:
 
     # CLI API Methods (synchronous, for CLI use)
 
-    def submit_task(self, capability_id: str, params: dict,
-                    target_node: str = "", deadline: str = "",
-                    risk_level: str = "low") -> dict | None:
+    def submit_task(
+        self,
+        capability_id: str,
+        params: dict,
+        target_node: str = "",
+        deadline: str = "",
+        risk_level: str = "low",
+    ) -> dict | None:
         """Submit a task via the gateway (synchronous)."""
         submission = TaskSubmission.create(
             capability_id=capability_id,
@@ -441,53 +550,82 @@ class ControlPlaneGateway:
         return None
 
     def _try_deliver(self, task: dict) -> bool:
-        """Try to deliver a queued task to a connected node."""
-        if not task:
+        """Schedule delivery only to an actual current route.
+
+        Cross-thread callers schedule a callback, not a delivered-state claim.
+        Assignment and enqueue occur together on the gateway loop after a fresh
+        route/session check. Losing a route before that callback leaves QUEUED.
+        """
+        if not task or not self._loop or not self._loop.is_running():
             return False
-
-        target_node = task.get("target_node", "")
-        node_id = target_node if target_node else task.get("assigned_node", "")
-
-        # Find an online node
+        node_id = task.get("target_node") or task.get("assigned_node", "")
         if not node_id:
-            sessions = self.session_registry.list_active()
-            for s in sessions:
-                if self.node_registry.has_capability(s.node_id, task["capability_id"]):
-                    node_id = s.node_id
+            for session in self.session_registry.list_active():
+                if (
+                    session.node_id in self._delivery_routes
+                    and self.node_registry.has_capability(
+                        session.node_id, task["capability_id"]
+                    )
+                ):
+                    node_id = session.node_id
                     break
-
-        if not node_id:
+        route = self._delivery_routes.get(node_id)
+        if route is None:
             return False
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+        if current_loop is self._loop:
+            return self._enqueue_task(task["task_id"], node_id, route)
+        try:
+            self._loop.call_soon_threadsafe(
+                self._enqueue_task, task["task_id"], node_id, route
+            )
+        except RuntimeError:
+            return False
+        return True
 
+    def _enqueue_task(self, task_id: str, node_id: str, route: _DeliveryRoute) -> bool:
+        """Revalidate and perform the existing assignment on its queue's loop."""
+        if (
+            not self._running
+            or self._delivery_routes.get(node_id) is not route
+            or route.writer.is_closing()
+        ):
+            return False
         session = self.session_registry.get_by_node(node_id)
-        if not session:
+        node = self.node_registry.get(node_id)
+        self.task_coordinator.check_deadlines()
+        task = self.task_coordinator.get(task_id)
+        if (
+            session is None
+            or session.status != "active"
+            or session.session_id != route.session_id
+            or node is None
+            or node.get("credential_status") == "revoked"
+            or task is None
+            or task["state"] != TaskState.QUEUED.value
+            or (task.get("target_node") and task["target_node"] != node_id)
+            or not self.node_registry.has_capability(node_id, task["capability_id"])
+        ):
             return False
-
-        # Create assignment
         session = self.session_registry.increment_sequence(session.session_id)
-        if not session:
+        if session is None:
             return False
-
         assignment = self.task_coordinator.assign(
-            task["task_id"], node_id, session.sequence_number,
-            session_id=session.session_id,
+            task_id, node_id, session.sequence_number, session_id=session.session_id
         )
         if assignment is None:
             return False
-
-        # Push assignment to connected node
-        send_queue = self._node_writers.get(node_id)
-        if send_queue and self._loop and self._loop.is_running():
-            env = ProtocolEnvelope(
-                message_type="TASK_ASSIGNMENT",
-                source_id="control_plane",
-                target_id=node_id,
-                sequence_number=session.sequence_number,
-                payload=assignment.to_dict(),
-            )
-            asyncio.run_coroutine_threadsafe(
-                send_queue.put(env.to_dict()), self._loop
-            )
+        envelope = ProtocolEnvelope(
+            message_type="TASK_ASSIGNMENT",
+            source_id="control_plane",
+            target_id=node_id,
+            sequence_number=session.sequence_number,
+            payload=assignment.to_dict(),
+        )
+        route.queue.put_nowait(envelope.to_dict())
         return True
 
     def get_status(self) -> dict:
@@ -497,10 +635,16 @@ class ControlPlaneGateway:
             "host": self.host,
             "port": self.port,
             "nodes_registered": len(self.node_registry.list_all()),
-            "nodes_online": len([n for n in self.node_registry.list_all() if n.get("is_online")]),
+            "nodes_online": len(
+                [n for n in self.node_registry.list_all() if n.get("is_online")]
+            ),
             "sessions_active": len(self.session_registry.list_active()),
             "tasks_queued": len(self.task_coordinator.list_all(TaskState.QUEUED.value)),
-            "tasks_running": len(self.task_coordinator.list_all(TaskState.RUNNING.value)),
-            "tasks_completed": len(self.task_coordinator.list_all(TaskState.COMPLETED.value)),
+            "tasks_running": len(
+                self.task_coordinator.list_all(TaskState.RUNNING.value)
+            ),
+            "tasks_completed": len(
+                self.task_coordinator.list_all(TaskState.COMPLETED.value)
+            ),
             "tasks_failed": len(self.task_coordinator.list_all(TaskState.FAILED.value)),
         }

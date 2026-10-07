@@ -85,6 +85,50 @@ budget; fixed sleeps cannot establish these facts. A legacy WELCOME is not remot
 human identity qualification or permission for a governed Operation. Canonical
 Distributed Work still uses its signed Node admission and Governance boundaries.
 
+Legacy delivery routes are published from an accepted HELLO/WELCOME session,
+not a fixed timer. Cross-thread submission schedules a gateway-loop callback;
+that callback rechecks the exact current route, session, writer, Node revocation,
+capability, deadline and original QUEUED state before the existing assignment
+and FIFO enqueue. Scheduling alone is not a persisted DELIVERED claim. If the route is
+lost or replaced before admission, the original task stays QUEUED. A newly ready
+route may deliver never-dispatched queued tasks; reconnect never republishes
+DELIVERED, running or terminal tasks. EOF closes that connection, and its cleanup
+cannot remove a successor's route. This repairs transport ordering only; it
+creates no human identity, grant, Governance decision or physical-effect proof.
+
+Local correction evidence: the missing-route contract reproduced **1 failed**
+on the accepted prior implementation (it returned success and persisted
+DELIVERED with no send queue). Final affected regressions have **609 passed**, repository contracts **244 passed**.
+Final new contracts have **14 passed**; initial
+combined connectivity tests had **29 passed**, and forced late HELLO, old-connection
+cleanup and duplicate scheduling passed **60 cases across 20 rounds**. Full
+configured init-container regression: **3812 passed, 47 skipped, 4 warnings**;
+bare managed host: **3821 passed, 36 skipped, 2 unchanged orphan-process failures,
+4 warnings**. Those failures and process identity assertions are preserved.
+Ruff/format/compile/docs/link/hygiene/security and three component-lock contract
+tests pass; actual locked native binaries remain missing/BLOCKED. Required
+source/PR/main CI and checkpoint are separate prerequisites. Issue #4 and Windows
+shutdown issue #8 remain open; this evidence does not prove all timing races absent.
+
+Source `2992690040305441bdac34339411477d1d34c2e9` then exposed the previously
+tracked Windows relay stop mechanism: Core `37552829192` recorded **1 failed,
+3818 passed, 40 skipped, 4 warnings**. A keepalive close reached an uninterruptible
+reconnect-backoff sleep, and the unchanged two-second stop assertion timed out.
+The failed run is preserved in [issue #8 evidence](https://github.com/untrod/apeir/issues/8#issuecomment-6028532257).
+Three deterministic pre-fix stop probes failed; the narrow correction waits on
+stop with the unchanged jitter/exponential timeout instead of sleeping through it.
+It grants no authority and changes neither session execution nor the Node journal.
+Stop wakes the backoff, ordinary retry still waits, and cancellation propagates.
+Six new cases plus the two observed integration tests passed **8 cases**;
+**160 passed across 20 controlled rounds**, final affected **615 passed** and
+repository **245 passed**. Complete supported init-container regression:
+**3819 passed, 47 skipped, 4 warnings**, exit0; bare managed host: **3828 passed,
+36 skipped, 2 unchanged orphan failures, 4 warnings**. Whole standard checks pass,
+security **0 findings/1895 files**; lock contracts3 pass while actual native hash
+verification remains BLOCKED. Keepalive origin and active-session close timing remain
+unqualified; #8 stays open. Source/PR/main CI must qualify the final correction.
+
+
 | Evidence condition | Required response |
 | --- | --- |
 | Missing/expired/revoked authority or credentials | Deny current execution; do not reuse after reconnect |
