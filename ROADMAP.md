@@ -164,8 +164,10 @@ passed, 36 skipped, 2 failed, 4 warnings**. Seven original failures are repaired
 the two orphan assertions require a supported init/reaper, which is independently
 verified without Kernel or assertion changes. See the
 [configuration and preserved failed probes](docs/development/DEVELOPER_PLATFORM.md#supported-development-environment).
-Source/PR and resulting-main CI remain prerequisites to a checkpoint and issue
-closure; a bare managed PID 1 is not a qualified process lifecycle environment.
+Source/PR and resulting-main Core, Desktop, Multi-Arch and Security all passed;
+`milestone/development-environment-qualification` freezes normal merge
+`9fe47490dd2bb7c670d7762bdf5de54b4e3f9a1b`. Issue #9 is closed for that scoped
+qualification. A bare managed PID 1 is not a qualified process lifecycle environment.
 
 [Recovery timing issue #4](https://github.com/untrod/apeir/issues/4) remains open
 for continued cross-platform timing qualification after [PR #7](https://github.com/untrod/apeir/pull/7)
@@ -185,7 +187,11 @@ Further Windows/controlled legacy-connectivity evidence distinguishes TCP,
 WELCOME, cached reconnect session and actual send-queue readiness. Test
 synchronization does not repair the legacy early-assignment gap; it remains
 [actionable OPEN evidence](https://github.com/untrod/apeir/issues/4#issuecomment-6012448219)
-outside the nine original environment failures.
+outside the nine original environment failures. The subsequent routing repair
+binds a route to actual accepted WELCOME, revalidates before assignment and
+preserves successor routes on old-connection EOF; [state semantics](docs/architecture/STATE_OWNERSHIP.md)
+remain transport-only. Its source/PR/main validation and checkpoint are still
+required; #4 remains open for broader timing qualification.
 
 The separate [Windows relay shutdown timeout #8](https://github.com/untrod/apeir/issues/8)
 remains OPEN. [Environment cleanup #9](https://github.com/untrod/apeir/issues/9)
