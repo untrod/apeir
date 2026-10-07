@@ -403,3 +403,114 @@ await the original signed terminal evidence, resume the same Workflow/Plan and
 require FAILED, zero backend resolutions, zero effects and no leakage. Runtime
 admission/retry behavior is unchanged; the nine unrelated Cloud baseline failures
 remain intact. Corrective CI must pass before reporting the M4 software Gate.
+
+## M4.6 bounded Ray qualification diagnostic
+
+Starting main: `583387eab58868155d6badc1c199694ee00fb6fb`; Kernel stays
+`87fd1b2ff28ef14ab1a515a58162592b452fda2e`. The operator approved a temporary
+local diagnostic PID ceiling at most256. This is **not a production Ray
+ExecutionProvider**: complete M4 remains PARTIAL and production Ray is PENDING.
+Normal OCI, its PID64 default, Kernel, SDK, credentials and CI resource limits
+remain unchanged. The standalone CLI is an operator-owned resource probe, not a
+new Runtime admission API; its acknowledgement flag never grants authority.
+
+| Concern | Audit | Existing owner / scoped extension |
+| --- | --- | --- |
+| Containment and resource/time boundaries | REUSE | OCIContainerProvider, ExecutionEnvironment and EnvironmentCommand |
+| Human approval and execution admission | REUSE | Governance/ApprovalBroker and bound ExternalAgentOperationHandler |
+| Delivery, restart and uncertainty | REUSE | Canonical Node execution journal, not Ray retries |
+| Resource profile and measurements | EXTEND | Immutable diagnostic profile in the host descriptor metadata, hence its approved resource digest; native result CAS retains provenance |
+| Production profile admission/public Provider | MISSING | No production profile registration or Runtime schema is added |
+| Remote cluster identity, credentials, GPU/platforms | MISSING | Network-none CPU diagnostics do not qualify them |
+
+Every diagnostic keeps UID65532, read-only root, dropped capabilities,
+no-new-privileges, network-none, private PID namespace, no host device/socket,
+CPU1, memory2GiB, 512MiB noexec/nosuid/nodev temporary filesystem and45-second
+execution budget. Profile inputs are host-owned, not supplied by a model/Work.
+Governed tests bind image/PID/CPU/memory/tmpfs/timeout before approval and reject
+changed profiles before create. Deny, revoke and six non-human self-approval
+cases produce no engine invocation. There is no host-process fallback.
+
+Ray2.49.2 uses pinned upstream Linux-amd64 image
+`rayproject/ray@sha256:de04957cc0a2f30563389ab945b5f96358f601ae76bd49755f5727adbcb5e7ba`.
+Its public Python directory is inaccessible to UID65532. An offline local
+build runs `chmod o+rx /home/ray` and returns to UID65532; runtime execution
+remains non-privileged. The exact `IMAGE_RECIPE`, immutable local image ID and
+recipe digest are recorded. This derivative is neither signed nor release-qualified.
+The repository scanner reports **0 HIGH, 3 MEDIUM** for these public image-layout
+paths (recipe, Python constant, documentation), not credentials/personal homes.
+They are reviewed findings; no scanner rule or allowlist is weakened to hide them.
+
+| PID ceiling | Measured result | Peak PID slots |
+| --- | --- | --- |
+| 64 | Earlier startup/thread exhaustion; failed probes retained | No task acceptance |
+| 192 | Starts but worker crashes during execution: FAIL | 192 |
+| 208 | One task succeeds with only one slot of headroom | 207 |
+| 216 | Entire governed diagnostic matrix passes repeatedly | Up to212 under concurrent full-regression load |
+| 224 | Same matrix passes; completion peak varies above208 | 210 |
+| 256 | Initial task succeeds at the approved upper bound | 207 |
+
+216 is the smallest tested bound completing the matrix, **not a proven minimum,
+production default or fleet capacity promise**. PID accounting includes threads.
+Initial successful probes have at most11 processes: driver/helper Python,
+GCS server, raylet, Ray worker and OCI keepalive shell/sleep. Later load/cleanup
+may transiently add helpers. Startup phase mean CPU is approximately0.87–1.00
+cores; simple task/idle means0.14–0.18 cores. Adjacent cgroup usage/timestamp
+samples expose CPU peaks separately; short samples can span quota windows.
+Cgroup memory includes cache; observed peaks range488,218,624–799,838,208bytes,
+below the same2GiB limit. Summed RSS double-counts shared mappings. These are
+resource measurements, not throughput benchmarks. Ray's default64MiB /dev/shm
+warning and /tmp fallback remain; shared memory/noexec were not changed.
+
+Final kernel-reading matrix: **31 passed** (105.36seconds), including four actual
+Ray cases. Normal tasks have kernel PID peaks208/208, error202, cancellation205;
+last cgroup memory peak501,346,304bytes. Kernel peak readings include the cleanup
+helper. Controlled cancellation's actual container destruction is1.532seconds,
+separate from the subsequent0.041-second absence check. Normal/error destruction
+is1.500–1.548seconds. Every tracked PID plus start-time identity is absent after
+cleanup, the container is absent, and default PID64 is rechecked. Earlier PID216
+matrices also passed31 cases, including one under concurrent regression load.
+
+Tasks set `max_retries=0`, `retry_exceptions=False`. Task/worker/Ray-node IDs are
+untrusted execution evidence, never authority or stable APEIR Node identity.
+Effect followed by lost response is reconciled from the original persisted Node
+journal after restart and independently observed as counter1, with invocation1.
+Error/cancel also leave counter1: neither proves an effect did not happen.
+Duplicate delivery returns original terminal evidence without execution. Native
+CAS provenance remains, and `effect_verified` stays false. No Reality receipt
+or independent EffectVerification is fabricated, and no physical COMMIT is claimed.
+
+Cleanup first exposed unreadable non-secret probe inputs under strict host umask
+(no task ran), then pytest warnings from guest-private Ray logs. Only the two fixed
+fake inputs use0644. Before destruction the same UID65532 normalizes its own fake
+Ray-state files/directories, follows no symlinks and widens no mount. Earlier
+warning-bearing results remain: host3854passed/40skipped/2knownPID1failures/
+41warnings. Final host full regression: **3854 passed, 40 skipped, 2 unchanged
+PID1 orphan failures, 4 warnings**; supported init-container: **3845 passed,
+51 skipped, 4 warnings**, exit0. Affected regression780passed/7skipped; final
+contract/environment67passed/6skipped; repository244passed; lock contracts3passed.
+Ruff/format/compile/docs232/links/hygiene/identity/Git/version checks pass.
+Actual native component hashes remain missing/BLOCKED, not substituted by contracts.
+
+Reproduce only with an explicitly approved diagnostic exception:
+
+```bash
+# Build IMAGE_RECIPE offline from the pinned, already pulled image.
+# Inspect and supply the immutable local image ID, not a mutable tag.
+python -m scripts.ci.ray_bounded_diagnostic \
+  --image sha256:<local-image-id> --workspace /tmp/apeir-ray-new-probe \
+  --pids 216 --acknowledge-diagnostic-exception
+# Add --mode failure or --mode cancel for fault injection.
+APEIR_RAY_DIAGNOSTIC_IMAGE=sha256:<local-image-id> APEIR_RAY_DIAGNOSTIC_PIDS=216 \
+  python -m pytest -q tests/interoperability/test_ray_diagnostic.py
+```
+
+The CLI rejects reused workspaces; an instance/restart also refuses prior probe
+inputs/state even if the counter is missing. Keep raw reports/samples outside
+source control. CI runs contracts and explicitly skips the four real cases without
+a host image/exception; no GitHub CI high-PID exception is introduced. A future
+production Gate must register a host-selected profile as governed resource facts,
+revalidate admission immediately before task dispatch, integrate complete Work/
+Workflow and independent effect verification, and qualify health/errors,
+cancellation, cleanup, recovery, credentials/identity and conformance. A prior
+approval, startup success or profile name alone cannot satisfy that Gate.
