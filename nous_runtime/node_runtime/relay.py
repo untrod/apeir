@@ -1533,7 +1533,13 @@ class NodeRelayClient:
             except (OSError, TimeoutError, ConnectionClosed, NodeProtocolError):
                 if stop_event.is_set():
                     break
-                await asyncio.sleep(delay + random.random() * min(delay * 0.25, 1.0))
+                try:
+                    await asyncio.wait_for(
+                        stop_event.wait(),
+                        timeout=delay + random.random() * min(delay * 0.25, 1.0),
+                    )
+                except asyncio.TimeoutError:
+                    pass
                 delay = min(delay * 2, 60.0)
 
     async def run_session(self, stop_event: asyncio.Event) -> None:

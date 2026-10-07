@@ -110,6 +110,25 @@ tests pass; actual locked native binaries remain missing/BLOCKED. Required
 source/PR/main CI and checkpoint are separate prerequisites. Issue #4 and Windows
 shutdown issue #8 remain open; this evidence does not prove all timing races absent.
 
+Source `2992690040305441bdac34339411477d1d34c2e9` then exposed the previously
+tracked Windows relay stop mechanism: Core `37552829192` recorded **1 failed,
+3818 passed, 40 skipped, 4 warnings**. A keepalive close reached an uninterruptible
+reconnect-backoff sleep, and the unchanged two-second stop assertion timed out.
+The failed run is preserved in [issue #8 evidence](https://github.com/untrod/apeir/issues/8#issuecomment-6028532257).
+Three deterministic pre-fix stop probes failed; the narrow correction waits on
+stop with the unchanged jitter/exponential timeout instead of sleeping through it.
+It grants no authority and changes neither session execution nor the Node journal.
+Stop wakes the backoff, ordinary retry still waits, and cancellation propagates.
+Six new cases plus the two observed integration tests passed **8 cases**;
+**160 passed across 20 controlled rounds**, final affected **615 passed** and
+repository **245 passed**. Complete supported init-container regression:
+**3819 passed, 47 skipped, 4 warnings**, exit0; bare managed host: **3828 passed,
+36 skipped, 2 unchanged orphan failures, 4 warnings**. Whole standard checks pass,
+security **0 findings/1895 files**; lock contracts3 pass while actual native hash
+verification remains BLOCKED. Keepalive origin and active-session close timing remain
+unqualified; #8 stays open. Source/PR/main CI must qualify the final correction.
+
+
 | Evidence condition | Required response |
 | --- | --- |
 | Missing/expired/revoked authority or credentials | Deny current execution; do not reuse after reconnect |

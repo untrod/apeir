@@ -194,7 +194,12 @@ remain transport-only. Its source/PR/main validation and checkpoint are still
 required; #4 remains open for broader timing qualification.
 
 The separate [Windows relay shutdown timeout #8](https://github.com/untrod/apeir/issues/8)
-remains OPEN. [Environment cleanup #9](https://github.com/untrod/apeir/issues/9)
+remains OPEN. Source Core `37552829192` preserved another Windows keepalive-close /
+stop timeout (**1 failed, 3818 passed, 40 skipped**). A deterministic reconnect
+backoff stop defect is now isolated and narrowly repaired without increasing the
+existing stop timeout; [evidence](docs/architecture/STATE_OWNERSHIP.md) and required
+final CI remain separate from proving the keepalive timing origin.
+[Environment cleanup #9](https://github.com/untrod/apeir/issues/9)
 tracks the qualification above and closes only after its checkpoint prerequisites.
 The original nine unconfigured Cloud failures remain historical evidence; current configured qualification and its remaining unsupported host
 conditions are recorded above, rather than retaining nine failures as permanent
