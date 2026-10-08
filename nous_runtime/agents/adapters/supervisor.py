@@ -13,6 +13,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable
+from typing import Protocol, runtime_checkable
 
 from nous_runtime.core.redaction import redact_sensitive_text
 
@@ -31,6 +32,26 @@ from nous_runtime.agents.external.models import (
 )
 
 _log = logging.getLogger("nous.agents.supervisor")
+
+
+@runtime_checkable
+class AdmissionAwareExecutionRunner(Protocol):
+    """Trusted host runner that revalidates after setup, before dispatch.
+
+    The callback stays in the host process. It must never be serialized into
+    a subprocess, remote task, model request or provider result. Implementations
+    own cleanup even when revalidation raises; they cannot issue authority.
+    """
+
+    def execute_admitted(
+        self,
+        cmd: list[str],
+        env: dict[str, str],
+        cwd: str,
+        timeout_ms: int,
+        *,
+        before_dispatch: Callable[[], None],
+    ): ...
 
 
 class ProcessSupervisor:
@@ -54,7 +75,7 @@ class ProcessSupervisor:
         *,
         grace_period_seconds: float = 5.0,
         before_spawn: Callable[[], None] | None = None,
-        execution_runner: Callable | None = None,
+        execution_runner: Callable | AdmissionAwareExecutionRunner | None = None,
     ):
         self._descriptor = descriptor
         self._before_spawn = before_spawn
@@ -287,7 +308,31 @@ class ProcessSupervisor:
         if self._execution_runner is not None:
             if self._before_spawn is not None:
                 self._before_spawn()
-            result = self._execution_runner(cmd, env, cwd, timeout_ms)
+            if isinstance(self._execution_runner, AdmissionAwareExecutionRunner):
+                if self._before_spawn is None:
+                    raise PermissionError("Dispatch requires an admission callback")
+                active = True
+                dispatched = False
+
+                def before_dispatch():
+                    nonlocal dispatched
+                    if not active or dispatched:
+                        raise PermissionError("Dispatch admission is no longer usable")
+                    if self._cancel_event.is_set():
+                        raise PermissionError("Agent cancelled before dispatch")
+                    self._before_spawn()
+                    dispatched = True
+
+                try:
+                    result = self._execution_runner.execute_admitted(
+                        cmd, env, cwd, timeout_ms, before_dispatch=before_dispatch
+                    )
+                    if result.ok and not dispatched:
+                        raise PermissionError("Runner omitted dispatch admission")
+                finally:
+                    active = False
+            else:
+                result = self._execution_runner(cmd, env, cwd, timeout_ms)
             stdout_limiter.write(result.stdout.encode("utf-8"))
             stdout_text = redact_sensitive_text(stdout_limiter.getvalue_text())
             stderr_limiter = OutputLimiter(limit_bytes=stdout_limiter.limit)

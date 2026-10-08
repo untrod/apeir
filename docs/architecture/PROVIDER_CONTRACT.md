@@ -404,6 +404,35 @@ require FAILED, zero backend resolutions, zero effects and no leakage. Runtime
 admission/retry behavior is unchanged; the nine unrelated Cloud baseline failures
 remain intact. Corrective CI must pass before reporting the M4 software Gate.
 
+## Dispatch admission after provider setup
+
+Audit classification: **REUSE** the external-agent handler, Governance admission,
+Node journal, supervisor and CAS; **EXTEND** the host runner callback boundary;
+**MISSING** remains the full production Ray execution/verification integration.
+Slow container or cluster setup cannot extend an approved Operation's authority.
+
+The public Provider SDK exports `AdmissionAwareExecutionRunner`. A trusted,
+host-selected runner implements `execute_admitted(..., before_dispatch=...)`,
+performs setup, then calls the supplied callback immediately before submitting
+the one authorized task. The supervisor preserves the pre-setup check and adds
+current Governance revalidation at dispatch. Cancellation during setup prevents
+dispatch. The callback permits one successful dispatch and becomes unusable
+when the runner returns or raises. A successful report without invoking it is
+rejected. The runner must clean up owned resources in `finally`, including when
+admission fails; uncertain effects still use the existing Node journal.
+
+This is a trusted execution-adapter contract, not a sandbox for malicious host
+code. The callback must remain in the host process, never in task arguments,
+credentials, model context, Work, CAS, logs or provider results. It grants no new
+authority and cannot approve a request. Existing four-argument callable runners
+remain compatible and retain their pre-call check; they cannot claim post-setup
+admission unless they implement the new contract. Cancellation after task
+submission and production Ray cleanup/verification remain separate acceptance
+requirements. Tests in `tests/interoperability/test_dispatch_admission.py` cover
+policy DENY/UNKNOWN and expiry during setup, omitted/duplicate/late callbacks,
+pre-dispatch cancellation, missing admission and response-loss reconciliation.
+Neither this boundary nor the diagnostic below changes default OCI PID64.
+
 ## M4.6 bounded Ray qualification diagnostic
 
 Starting main: `583387eab58868155d6badc1c199694ee00fb6fb`; Kernel stays
