@@ -20,6 +20,7 @@ from urllib.parse import urlsplit
 import requests
 
 from nous_runtime.agents.adapters.command_adapter import CommandAgentAdapter
+from nous_runtime.agents.adapters.supervisor import AdmissionAwareExecutionRunner
 from nous_runtime.agents.external.models import (
     AgentDescriptor,
     AgentRunContext,
@@ -244,7 +245,7 @@ class ExternalAgentOperationHandler:
         artifacts: ContentAddressedArtifactStore,
         *,
         governance,
-        execution_runner: Callable | None = None,
+        execution_runner: Callable | AdmissionAwareExecutionRunner | None = None,
     ):
         if descriptor.validate():
             raise ValueError("Invalid external-agent descriptor")

@@ -1,6 +1,7 @@
 """Public replaceable roles; canonical Runtime types, never new authority."""
 
 from nous_runtime.provider.interoperability import (
+    AdmissionAwareExecutionRunner,
     DeviceProvider,
     ExecutionProvider,
     ExternalAgentOperationHandler,
@@ -41,6 +42,7 @@ from nous_runtime.model_runtime.models import (
 )
 
 __all__ = [
+    "AdmissionAwareExecutionRunner",
     "AgentDescriptor",
     "AdapterProbe",
     "AgentRunRequest",

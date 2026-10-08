@@ -24,7 +24,10 @@ import logging
 from collections.abc import Callable
 
 from nous_runtime.agents.adapters.policy_evaluator import CommandPolicyEvaluator
-from nous_runtime.agents.adapters.supervisor import ProcessSupervisor
+from nous_runtime.agents.adapters.supervisor import (
+    AdmissionAwareExecutionRunner,
+    ProcessSupervisor,
+)
 from nous_runtime.agents.external.models import (
     AgentCommandProposal,
     AgentDescriptor,
@@ -49,7 +52,7 @@ class CommandAgentAdapter:
         descriptor: AgentDescriptor,
         *,
         before_spawn: Callable[[], None] | None = None,
-        execution_runner: Callable | None = None,
+        execution_runner: Callable | AdmissionAwareExecutionRunner | None = None,
     ):
         errors = descriptor.validate()
         if errors:
