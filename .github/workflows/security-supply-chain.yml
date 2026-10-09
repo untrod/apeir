@@ -1,7 +1,7 @@
 name: Security and Supply Chain
 on:
   push:
-    branches: [main, 'feature/*', 'fix/*', 'docs/*', 'security/*', 'provider/*', 'platform/*', 'hardware/*', 'research/*', 'release/*']
+    branches: [main, 'release/*']
   pull_request:
     branches: [main]
   workflow_dispatch:

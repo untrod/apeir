@@ -1,0 +1,12 @@
+{
+  "workflow_id": "example.workflow",
+  "version": "1.0.0",
+  "trigger": "manual",
+  "steps": [
+    {
+      "step_id": "hello",
+      "step_type": "transform",
+      "params": {"value": "Hello from APEIR"}
+    }
+  ]
+}

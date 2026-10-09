@@ -1,7 +1,7 @@
 name: Core CI
 on:
   push:
-    branches: [main, 'feature/*', 'fix/*', 'docs/*', 'security/*', 'provider/*', 'platform/*', 'hardware/*', 'research/*', 'release/*']
+    branches: [main, 'release/*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -26,24 +26,37 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
+      - name: Select conservative PR scope
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: python scripts/ci/test_scope.py
       - name: Install dependencies
         run: python -m pip install ".[dev,a2a,mcp,scientific]"
       - name: Provision real OpenBao software reference
-        if: matrix.os == 'ubuntu-22.04' && matrix.python == '3.12'
+        if: steps.scope.outputs.scope == 'full' && matrix.os == 'ubuntu-22.04' && matrix.python == '3.12'
         env:
           OPENBAO_REFERENCE_IMAGE: openbao/openbao@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf
         run: |
           docker pull "$OPENBAO_REFERENCE_IMAGE"
           echo "APEIR_OPENBAO_TEST_IMAGE=$OPENBAO_REFERENCE_IMAGE" >> "$GITHUB_ENV"
       - name: Provision real OPA software reference
-        if: matrix.os == 'ubuntu-22.04' && matrix.python == '3.12'
+        if: steps.scope.outputs.scope == 'full' && matrix.os == 'ubuntu-22.04' && matrix.python == '3.12'
         env:
           OPA_REFERENCE_IMAGE: openpolicyagent/opa@sha256:4675ab04ad1627f74741d2d9c5142698c79e18b7b09f192587d31d6dba20838e
         run: |
           docker pull "$OPA_REFERENCE_IMAGE"
           echo "APEIR_OPA_TEST_IMAGE=$OPA_REFERENCE_IMAGE" >> "$GITHUB_ENV"
       - name: Full repository regression
+        if: steps.scope.outputs.scope == 'full'
         run: python -m pytest --tb=short --timeout=60
+      - name: Documentation and release consistency regression
+        if: steps.scope.outputs.scope == 'documentation'
+        run: |
+          python -m pytest -q tests/repository tests/test_rc_validation.py::TestDocumentation tests/test_productization_integration.py::TestDocFilesExist
+          python scripts/markdown_link_check.py
+          python scripts/ci/verify_release_versions.py
       - name: Verify collection floor
         run: >-
           python -c "import re, subprocess, sys;

@@ -5,7 +5,7 @@ name: Desktop CI
 
 on:
   push:
-    branches: [main, 'feature/*', 'fix/*', 'docs/*', 'security/*', 'provider/*', 'platform/*', 'hardware/*', 'research/*', 'release/*']
+    branches: [main, 'release/*']
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -28,16 +28,35 @@ jobs:
         working-directory: desktop
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select conservative PR scope
+        id: scope
+        working-directory: .
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: python scripts/ci/test_scope.py
       - uses: actions/setup-node@v4
+        if: steps.scope.outputs.scope == 'full'
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci
+        if: steps.scope.outputs.scope == 'full'
       - run: npm run lint
+        if: steps.scope.outputs.scope == 'full'
       - run: npm test
+        if: steps.scope.outputs.scope == 'full'
       - run: npm run typecheck
+        if: steps.scope.outputs.scope == 'full'
       - run: npm run build
+        if: steps.scope.outputs.scope == 'full'
+      - name: Documentation-only validation (required context remains present)
+        if: steps.scope.outputs.scope == 'documentation'
+        working-directory: .
+        run: python scripts/markdown_link_check.py
 
   # Windows x86_64 Build
   build-windows-x64:
