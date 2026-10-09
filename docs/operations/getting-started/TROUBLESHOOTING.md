@@ -1,97 +1,35 @@
-# Troubleshooting Guide
+# Troubleshooting
 
-## Installation
+Use the [source Quick Start](QUICK_START.md) first. Keep the exact failing
+command, interpreter version, operating system and traceback.
 
-### `pip install` fails
-```bash
-pip install --upgrade pip
-pip install nous-runtime[all] --no-cache-dir
-```
+## Installation or command discovery
 
-### `nous` command not found
-- Windows: Add `%APPDATA%\Python\Python3XX\Scripts` to PATH
-- Linux/macOS: `export PATH="$HOME/.local/bin:$PATH"`
-- Or: `python -m nous_runtime.cli.main`
+Check `python --version` (supported source development: 3.10–3.12), activate
+the checkout's virtual environment, then run `python -m pip check` and
+`apeir --help`. From the checkout, `python -m pip install -e .` installs the
+current package; obsolete package names and guessed images are unsupported.
 
-### Python version too old
-```bash
-python --version  # Must be 3.10+
-# Install Python 3.11+ from python.org or your package manager
-```
+Do not run as Administrator or delete an entire configuration directory to
+work around a permission error. Inspect the specific workspace and use a
+fresh writable directory when reproducing an installation problem.
 
-## Runtime
+## Runtime, Providers and recovery
 
-### Port 8770 already in use
-```bash
-# Find what's using it
-lsof -i :8770        # Linux/macOS
-netstat -ano | findstr 8770  # Windows
+`apeir doctor` and `apeir status` inspect the environment. Missing Kernel,
+credential, device or strong isolation backend must be reported; do not
+enable a test-only isolation override.
+Use the [Provider guide](../guides/PROVIDER_GUIDE.md) for endpoint diagnostics.
+Redact credentials and private data before sharing.
 
-# Change port
-export NOUS_BRAIN_PORT=8771
-```
+For an uncertain mutation, preserve Work/Operation IDs and evidence and use
+the existing recovery path. Do not retry an effect because a response was lost;
+a Receipt or model statement cannot replace a fresh Observation.
 
-### Runtime won't start
-```bash
-nous doctor          # Check environment
-tail -50 ~/.config/nous/logs/nous.log  # Check logs
-```
+Process-lifecycle tests require the
+[supported environment](../../development/DEVELOPER_PLATFORM.md#supported-development-environment),
+including a reaper in containers. Known qualification limits live in
+[ROADMAP](../../../ROADMAP.md).
 
-### Demo mode not working
-```bash
-export NOUS_DEMO_MODE=1
-nous start
-```
-
-## Providers
-
-### Connection test fails
-1. Check API key is correct
-2. Check endpoint URL
-3. Check network: `ping api.openai.com`
-4. Check firewall/proxy
-
-### Rate limited (429)
-The Runtime retries automatically with exponential backoff. If persistent:
-- Check your API usage dashboard
-- Consider using a different provider
-- Reduce request frequency
-
-### Provider health shows "degraded"
-- Provider may be temporarily unavailable
-- Check provider status page
-- The Runtime will retry automatically
-
-## Packs
-
-### Pack install fails
-```bash
-nous dev validate   # Check pack.yaml
-nous dev test       # Run pack tests
-```
-
-### Pack capability not found
-```bash
-nous capability list | grep my-pack
-```
-
-## Configuration
-
-### Config not loading
-```bash
-nous doctor          # Checks write permissions
-ls -la ~/.config/nous/  # Check config exists
-```
-
-### Reset configuration
-```bash
-rm -rf ~/.config/nous/
-nous init
-```
-
-## Getting Help
-
-1. Run `nous doctor` first
-2. Check logs in `~/.config/nous/logs/`
-3. Read docs in `docs/operations/getting-started/`
-4. Open an issue with the output of `nous doctor`
+Report bugs at [GitHub](https://github.com/untrod/apeir/issues).
+Security concerns follow [SECURITY](../../../SECURITY.md).

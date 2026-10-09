@@ -148,5 +148,5 @@ exact same layout renders in plain text — no missing features, no
 import errors.
 
 ```bash
-pip install nous-runtime[ui]   # enhanced colour rendering
+python -m pip install -e ".[ui]"   # from the source checkout
 ```

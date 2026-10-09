@@ -1,10 +1,10 @@
-# APEIR Developer Ecosystem v1.0
+# APEIR Developer Ecosystem
 
 ## Getting Started
 
 ```bash
-# 1. Install
-pip install nous-runtime[all]
+# 1. Install from the checkout after following the source Quick Start
+python -m pip install -e .
 
 # 2. Verify
 nous version
@@ -17,12 +17,11 @@ nous dev validate
 nous pack install .
 nous capability run hello.hello
 
-# Total time: under 5 minutes
 ```
 
 ## Pack Registry (Concept)
 
-The Pack Registry is where packs are published and discovered.
+Remote pack publication/discovery is a future concept, not an exercised service.
 
 ```
 nous pack search study        # Search for packs
@@ -30,7 +29,9 @@ nous pack install study_pack  # Install by name
 nous pack publish             # Publish your pack
 ```
 
-For v1.0.0, packs are installed from local directories. Registry support planned for v1.1.
+Use local directories for currently supported pack installation. Current milestone
+status is maintained only in [ROADMAP](../../ROADMAP.md); no production version
+or release timeline is implied by these command sketches.
 
 ## Pack Templates
 
