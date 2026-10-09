@@ -61,6 +61,12 @@ API or Chat tool request
   -> EventStream + ArtifactRegistry evidence
 ```
 
+The existing Connector compatibility path honors its declared additional retry
+budget. Non-idempotent calls have zero retries, including temporary errors after
+an effect; an error response cannot authorize another invocation. Explicitly
+idempotent calls keep their bounded retries. This does not turn Connector
+metadata or a cached result into independent EffectVerification.
+
 This second path is real and governed, but it does **not** traverse the Rust
 Kernel. Responses and UI status must report `execution_scope=runtime-service`
 and `kernel_traversed=false`. It must not issue, emulate, or persist Kernel

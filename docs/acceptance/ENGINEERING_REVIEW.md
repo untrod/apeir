@@ -56,6 +56,17 @@ records. Classification refers to existing owners, not proposed replacements:
    The lock is released before result polling, so different Operations and the
    Relay can progress. Atomic rename and fsync remain intact.
 
+3. **Connector retry-budget overrun and lost zero setting.** The existing Connector Runtime used an
+   off-by-one exhaustion condition. Even `retries=0` allowed a second invocation,
+   including a non-idempotent write whose first effect happened before a temporary
+   response error. Five new negative cases fail before correction. Honor the
+   declared additional-attempt budget. Manifest decoding also replaced explicit
+   zero with the default two retries; preserve zero across store reload. A
+   non-idempotent call executes once, while
+   explicitly idempotent calls retain their bounded retries. This is an existing
+   legacy Connector path correction, not a new Work executor or a claim that its
+   metadata provides complete effect/idempotency proof.
+
 Contract coverage includes competing and duplicate admission, invalid/compatible
 timeouts, immutable collision evidence, cached Receipt mismatch and fresh-process
 recovery after response loss. Adapter fixture receipts only test binding; real
@@ -155,7 +166,7 @@ where access exists. Physical M3.3-C/M5 and a second real device family remain
 PENDING; native hashes remain BLOCKED. M6 depends on stable M3–M5 contracts and
 M7 has no completed public benchmark Gate. This review cannot upgrade them.
 
-## Local validation of the admission repair
+## Local validation of the initial remote admission repair
 
 - Focused contracts: **24 passed**, 1.03 s. Original implementation rejection
   comparison: **12 failed**, 12 deselected; no raw values enter durable state
@@ -178,3 +189,20 @@ M7 has no completed public benchmark Gate. This review cannot upgrade them.
 Source/PR and resulting main CI, exact commit IDs and checkpoint evidence belong
 in the integration PR and immutable tag annotation after those checks complete.
 The local pass does not resolve timing issues or the SQLite qualification gap.
+
+The follow-up Connector budget repair retains the initial commit and failure
+evidence, adds effect-then-response-error tests, and revalidates the combined
+HEAD. Final counts and CI attempts are recorded in the PR/checkpoint. Windows
+initial CI also exceeded the unchanged Connector timeout test wall-time bound;
+fixing the retry budget does not establish that separate timing failure's cause.
+
+Final combined local validation after both Connector corrections: **42 focused
+passed**, **891 affected passed / 25 skipped**, **3953 full passed / 60 skipped /
+4 existing warnings** (262.35 s), and **274 repository passed**. The focused
+suite includes 24 remote-admission and 9 new Connector-budget cases plus 9
+existing Connector regressions. Repository-ref-dependent collection means
+counts are reported from each exercised checkout, not inferred by addition.
+Ruff/changed-file formatting/compile and standard documentation, security,
+identity, Git and version checks pass; the same 3 MEDIUM findings and native
+binary blocker remain. Required formatting changes in the legacy Connector
+files were reviewed by AST: only `from_dict` and `_invoke` change semantics.
