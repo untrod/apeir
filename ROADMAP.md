@@ -90,6 +90,11 @@ maintainer must configure and verify these settings through GitHub:
 Do not report this administration prerequisite complete without checking the
 actual settings. Do not use personal-token workarounds for missing permissions.
 
+The [dated engineering review](docs/acceptance/ENGINEERING_REVIEW.md) records
+reproduced remote admission defects, configuration gaps, performance measurement
+priorities and external research. It does not replace this status table or
+qualify hardware, production Providers or release integrity.
+
 ## Ordered software qualification and interoperability Gates
 
 Proceed in the order below. External credentials or deployed infrastructure may

@@ -30,7 +30,14 @@ class ConnectorAction:
     idempotent: bool = True
 
     def to_dict(self) -> dict[str, Any]:
-        return {"name": self.name, "risk": self.risk.value, "required_scopes": list(self.required_scopes), "input_schema": self.input_schema, "output_schema": self.output_schema, "idempotent": self.idempotent}
+        return {
+            "name": self.name,
+            "risk": self.risk.value,
+            "required_scopes": list(self.required_scopes),
+            "input_schema": self.input_schema,
+            "output_schema": self.output_schema,
+            "idempotent": self.idempotent,
+        }
 
 
 @dataclass(frozen=True)
@@ -64,16 +71,48 @@ class ConnectorManifest:
         return next((item for item in self.actions if item.name == name), None)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"connector_id": self.connector_id, "version": self.version, "authentication_type": self.authentication_type.value, "granted_scopes": list(self.granted_scopes), "actions": [item.to_dict() for item in self.actions], "rate_limit_per_minute": self.rate_limit_per_minute, "max_retries": self.max_retries, "data_boundary": self.data_boundary, "audit_behavior": self.audit_behavior}
+        return {
+            "connector_id": self.connector_id,
+            "version": self.version,
+            "authentication_type": self.authentication_type.value,
+            "granted_scopes": list(self.granted_scopes),
+            "actions": [item.to_dict() for item in self.actions],
+            "rate_limit_per_minute": self.rate_limit_per_minute,
+            "max_retries": self.max_retries,
+            "data_boundary": self.data_boundary,
+            "audit_behavior": self.audit_behavior,
+        }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ConnectorManifest":
         return cls(
-            connector_id=str(data.get("connector_id") or ""), version=str(data.get("version") or ""),
-            authentication_type=AuthenticationType(str(data.get("authentication_type") or "none")),
-            granted_scopes=tuple(str(item) for item in data.get("granted_scopes") or ()),
-            actions=tuple(ConnectorAction(name=str(item.get("name") or ""), risk=ConnectorRisk(str(item.get("risk") or "read")), required_scopes=tuple(str(scope) for scope in item.get("required_scopes") or ()), input_schema=dict(item.get("input_schema") or {}), output_schema=dict(item.get("output_schema") or {}), idempotent=bool(item.get("idempotent", True))) for item in data.get("actions") or ()),
-            rate_limit_per_minute=int(data.get("rate_limit_per_minute") or 60), max_retries=int(data.get("max_retries") or 2), data_boundary=str(data.get("data_boundary") or "workspace"), audit_behavior=str(data.get("audit_behavior") or "all"),
+            connector_id=str(data.get("connector_id") or ""),
+            version=str(data.get("version") or ""),
+            authentication_type=AuthenticationType(
+                str(data.get("authentication_type") or "none")
+            ),
+            granted_scopes=tuple(
+                str(item) for item in data.get("granted_scopes") or ()
+            ),
+            actions=tuple(
+                ConnectorAction(
+                    name=str(item.get("name") or ""),
+                    risk=ConnectorRisk(str(item.get("risk") or "read")),
+                    required_scopes=tuple(
+                        str(scope) for scope in item.get("required_scopes") or ()
+                    ),
+                    input_schema=dict(item.get("input_schema") or {}),
+                    output_schema=dict(item.get("output_schema") or {}),
+                    idempotent=bool(item.get("idempotent", True)),
+                )
+                for item in data.get("actions") or ()
+            ),
+            rate_limit_per_minute=int(data.get("rate_limit_per_minute") or 60),
+            max_retries=(
+                int(data["max_retries"]) if data.get("max_retries") is not None else 2
+            ),
+            data_boundary=str(data.get("data_boundary") or "workspace"),
+            audit_behavior=str(data.get("audit_behavior") or "all"),
         )
 
 

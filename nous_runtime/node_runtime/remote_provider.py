@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import sys
@@ -11,6 +12,8 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
+
+from nous_runtime.locking import file_lock
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
@@ -58,6 +61,20 @@ def execute_remote_provider(
     request = provider_request.get("request")
     if not isinstance(request, dict):
         raise TypeError("remote provider request is missing Kernel operation")
+    timeout_value = request.get("timeout_ms", 30_000)
+    try:
+        timeout_ms = float(timeout_value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(
+            "remote provider timeout must be finite and nonnegative"
+        ) from exc
+    if (
+        isinstance(timeout_value, bool)
+        or not math.isfinite(timeout_ms)
+        or timeout_ms < 0
+    ):
+        raise ValueError("remote provider timeout must be finite and nonnegative")
+    timeout_seconds = max(timeout_ms / 1000.0, 0.001)
     operation_id = str(request.get("operation_id", ""))
     if not _SAFE_ID.fullmatch(operation_id):
         raise ValueError("remote provider operation_id is invalid")
@@ -96,9 +113,7 @@ def execute_remote_provider(
         "node_id": str(target.get("node_id", "")),
         "capability": str(request.get("model", "")),
         "arguments": arguments,
-        "timeout_seconds": max(
-            float(request.get("timeout_ms", 30_000)) / 1000.0, 0.001
-        ),
+        "timeout_seconds": timeout_seconds,
         "delivery_semantics": "at_most_once",
         "binding": binding,
     }
@@ -106,15 +121,14 @@ def execute_remote_provider(
         raise ValueError("remote provider target node and capability are required")
     request_path = relay_state / "provider-requests" / f"{operation_id}.json"
     result_path = relay_state / "provider-results" / f"{operation_id}.json"
-    if request_path.is_file():
-        existing = json.loads(request_path.read_text(encoding="utf-8"))
-        if existing != spool_request:
-            raise ValueError("remote provider operation binding collision")
-    elif not result_path.is_file():
-        _atomic_json(request_path, spool_request)
-    deadline = time.monotonic() + max(
-        float(request.get("timeout_ms", 30_000)) / 1000.0, 0.001
-    )
+    with file_lock(request_path.with_suffix(".lock")):
+        if request_path.is_file():
+            existing = json.loads(request_path.read_text(encoding="utf-8"))
+            if existing != spool_request:
+                raise ValueError("remote provider operation binding collision")
+        elif not result_path.is_file():
+            _atomic_json(request_path, spool_request)
+    deadline = time.monotonic() + timeout_seconds
     while not result_path.is_file():
         if time.monotonic() >= deadline:
             raise TimeoutError(
