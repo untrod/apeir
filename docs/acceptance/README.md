@@ -4,6 +4,7 @@ Current milestone status is maintained in [ROADMAP](../../ROADMAP.md).
 These records have distinct scopes and are not blanket release certification.
 
 - [Reality/Governance/simulation and M5 host-contract evidence](REALITY_ARCHITECTURE_AUDIT.md)
+- [Engineering review, reproduced admission defects and research comparison](ENGINEERING_REVIEW.md)
 - [Repository consolidation audit and document inventory](REPOSITORY_CONSOLIDATION.md)
 - [Historical ARM64 host qualification](WINDOWS_ARM64_NATIVE_QUALIFICATION.md)
 - [R6 baseline](R6_BASELINE.md) and [laptop evidence](R6_LAPTOP_CHECKPOINT.md)

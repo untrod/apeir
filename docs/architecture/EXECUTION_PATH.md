@@ -38,6 +38,13 @@ remains durable until a signed result is materialized. An uncertain at-most-once
 outcome is returned as `NOUS_NODE_UNCERTAIN_EFFECT` for Kernel to journal as
 `RECOVERY_REQUIRED`; it is never automatically replayed.
 
+Remote spool publication compares and writes the original Operation binding
+under the existing per-file lock. Concurrent identical callers share one request;
+changed bindings fail closed. Non-finite or invalid timeout inputs are rejected
+before persistence. Polling happens outside the publication lock. Recovery reads
+the bound cached result without republishing a possibly completed effect; cached
+results still require exact Receipt binding and Kernel signature admission.
+
 Compatibility APIs that invoke models must translate to an NKI request. They
 may not write the Kernel journal, grant a Kernel lease, select credentials or
 mark a model workload complete.
