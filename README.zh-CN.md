@@ -5,7 +5,7 @@ APEIR 是面向异构智能与现实资源的开放执行、治理和验证运�
 授权、执行证据、独立观察、效果验证及恢复。模型与调度器不是授权方，
 UNKNOWN 失败关闭，可能已经发生的效果必须核对证据，不能盲目重试。
 
-[English / 快速开始](README.md) · [架构](docs/architecture/README.md) ·
+[English](README.md) · [唯一推荐快速开始](docs/operations/getting-started/QUICK_START.md) · [架构](docs/architecture/README.md) ·
 [里程碑状态](ROADMAP.md) · [开发](CONTRIBUTING.md) · [安全](SECURITY.md)
 
 当前版本为 `0.1.0-rc1`，用于开发与评估。已验收的软件范围、未完成的集成、

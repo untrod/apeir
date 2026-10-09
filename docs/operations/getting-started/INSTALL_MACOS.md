@@ -1,57 +1,13 @@
-# Install Nous on macOS
+# macOS source installation
 
-## Requirements
-- macOS 13+ (Ventura or newer)
-- Python 3.10+
-- Intel or Apple Silicon
-- 4GB RAM
+Follow the [source Quick Start](QUICK_START.md) with Python 3.10–3.12 and a
+writable checkout. If your interpreter is named `python3`, use it consistently
+when creating the virtual environment.
 
-## Quick Install
+There is no qualified APEIR Homebrew formula or service here. Heavy AI
+dependencies have separate platform requirements; source installation does
+not establish native-provider or hardware acceptance.
 
-```bash
-# 1. Install Python
-brew install python@3.11
-
-# 2. Install Nous
-pip3 install nous-runtime[all]
-
-# 3. Verify
-nous version
-nous doctor
-```
-
-## Homebrew (planned)
-
-```bash
-brew install nous-runtime
-```
-
-## First Run
-
-```bash
-nous init
-nous start
-nous
-```
-
-## Service
-
-```bash
-brew services start nousd    # (planned)
-```
-
-## Configuration
-
-Config stored at `~/Library/Application Support/Nous/`
-
-## Apple Silicon Notes
-
-All dependencies work natively on Apple Silicon (M1/M2/M3). Use Python 3.11+ for best compatibility.
-
-## Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| `pip` not found | `python3 -m pip install nous-runtime[all]` |
-| Tesseract | `brew install tesseract` |
-| Port in use | `lsof -i :8770` |
+See [installation notes](../INSTALLATION.md),
+[Desktop architecture](../../architecture/DESKTOP_ARCHITECTURE.md) and
+[troubleshooting](TROUBLESHOOTING.md).

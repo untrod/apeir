@@ -1,59 +1,35 @@
-# Installation
+# Installation notes
 
-## Requirements
+Start with the [source Quick Start](getting-started/QUICK_START.md). It owns
+the recommended clone, virtual environment, install and first-run commands.
+This page supplements that flow; it does not describe a published binary release.
 
-- Python 3.10, 3.11, or 3.12
-- Git
-- A writable project directory
-- Optional: Node.js for the Desktop web build
-- Optional: Rust and Cargo for a native Tauri package
+## Requirements and optional dependencies
 
-## Install from source
+- Python 3.10–3.12, Git and a writable checkout/temporary directory.
+- Base install: `python -m pip install -e .` from the checkout.
+- Development: `python -m pip install -e ".[dev,a2a,mcp,scientific]"`.
+- Serial host contracts: `python -m pip install -e ".[reality]"`; this does not
+  qualify real firmware writes or physical recovery.
+- Terminal colour: `python -m pip install -e ".[ui]"`.
+- Heavy model packages: `ai-full` or `local-llm`, only for supported platforms
+  with sufficient resources. They are unnecessary for the source preview.
 
-```powershell
-git clone https://github.com/kicoyini45-blip/nous-runtime.git
-cd nous-runtime
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -e .
-```
+`apeir-distribution` is the current package; legacy Python/wire/CLI identifiers
+are preserved. Read the [platform policy](platform/PLATFORM_SUPPORT_POLICY.md)
+and [supported environment](../development/DEVELOPER_PLATFORM.md#supported-development-environment)
+before running process lifecycle tests.
 
-On Linux or macOS, activate the environment with:
+## Desktop and deployment
 
-```bash
-source .venv/bin/activate
-```
+Node.js 22 supports the web frontend. Rust, platform SDKs and exact locked
+Kernel artifacts are additional native packaging requirements; see
+[Desktop architecture](../architecture/DESKTOP_ARCHITECTURE.md).
+Persistent Controller/Node services use the
+[Compute Mesh runbook](compute-mesh/OPERATIONS.md).
 
-## Initialize and verify
-
-```powershell
-nous init --path .
-nous doctor
-nous status
-nous models doctor
-nous demo
-```
-
-The built-in demo does not require a cloud provider key.
-
-## Development installation
-
-```powershell
-pip install -e ".[dev]"
-ruff check nous_runtime tests
-pytest
-```
-
-## Optional components
-
-Install optional dependency groups only when required:
-
-```powershell
-pip install -e ".[desktop]"
-pip install -e ".[ai-full]"
-pip install -e ".[installer]"
-```
-
-Review platform availability before installing large model or vector packages.
-Do not add provider credentials to `pyproject.toml`, YAML, source files, or Git.
+The root Dockerfile belongs to historical `remote_terminal`; it is not a
+qualified Developer Preview image. There is no verified Homebrew formula or
+`install.nous.ai` installer here. Never put credentials in source, manifests
+or Git. Binary publication requires the
+[Release Runbook](../acceptance/RELEASE_RUNBOOK.md).

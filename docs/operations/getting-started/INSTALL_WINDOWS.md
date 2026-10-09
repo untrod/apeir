@@ -1,53 +1,13 @@
-# Install Nous on Windows
+# Windows source installation
 
-## Requirements
-- Windows 10 or 11
-- Python 3.10+ ([python.org](https://python.org))
-- 4GB RAM (8GB+ recommended)
+Follow the [source Quick Start](QUICK_START.md), including PowerShell virtual
+environment activation. Use Python 3.10–3.12 and a writable checkout;
+Administrator privileges are unnecessary for a source install.
 
-## Quick Install
+If `apeir` is not found, activate the same environment used by `python -m pip`.
+Native Tauri packaging requires Rust, MSVC/Windows SDK and locked native
+components. Windows ARM64 has a separate
+[qualification guide](../deployment/WINDOWS_10_ARM64_LOCAL.md); source installation
+does not qualify native binaries or isolation backends.
 
-```powershell
-# 1. Install Python from python.org (check "Add to PATH")
-
-# 2. Open PowerShell and install Nous
-pip install nous-runtime[all]
-
-# 3. Verify
-nous version
-nous doctor
-```
-
-## First Run
-
-```powershell
-nous init        # Interactive setup wizard
-nous start       # Start the Runtime
-nous             # Open interactive shell
-```
-
-## Service (Optional)
-
-```powershell
-# Register as Windows service
-powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1 -RegisterService
-
-# Start service
-Start-Service nousd
-```
-
-## PATH
-
-If `nous` is not found after install:
-1. Open "Edit environment variables"
-2. Add `%APPDATA%\Python\Python3XX\Scripts` to PATH
-3. Restart terminal
-
-## Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| `nous` not found | Add Python Scripts to PATH |
-| `chromadb` fails | `pip install chromadb --upgrade` |
-| Permission denied | Run terminal as Administrator |
-| Port 8770 in use | `netstat -ano | findstr 8770` |
+See [installation notes](../INSTALLATION.md) and [troubleshooting](TROUBLESHOOTING.md).

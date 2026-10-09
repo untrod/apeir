@@ -52,26 +52,19 @@ approvals, evidence and recovery, with responsive mobile controls. It does not
 grant authority. Real IdP deployment and native/physical qualification are
 separate from deterministic Cloud contract tests.
 
-## Source quick start
+## Quick start
 
-Python 3.10–3.12 is supported for source development. Desktop development uses
-Node.js 22 and Rust stable; Windows native builds additionally require MSVC/SDK
-and the exact locked Kernel artifacts.
+Follow the [source Quick Start](docs/operations/getting-started/QUICK_START.md)
+for the single recommended installation and first-run path. It needs no API key
+or hardware. Distribution and SDK versions have separate compatibility contracts;
+this source preview is not a certified binary release.
 
-```bash
-git clone https://github.com/untrod/apeir.git
-cd apeir
-python -m venv .venv
-# Activate .venv for your shell
-python -m pip install -e ".[dev,a2a,mcp,scientific]"
-python -m pytest -q
-apeir --help
-```
-
-For setup, Controller/Node launch and installation, use the
+For Controller/Node launch and deployment, use the
 [operations guides](docs/operations/README.md) and
 [Compute Mesh runbook](docs/operations/compute-mesh/OPERATIONS.md).
-Production Kernel-managed paths fail closed if Kernel is unavailable. Desktop:
+Production Kernel-managed paths fail closed if Kernel is unavailable. Desktop
+development uses Node.js 22 and Rust stable; Windows native builds also require
+MSVC/SDK and the exact locked Kernel artifacts:
 
 ```bash
 npm --prefix desktop ci

@@ -1,19 +1,18 @@
 # APEIR Runtime — User Guide
 
-## What is Nous?
+## What is APEIR?
 
-APEIR is an open intelligence runtime. It runs on your machine and connects AI models, devices, tools, and knowledge through standardized capabilities.
+APEIR is an open execution, governance and verification runtime for heterogeneous
+intelligence and real-world resources.
 
-**You don't need to be a developer to use Nous.** If you can type in a terminal, you can use Nous.
+The source preview is intended for developers and evaluation. Existing `nous`
+commands remain compatibility aliases for `apeir`.
 
-## Installation (30 seconds)
+## Installation
 
-```bash
-pip install nous-runtime
-export NOUS_DEMO_MODE=1
-nous start
-nous
-```
+Follow the [source Quick Start](../getting-started/QUICK_START.md). It owns the
+recommended installation and first inspection; service deployment follows the
+[Compute Mesh runbook](../compute-mesh/OPERATIONS.md).
 
 ## Your First Interaction
 
@@ -36,7 +35,7 @@ nous
 
 | Task | Command |
 |------|---------|
-| Start Runtime | `nous start` |
+| Inspect Runtime | `apeir status` |
 | Interactive Shell | `nous` |
 | Check Status | `/status` |
 | List Packs | `/packs` |

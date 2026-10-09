@@ -1,50 +1,16 @@
-# Install Nous with Docker
+# Container installation boundary
 
-## Requirements
-- Docker 24+
-- Docker Compose v2
+The recommended Developer Preview path is the [source Quick Start](QUICK_START.md).
+No public APEIR container image is qualified by this source preview.
 
-## Quick Start
+The root Dockerfile builds historical `remote_terminal`, not the current
+governed Runtime. It is retained for compatibility and history; it is not
+evidence of a current Controller, Console or Verified Demo deployment.
+The previously documented Compose installation and `nous-runtime/nous:latest`
+release image are not supplied by this repository.
 
-```bash
-git clone <repo-url> nous-runtime
-cd nous-runtime
-docker compose up -d
-curl http://localhost:8770/health
-```
-
-## Docker Image
-
-```bash
-docker pull nous-runtime/nous:latest
-docker run -d -p 8770:8770 \
-  -e NOUS_DEMO_MODE=1 \
-  -v nous-data:/opt/nous/data \
-  nous-runtime/nous:latest
-```
-
-## Configuration
-
-```bash
-# Copy example config
-cp remote_terminal/.env.example remote_terminal/.env
-
-# Edit with your API keys
-vim remote_terminal/.env
-
-# Start with config
-docker compose up -d
-```
-
-## Access
-- Runtime API: http://localhost:8770
-- Health: http://localhost:8770/health
-- Control Center: http://localhost:8770/control
-
-## Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| Port conflict | Change `ports:` in docker-compose.yml |
-| Volume permissions | `chown -R 1000:1000 data/` |
-| Container exits | `docker logs nous-brain` |
+For Node/Controller deployment follow the
+[Compute Mesh runbook](../compute-mesh/OPERATIONS.md). Development containers
+running lifecycle tests need an init/reaper and writable temporary storage;
+see the [supported environment](../../development/DEVELOPER_PLATFORM.md#supported-development-environment).
+Release images require the [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md).

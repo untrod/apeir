@@ -1,56 +1,12 @@
-# Install Nous on Linux
+# Linux source installation
 
-## Requirements
-- Ubuntu 20.04+ / Debian 11+
-- Python 3.10+
-- 4GB RAM (8GB+ recommended)
+Follow the [source Quick Start](QUICK_START.md) with Python 3.10–3.12 and a
+writable checkout. Use a virtual environment rather than the system interpreter.
+No remote shell installer is part of the preview.
 
-## Quick Install
+Container-based process lifecycle tests need an init/reaper; see the
+[supported environment](../../development/DEVELOPER_PLATFORM.md#supported-development-environment).
+Persistent Controller/Node services use the
+[Compute Mesh runbook](../compute-mesh/OPERATIONS.md).
 
-```bash
-# 1. Install Python
-sudo apt update && sudo apt install python3 python3-pip -y
-
-# 2. Install Nous
-pip install nous-runtime[all]
-
-# 3. Verify
-nous version
-nous doctor
-```
-
-## One-Line Installer
-
-```bash
-curl -fsSL https://install.nous.ai | bash
-```
-
-## First Run
-
-```bash
-nous init        # Interactive setup wizard
-nous start       # Start Runtime
-nous             # Interactive shell
-```
-
-## Systemd Service
-
-```bash
-sudo cp deploy/nousd.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now nousd
-nous status
-```
-
-## Configuration
-
-Config stored at `~/.config/nous/`
-
-## Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| Permission denied | `sudo chown -R $USER ~/.config/nous` |
-| Port 8770 in use | `sudo lsof -i :8770` |
-| Tesseract (OCR) | `sudo apt install tesseract-ocr` |
-| Missing libs | `sudo apt install build-essential python3-dev` |
+See [installation notes](../INSTALLATION.md) and [troubleshooting](TROUBLESHOOTING.md).

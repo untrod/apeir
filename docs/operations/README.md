@@ -4,8 +4,8 @@ Use this section to install, configure, operate, and troubleshoot APEIR Runtime.
 
 ## Start here
 
-- [Installation](INSTALLATION.md)
-- [Quick start](getting-started/QUICK_START.md)
+- [Source Quick Start — recommended first-run path](getting-started/QUICK_START.md)
+- [Installation notes and optional dependencies](INSTALLATION.md)
 - [Windows installation](getting-started/INSTALL_WINDOWS.md)
 - [Linux installation](getting-started/INSTALL_LINUX.md)
 - [macOS installation](getting-started/INSTALL_MACOS.md)
