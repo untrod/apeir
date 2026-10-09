@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import platform
 import re
 from dataclasses import dataclass, field, replace
@@ -51,23 +52,67 @@ class MountMode(str, Enum):
 
 
 ALLOWED_TRANSITIONS: dict[EnvironmentState, frozenset[EnvironmentState]] = {
-    EnvironmentState.CREATED: frozenset({EnvironmentState.PREPARING, EnvironmentState.DESTROYED, EnvironmentState.FAILED}),
-    EnvironmentState.PREPARING: frozenset({EnvironmentState.READY, EnvironmentState.FAILED, EnvironmentState.STOPPING}),
-    EnvironmentState.READY: frozenset({EnvironmentState.RUNNING, EnvironmentState.STOPPING, EnvironmentState.DESTROYED, EnvironmentState.FAILED}),
-    EnvironmentState.RUNNING: frozenset({EnvironmentState.READY, EnvironmentState.SUSPENDED, EnvironmentState.STOPPING, EnvironmentState.FAILED}),
-    EnvironmentState.SUSPENDED: frozenset({EnvironmentState.RUNNING, EnvironmentState.STOPPING, EnvironmentState.FAILED}),
-    EnvironmentState.STOPPING: frozenset({EnvironmentState.STOPPED, EnvironmentState.FAILED}),
-    EnvironmentState.STOPPED: frozenset({EnvironmentState.PREPARING, EnvironmentState.DESTROYED, EnvironmentState.FAILED}),
+    EnvironmentState.CREATED: frozenset(
+        {
+            EnvironmentState.PREPARING,
+            EnvironmentState.DESTROYED,
+            EnvironmentState.FAILED,
+        }
+    ),
+    EnvironmentState.PREPARING: frozenset(
+        {EnvironmentState.READY, EnvironmentState.FAILED, EnvironmentState.STOPPING}
+    ),
+    EnvironmentState.READY: frozenset(
+        {
+            EnvironmentState.RUNNING,
+            EnvironmentState.STOPPING,
+            EnvironmentState.DESTROYED,
+            EnvironmentState.FAILED,
+        }
+    ),
+    EnvironmentState.RUNNING: frozenset(
+        {
+            EnvironmentState.READY,
+            EnvironmentState.SUSPENDED,
+            EnvironmentState.STOPPING,
+            EnvironmentState.FAILED,
+        }
+    ),
+    EnvironmentState.SUSPENDED: frozenset(
+        {EnvironmentState.RUNNING, EnvironmentState.STOPPING, EnvironmentState.FAILED}
+    ),
+    EnvironmentState.STOPPING: frozenset(
+        {EnvironmentState.STOPPED, EnvironmentState.FAILED}
+    ),
+    EnvironmentState.STOPPED: frozenset(
+        {
+            EnvironmentState.PREPARING,
+            EnvironmentState.DESTROYED,
+            EnvironmentState.FAILED,
+        }
+    ),
     EnvironmentState.DESTROYED: frozenset(),
-    EnvironmentState.FAILED: frozenset({EnvironmentState.PREPARING, EnvironmentState.STOPPING, EnvironmentState.DESTROYED}),
+    EnvironmentState.FAILED: frozenset(
+        {
+            EnvironmentState.PREPARING,
+            EnvironmentState.STOPPING,
+            EnvironmentState.DESTROYED,
+        }
+    ),
 }
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
 
 
-def _text(value: Any, field_name: str, *, required: bool = False, maximum: int = _MAX_TEXT) -> str:
+def _text(
+    value: Any, field_name: str, *, required: bool = False, maximum: int = _MAX_TEXT
+) -> str:
     result = str(value or "").strip()
     if required and not result:
         raise EnvironmentValidationError(f"{field_name} is required")
@@ -81,7 +126,35 @@ def _enum(enum_type, value: Any, field_name: str):
         return value if isinstance(value, enum_type) else enum_type(str(value))
     except ValueError as exc:
         allowed = ", ".join(item.value for item in enum_type)
-        raise EnvironmentValidationError(f"{field_name} must be one of: {allowed}") from exc
+        raise EnvironmentValidationError(
+            f"{field_name} must be one of: {allowed}"
+        ) from exc
+
+
+def _bounded_number(
+    value: Any,
+    field_name: str,
+    minimum: int | float,
+    maximum: int | float,
+    *,
+    integer: bool = False,
+) -> int | float:
+    """Reject ambiguous limits before normalization, persistence or execution."""
+    if type(value) not in (int, float, str):
+        raise EnvironmentValidationError(f"{field_name} must be a finite number")
+    try:
+        # Keep existing numeric-text compatibility without truncating fractions.
+        number = int(value) if integer and isinstance(value, str) else float(value)
+        if not math.isfinite(number) or (integer and number != int(number)):
+            raise ValueError
+        if not minimum <= number <= maximum:
+            raise ValueError
+    except (ValueError, TypeError, OverflowError):
+        raise EnvironmentValidationError(
+            f"{field_name} must be {'an integer' if integer else 'finite'} "
+            f"between {minimum} and {maximum}"
+        ) from None
+    return int(number) if integer else number
 
 
 def _relative_path(value: Any, field_name: str, *, allow_dot: bool = True) -> str:
@@ -99,10 +172,16 @@ def _container_path(value: Any) -> str:
     text = _text(value, "container_path", required=True, maximum=512).replace("\\", "/")
     path = PurePosixPath(text)
     if not path.is_absolute() or ".." in path.parts:
-        raise EnvironmentValidationError("container_path must be an absolute container path")
+        raise EnvironmentValidationError(
+            "container_path must be an absolute container path"
+        )
     normalized = path.as_posix()
-    if normalized != "/model-workspace" and not normalized.startswith("/model-workspace/"):
-        raise EnvironmentValidationError("container_path must remain below /model-workspace")
+    if normalized != "/model-workspace" and not normalized.startswith(
+        "/model-workspace/"
+    ):
+        raise EnvironmentValidationError(
+            "container_path must remain below /model-workspace"
+        )
     return normalized
 
 
@@ -118,17 +197,27 @@ class WorkspaceMount:
             raise EnvironmentValidationError("workspace mount must be an object")
         unknown = set(value) - {"source", "target", "mode"}
         if unknown:
-            raise EnvironmentValidationError(f"unknown workspace mount fields: {sorted(unknown)}")
+            raise EnvironmentValidationError(
+                f"unknown workspace mount fields: {sorted(unknown)}"
+            )
         source = _relative_path(value.get("source") or ".", "workspace mount source")
         target = _container_path(value.get("target") or "/model-workspace")
-        mode = _enum(MountMode, value.get("mode") or MountMode.READ_ONLY.value, "workspace mount mode")
+        mode = _enum(
+            MountMode,
+            value.get("mode") or MountMode.READ_ONLY.value,
+            "workspace mount mode",
+        )
         lowered = f"{source}/{target}".casefold()
         if "docker.sock" in lowered or "podman.sock" in lowered:
-            raise EnvironmentValidationError("container engine sockets cannot be mounted")
+            raise EnvironmentValidationError(
+                "container engine sockets cannot be mounted"
+            )
         if mode is MountMode.ARTIFACT_OUTPUT_ONLY and not (
             source == "artifacts" or source.startswith("artifacts/")
         ):
-            raise EnvironmentValidationError("artifact-output-only sources must remain below artifacts/")
+            raise EnvironmentValidationError(
+                "artifact-output-only sources must remain below artifacts/"
+            )
         return cls(source=source, target=target, mode=mode)
 
     def to_dict(self) -> dict[str, str]:
@@ -145,18 +234,33 @@ class NetworkPolicy:
         data = dict(value or {})
         unknown = set(data) - {"mode", "allowed_hosts"}
         if unknown:
-            raise EnvironmentValidationError(f"unknown network policy fields: {sorted(unknown)}")
-        mode = _text(data.get("mode") or "none", "network_policy.mode", required=True, maximum=32).lower()
+            raise EnvironmentValidationError(
+                f"unknown network policy fields: {sorted(unknown)}"
+            )
+        mode = _text(
+            data.get("mode") or "none", "network_policy.mode", required=True, maximum=32
+        ).lower()
         if mode not in {"none", "http"}:
             raise EnvironmentValidationError("network_policy.mode must be none or http")
         hosts_value = data.get("allowed_hosts") or []
-        if not isinstance(hosts_value, Sequence) or isinstance(hosts_value, (str, bytes)):
-            raise EnvironmentValidationError("network_policy.allowed_hosts must be an array")
-        hosts = tuple(dict.fromkeys(_text(item, "allowed host", required=True, maximum=253).lower() for item in hosts_value))
+        if not isinstance(hosts_value, Sequence) or isinstance(
+            hosts_value, (str, bytes)
+        ):
+            raise EnvironmentValidationError(
+                "network_policy.allowed_hosts must be an array"
+            )
+        hosts = tuple(
+            dict.fromkeys(
+                _text(item, "allowed host", required=True, maximum=253).lower()
+                for item in hosts_value
+            )
+        )
         if len(hosts) > 32:
             raise EnvironmentValidationError("network policy exceeds 32 allowed hosts")
         if mode == "none" and hosts:
-            raise EnvironmentValidationError("network_policy.allowed_hosts requires http mode")
+            raise EnvironmentValidationError(
+                "network_policy.allowed_hosts requires http mode"
+            )
         return cls(mode=mode, allowed_hosts=hosts)
 
     def to_dict(self) -> dict[str, Any]:
@@ -173,19 +277,30 @@ class FilesystemPolicy:
         data = dict(value or {})
         unknown = set(data) - {"read_only_root", "temporary_filesystem_mb"}
         if unknown:
-            raise EnvironmentValidationError(f"unknown filesystem policy fields: {sorted(unknown)}")
+            raise EnvironmentValidationError(
+                f"unknown filesystem policy fields: {sorted(unknown)}"
+            )
         read_only_root = data.get("read_only_root", True)
         if not isinstance(read_only_root, bool):
-            raise EnvironmentValidationError("filesystem_policy.read_only_root must be a boolean")
-        temporary = int(data["temporary_filesystem_mb"]) if "temporary_filesystem_mb" in data else 64
+            raise EnvironmentValidationError(
+                "filesystem_policy.read_only_root must be a boolean"
+            )
+        temporary = _bounded_number(
+            data.get("temporary_filesystem_mb", 64),
+            "temporary_filesystem_mb",
+            0,
+            4096,
+            integer=True,
+        )
         if not read_only_root:
             raise EnvironmentValidationError("filesystem root must remain read-only")
-        if temporary < 0 or temporary > 4096:
-            raise EnvironmentValidationError("temporary_filesystem_mb must be between 0 and 4096")
         return cls(read_only_root=True, temporary_filesystem_mb=temporary)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"read_only_root": self.read_only_root, "temporary_filesystem_mb": self.temporary_filesystem_mb}
+        return {
+            "read_only_root": self.read_only_root,
+            "temporary_filesystem_mb": self.temporary_filesystem_mb,
+        }
 
 
 @dataclass(frozen=True)
@@ -194,18 +309,34 @@ class DevicePolicy:
     devices: tuple[str, ...] = ()
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any] | None, *, gpu_policy: Any = "none") -> "DevicePolicy":
+    def from_mapping(
+        cls, value: Mapping[str, Any] | None, *, gpu_policy: Any = "none"
+    ) -> "DevicePolicy":
         data = dict(value or {})
         unknown = set(data) - {"gpu", "devices"}
         if unknown:
-            raise EnvironmentValidationError(f"unknown device policy fields: {sorted(unknown)}")
-        gpu = _text(data.get("gpu") or gpu_policy or "none", "gpu_policy", required=True, maximum=32).lower()
+            raise EnvironmentValidationError(
+                f"unknown device policy fields: {sorted(unknown)}"
+            )
+        gpu = _text(
+            data.get("gpu") or gpu_policy or "none",
+            "gpu_policy",
+            required=True,
+            maximum=32,
+        ).lower()
         if gpu not in {"none", "compute"}:
             raise EnvironmentValidationError("gpu_policy must be none or compute")
         raw_devices = data.get("devices") or []
-        if not isinstance(raw_devices, Sequence) or isinstance(raw_devices, (str, bytes)):
+        if not isinstance(raw_devices, Sequence) or isinstance(
+            raw_devices, (str, bytes)
+        ):
             raise EnvironmentValidationError("device_policy.devices must be an array")
-        devices = tuple(dict.fromkeys(_text(item, "device", required=True, maximum=128) for item in raw_devices))
+        devices = tuple(
+            dict.fromkeys(
+                _text(item, "device", required=True, maximum=128)
+                for item in raw_devices
+            )
+        )
         if len(devices) > 16:
             raise EnvironmentValidationError("device policy exceeds 16 devices")
         return cls(gpu=gpu, devices=devices)
@@ -220,7 +351,9 @@ class ExecutionEnvironment:
     provider: str
     environment_type: EnvironmentType
     image: str = ""
-    architecture: str = field(default_factory=lambda: platform.machine().lower() or "unknown")
+    architecture: str = field(
+        default_factory=lambda: platform.machine().lower() or "unknown"
+    )
     os: str = field(default_factory=lambda: platform.system().lower() or "unknown")
     cpu_limit: float = 1.0
     memory_limit_mb: int = 512
@@ -242,24 +375,50 @@ class ExecutionEnvironment:
     schema_version: str = ENVIRONMENT_SCHEMA_VERSION
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any], *, new_identity: bool = False) -> "ExecutionEnvironment":
+    def from_mapping(
+        cls, value: Mapping[str, Any], *, new_identity: bool = False
+    ) -> "ExecutionEnvironment":
         if not isinstance(value, Mapping):
             raise EnvironmentValidationError("environment must be an object")
         allowed_fields = {
-            "schema_version", "environment_id", "provider", "environment_type",
-            "image", "architecture", "os", "cpu_limit", "memory_limit_mb",
-            "memory_limit", "gpu_policy", "network_policy", "filesystem_policy",
-            "device_policy", "workspace_mounts", "lifetime_seconds", "lifetime",
-            "task_id", "run_id", "trace_id", "state", "provider_handle",
-            "created_at", "updated_at", "last_error", "metadata",
+            "schema_version",
+            "environment_id",
+            "provider",
+            "environment_type",
+            "image",
+            "architecture",
+            "os",
+            "cpu_limit",
+            "memory_limit_mb",
+            "memory_limit",
+            "gpu_policy",
+            "network_policy",
+            "filesystem_policy",
+            "device_policy",
+            "workspace_mounts",
+            "lifetime_seconds",
+            "lifetime",
+            "task_id",
+            "run_id",
+            "trace_id",
+            "state",
+            "provider_handle",
+            "created_at",
+            "updated_at",
+            "last_error",
+            "metadata",
         }
         unknown = set(value) - allowed_fields
         if unknown:
-            raise EnvironmentValidationError(f"unknown environment fields: {sorted(unknown)}")
+            raise EnvironmentValidationError(
+                f"unknown environment fields: {sorted(unknown)}"
+            )
         environment_id = (
             f"env_{uuid4().hex}"
             if new_identity
-            else _text(value.get("environment_id"), "environment_id", required=True, maximum=36)
+            else _text(
+                value.get("environment_id"), "environment_id", required=True, maximum=36
+            )
         )
         if not _ID_PATTERN.fullmatch(environment_id):
             raise EnvironmentValidationError("environment_id is invalid")
@@ -269,7 +428,12 @@ class ExecutionEnvironment:
             "environment_type",
         )
         provider = _text(
-            value.get("provider") or ("local-sandbox" if environment_type is EnvironmentType.LOCAL_SANDBOX else "oci"),
+            value.get("provider")
+            or (
+                "local-sandbox"
+                if environment_type is EnvironmentType.LOCAL_SANDBOX
+                else "oci"
+            ),
             "provider",
             required=True,
             maximum=64,
@@ -281,60 +445,93 @@ class ExecutionEnvironment:
             raise EnvironmentValidationError("image is required for an OCI container")
         if any(character.isspace() for character in image):
             raise EnvironmentValidationError("image cannot contain whitespace")
-        cpu_limit = float(value["cpu_limit"]) if "cpu_limit" in value else 1.0
-        memory_limit = (
-            int(value["memory_limit_mb"])
-            if "memory_limit_mb" in value
-            else int(value["memory_limit"])
-            if "memory_limit" in value
-            else 512
+        cpu_limit = _bounded_number(value.get("cpu_limit", 1.0), "cpu_limit", 0.1, 64)
+        memory_limit = _bounded_number(
+            value.get("memory_limit_mb", value.get("memory_limit", 512)),
+            "memory_limit_mb",
+            64,
+            131072,
+            integer=True,
         )
-        if cpu_limit < 0.1 or cpu_limit > 64:
-            raise EnvironmentValidationError("cpu_limit must be between 0.1 and 64")
-        if memory_limit < 64 or memory_limit > 131072:
-            raise EnvironmentValidationError("memory_limit_mb must be between 64 and 131072")
-        lifetime = (
-            int(value["lifetime_seconds"])
-            if "lifetime_seconds" in value
-            else int(value["lifetime"])
-            if "lifetime" in value
-            else 3600
+        lifetime = _bounded_number(
+            value.get("lifetime_seconds", value.get("lifetime", 3600)),
+            "lifetime_seconds",
+            60,
+            604800,
+            integer=True,
         )
-        if lifetime < 60 or lifetime > 604800:
-            raise EnvironmentValidationError("lifetime_seconds must be between 60 and 604800")
         raw_mounts = value.get("workspace_mounts") or []
         if not isinstance(raw_mounts, Sequence) or isinstance(raw_mounts, (str, bytes)):
             raise EnvironmentValidationError("workspace_mounts must be an array")
         if len(raw_mounts) > _MAX_MOUNTS:
-            raise EnvironmentValidationError(f"workspace_mounts exceeds {_MAX_MOUNTS} entries")
+            raise EnvironmentValidationError(
+                f"workspace_mounts exceeds {_MAX_MOUNTS} entries"
+            )
         mounts = tuple(WorkspaceMount.from_mapping(item) for item in raw_mounts)
         targets = [item.target.casefold() for item in mounts]
         if len(set(targets)) != len(targets):
             raise EnvironmentValidationError("workspace mount targets must be unique")
         network_policy = NetworkPolicy.from_mapping(value.get("network_policy"))
-        filesystem_policy = FilesystemPolicy.from_mapping(value.get("filesystem_policy"))
-        device_policy = DevicePolicy.from_mapping(value.get("device_policy"), gpu_policy=value.get("gpu_policy"))
+        filesystem_policy = FilesystemPolicy.from_mapping(
+            value.get("filesystem_policy")
+        )
+        device_policy = DevicePolicy.from_mapping(
+            value.get("device_policy"), gpu_policy=value.get("gpu_policy")
+        )
         raw_metadata = value.get("metadata") or {}
         if not isinstance(raw_metadata, Mapping):
             raise EnvironmentValidationError("metadata must be an object")
         metadata = dict(raw_metadata)
         try:
-            metadata_bytes = len(json.dumps(metadata, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+            metadata_bytes = len(
+                json.dumps(metadata, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            )
         except (TypeError, ValueError) as exc:
-            raise EnvironmentValidationError("metadata must be JSON serializable") from exc
+            raise EnvironmentValidationError(
+                "metadata must be JSON serializable"
+            ) from exc
         if metadata_bytes > 32768:
             raise EnvironmentValidationError("metadata exceeds 32768 bytes")
         now = _utc_now()
         state = (
             EnvironmentState.CREATED
             if new_identity
-            else _enum(EnvironmentState, value.get("state") or EnvironmentState.CREATED.value, "state")
+            else _enum(
+                EnvironmentState,
+                value.get("state") or EnvironmentState.CREATED.value,
+                "state",
+            )
         )
-        provider_handle = "" if new_identity else _text(value.get("provider_handle"), "provider_handle", maximum=256)
-        created_at = now if new_identity else _text(value.get("created_at") or now, "created_at", required=True, maximum=64)
-        updated_at = now if new_identity else _text(value.get("updated_at") or now, "updated_at", required=True, maximum=64)
-        last_error = "" if new_identity else _text(value.get("last_error"), "last_error", maximum=2048)
-        schema = _text(value.get("schema_version") or ENVIRONMENT_SCHEMA_VERSION, "schema_version", required=True, maximum=64)
+        provider_handle = (
+            ""
+            if new_identity
+            else _text(value.get("provider_handle"), "provider_handle", maximum=256)
+        )
+        created_at = (
+            now
+            if new_identity
+            else _text(
+                value.get("created_at") or now, "created_at", required=True, maximum=64
+            )
+        )
+        updated_at = (
+            now
+            if new_identity
+            else _text(
+                value.get("updated_at") or now, "updated_at", required=True, maximum=64
+            )
+        )
+        last_error = (
+            ""
+            if new_identity
+            else _text(value.get("last_error"), "last_error", maximum=2048)
+        )
+        schema = _text(
+            value.get("schema_version") or ENVIRONMENT_SCHEMA_VERSION,
+            "schema_version",
+            required=True,
+            maximum=64,
+        )
         if schema != ENVIRONMENT_SCHEMA_VERSION:
             raise EnvironmentValidationError(
                 f"unsupported Environment Contract: {schema}; expected {ENVIRONMENT_SCHEMA_VERSION}"
@@ -344,8 +541,23 @@ class ExecutionEnvironment:
             provider=provider,
             environment_type=environment_type,
             image=image,
-            architecture=_text(value.get("architecture") or platform.machine().lower() or "unknown", "architecture", required=True, maximum=64).lower(),
-            os=_text(value.get("os") or ("linux" if environment_type is EnvironmentType.OCI_CONTAINER else platform.system().lower()), "os", required=True, maximum=64).lower(),
+            architecture=_text(
+                value.get("architecture") or platform.machine().lower() or "unknown",
+                "architecture",
+                required=True,
+                maximum=64,
+            ).lower(),
+            os=_text(
+                value.get("os")
+                or (
+                    "linux"
+                    if environment_type is EnvironmentType.OCI_CONTAINER
+                    else platform.system().lower()
+                ),
+                "os",
+                required=True,
+                maximum=64,
+            ).lower(),
             cpu_limit=cpu_limit,
             memory_limit_mb=memory_limit,
             gpu_policy=device_policy.gpu,
@@ -366,10 +578,14 @@ class ExecutionEnvironment:
             schema_version=schema,
         )
 
-    def transition(self, state: EnvironmentState, **changes: Any) -> "ExecutionEnvironment":
+    def transition(
+        self, state: EnvironmentState, **changes: Any
+    ) -> "ExecutionEnvironment":
         target = _enum(EnvironmentState, state, "state")
         if target not in ALLOWED_TRANSITIONS[self.state]:
-            raise EnvironmentValidationError(f"invalid environment transition: {self.state.value} -> {target.value}")
+            raise EnvironmentValidationError(
+                f"invalid environment transition: {self.state.value} -> {target.value}"
+            )
         return replace(self, state=target, updated_at=_utc_now(), **changes)
 
     def to_dict(self) -> dict[str, Any]:
@@ -401,7 +617,9 @@ class ExecutionEnvironment:
         }
 
     def digest(self) -> str:
-        encoded = json.dumps(self.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        encoded = json.dumps(
+            self.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
 
@@ -418,41 +636,77 @@ class EnvironmentCommand:
     def from_mapping(cls, value: Mapping[str, Any]) -> "EnvironmentCommand":
         if not isinstance(value, Mapping):
             raise EnvironmentValidationError("command must be an object")
-        unknown = set(value) - {"argv", "cwd", "timeout_seconds", "max_output_bytes", "env", "cancel_file"}
+        unknown = set(value) - {
+            "argv",
+            "cwd",
+            "timeout_seconds",
+            "max_output_bytes",
+            "env",
+            "cancel_file",
+        }
         if unknown:
-            raise EnvironmentValidationError(f"unknown command fields: {sorted(unknown)}")
+            raise EnvironmentValidationError(
+                f"unknown command fields: {sorted(unknown)}"
+            )
         raw_argv = value.get("argv")
-        if not isinstance(raw_argv, Sequence) or isinstance(raw_argv, (str, bytes)) or not raw_argv:
+        if (
+            not isinstance(raw_argv, Sequence)
+            or isinstance(raw_argv, (str, bytes))
+            or not raw_argv
+        ):
             raise EnvironmentValidationError("argv must be a non-empty array")
         if len(raw_argv) > 64:
             raise EnvironmentValidationError("argv exceeds 64 entries")
-        argv = tuple(_text(item, "argv entry", required=True, maximum=4096) for item in raw_argv)
+        argv = tuple(
+            _text(item, "argv entry", required=True, maximum=4096) for item in raw_argv
+        )
         cwd = _relative_path(value.get("cwd") or ".", "cwd")
         cancel_file = (
             _relative_path(value["cancel_file"], "cancel_file", allow_dot=False)
-            if value.get("cancel_file") else ""
+            if value.get("cancel_file")
+            else ""
         )
         if ":" in cancel_file or "\0" in cancel_file:
-            raise EnvironmentValidationError("cancel_file must remain workspace-relative")
-        timeout = int(value.get("timeout_seconds") or 60)
-        output = int(value.get("max_output_bytes") or 1_000_000)
-        if timeout < 1 or timeout > 3600:
-            raise EnvironmentValidationError("timeout_seconds must be between 1 and 3600")
-        if output < 1024 or output > 10_485_760:
-            raise EnvironmentValidationError("max_output_bytes must be between 1024 and 10485760")
+            raise EnvironmentValidationError(
+                "cancel_file must remain workspace-relative"
+            )
+        timeout = _bounded_number(
+            value.get("timeout_seconds", 60), "timeout_seconds", 1, 3600, integer=True
+        )
+        output = _bounded_number(
+            value.get("max_output_bytes", 1_000_000),
+            "max_output_bytes",
+            1024,
+            10_485_760,
+            integer=True,
+        )
         raw_env = value.get("env") or {}
         if not isinstance(raw_env, Mapping) or len(raw_env) > _MAX_ENV_VARS:
-            raise EnvironmentValidationError(f"env must be an object with at most {_MAX_ENV_VARS} entries")
+            raise EnvironmentValidationError(
+                f"env must be an object with at most {_MAX_ENV_VARS} entries"
+            )
         environment: dict[str, str] = {}
         for key, item in raw_env.items():
             name = _text(key, "environment variable name", required=True, maximum=128)
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
-                raise EnvironmentValidationError(f"invalid environment variable name: {name}")
+                raise EnvironmentValidationError(
+                    f"invalid environment variable name: {name}"
+                )
             if any(marker in name.casefold() for marker in _SENSITIVE_ENV):
-                raise EnvironmentValidationError("inline secret environment variables are forbidden; use a credential reference")
-            environment[name] = _text(item, f"environment variable {name}", maximum=4096)
-        return cls(argv=argv, cwd=cwd, timeout_seconds=timeout, max_output_bytes=output,
-                   env=environment, cancel_file=cancel_file)
+                raise EnvironmentValidationError(
+                    "inline secret environment variables are forbidden; use a credential reference"
+                )
+            environment[name] = _text(
+                item, f"environment variable {name}", maximum=4096
+            )
+        return cls(
+            argv=argv,
+            cwd=cwd,
+            timeout_seconds=timeout,
+            max_output_bytes=output,
+            env=environment,
+            cancel_file=cancel_file,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {

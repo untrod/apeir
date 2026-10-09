@@ -76,6 +76,52 @@ mapping, bound evidence, recovery semantics and its own exercised conformance.
 An unavailable external credential or device leaves that specific integration
 PENDING. Cloud uses deterministic fake secrets and never claims physical results.
 
+## Environment resource admission
+
+Audit baseline: `a5eee6f6656f1654f0d44a13f405af7bb78d60df`.
+This is numeric admission hardening of the existing Environment contract, not
+a new resource authority or production Ray profile.
+
+| Concern | Classification | Authoritative path |
+| --- | --- | --- |
+| Environment records, lifecycle, digest and resource bounds | REUSE | ExecutionEnvironment, EnvironmentRuntime and existing Provider contract |
+| Numeric limits and direct constructed inputs | EXTEND | Existing mapping validation plus Local/OCI execution and OCI creation boundaries |
+| Production Ray resource-profile admission | MISSING | Diagnostic PID exceptions do not become production defaults or permission |
+
+CPU limits must be finite and within the existing 0.1–64 range. Memory, lifetime,
+temporary filesystem, command timeout and output limits must be integral and
+within their existing bounds. Boolean, null, non-finite and fractional integer
+limits fail closed; explicit zero timeout/output cannot select a default.
+Errors name the field and bounds without echoing the rejected value. Valid
+numeric text and integral floats retain compatibility, including memory/lifetime
+aliases. Omitted fields retain their defaults; zero temporary-filesystem space
+remains valid. Normalized valid records retain their digest across reload.
+
+Validation happens before Environment creation persists a record or calls an
+engine. Reload rejects invalid records even if their stored digest matches.
+Local/OCI execution and OCI creation also validate directly constructed contracts
+before invoking a subprocess or engine. This validation does not grant authority:
+the existing Governance and admission paths are still required. Cleanup remains
+available without executing a command or creating a new environment.
+
+Focused negative, compatibility and restart coverage is in
+`tests/environments/test_resource_admission.py`; existing Environment and
+interoperability regressions retain authority and execution coverage. Ordinary
+OCI PID64, other isolation controls and the frozen Kernel are unchanged.
+Preparation for a production Ray profile must bind exact admitted resource facts
+and separately qualify its execution/recovery/cleanup behavior.
+
+Local hardening validation: **56 passed** focused resource contracts,
+**917 passed, 27 skipped** affected regressions, **3918 passed, 60 skipped,
+4 existing deprecation warnings** in the supported initialized-container full
+suite, and **244 passed** repository checks (including three component-lock
+contracts). Real bounded Ray regression: **48 passed**, including all 13 live
+scenarios with diagnostic PID216 and the previously pinned Ray2.49.2 image.
+Ruff, changed-source formatting, compile, documentation/link, hygiene and
+version checks pass. Security retains zero HIGH and three reviewed existing
+MEDIUM filesystem-path findings. Actual native binary hashes remain BLOCKED
+by absent locked binaries. No physical or production Ray acceptance is added.
+
 ## M4 interoperability audit
 
 | Concern | Classification | Authoritative path |
