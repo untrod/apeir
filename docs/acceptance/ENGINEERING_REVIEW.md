@@ -206,3 +206,29 @@ Ruff/changed-file formatting/compile and standard documentation, security,
 identity, Git and version checks pass; the same 3 MEDIUM findings and native
 binary blocker remain. Required formatting changes in the legacy Connector
 files were reviewed by AST: only `from_dict` and `_invoke` change semantics.
+
+## Preserved Windows evidence and traceability synchronization
+
+Initial remote-only source Core37918138923 attempt1 had **2 failed,3948 passed,
+53 skipped,4 warnings** (833.79 s): restored firmware session still WAITING and
+Connector timeout wall time0.7756698s exceeded its existing0.5s assertion. Its
+attempt2 was cancelled by normal concurrency after the next semantic HEAD push.
+Combined runtime HEAD8fd2b29 source Core37921150934 attempt1 had **1 failed,
+3958 passed,53 skipped,4 warnings** (737.58 s): legacy decision/outcome linkage
+read no outcome. The previous two failures passed in this later run; their
+origins are still unproven and issues remain open.
+
+The traceability test submitted after a fixed0.8s sleep rather than a current
+WELCOME session, and skipped Node shutdown if an assertion failed. Reuse the
+existing ten-second protocol-budget WELCOME helper before submission; poll the
+actual outcome within the **unchanged1.5s outcome budget**. Retain all exact
+Task/Decision/Node/Outcome linkage assertions, and stop the Node in `finally`.
+A missing-outcome negative case must still fail and leave no live Node thread.
+This repairs a test's synchronization/cleanup contract, not a proof of the
+Windows timing root cause, and changes no production Runtime/Kernel deadlines.
+
+After the traceability test repair: **33 focused connectivity passed**, **79
+complete connectivity passed** (30.42 s), and **3954 full passed / 60 skipped /
+4 existing warnings** (261.40 s) in the initialized supported container. The
+runtime repair's42/891/274 checks above retain their scope; counts overlap.
+Final source/PR/main CI must exercise the new test HEAD before acceptance.
