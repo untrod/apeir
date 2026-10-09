@@ -21,6 +21,7 @@ from nous_runtime.node_runtime.distributed_work import (
     DistributedWork,
     DistributedWorkError,
     DistributedWorkState,
+    DistributedWorkStore,
     WorkAssignment,
     WorkExecutionPolicy,
     WorkRequirements,
@@ -60,8 +61,31 @@ from nous_runtime.reality.serial import (
 )
 from nous_runtime.schema_registry import OBSERVATION_SCHEMA_VERSION
 from nous_runtime.sdk.client import NousClient
+from nous_runtime.provider.base import Provider
+from nous_runtime.provider.registry import ProviderRegistry
+from nous_runtime.governance import (
+    ExecutionAuthorizationGate,
+    GovernanceStore,
+    GovernanceDecision,
+    GovernanceRequest,
+    Policy,
+)
+from nous_runtime.skills import SkillRegistry, SkillToolRuntime
+from nous_runtime.workflow.models import WorkflowStep, StepType
 
 __all__ = [
+    "Provider",
+    "ProviderRegistry",
+    "ExecutionAuthorizationGate",
+    "GovernanceStore",
+    "GovernanceDecision",
+    "GovernanceRequest",
+    "Policy",
+    "SkillRegistry",
+    "SkillToolRuntime",
+    "WorkflowStep",
+    "StepType",
+    "DistributedWorkStore",
     "WORK_SCHEMA",
     "NODE_PROTOCOL",
     "NODE_PROTOCOL_VERSION",

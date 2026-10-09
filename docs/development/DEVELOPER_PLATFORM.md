@@ -3,7 +3,7 @@
 Current overall milestone status is authoritative in [ROADMAP](../../ROADMAP.md).
 Acceptance counts below are dated, scoped records, not broader qualification.
 
-The Nous Developer Platform is a control surface over the Runtime. It does not
+The APEIR Developer Platform is a control surface over the Runtime. It does not
 own a second scheduler, project database, model registry, or execution path.
 
 ## Surfaces
@@ -133,6 +133,40 @@ The SDK implementation imports the authoritative Runtime contracts. It does not
 copy them. Legacy `nous_provider.Device` remains a Kernel compute resource;
 `nous_provider.runtime.ManagedDevice` is a Reality resource. Legacy
 `nous_provider.ExecutionProvider` remains the NPA inference interface.
+
+### Source SDK onboarding
+
+Use the [Source Quick Start](../operations/getting-started/QUICK_START.md#public-sdk-examples)
+for the single recommended installation path and runnable public SDK examples.
+The additive SDK facade reexports the existing ProviderRegistry, Governance
+contracts, SkillRegistry/SkillToolRuntime and Workflow step types; it implements
+none of them again. Access to a class is not authority. The example's local host
+owns explicit read-only policy and Node admission; adapter code receives input
+only. Skill installation/load records instructions and CAS provenance, not
+permission or execution. Removal/disable and error paths are tested.
+
+### CI scope and measured cost
+
+Core, Desktop and Security required contexts remain present on every PR. Feature
+branches run these on `pull_request` instead of duplicating the same work on
+`push`; main, release branches and dispatch retain their broader validation.
+Only known root/docs Markdown and listed example README files select the
+documentation path. Skill instructions, code, tests, configuration, workflows,
+unknown paths and mixed changes select full regression. Deletions and both ends
+of renames participate; invalid Git revisions fail the job. Security checks and
+the collection floor still run on documentation PRs. Main never uses the narrow
+path; Multi-Arch and Release gates are unchanged.
+
+Baseline PR #21 used 13 active source jobs and 2,555 aggregate job-seconds, with
+1,064 seconds from the first source workflow start to all source checks complete.
+Its feature push plus PR ran five full Python jobs and two frontend builds.
+The new feature-PR shape runs one full Python job and one frontend build, with
+three workflows instead of six. Actual after-change timing is attached to the
+PR acceptance evidence; different workloads and runner scheduling limit direct
+latency comparisons. No Relay, SQLite or fsync durability tuning is included:
+the existing three-round startup baseline measured CLI-ready median 1.214 seconds
+and the 1,000-record benchmark measured context-write median 0.382 ms and p95
+0.567 ms. Those synthetic local results do not justify weakening persistence.
 
 ### Packaging and compatibility
 

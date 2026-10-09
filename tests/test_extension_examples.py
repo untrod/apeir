@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from nous_runtime.plugins import PluginError, PluginManager, PluginManifest, package_checksum
+from nous_runtime.plugins import (
+    PluginError,
+    PluginManager,
+    PluginManifest,
+    package_checksum,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -23,7 +28,10 @@ def test_provider_reference_registers_invokes_and_cleans_up(tmp_path, monkeypatc
     from remote_terminal.nous_core.capability import get_capability
 
     monkeypatch.chdir(tmp_path)
-    module = _load(ROOT / "examples/hello_provider/hello_provider.py", "hello_provider_example")
+    monkeypatch.syspath_prepend(str(ROOT / "sdk/provider/python"))
+    module = _load(
+        ROOT / "examples/hello_provider/hello_provider.py", "hello_provider_example"
+    )
     registry = ProviderRegistry()
     provider_id = registry.install(module.HelloProvider())
     try:
@@ -35,7 +43,9 @@ def test_provider_reference_registers_invokes_and_cleans_up(tmp_path, monkeypatc
 
 
 def test_connector_reference_enforces_governance_and_cleans_up():
-    module = _load(ROOT / "examples/hello_connector/run_example.py", "hello_connector_example")
+    module = _load(
+        ROOT / "examples/hello_connector/run_example.py", "hello_connector_example"
+    )
     module.main()
 
 
@@ -71,12 +81,16 @@ def test_plugin_checksum_is_stable_across_text_line_endings(tmp_path):
     (unix_root / "plugin_impl.py").write_bytes(b"def run():\n    return True\n")
     (windows_root / "plugin_impl.py").write_bytes(b"def run():\r\n    return True\r\n")
 
-    assert package_checksum(unix_root, manifest) == package_checksum(windows_root, manifest)
+    assert package_checksum(unix_root, manifest) == package_checksum(
+        windows_root, manifest
+    )
 
 
 def test_sdk_and_vscode_reference_flows_use_server_runtime():
     python = (ROOT / "examples/sdk/python_quickstart.py").read_text(encoding="utf-8")
-    typescript = (ROOT / "examples/sdk/typescript_quickstart.ts").read_text(encoding="utf-8")
+    typescript = (ROOT / "examples/sdk/typescript_quickstart.ts").read_text(
+        encoding="utf-8"
+    )
     extension = (ROOT / "ide/vscode/src/extension.ts").read_text(encoding="utf-8")
 
     assert "runtime.workflow" in python

@@ -74,6 +74,24 @@ See the [example gallery](../../../examples/README.md),
 [canonical architecture](../../architecture/README.md). Models never grant
 authority; a Receipt is not an Observation, and UNKNOWN cannot commit an effect.
 
+## Public SDK examples
+
+After the source installation above, install the existing Provider SDK from the
+same checkout; no published SDK wheel is assumed:
+
+```bash
+python -m pip install -e sdk/provider/python
+python examples/hello_provider/run_example.py --workspace ./provider-demo
+python examples/hello_skill/run_example.py --workspace ./skill-demo
+```
+
+Use separate empty directories. The [Provider example](../../../examples/hello_provider/README.md)
+executes an explicitly allowed read-only Work through a signed Node and checks
+denied/unknown/approval-required requests. The [Skill example](../../../examples/hello_skill/README.md)
+installs, discovers, loads and disables actual instructions with CAS provenance;
+it grants no authority and runs no device operation. Both import public SDK
+contracts, not internal Runtime modules. Their printed workspaces retain evidence.
+
 ## Development and optional components
 
 For repository tests and the numerical reference task:
