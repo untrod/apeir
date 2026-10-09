@@ -312,6 +312,17 @@ retains governance, scheduling, recovery, verification and evidence. Keep the fi
 stable documentation domains and one authoritative status source; historical
 tags and Git history replace archive directories and permanent feature branches.
 
+The source Developer Preview closes existing public entry points through the
+[canonical Quick Start](docs/operations/getting-started/QUICK_START.md),
+[Verified Demo and recording script](examples/hello_runtime/README.md),
+[public SDK examples](examples/README.md) and existing Operations Console.
+Its simulated MATCH/denial/MISMATCH/UNKNOWN/restart/reconciliation evidence does
+not upgrade any physical, real-IdP, production-provider or binary-release Gate.
+The current Cloud scientific report run is BLOCKED by the existing strong sandbox
+prerequisite; numerical libraries alone do not qualify execution. No new DOCX/PDF
+report is claimed here. Productization ends after this scoped delivery; further
+onboarding, UI and compatibility changes should follow real developer feedback.
+
 ## Release discipline
 
 Distribution remains `0.1.0-rc1`; SDK remains `1.0.0b2` and NKI wrapper `0.1.1`.

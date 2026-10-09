@@ -66,3 +66,47 @@ Acceptance tests: `python -m pytest -q tests/reality/test_verified_preview.py`.
 They cover positive/negative effects, five self-approval attempts, CAS/provenance,
 lost-response reconciliation and a two-process persistent restart. See
 [ROADMAP](../../ROADMAP.md) for hardware and release blockers.
+
+## Five-minute video script
+
+This is a reproducible recording script, not a claim that a native or live
+remote-human video has been qualified. Use a fresh workspace per scenario and
+show actual command output; do not splice in prepared success JSON.
+
+1. **00:00 — Scope.** Show `apeir version`, the Quick Start and this scenario
+   table. Say “simulated Runtime-service execution; no Kernel traversal, physical
+   device or authenticated remote-human qualification.”
+2. **00:30 — Approval pause.** Run the two `prepare`/`resume --approve-once`
+   commands above as separate processes. Before resume, inspect the original
+   AgentSession, Plan, Work and pending approval; the mutation effect count is
+   zero. Explain that this explicit local OS-user approval is not model authority.
+3. **01:30 — Verified result.** Inspect `work.work_id`, `work.provenance`,
+   `receipt`, `observations`, `effect_verification.verdict` and
+   `artifact_integrity_checked`. Show the original Work COMMITTED, actual firmware
+   2.0.0, MATCH and `effect_count=1`. Receipt and fresh Observation are separate.
+4. **02:30 — Fail closed.** Run Deny, MISMATCH and UNKNOWN from the gallery.
+   Deny has zero effects; the latter two stay VERIFIED and cannot claim COMMITTED.
+   CLI exit zero means the scenario finished, not that its effect succeeded.
+5. **03:30 — Lost acknowledgement.** Run `lost-response`; show
+   `before_recovery.receipt` absent and the persisted effect count already one.
+   After recovery, show original provenance, a fresh independent observation and
+   MATCH with the count still one. No second firmware mutation was submitted.
+6. **04:15 — Extension and limits.** Run the public Provider and Skill examples
+   linked in the gallery. Explain read-only Work versus Skill instruction loading,
+   show denial/removal/disable evidence, then show the scientific strong-sandbox
+   and native-hash blockers. Close with the issue feedback path.
+
+The Operations Console remains an existing Controller-backed view; it does not
+ingest an arbitrary Demo JSON file or enable approvals using a service token.
+The CLI's `operations` projection is inspectable without a native Desktop build.
+A configured Console and trusted human session are required for remote controls;
+their deployment qualification is separate.
+
+## Feedback
+
+Report the exact source commit/version, OS/Python, scenario, command and expected
+versus actual Work/verification state through [issues](https://github.com/untrod/apeir/issues).
+Retain the original workspace for local reconciliation, but attach only sanitized
+record excerpts or artifact identifiers. Never upload private keys, credentials
+or raw databases. UI clarity, SDK onboarding, reproducible provider errors and
+platform behavior are the next decisions for real developer feedback.
