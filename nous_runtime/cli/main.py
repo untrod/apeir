@@ -415,53 +415,63 @@ def init(
 
 
 @app.command("demo")
-def demo():
-    """Run the first-experience demo: Goal -> Plan -> Execute."""
-    from nous_runtime.cli.stream import TraceDisplay, Spinner
-    import time
+def demo(
+    workspace: Path = typer.Option(
+        None,
+        "--workspace",
+        help="Dedicated empty directory, or original state for resume",
+    ),
+    scenario: str = typer.Option(
+        "match",
+        "--scenario",
+        help="match, deny, mismatch, unknown, lost-response or restart",
+    ),
+    phase: str = typer.Option("run", "--phase", help="run, prepare or resume"),
+    approve_once: bool = typer.Option(
+        False,
+        "--approve-once",
+        help="Explicit local human approval of this simulated mutation",
+    ),
+    json_output: bool = typer.Option(
+        False, "--json", help="Emit actual Runtime evidence as JSON"
+    ),
+):
+    """Run governed, persisted simulated execution; no API key or hardware."""
+    import tempfile
 
-    typer.echo()
-    typer.echo("Nous Runtime - Demo (built-in)")
-    typer.echo("-" * 32)
-    typer.echo()
+    from nous_runtime.governance.cli import _build_context
+    from nous_runtime.reality.preview import run_verified_demo
 
-    trace = TraceDisplay()
-
-    trace.add("Goal: Demonstrate Runtime pipeline", "running")
-    time.sleep(0.3)
-    trace.update(trace.steps[-1], "done", "User intent -> structured goal")
-    typer.echo(trace.render())
-    typer.echo()
-
-    spinner = Spinner("Planning...")
-    spinner.start()
-    time.sleep(0.5)
-    trace.add("Plan: Resolve capability graph", "running")
-    time.sleep(0.3)
-    trace.update(trace.steps[-1], "done", "model.reason -> built-in demo provider")
-    spinner.stop("done")
-    typer.echo(trace.render())
-    typer.echo()
-
-    spinner = Spinner("Executing...")
-    spinner.start()
-    trace.add("Execute: model.reason via built-in demo", "running")
-    time.sleep(0.4)
-    trace.update(trace.steps[-1], "done", "Demo pipeline complete")
-    spinner.stop("done")
-    typer.echo(trace.render())
-    typer.echo()
-
-    trace.add("Audit: Record experience", "running")
-    time.sleep(0.2)
-    trace.update(trace.steps[-1], "done", "Stored for provider optimization")
-    typer.echo(trace.render())
-    typer.echo()
-
-    typer.echo("Demo complete! (using built-in demo provider)")
-    typer.echo()
-    typer.echo("No external API key required for the demo.")
-    typer.echo("Configure a real provider: nous provider add")
+    if workspace is None:
+        if phase == "resume":
+            raise typer.BadParameter("Resume requires --workspace with original state")
+        workspace = Path(tempfile.mkdtemp(prefix="apeir-verified-demo-"))
+    # The explicit local CLI action supplies human attestation, never the planner.
+    context = _build_context() if approve_once or scenario == "deny" else None
+    try:
+        result = run_verified_demo(
+            workspace, scenario=scenario, phase=phase, approval_context=context
+        )
+    except (ValueError, PermissionError, TimeoutError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    if json_output:
+        typer.echo(json.dumps(result, indent=2, ensure_ascii=True))
+        return
+    typer.echo(
+        "APEIR Verified Execution Demo — SIMULATED / runtime-service / Kernel not traversed"
+    )
+    typer.echo(f"State and evidence: {workspace.resolve()}")
+    typer.echo(
+        f"Demo complete! Work={result['work']['state']} Session={result['agent_session']['state']}"
+    )
+    typer.echo(
+        f"Verification={result['effect_verification'].get('verdict', 'not yet available')} Effects={result['effect_count']}"
+    )
+    if result["agent_session"]["pending_approvals"]:
+        typer.echo(
+            "Pending human approval. Resume the same workspace with --phase resume --approve-once."
+        )
 
 
 @app.command("version")

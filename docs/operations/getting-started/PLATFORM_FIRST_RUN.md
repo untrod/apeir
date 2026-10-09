@@ -8,6 +8,6 @@ Optional model services use the existing
 grant execution permission or qualify a remote human identity.
 
 The [example gallery](../../../examples/README.md) identifies actual example
-scope. The baseline terminal demo prints a walkthrough; it does not prove an
-effect or create verified audit records. Persistent services use the
+scope. [Verified Execution](../../../examples/hello_runtime/README.md) exercises
+persisted simulated state; it does not prove physical acceptance. Persistent services use the
 [Compute Mesh runbook](../compute-mesh/OPERATIONS.md).
