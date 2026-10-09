@@ -56,7 +56,9 @@ class ProviderExecutionResult:
         }
 
 
-Runner = Callable[[list[str], str, int, int, Mapping[str, str] | None], ProviderExecutionResult]
+Runner = Callable[
+    [list[str], str, int, int, Mapping[str, str] | None], ProviderExecutionResult
+]
 
 
 def _default_runner(
@@ -74,7 +76,9 @@ def _default_runner(
     if executable and not os.path.isabs(executable):
         executable = resolve_executable(executable) or ""
     if not executable:
-        return ProviderExecutionResult(ok=False, exit_code=-1, stderr="Executable not found")
+        return ProviderExecutionResult(
+            ok=False, exit_code=-1, stderr="Executable not found"
+        )
     policy = SandboxPolicy(
         executable=executable,
         args=[str(item) for item in argv[1:]],
@@ -159,15 +163,29 @@ class LocalSandboxProvider:
 
     def prepare(self, environment: ExecutionEnvironment, workspace_root: Path) -> str:
         if environment.environment_type is not EnvironmentType.LOCAL_SANDBOX:
-            raise EnvironmentProviderError("LocalSandboxProvider received a non-local environment")
+            raise EnvironmentProviderError(
+                "LocalSandboxProvider received a non-local environment"
+            )
         if environment.device_policy.devices or environment.gpu_policy != "none":
-            raise EnvironmentProviderError("local sandbox device and GPU passthrough are unavailable")
+            raise EnvironmentProviderError(
+                "local sandbox device and GPU passthrough are unavailable"
+            )
         if environment.workspace_mounts:
-            raise EnvironmentProviderError("local sandbox cannot provide a host mount namespace; use its isolated scratch workdir")
-        workdir = (workspace_root / ".nous" / "environments" / "workdirs" / environment.environment_id).resolve()
+            raise EnvironmentProviderError(
+                "local sandbox cannot provide a host mount namespace; use its isolated scratch workdir"
+            )
+        workdir = (
+            workspace_root
+            / ".nous"
+            / "environments"
+            / "workdirs"
+            / environment.environment_id
+        ).resolve()
         authority = (workspace_root / ".nous" / "environments" / "workdirs").resolve()
         if not _under(authority, workdir):
-            raise EnvironmentProviderError("local sandbox workdir escaped environment storage")
+            raise EnvironmentProviderError(
+                "local sandbox workdir escaped environment storage"
+            )
         workdir.mkdir(parents=True, exist_ok=True)
         return str(workdir)
 
@@ -186,15 +204,23 @@ class LocalSandboxProvider:
         handle: str,
         command: EnvironmentCommand,
     ) -> ProviderExecutionResult:
+        environment = ExecutionEnvironment.from_mapping(environment.to_dict())
+        command = EnvironmentCommand.from_mapping(command.to_dict())
         if environment.network_policy.mode != "none":
-            raise EnvironmentProviderError("LocalSandboxProvider cannot enforce HTTP host allowlists")
+            raise EnvironmentProviderError(
+                "LocalSandboxProvider cannot enforce HTTP host allowlists"
+            )
         workdir = Path(handle).resolve()
         cwd = (workdir / Path(*PurePosixPath(command.cwd).parts)).resolve()
         if not _under(workdir, cwd):
             raise EnvironmentProviderError("command cwd escaped the local environment")
-        cancel_path = (workdir / command.cancel_file).resolve() if command.cancel_file else None
+        cancel_path = (
+            (workdir / command.cancel_file).resolve() if command.cancel_file else None
+        )
         if cancel_path is not None and not _under(workdir, cancel_path):
-            raise EnvironmentProviderError("cancellation marker escaped the local environment")
+            raise EnvironmentProviderError(
+                "cancellation marker escaped the local environment"
+            )
         cwd.mkdir(parents=True, exist_ok=True)
         argv = list(command.argv)
         candidate = Path(argv[0])
@@ -203,11 +229,15 @@ class LocalSandboxProvider:
         elif len(candidate.parts) > 1:
             executable = (cwd / candidate).resolve()
             if not _under(workdir, executable):
-                raise EnvironmentProviderError("environment executable escaped the workdir")
+                raise EnvironmentProviderError(
+                    "environment executable escaped the workdir"
+                )
         else:
             found = resolve_executable(argv[0])
             if not found:
-                return ProviderExecutionResult(ok=False, exit_code=-1, stderr=f"Executable not found: {argv[0]}")
+                return ProviderExecutionResult(
+                    ok=False, exit_code=-1, stderr=f"Executable not found: {argv[0]}"
+                )
             executable = Path(found).resolve()
         argv[0] = str(executable)
         if self._runner is _default_runner:
@@ -242,9 +272,13 @@ class LocalSandboxProvider:
         workdir = Path(handle).resolve()
         expected = f"workdirs{os.sep}{environment.environment_id}".casefold()
         if expected not in str(workdir).casefold():
-            raise EnvironmentProviderError("refusing to remove an unrecognized local environment path")
+            raise EnvironmentProviderError(
+                "refusing to remove an unrecognized local environment path"
+            )
         if workdir.is_dir():
-            for path in sorted(workdir.rglob("*"), key=lambda item: len(item.parts), reverse=True):
+            for path in sorted(
+                workdir.rglob("*"), key=lambda item: len(item.parts), reverse=True
+            ):
                 if path.is_symlink() or path.is_file():
                     path.unlink(missing_ok=True)
                 elif path.is_dir():
@@ -263,7 +297,9 @@ class OCIContainerProvider:
     contract_version = ENVIRONMENT_PROVIDER_SCHEMA_VERSION
 
     def __init__(self, engine_path: str = "", runner: Runner = _default_runner) -> None:
-        self._engine = engine_path or shutil.which("docker") or shutil.which("podman") or ""
+        self._engine = (
+            engine_path or shutil.which("docker") or shutil.which("podman") or ""
+        )
         self._runner = runner
 
     @property
@@ -291,25 +327,38 @@ class OCIContainerProvider:
                 "host_pid": False,
                 "host_network": False,
             },
-            "limitations": [] if available else ["No Docker or Podman engine is installed on this host."],
+            "limitations": []
+            if available
+            else ["No Docker or Podman engine is installed on this host."],
         }
 
     def _require_engine(self) -> None:
         if not self._engine:
-            raise EnvironmentProviderError("OCI provider is unavailable: Docker or Podman was not found")
+            raise EnvironmentProviderError(
+                "OCI provider is unavailable: Docker or Podman was not found"
+            )
 
-    def build_create_command(self, environment: ExecutionEnvironment, workspace_root: Path) -> list[str]:
+    def build_create_command(
+        self, environment: ExecutionEnvironment, workspace_root: Path
+    ) -> list[str]:
+        environment = ExecutionEnvironment.from_mapping(environment.to_dict())
         self._require_engine()
         if environment.environment_type is not EnvironmentType.OCI_CONTAINER:
-            raise EnvironmentProviderError("OCIContainerProvider received a non-OCI environment")
+            raise EnvironmentProviderError(
+                "OCIContainerProvider received a non-OCI environment"
+            )
         if environment.network_policy.mode != "none":
             raise EnvironmentProviderError(
                 "OCI HTTP allowlists require a governed egress proxy and are unavailable in v1"
             )
         if environment.device_policy.devices:
-            raise EnvironmentProviderError("host device passthrough is unavailable in OCI provider v1")
+            raise EnvironmentProviderError(
+                "host device passthrough is unavailable in OCI provider v1"
+            )
         if environment.gpu_policy != "none":
-            raise EnvironmentProviderError("GPU passthrough is unavailable in OCI provider v1")
+            raise EnvironmentProviderError(
+                "GPU passthrough is unavailable in OCI provider v1"
+            )
         name = f"nous-{environment.environment_id[-12:]}"
         argv = [
             self._engine,
@@ -336,18 +385,29 @@ class OCIContainerProvider:
         ]
         temporary_mb = environment.filesystem_policy.temporary_filesystem_mb
         if temporary_mb:
-            argv.extend(["--tmpfs", f"/tmp:rw,noexec,nosuid,nodev,size={temporary_mb}m"])
+            argv.extend(
+                ["--tmpfs", f"/tmp:rw,noexec,nosuid,nodev,size={temporary_mb}m"]
+            )
         root = workspace_root.resolve()
         for mount in environment.workspace_mounts:
             source = (root / Path(*PurePosixPath(mount.source).parts)).resolve()
             if not _under(root, source):
-                raise EnvironmentProviderError("workspace mount escaped the active workspace")
-            if "docker.sock" in str(source).casefold() or "podman.sock" in str(source).casefold():
-                raise EnvironmentProviderError("container engine sockets cannot be mounted")
+                raise EnvironmentProviderError(
+                    "workspace mount escaped the active workspace"
+                )
+            if (
+                "docker.sock" in str(source).casefold()
+                or "podman.sock" in str(source).casefold()
+            ):
+                raise EnvironmentProviderError(
+                    "container engine sockets cannot be mounted"
+                )
             if mount.mode is MountMode.ARTIFACT_OUTPUT_ONLY:
                 source.mkdir(parents=True, exist_ok=True)
             elif not source.exists():
-                raise EnvironmentProviderError(f"workspace mount source does not exist: {mount.source}")
+                raise EnvironmentProviderError(
+                    f"workspace mount source does not exist: {mount.source}"
+                )
             mode = "ro" if mount.mode is MountMode.READ_ONLY else "rw"
             argv.extend(["--volume", f"{source}:{mount.target}:{mode}"])
         argv.extend(
@@ -367,14 +427,20 @@ class OCIContainerProvider:
         argv = self.build_create_command(environment, workspace_root)
         result = self._runner(argv, str(workspace_root), 120, 1_000_000, None)
         if not result.ok:
-            raise EnvironmentProviderError(f"OCI create failed: {result.stderr or result.stdout}")
+            raise EnvironmentProviderError(
+                f"OCI create failed: {result.stderr or result.stdout}"
+            )
         return f"nous-{environment.environment_id[-12:]}"
 
     def start(self, environment: ExecutionEnvironment, handle: str) -> None:
         self._require_engine()
-        result = self._runner([self._engine, "start", handle], os.getcwd(), 60, 1_000_000, None)
+        result = self._runner(
+            [self._engine, "start", handle], os.getcwd(), 60, 1_000_000, None
+        )
         if not result.ok:
-            raise EnvironmentProviderError(f"OCI start failed: {result.stderr or result.stdout}")
+            raise EnvironmentProviderError(
+                f"OCI start failed: {result.stderr or result.stdout}"
+            )
 
     def execute(
         self,
@@ -382,31 +448,55 @@ class OCIContainerProvider:
         handle: str,
         command: EnvironmentCommand,
     ) -> ProviderExecutionResult:
+        environment = ExecutionEnvironment.from_mapping(environment.to_dict())
+        command = EnvironmentCommand.from_mapping(command.to_dict())
         self._require_engine()
         workdir = PurePosixPath("/model-workspace") / PurePosixPath(command.cwd)
         argv = [self._engine, "exec", "--workdir", workdir.as_posix()]
         for key, value in sorted(command.env.items()):
             argv.extend(["--env", f"{key}={value}"])
         argv.extend([handle, *command.argv])
-        return self._runner(argv, os.getcwd(), command.timeout_seconds, command.max_output_bytes, None)
+        return self._runner(
+            argv, os.getcwd(), command.timeout_seconds, command.max_output_bytes, None
+        )
 
     def stop(self, environment: ExecutionEnvironment, handle: str) -> None:
         self._require_engine()
-        result = self._runner([self._engine, "stop", "--time", "5", handle], os.getcwd(), 30, 1_000_000, None)
+        result = self._runner(
+            [self._engine, "stop", "--time", "5", handle],
+            os.getcwd(),
+            30,
+            1_000_000,
+            None,
+        )
         if not result.ok:
-            raise EnvironmentProviderError(f"OCI stop failed: {result.stderr or result.stdout}")
+            raise EnvironmentProviderError(
+                f"OCI stop failed: {result.stderr or result.stdout}"
+            )
 
     def destroy(self, environment: ExecutionEnvironment, handle: str) -> None:
         self._require_engine()
-        result = self._runner([self._engine, "rm", "--force", handle], os.getcwd(), 30, 1_000_000, None)
+        result = self._runner(
+            [self._engine, "rm", "--force", handle], os.getcwd(), 30, 1_000_000, None
+        )
         if not result.ok and "No such container" not in (result.stderr + result.stdout):
-            raise EnvironmentProviderError(f"OCI destroy failed: {result.stderr or result.stdout}")
+            raise EnvironmentProviderError(
+                f"OCI destroy failed: {result.stderr or result.stdout}"
+            )
 
     def logs(self, environment: ExecutionEnvironment, handle: str) -> str:
         self._require_engine()
-        result = self._runner([self._engine, "logs", "--tail", "2000", handle], os.getcwd(), 30, 2_000_000, None)
+        result = self._runner(
+            [self._engine, "logs", "--tail", "2000", handle],
+            os.getcwd(),
+            30,
+            2_000_000,
+            None,
+        )
         if not result.ok:
-            raise EnvironmentProviderError(f"OCI logs failed: {result.stderr or result.stdout}")
+            raise EnvironmentProviderError(
+                f"OCI logs failed: {result.stderr or result.stdout}"
+            )
         return result.stdout + result.stderr
 
 
@@ -423,7 +513,9 @@ class EnvironmentProviderRegistry:
     def get(self, provider_id: str):
         provider = self._providers.get(str(provider_id))
         if provider is None:
-            raise EnvironmentProviderError(f"environment provider is not registered: {provider_id}")
+            raise EnvironmentProviderError(
+                f"environment provider is not registered: {provider_id}"
+            )
         return provider
 
     def status(self) -> list[dict[str, Any]]:
