@@ -50,9 +50,24 @@ apeir --no-intelligence provider list
 
 These commands inspect actual local Runtime state. Missing Providers, Kernel
 services or optional dependencies are reported; they do not establish execution
-or hardware acceptance. At the initial preview baseline the legacy `apeir demo`
-is a terminal walkthrough, not verified execution or a persisted audit record.
-Use only examples whose documentation identifies the exercised execution scope.
+or hardware acceptance.
+
+## First verified execution
+
+```bash
+apeir demo --workspace ./demo-match --phase prepare --json
+apeir demo --workspace ./demo-match --phase resume --approve-once --json
+```
+
+Use an empty dedicated directory. The first command persists an AgentSession,
+Plan and Work and pauses for approval. The second explicitly approves once as
+the local OS user, resumes the original Work through signed Node execution,
+observes independently and commits only on MATCH. Without approval no mutation
+occurs. [Verified Demo details](../../../examples/hello_runtime/README.md) include
+Deny, MISMATCH, UNKNOWN, lost-response reconciliation and process restart commands.
+This is simulated Runtime-service execution; Kernel is not traversed and no
+physical or remote-human acceptance is claimed. Keep generated private keys and
+databases out of Git and public issue attachments.
 
 See the [example gallery](../../../examples/README.md),
 [public Developer SDK](../../development/DEVELOPER_PLATFORM.md) and

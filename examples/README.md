@@ -1,5 +1,6 @@
 # Example Gallery
 
+- [Verified Execution](hello_runtime/README.md) — real governed simulated firmware Work, independent observation, MATCH-only commit and no-replay recovery.
 - `hello_provider/` — credential-free Provider registration, invocation and capability cleanup.
 - `hello_connector/` — workspace-scoped Connector execution with Governance blocking writes.
 - `hello_plugin/` — checksum-bound, permission-declared Plugin lifecycle.
