@@ -204,6 +204,28 @@ without executing the effect again.
 
 ### Supported development environment
 
+Developer Preview PR #23's source checks passed, but its initial main
+`25aed7c34cb1c4173476d660ccccc032b3fb0452` exposed two failures in untouched
+baseline files. Windows Core recorded **1 failed, 4000 passed, 53 skipped,
+4 warnings**: the existing EventStream writer's 10-second process-exit assertion.
+Windows Multi-Arch recorded **1 failed, 3711 passed, 53 skipped, 272 deselected,
+4 warnings**: WebGateway passed `30.000000000000057` seconds to transport against
+an exact 30-second bound. Original failed Actions runs
+[37972025588](https://github.com/untrod/apeir/actions/runs/37972025588) and
+[37972025503](https://github.com/untrod/apeir/actions/runs/37972025503) are retained.
+
+A controlled constant clock reproduces the timeout overflow on unchanged
+Gateway code. Transport now receives at most the original request bound;
+the total deadline, retry, network/credential and authority rules are unchanged.
+A controlled failed first writer also proves the old test leaves other started
+children unreaped. The test now cleans every child and records construction,
+writing and completion phases for future failures. Four writers, forty events,
+exact sequence assertions and the original 10-second exit check remain intact.
+EventStream, fsync and Kernel are unchanged. This fixes test cleanup and adds
+diagnostics; it does **not** prove the original Windows termination timing cause
+resolved. SDK acceptance requires a separate corrective PR and successful native
+source/main checks; original failures are not erased or rerun into acceptance.
+
 The environment cleanup audit reuses the existing workspace configuration,
 daemon constructor, pytest fixtures and Kernel process identity semantics.
 The MCP adapter extends only trusted base-interpreter selection: CPython's
