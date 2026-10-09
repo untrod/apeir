@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from nous_runtime.agents.external.models import AgentDescriptor
 from nous_runtime.environments.models import EnvironmentCommand, ExecutionEnvironment
 from nous_runtime.environments.providers import (
     OCIContainerProvider,
@@ -55,6 +56,7 @@ class RayDiagnosticProfile:
             "image": self.image,
             "source_image": SOURCE_IMAGE,
             "recipe_digest": hashlib.sha256(IMAGE_RECIPE.encode()).hexdigest(),
+            "bootstrap_digest": hashlib.sha256(GUEST.encode()).hexdigest(),
             "pids": self.pids,
             "cpu_limit": 1.0,
             "memory_limit_mb": 2048,
@@ -91,6 +93,12 @@ monitor=threading.Thread(target=sample,daemon=True);monitor.start()
 print(json.dumps({'version':ray.__version__,'pid_limit':pathlib.Path('/sys/fs/cgroup/pids.max').read_text().strip()}),flush=True)
 try:
  ray.init(num_cpus=1,include_dashboard=False,object_store_memory=80*1024*1024,_node_ip_address='127.0.0.1',_temp_dir='/model-workspace/ray-state',_system_config={'num_server_call_thread':1,'gcs_server_rpc_server_thread_num':1,'gcs_server_rpc_client_thread_num':1,'object_manager_rpc_threads_num':1,'worker_num_grpc_internal_threads':1})
+ pathlib.Path('/model-workspace/ready.tmp').write_text(json.dumps({'version':ray.__version__}))
+ pathlib.Path('/model-workspace/ready.tmp').replace('/model-workspace/ready.json')
+ deadline=time.monotonic()+20
+ while not pathlib.Path('/model-workspace/dispatch.json').exists():
+  if time.monotonic()>deadline:raise TimeoutError('host dispatch admission absent')
+  time.sleep(.05)
  phase='steady'
  @ray.remote(max_retries=0,retry_exceptions=False)
  def once(mode):
@@ -192,6 +200,9 @@ class RayBoundedDiagnostic:
         self._cancel = threading.Event()
         self.report = {}
         self._used = False
+        self._before_dispatch = None
+        self._execution_thread = None
+        self._expected_profile = None
         self.provider = OCIContainerProvider(runner=self._runner)
         self.environment = ExecutionEnvironment.from_mapping(
             {
@@ -248,6 +259,7 @@ class RayBoundedDiagnostic:
         # Poll the owned diagnostic only, never enumerate unrelated host processes.
         result = []
         errors = []
+        dispatched = False
 
         def execute():
             try:
@@ -256,9 +268,19 @@ class RayBoundedDiagnostic:
                 errors.append(exc)
 
         worker = threading.Thread(target=execute, daemon=True)
+        self._execution_thread = worker
         worker.start()
         start = time.monotonic()
         while worker.is_alive() and time.monotonic() - start < timeout:
+            if not dispatched and (self.workspace / "ready.json").exists():
+                try:
+                    self._release_dispatch()
+                except Exception:
+                    # No Ray task has been submitted. The enclosing run owns
+                    # cleanup; never turn failed admission into task execution.
+                    self._cancel.set()
+                    raise
+                dispatched = True
             r = self._docker(["top", self.handle, "-eo", "pid,comm"])
             if r.returncode == 0:
                 for line in r.stdout.splitlines()[1:]:
@@ -314,16 +336,46 @@ class RayBoundedDiagnostic:
     def cancel(self):
         self._cancel.set()
 
+    def _release_dispatch(self):
+        if self._cancel.is_set():
+            raise PermissionError("Diagnostic cancelled before Ray dispatch")
+        ready = json.loads((self.workspace / "ready.json").read_text())
+        if ready != {"version": "2.49.2"}:
+            raise PermissionError("Ray readiness differs from qualified version")
+        if (
+            self._expected_profile is not None
+            and self.profile.to_dict() != self._expected_profile
+        ):
+            raise PermissionError("Ray profile changed during setup")
+        if self._before_dispatch is not None:
+            self._before_dispatch()
+        # Exclusive creation rejects a pre-existing marker. This carries no
+        # callback, AuthorizationContext, credentials or self-issued grant.
+        with (self.workspace / "dispatch.json").open("x") as marker:
+            marker.write('{"dispatch":true}')
+        (self.workspace / "dispatch.json").chmod(0o644)
+        self.report["dispatch_admission"] = {
+            "ray_ready": True,
+            "governed": self._before_dispatch is not None,
+        }
+
     def _assert_default(self):
         argv = OCIContainerProvider(
             engine_path=self.provider._engine
         ).build_create_command(self.environment, self.root)
         assert argv[argv.index("--pids-limit") + 1] == "64"
 
-    def run(self, mode="execute", *, expected_profile=None):
+    def run(self, mode="execute", *, expected_profile=None, before_dispatch=None):
         if self._used or any(
             (self.workspace / name).exists()
-            for name in ("count.txt", "probe.py", "mode.json", "ray-state")
+            for name in (
+                "count.txt",
+                "probe.py",
+                "mode.json",
+                "ray-state",
+                "ready.json",
+                "dispatch.json",
+            )
         ):
             raise PermissionError(
                 "A diagnostic environment cannot replay an uncertain effect"
@@ -337,6 +389,10 @@ class RayBoundedDiagnostic:
         self._assert_default()
         self._used = True
         self._mode = mode
+        self._before_dispatch = before_dispatch
+        self._expected_profile = (
+            dict(expected_profile) if expected_profile is not None else None
+        )
         (self.workspace / "probe.py").write_text(GUEST)
         (self.workspace / "mode.json").write_text(json.dumps(mode))
         (self.workspace / "probe.py").chmod(0o644)
@@ -392,6 +448,8 @@ class RayBoundedDiagnostic:
                 self._restore_fake_evidence()
             finally:
                 self.provider.destroy(self.environment, self.handle)
+                if self._execution_thread is not None:
+                    self._execution_thread.join(2)
             remaining = []
             for pid, identity in self._host_pids.items():
                 try:
@@ -407,6 +465,10 @@ class RayBoundedDiagnostic:
                 "container_absent": self._docker(["inspect", self.handle]).returncode
                 != 0,
                 "default_pids_after": 64,
+                "execution_thread_stopped": (
+                    self._execution_thread is None
+                    or not self._execution_thread.is_alive()
+                ),
             }
             samples = self.workspace / "samples.json"
             if samples.exists():
@@ -414,8 +476,64 @@ class RayBoundedDiagnostic:
                     json.loads(samples.read_text())
                 )
             (self.root / "report.json").write_text(json.dumps(self.report, indent=2))
-            if remaining or not self.report["cleanup"]["container_absent"]:
+            if (
+                remaining
+                or not self.report["cleanup"]["container_absent"]
+                or not self.report["cleanup"]["execution_thread_stopped"]
+            ):
                 raise RuntimeError("Owned diagnostic cleanup failed")
+
+
+class RayDiagnosticAdmissionRunner:
+    """Connect only the fixed diagnostic to canonical host dispatch admission.
+
+    This is not a production Ray adapter. Work cannot select a program, image,
+    profile, retries or environment, and no host credentials enter the guest.
+    """
+
+    def __init__(self, diagnostic: RayBoundedDiagnostic):
+        self.diagnostic = diagnostic
+        self._profile = diagnostic.profile.to_dict()
+
+    def descriptor(self):
+        return AgentDescriptor(
+            agent_id="ray-diagnostic",
+            executable_reference="diagnostic-only",
+            default_timeout_ms=45000,
+            metadata={"execution_profile": dict(self._profile)},
+        )
+
+    def execute_admitted(self, argv, env, cwd, timeout_ms, *, before_dispatch):
+        if (
+            argv[0] != "diagnostic-only"
+            or Path(cwd).resolve() != self.diagnostic.workspace
+            or timeout_ms != 45000
+            or not callable(before_dispatch)
+        ):
+            raise PermissionError("Ray qualification input differs from host scope")
+        request = json.loads(Path(argv[-1]).read_text())
+        if request.get("agent_id") != "ray-diagnostic":
+            raise PermissionError("Ray qualification agent identity differs")
+        result = self.diagnostic.run(
+            expected_profile=self._profile, before_dispatch=before_dispatch
+        )
+        if not result.ok:
+            return result
+        evidence = json.loads(
+            (self.diagnostic.workspace / "task-evidence.json").read_text()
+        )
+        return ProviderExecutionResult(
+            True,
+            0,
+            stdout=json.dumps(
+                {
+                    "qualification_only": True,
+                    "run_id": request["run_id"],
+                    "ray_task": evidence,
+                    "profile": self._profile,
+                }
+            ),
+        )
 
 
 def main():

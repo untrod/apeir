@@ -37,7 +37,7 @@ from nous_runtime.provider.interoperability import ExternalAgentOperationHandler
 pytestmark = pytest.mark.unit
 
 
-def setup_agent(root, runner, *, policy=None, descriptor=None):
+def setup_agent(root, runner, *, policy=None, descriptor=None, timeout_ms=5000):
     gate = ExecutionAuthorizationGate(
         GovernanceStore(root / "governance"), operation_policy_provider=policy
     )
@@ -80,7 +80,7 @@ def setup_agent(root, runner, *, policy=None, descriptor=None):
         task_id="work-external",
         agent_id=descriptor.agent_id,
         objective="Propose an upgrade; output is not authority",
-        timeout_ms=5000,
+        timeout_ms=timeout_ms,
         approval_policy="always_allow",
     )
     payload = {
