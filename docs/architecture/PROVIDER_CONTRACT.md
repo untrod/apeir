@@ -435,7 +435,59 @@ Neither this boundary nor the diagnostic below changes default OCI PID64.
 
 ## M4.6 bounded Ray qualification diagnostic
 
-Starting main: `583387eab58868155d6badc1c199694ee00fb6fb`; Kernel stays
+### Workflow and post-start admission qualification
+
+Starting main: `515208545736ae7d24306d84f5c0389c072965a1`.
+Audit: **REUSE** ExternalAgentWorkflowHandler, the canonical AgentSession/Plan,
+Distributed Work, Node identity/journal, Governance/Broker, CAS, CredentialBroker
+and Reality EffectVerifier. **EXTEND** only the existing opt-in diagnostic with
+the public admission-aware host runner contract. **MISSING** remains a production
+Ray adapter/resource-profile admission, remote cluster identity/credentials,
+arbitrary workload conformance, GPU and additional platform qualification.
+No second execution ledger, approval implementation or verifier is introduced.
+
+`RayDiagnosticAdmissionRunner` runs only the fixed qualification task. Its host
+descriptor binds the immutable image, CPU/RAM/tmpfs/PID bounds and exact guest
+bootstrap digest into the original approved resource identity. Ray initializes
+inside the same isolated OCI environment, emits readiness and waits. The host
+checks the pinned Ray version and unchanged profile, calls native Governance
+revalidation, and exclusively creates a non-secret dispatch marker. No callback,
+AuthorizationContext, grant, credential or model-selected program enters Ray.
+The marker is an internal handshake in a fixture-owned workspace, not portable
+authority or a defense against malicious trusted host/bootstrap code. Persisted
+readiness/dispatch files fence reuse of an uncertain diagnostic directory.
+
+The actual test chain in `tests/interoperability/test_ray_workflow.py` uses one
+AgentSession and one durable Plan: independently inspect old simulated firmware,
+pause for the Ray Work's Approve Once, execute via Distributed Work/attested Node,
+store Ray task/evidence in native CAS, then pause for a separate firmware approval.
+That second Operation obtains execution-time fake credentials and its existing
+OperationReceipt; separate read-only Work acquires a fresh Observation. Only
+MATCH completes the Session and commits the firmware Work. Ray completion has
+`effect_verified=false` and grants no device authority. Deny leaves firmware
+unchanged; MISMATCH/UNKNOWN never commit. Workflow/Session and Ray Node journal
+reload preserve the original Work, approval and one task execution.
+
+Live negative tests change policy to DENY/UNKNOWN, expire authority or alter the
+profile after real Ray readiness: no Task is submitted. Cleanup checks the exact
+owned container/process identities and execution thread, and verifies default
+OCI PID64. Earlier actual Ray failure, cancellation and response-loss/restart
+tests continue to reconcile native journals and fresh counter observations
+without another task. Bootstrap/version/profile changes and stale dispatch
+markers also have engine-free contract tests. Fake broker material is scanned
+out of Ray output, Work, CAS and persisted execution records.
+
+This qualification uses only the explicitly approved isolated diagnostic
+exception, with PID216 selected for these probes. Observed same-Session task
+peaks were 208–212 PID slots, at most 505,974,784 bytes cgroup memory; recorded
+cleanup took 1.334–1.707 seconds with no tracked process/container/thread left.
+It does not adopt 216 as a production default or prove a global minimum. The
+normal OCI default remains64; Kernel and component lock remain frozen. Physical
+effects, full production Ray and remote-human qualification are still pending.
+
+### Original bounded resource diagnostic
+
+Historical starting main: `583387eab58868155d6badc1c199694ee00fb6fb`; Kernel stays
 `87fd1b2ff28ef14ab1a515a58162592b452fda2e`. The operator approved a temporary
 local diagnostic PID ceiling at most256. This is **not a production Ray
 ExecutionProvider**: complete M4 remains PARTIAL and production Ray is PENDING.
