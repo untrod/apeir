@@ -1,5 +1,6 @@
 """Real Runtime demo acceptance: never infer effects from printed success."""
 
+import asyncio
 import json
 import os
 import subprocess
@@ -85,6 +86,34 @@ def test_no_approval_is_no_mutation(tmp_path):
     assert result["agent_session"]["pending_approvals"]
     assert result["effect_count"] == 0
     assert result["work"]["state"] == "CREATED"
+
+
+def test_recovery_waits_for_delayed_persisted_receipt_and_fresh_read(
+    tmp_path, monkeypatch
+):
+    from nous_runtime.node_runtime.relay import NodeRelayClient
+
+    send = NodeRelayClient._send
+    delayed = []
+
+    async def hold_evidence(self, websocket, message_type, payload, **kwargs):
+        work_id = str(payload.get("workload_id", ""))
+        if message_type == "WORKLOAD_STATUS" and (
+            work_id == "preview-firmware-update" or work_id.startswith("observe_")
+        ):
+            delayed.append(work_id)
+            await asyncio.sleep(1.25)
+        return await send(self, websocket, message_type, payload, **kwargs)
+
+    monkeypatch.setattr(NodeRelayClient, "_send", hold_evidence)
+    result = run_verified_demo(
+        tmp_path, scenario="lost-response", approval_context=_build_context()
+    )
+    assert "preview-firmware-update" in delayed
+    assert result["work"]["state"] == "COMMITTED"
+    assert any(item.startswith("observe_") for item in delayed)
+    assert result["effect_verification"]["verdict"] == "MATCH"
+    assert result["effect_count"] == result["before_recovery"]["effect_count"] == 1
 
 
 @pytest.mark.parametrize("subject", ["agent", "model", "node", "provider", "scheduler"])

@@ -327,6 +327,11 @@ async def _run(root, scenario, phase, approval_context):
             await components.close()
             components = _DemoComponents(root)
             await components.start()
+            # A resource report proves connectivity, not receipt reconciliation.
+            # Use the existing observation-only recovery API after the original
+            # persisted Node result arrives; never resubmit the mutation.
+            await _wait(lambda: WORK_ID in components.server.results)
+            await asyncio.to_thread(components.handler.recover_verified, WORK_ID)
             session = await components.resume(original)
             result = components.projection(session)
             result["before_recovery"] = before
