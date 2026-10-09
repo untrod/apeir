@@ -61,7 +61,9 @@ def invocation(root: Path, method="GET", arguments=None, scope=("api.example.tes
     )
 
 
-def gateway(calls: list[dict], body=b'{"ok":true}', content_type="application/json"):
+def gateway(
+    calls: list[dict], body=b'{"ok":true}', content_type="application/json", clock=None
+):
     def transport(**kwargs):
         calls.append(kwargs)
         return _TransportResponse(
@@ -73,6 +75,7 @@ def gateway(calls: list[dict], body=b'{"ok":true}', content_type="application/js
     return WebGateway(
         resolver=lambda host, port: ["93.184.216.34"],
         transport=transport,
+        **({"clock": clock} if clock is not None else {}),
     )
 
 
@@ -109,6 +112,23 @@ def test_openapi_post_body_is_encoded_and_bounded(tmp_path: Path):
     )
     assert result.success
     assert json.loads(calls[0]["body"]) == {"name": "safe"}
+
+
+def test_openapi_transport_budget_never_exceeds_policy_due_to_clock_rounding(tmp_path):
+    package = tmp_path / "package"
+    write_spec(package)
+    calls = []
+
+    def clock():
+        return 2.2212
+
+    assert clock() + 30.0 - clock() > 30.0
+    adapter = OpenApiExecutionAdapter(gateway(calls, clock=clock))
+    result = asyncio.run(
+        adapter.execute(invocation(package), permit_id="bounded-clock")
+    )
+    assert result.success
+    assert 0 < calls[0]["timeout"] <= 30.0
 
 
 def test_openapi_host_outside_kernel_scope_is_blocked_before_transport(tmp_path: Path):

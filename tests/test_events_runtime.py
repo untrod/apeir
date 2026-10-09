@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import time
+from pathlib import Path
 
 import pytest
 
@@ -93,7 +95,25 @@ def test_event_stream_redacts_nested_list_values(tmp_path):
 
 
 def _emit_many_events(workspace: str, worker_id: int, count: int) -> None:
+    started = time.perf_counter()
+    status_path = Path(workspace) / f"event-writer-{worker_id}.json"
+
+    def status(phase, emitted):
+        status_path.write_text(
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "phase": phase,
+                    "emitted": emitted,
+                    "elapsed_seconds": time.perf_counter() - started,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    status("constructing", 0)
     stream = EventStream(workspace)
+    status("writing", 0)
     for index in range(count):
         stream.emit(
             RunEvent(
@@ -102,6 +122,7 @@ def _emit_many_events(workspace: str, worker_id: int, count: int) -> None:
                 payload={"worker": worker_id, "index": index},
             )
         )
+    status("completed", count)
 
 
 def test_event_stream_is_process_safe(tmp_path):
@@ -112,17 +133,29 @@ def test_event_stream_is_process_safe(tmp_path):
         context.Process(target=_emit_many_events, args=(str(tmp_path), worker_id, 10))
         for worker_id in range(4)
     ]
-    for process in processes:
-        process.start()
-    for process in processes:
-        try:
+    try:
+        for process in processes:
+            process.start()
+        for worker_id, process in enumerate(processes):
             process.join(timeout=10)
-            assert not process.is_alive(), "event writer process did not terminate"
+            status_path = tmp_path / f"event-writer-{worker_id}.json"
+            try:
+                status = json.loads(status_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                status = {"phase": "not entered or status unavailable"}
+            assert not process.is_alive(), (
+                f"event writer process did not terminate: pid={process.pid}, "
+                f"exitcode={process.exitcode}, status={status}"
+            )
             assert process.exitcode == 0
-        finally:
+    finally:
+        for process in processes:
             if process.is_alive():
                 process.terminate()
                 process.join(timeout=2)
+                if process.is_alive():
+                    process.kill()
+                    process.join(timeout=2)
 
     events = EventStream(str(tmp_path)).load_events("shared_run")
     sequences = sorted(event.sequence for event in events)
