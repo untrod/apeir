@@ -146,6 +146,8 @@ def test_metadata_audit_accepts_hardware_and_named_remote_work(tmp_path):
     repo = _metadata_repo(tmp_path)
     for ref in [
         "refs/heads/hardware/m5-real-acceptance",
+        "refs/heads/security/node-key-publication",
+        "refs/remotes/upstream/security/key-publication",
         "refs/remotes/upstream/feature/m4-interoperability",
     ]:
         subprocess.run(["git", "-C", str(repo), "update-ref", ref, "HEAD"], check=True)

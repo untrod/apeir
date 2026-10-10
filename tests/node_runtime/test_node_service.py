@@ -31,6 +31,41 @@ def test_node_identity_is_cryptographic_and_stable_across_restart(tmp_path: Path
     assert "PRIVATE KEY" not in first.identity_path.read_text(encoding="utf-8")
 
 
+def test_private_key_permissions_precede_material_write(tmp_path, monkeypatch):
+    original = node_service.restrict_owner_only_file
+    protected_empty_file = []
+
+    def restrict(path, *, subject):
+        if Path(path).name.endswith(".tmp"):
+            assert Path(path).stat().st_size == 0
+            protected_empty_file.append(Path(path))
+        return original(path, subject=subject)
+
+    monkeypatch.setattr(node_service, "restrict_owner_only_file", restrict)
+    service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+    assert protected_empty_file
+    assert all(not path.exists() for path in protected_empty_file)
+    assert service.load_private_key()
+
+
+def test_private_key_permission_failure_never_publishes_identity(tmp_path, monkeypatch):
+    state = tmp_path / "node"
+    attempted = []
+
+    def reject(path, *, subject):
+        attempted.append(Path(path))
+        assert Path(path).stat().st_size == 0
+        raise PermissionError("permission boundary unavailable")
+
+    monkeypatch.setattr(node_service, "restrict_owner_only_file", reject)
+    with pytest.raises(PermissionError, match="boundary unavailable"):
+        NodeRuntimeService(NodeRuntimeConfig(state_dir=state))
+    assert attempted
+    assert all(not path.exists() for path in attempted)
+    assert not (state / "identity.ed25519.pem").exists()
+    assert not (state / "identity.json").exists()
+
+
 def test_heartbeat_sequence_continues_across_process_restart(tmp_path: Path):
     state = tmp_path / "node"
     first = NodeRuntimeService(NodeRuntimeConfig(state_dir=state))

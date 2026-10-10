@@ -29,6 +29,7 @@ FORBIDDEN_BRANCH_PREFIXES = [
 ALLOWED_BRANCH_PREFIXES = [
     "feature/",
     "fix/",
+    "security/",
     "refactor/",
     "docs/",
     "test/",

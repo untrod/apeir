@@ -59,6 +59,15 @@ or ordinary evidence. This is local software durability, not signed remote-human
 approval, complete one-time pairing, concurrent Node journal writers, Controller
 HA, physical hardware or native Windows installation qualification.
 
+
+Node first-key publication creates a unique empty temporary file, applies the
+existing owner-only permission/ACL boundary before writing private material,
+then flushes/fsyncs and atomically publishes it. Permission or write failure
+cleans the temporary file without publishing the identity. Ordinary public Node
+JSON writes retain their existing behavior. Loaded identities still undergo the
+existing key and permission checks. This closes the Node pre-write permission
+window; it does not establish remote human identity or authorize an Operation.
+
 ## Legacy admission pipeline
 
 ```
