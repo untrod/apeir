@@ -28,6 +28,20 @@ second scientific or document system. Current Cloud report generation is
 Windows Sandbox backend. Numerical dependencies alone are insufficient; no
 ordinary host fallback, fabricated report or theorem-proof claim is allowed.
 
+After installing the optional scientific dependencies from the Quick Start,
+check actual prerequisites without executing a calculation:
+
+```bash
+python -m scripts.acceptance.scientific_preview_preflight
+```
+
+The [read-only probe](../scripts/acceptance/scientific_preview_preflight.py)
+prints actual isolation and provider versions. Exit **2 / BLOCKED** is expected
+in this Cloud environment. READY_FOR_GOVERNED_RUN is only a prerequisite result,
+never report generation or acceptance; `execution_performed` stays false and
+`reports_created` stays empty. Continue through the existing governed native
+qualification flow only when its separate prerequisites are met.
+
 The existing [native qualification command](../scripts/acceptance/scientific_native_acceptance.ps1)
 contains the reproducible inputs and governed API flow, approval of each original
 request, artifact hashes, provider/code versions, Claims, report structure and

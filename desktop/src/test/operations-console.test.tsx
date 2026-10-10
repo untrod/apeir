@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OperationsConsole, type OperationsSnapshot } from "../components/OperationsConsole";
 
@@ -7,6 +7,65 @@ const fixture: OperationsSnapshot = {
 };
 afterEach(() => { vi.unstubAllGlobals(); sessionStorage.clear(); window.history.replaceState({}, "", "/"); });
 describe("Operations Console", () => {
+  it("ignores an earlier successful snapshot after a later refresh failure", async () => {
+    let complete: (value: unknown) => void = () => {};
+    const earlier = new Promise(resolve => { complete = resolve; });
+    let count = 0;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith("/human/session")) return Promise.reject(new Error("No human session"));
+      return ++count === 1 ? earlier : Promise.reject(new Error("Latest refresh disconnected"));
+    }));
+    render(<OperationsConsole />);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Latest refresh disconnected");
+    await act(async () => { complete({ ok: true, json: async () => ({ ok: true, data: { ...fixture, health: { degraded: false, components: [] } } }) }); });
+    expect(screen.queryByText("HEALTHY")).not.toBeInTheDocument();
+    expect(screen.getByText("UNKNOWN")).toBeInTheDocument();
+  });
+  it("clears stale healthy state after a refresh disconnect", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: { ...fixture, health: { degraded: false, components: [] } } }) });
+    vi.stubGlobal("fetch", fetcher);
+    render(<OperationsConsole />);
+    expect(await screen.findByText("HEALTHY")).toBeInTheDocument();
+    fetcher.mockRejectedValue(new Error("Controller disconnected after snapshot"));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Controller disconnected after snapshot");
+    expect(screen.queryByText("HEALTHY")).not.toBeInTheDocument();
+    expect(screen.getByText("UNKNOWN")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "uncertain-effect-1" })).not.toBeInTheDocument();
+  });
+  it("separates actual receipt, observations and UNKNOWN verification in the Work inspector", async () => {
+    const data = { ...fixture, devices: [{ device_id: "sim-device", metadata: { simulation: true } }], works: [{
+      work_id: "original-work", state: "VERIFIED", intent: "Update simulated firmware", target_resource_id: "sim-device", assigned_node: "original-node",
+      provenance: { agent_session_id: "original-session", plan_id: "original-plan", workflow_run_id: "original-workflow", operation_id: "original-work" },
+      execution_arguments: { authorization_id: "original-authorization" },
+      result_summary: { remote_execution_receipt: { operation_id: "original-work", status: "SUCCEEDED" } },
+      effect_verification: { verdict: "UNKNOWN", observation_ids: ["independent-observation"] }, evidence_refs: ["artifact://sha256/evidence"],
+    }] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data }) }));
+    render(<OperationsConsole />);
+    expect(await screen.findByText("SIMULATED")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "original-work" }));
+    const chain = within(screen.getByLabelText("Work execution chain"));
+    expect(chain.getByText("original-authorization")).toBeInTheDocument();
+    expect(chain.getByText("original-plan")).toBeInTheDocument();
+    expect(chain.getByText("independent-observation")).toBeInTheDocument();
+    expect(chain.getByText("Effect verification").nextElementSibling).toHaveTextContent("UNKNOWN");
+    expect(chain.queryByText("COMMITTED")).not.toBeInTheDocument();
+    expect(screen.getByText("Reconcile")).toBeDisabled();
+  });
+  it("keeps missing evidence unknown and provides instructions without fabricated demo records", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: fixture }) }));
+    render(<OperationsConsole />);
+    fireEvent.click(await screen.findByRole("button", { name: "uncertain-effect-1" }));
+    const chain = screen.getByLabelText("Work execution chain");
+    expect(chain).toHaveTextContent("UNKNOWN");
+    expect(chain).toHaveTextContent("Not recorded");
+    expect(chain).not.toHaveTextContent("MATCH");
+    expect(screen.getByText("Execution scope not recorded")).toBeInTheDocument();
+    expect(screen.getByText("Run the verified simulated demo")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "preview-firmware-update" })).not.toBeInTheDocument();
+  });
   it("shows real backend state and never treats uncertain effects as success", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: fixture }) }));
     render(<OperationsConsole />);

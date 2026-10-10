@@ -101,6 +101,13 @@ python -m pip install -e ".[dev,a2a,mcp,scientific]"
 python -m pytest -q tests/repository tests/developer_platform
 ```
 
+For the existing thermal report reference, run
+`python -m scripts.acceptance.scientific_preview_preflight` to inspect actual
+prerequisites. Exit 2 / BLOCKED is expected without the existing strong sandbox;
+the probe performs no computation or report generation. See the
+[scientific gallery](../../../examples/README.md#scientific-computation-and-reports)
+for inputs, the independent reference and the qualified native command.
+
 The [contribution guide](../../../CONTRIBUTING.md) defines full validation and
 supported process-lifecycle environments. This focused command does not replace
 the full merge/release gate. Desktop development needs Node.js 22; follow
