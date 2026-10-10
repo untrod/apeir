@@ -33,6 +33,7 @@ from nous_runtime.node_runtime.execution_host import (
 )
 from nous_runtime.node_runtime.protocol import workload_request_digest
 from nous_runtime.security.private_files import restrict_owner_only_file
+from nous_runtime.locking import file_lock
 from nous_runtime.version import __version__
 from nous_runtime.core.redaction import redact_sensitive_data
 from nous_runtime.governance.contracts import AuthorizationContext
@@ -268,6 +269,10 @@ class NodeRuntimeService:
         self.transfers_path.mkdir(parents=True, exist_ok=True)
 
     def _load_or_create_identity(self) -> NodeIdentity:
+        with file_lock(self.state_dir / "identity.lock"):
+            return self._load_identity_locked()
+
+    def _load_identity_locked(self) -> NodeIdentity:
         if self.identity_path.is_file() and self.private_key_path.is_file():
             value = json.loads(self.identity_path.read_text(encoding="utf-8"))
             if not isinstance(value, dict):
@@ -275,6 +280,19 @@ class NodeRuntimeService:
             identity = NodeIdentity.from_dict(value)
             self._verify_identity_key(identity)
             return identity
+
+        if any(
+            path.exists()
+            for path in (
+                self.identity_path,
+                self.private_key_path,
+                self.workloads_path,
+                self.status_path,
+            )
+        ):
+            raise PermissionError(
+                "Node identity is incomplete; restore its original identity before restart"
+            )
 
         key = Ed25519PrivateKey.generate()
         private_pem = key.private_bytes(
