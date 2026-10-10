@@ -789,6 +789,7 @@ class NodeRuntimeService:
                     }
                 return dict(existing)
             started = _utc_now()
+            execution_started = time.monotonic()
             handler = self._handlers.get(capability)
             if (
                 getattr(handler, "requires_at_most_once", False)
@@ -919,7 +920,16 @@ class NodeRuntimeService:
             staged = {**self._workloads, workload_id: result}
             _atomic_write_json(self.workloads_path, staged)
             self._workloads = staged
-        self._emit("node.workload.finished", result)
+        self._emit(
+            "node.workload.finished",
+            {
+                **result,
+                "timing": {
+                    "clock": "node-local-monotonic",
+                    "execute_and_persist_seconds": time.monotonic() - execution_started,
+                },
+            },
+        )
         if handler is not None and response_loss is not None:
             raise response_loss
         return dict(result)
