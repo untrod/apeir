@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import pytest
 
 from nous_runtime.node_runtime.reliability import (
     NodeConnectivityState,
@@ -207,6 +211,168 @@ def test_node_reconnects_after_durable_controller_restart(tmp_path: Path) -> Non
                 await restarted.stop()
             else:
                 await server.stop()
+
+    asyncio.run(scenario())
+
+
+def test_workload_handler_cannot_block_the_authenticated_transport_loop(tmp_path):
+    async def scenario():
+        service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+        server = NodeRelayServer(heartbeat_seconds=0.05)
+        server.register_node(service.identity.node_id, service.identity.public_key)
+        entered, release, finished = (threading.Event() for _ in range(3))
+        observations = []
+        executions = 0
+        loop = asyncio.get_running_loop()
+
+        def handler(arguments):
+            nonlocal executions
+            executions += 1
+            entered.set()
+            assert release.wait(3), "controlled handler was not released"
+            finished.set()
+            return {"echo": arguments["message"]}
+
+        def watchdog():
+            if not entered.wait(3):
+                release.set()
+                return
+            scheduled = time.monotonic()
+
+            def transport_tick():
+                observations.append(
+                    {
+                        "before_handler_finished": not finished.is_set(),
+                        "elapsed_seconds": time.monotonic() - scheduled,
+                    }
+                )
+                release.set()
+
+            loop.call_soon_threadsafe(transport_tick)
+            # Bounded cleanup for the defective implementation; no sleep or
+            # enlarged production deadline makes that implementation pass.
+            if not release.wait(1):
+                release.set()
+
+        service._handlers["system.echo"] = handler
+        await server.queue_workload(
+            service.identity.node_id,
+            "transport-responsive",
+            "system.echo",
+            {"message": "once"},
+        )
+        url = await server.start()
+        stop = asyncio.Event()
+        client = NodeRelayClient(
+            service, url, server.public_key, heartbeat_seconds=0.05
+        )
+        task = asyncio.create_task(client.run_forever(stop))
+        worker = threading.Thread(target=watchdog)
+        worker.start()
+        try:
+            await _wait_for(lambda: "transport-responsive" in server.results)
+            assert observations and observations[0]["before_handler_finished"], (
+                observations
+            )
+            assert executions == 1
+            assert server.results["transport-responsive"]["state"] == "COMPLETED"
+            assert server.result_envelopes["transport-responsive"]["signature"]
+        finally:
+            release.set()
+            stop.set()
+            await asyncio.wait_for(task, timeout=2)
+            await server.stop()
+            worker.join(timeout=3)
+            assert not worker.is_alive()
+
+    asyncio.run(scenario())
+
+
+def test_cancelled_transport_preserves_inflight_effect_and_delivers_original_result(
+    tmp_path: Path,
+) -> None:
+    async def scenario():
+        service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+        server = NodeRelayServer(heartbeat_seconds=0.05)
+        server.register_node(service.identity.node_id, service.identity.public_key)
+        entered, release = threading.Event(), threading.Event()
+        executions = 0
+        workload_id = "transport-cancelled"
+        binding = {
+            "intent_id": "intent-transport-cancelled",
+            "effect_contract_digest": "a" * 64,
+            "target_ref": "node://test/service/echo",
+            "target_binding_digest": "b" * 64,
+            "workload_id": workload_id,
+            "request_digest": "c" * 64,
+            "provider_revision": "test-1",
+        }
+
+        def handler(arguments):
+            nonlocal executions
+            executions += 1
+            entered.set()
+            assert release.wait(3), "controlled handler was not released"
+            return {"echo": arguments["message"]}
+
+        service._handlers["system.echo"] = handler
+        await server.queue_workload(
+            service.identity.node_id,
+            workload_id,
+            "system.echo",
+            {"message": "once"},
+            delivery_semantics="at_most_once",
+            binding=binding,
+        )
+        url = await server.start()
+        stop = asyncio.Event()
+        client = NodeRelayClient(
+            service, url, server.public_key, heartbeat_seconds=0.05
+        )
+        task = asyncio.create_task(client.run_forever(stop))
+        resumed = None
+        try:
+            await _wait_for(entered.is_set)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert (
+                json.loads(service.workloads_path.read_text())[workload_id]["state"]
+                == "EXECUTING"
+            )
+            uncertain = service.execute_workload(
+                workload_id,
+                "system.echo",
+                {"message": "once"},
+                delivery_semantics="at_most_once",
+                binding=binding,
+            )
+            assert uncertain["state"] == "RECOVERY_REQUIRED"
+            assert uncertain["error_code"] == "NOUS_NODE_UNCERTAIN_EFFECT"
+            assert executions == 1
+            release.set()
+            await _wait_for(
+                lambda: (
+                    json.loads(service.workloads_path.read_text())[workload_id]["state"]
+                    == "COMPLETED"
+                )
+            )
+            original = json.loads(service.workloads_path.read_text())[workload_id]
+            resumed = asyncio.create_task(client.run_forever(stop))
+            await _wait_for(lambda: workload_id in server.results)
+            assert server.results[workload_id] == original
+            assert server.result_envelopes[workload_id]["signature"]
+            assert executions == 1
+        finally:
+            release.set()
+            stop.set()
+            if not task.done():
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+            if resumed is not None:
+                await asyncio.wait_for(resumed, timeout=2)
+            await server.stop()
 
     asyncio.run(scenario())
 

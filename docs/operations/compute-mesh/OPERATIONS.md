@@ -138,6 +138,13 @@ execution code and test were unchanged by the workbench PR; the available failur
 log does not establish where delivery stalled. This is unresolved evidence, not
 a claimed recovery fix. Issues #4 and #8 remain open.
 
+Main `59b670c8811d11c480608a7ee17f6d17a0037422` Core CI run
+[38071947425](https://github.com/untrod/apeir/actions/runs/38071947425) also failed
+on Windows: `test_completed_work_is_delivered_after_transport_loss_without_reexecution`
+exceeded its original five-second convergence wait (1 failed, 4031 passed,
+53 skipped). The preceding four-platform source run passed; that does not explain
+the later failure. Both failure records remain open qualification evidence.
+
 That integration test now attaches bounded stage facts on a timeout: original
 operation/node IDs, host-local monotonic elapsed time, connection/report presence,
 pending assignment, Node journal state, Relay state, signed result and spool-file
@@ -153,6 +160,30 @@ The regression opens two actual WebSockets: the old socket is rejected; its
 sequence remains usable by the current connection; Controller shutdown closes
 the transports. This fixes that specific ownership bug, not every Windows
 shutdown or delivery deadline issue.
+
+## Execution and transport responsiveness
+
+The Node Relay previously called its synchronous workload handler on the network
+event loop. A controlled handler prevented a callback on that same loop from
+running until the test watchdog released the handler. The original implementation
+fails this causal ordering assertion; increasing a deadline cannot make it pass.
+
+The Relay now awaits the same existing `NodeRuntimeService.execute_workload`
+call through Python's thread offload. Work admission, authorization rechecks,
+at-most-once journal, signed receipts and serial result delivery remain owned by
+their existing paths. This permits transport keepalive/background callbacks while
+a synchronous handler runs; it does not enable concurrent Work dispatch or process
+incoming application cancellation/heartbeat messages during that serial await.
+It does not establish the cause of either Windows convergence failure above.
+
+Cancelling the transport await cannot stop an already-running handler or prove
+that its effect was absent. The controlled cancellation regression keeps the
+original at-most-once journal in EXECUTING, rejects another execution as
+RECOVERY_REQUIRED, releases the original handler and reconnects to deliver its
+persisted signed result with exactly one handler call. Process termination still
+requires the existing uncertain-effect reconciliation/Observation path; a missing
+response never authorizes another side effect. Thread offload does not change
+sandbox limits, grant authority or qualify physical/network acceptance.
 
 ## Local measurement baseline
 
