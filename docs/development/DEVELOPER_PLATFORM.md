@@ -231,8 +231,29 @@ writing and completion phases for future failures. Four writers, forty events,
 exact sequence assertions and the original 10-second exit check remain intact.
 EventStream, fsync and Kernel are unchanged. This fixes test cleanup and adds
 diagnostics; it does **not** prove the original Windows termination timing cause
-resolved. SDK acceptance requires a separate corrective PR and successful native
-source/main checks; original failures are not erased or rerun into acceptance.
+resolved. SDK acceptance requires a separate corrective PR and successful
+source/main platform checks; original failures are not erased or rerun into acceptance.
+
+Preview PR #25's resulting main `5ccbb6a4aec9deca9fcaec5c2c92af740932ea8c`
+passed Core/Desktop/Security, but its [Windows Multi-Arch run
+38007732190](https://github.com/untrod/apeir/actions/runs/38007732190) recorded
+**1 failed, 3725 passed, 53 skipped, 272 deselected, 4 warnings**. The untouched
+firmware response-loss/revoked-grant test stayed WAITING after its new observation
+Work timed out; it neither repeated the effect nor falsely committed success.
+This is additional evidence for [Issue #4](https://github.com/untrod/apeir/issues/4),
+not a successful main Gate or a failure hidden by rerunning.
+
+A controlled held REGISTER proves both the Demo and simulation fixture accepted
+a persisted RESOURCE_REPORT as startup readiness before the new connection was
+authenticated. Three controlled cases fail on that exact main, including a
+four-second restart delay longer than the original three-second Work wait.
+Startup now waits for an actual connection and a different signed RESOURCE_REPORT
+message ID verified by the existing relay. The original fifteen-second readiness,
+three-second Work wait, thirty-second Operation bound, heartbeat, fsync,
+authority and at-most-once assertions are unchanged. This corrects a demonstrated
+startup race; it does not prove every Windows observation/receipt deadline issue
+resolved or close Issue #4. A corrective PR must pass source/dispatch and resulting
+main matrices before the Preview checkpoint can be issued.
 
 The environment cleanup audit reuses the existing workspace configuration,
 daemon constructor, pytest fixtures and Kernel process identity semantics.
