@@ -7,6 +7,27 @@ their own Ed25519 private keys; only public `identity.json` files are enrolled.
 Node and Controller startup fail closed if their private-key files cannot be
 restricted to the current operating-system identity.
 
+Identity provisioning and trust updates use the existing cross-process file
+lock. Separate CLI/listener instances reload the authoritative trust map inside
+the update lock; registering one Node cannot erase another registration. Repeating
+the same Node ID/key is idempotent. Supplying a different key for an existing
+Node ID is rejected rather than silently rotating its identity. Treat public
+identity files as enrollment inputs only; registration does not grant device,
+Shell or firmware permissions.
+
+A partial Node identity or missing Controller key beside existing durable
+state blocks startup without generating replacement keys or altering original
+workload evidence. Restore that host's original identity from a protected
+backup; do not delete journals or replace the key to make startup pass.
+Concurrent initializers share one persistent identity. These are local durability
+guarantees, not Controller HA or permission for two Node daemons to write the
+same execution journal concurrently.
+
+The legacy in-memory Connectivity PairingService does not enroll signed Node
+Protocol identities. One-time invitation/QR onboarding and real cross-network
+Windows/Jetson qualification remain separate unfinished items; the manual
+public-identity enrollment procedure below remains supported.
+
 Protocol identifiers under `nous.*.v1` remain compatibility contracts. The
 public commands use the APEIR product name.
 

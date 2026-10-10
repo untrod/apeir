@@ -26,6 +26,7 @@ from websockets.exceptions import ConnectionClosed
 from nous_runtime.artifact.content_store import ContentAddressedArtifactStore
 from nous_runtime.connectivity.protocol.identity import NodeIdentity
 from nous_runtime.security.private_files import restrict_owner_only_file
+from nous_runtime.locking import file_lock
 
 from .protocol import (
     MAX_MESSAGE_BYTES,
@@ -121,14 +122,37 @@ class NodeRelayServer:
         )
 
     def register_node(self, node_id: str, public_key: str) -> None:
+        if not isinstance(node_id, str) or not node_id.strip():
+            raise ValueError("node identity is required")
         try:
             raw_key = bytes.fromhex(public_key)
         except ValueError as exc:
             raise ValueError("node Ed25519 public key must be hex") from exc
         if len(raw_key) != 32:
             raise ValueError("node Ed25519 public key must be 32-byte hex")
+        if self.state_dir is None:
+            self._register_node_key(node_id, public_key)
+            return
+        # Multiple Controller/CLI processes share this existing authoritative map.
+        # Reload within its lock; an atomic replace alone can lose another enrollment.
+        with file_lock(self.state_dir / "trusted-nodes.lock"):
+            current = self._load_trusted_nodes()
+            previous = self.node_keys
+            self.node_keys = current
+            try:
+                self._register_node_key(node_id, public_key)
+                self._save_trusted_nodes()
+            except BaseException:
+                self.node_keys = previous
+                raise
+
+    def _register_node_key(self, node_id: str, public_key: str) -> None:
+        existing = self.node_keys.get(node_id)
+        if existing is not None and bytes.fromhex(existing) != bytes.fromhex(
+            public_key
+        ):
+            raise PermissionError("Node identity is already bound to a different key")
         self.node_keys[node_id] = public_key
-        self._save_trusted_nodes()
 
     def _load_trusted_nodes(self) -> dict[str, str]:
         if self.state_dir is None:
@@ -2110,6 +2134,11 @@ def _is_loopback_host(host: str) -> bool:
 
 def _load_or_create_relay_key(state_dir: Path) -> Ed25519PrivateKey:
     state_dir.mkdir(parents=True, exist_ok=True)
+    with file_lock(state_dir / "identity.lock"):
+        return _load_relay_key_locked(state_dir)
+
+
+def _load_relay_key_locked(state_dir: Path) -> Ed25519PrivateKey:
     key_path = state_dir / "identity.ed25519.pem"
     if key_path.is_file():
         restrict_owner_only_file(key_path, subject="Controller identity private key")
@@ -2117,16 +2146,34 @@ def _load_or_create_relay_key(state_dir: Path) -> Ed25519PrivateKey:
         if not isinstance(key, Ed25519PrivateKey):
             raise ValueError("relay identity key must be Ed25519")
         return key
+    if any(
+        (state_dir / name).exists()
+        for name in (
+            "trusted-nodes.json",
+            "workload-state.json",
+            "node-observations.json",
+            "relay-sequence.json",
+        )
+    ):
+        raise PermissionError(
+            "Controller identity is missing; restore its original key before restart"
+        )
     key = Ed25519PrivateKey.generate()
     temporary = key_path.with_suffix(key_path.suffix + ".tmp")
-    temporary.write_bytes(
-        key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-    )
     try:
+        with temporary.open("wb") as stream:
+            restrict_owner_only_file(
+                temporary, subject="Controller identity private key"
+            )
+            stream.write(
+                key.private_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PrivateFormat.PKCS8,
+                    encryption_algorithm=serialization.NoEncryption(),
+                )
+            )
+            stream.flush()
+            os.fsync(stream.fileno())
         restrict_owner_only_file(temporary, subject="Controller identity private key")
         temporary.replace(key_path)
     except Exception:
