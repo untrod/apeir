@@ -168,6 +168,14 @@ the existing three-round startup baseline measured CLI-ready median 1.214 second
 and the 1,000-record benchmark measured context-write median 0.382 ms and p95
 0.567 ms. Those synthetic local results do not justify weakening persistence.
 
+Actual full-code PR #23 source cost was five active jobs, **513 job-seconds /
+392 seconds feedback**. The initial documentation-only head of PR #25
+(`406ca499e9b4b9a22d1ffa54ee20834d3928758d`) exercised the narrow path with all
+three workflows passing: five active jobs, **122 job-seconds / 86 seconds
+feedback**. Its later Console/preflight code commit selects full regression;
+the resulting main still runs all platforms. These are observed workflow costs,
+not a controlled runtime performance comparison or a reduced main quality gate.
+
 ### Packaging and compatibility
 
 Controller, Node and CLI share the existing `apeir-distribution` wheel and its

@@ -52,6 +52,31 @@ approvals, evidence and recovery, with responsive mobile controls. It does not
 grant authority. Real IdP deployment and native/physical qualification are
 separate from deterministic Cloud contract tests.
 
+## Developer Preview
+
+Start with the [Verified Execution Demo](examples/hello_runtime/README.md):
+a real simulated firmware state change through existing Governance, original
+Work, signed Node execution, Receipt, independent Observation and MATCH-only
+EffectVerification. No API key or hardware is needed. The failure gallery
+exercises Deny, MISMATCH, UNKNOWN, response loss without another mutation, and
+persistent restart. Results are Runtime records, not preset success JSON.
+
+The [Provider](examples/hello_provider/README.md) and
+[Skill](examples/hello_skill/README.md) examples use the public SDK and existing
+Registries. Read-only Work execution and loading Skill instructions have
+different scopes; neither grants device permission.
+The [scientific reference](docs/architecture/GOVERNED_SCIENTIFIC_RUNTIME.md)
+already composes simulation, independent numerical comparison, Claim/Evidence
+and DOCX/PDF reporting. Its current Cloud run is BLOCKED by the existing strong
+sandbox prerequisite; no substitute host execution or new report is claimed.
+The gallery includes a [short video script](examples/hello_runtime/README.md#five-minute-video-script),
+reproducible commands, actual result fields and feedback guidance.
+
+This is a source Developer Preview, not a production binary release. Kernel
+traversal, native packaging/signatures, real IdP and physical hardware have
+separate acceptance gates. Evaluate in dedicated workspaces and share sanitized
+reproductions through [issues](https://github.com/untrod/apeir/issues).
+
 ## Quick start
 
 Follow the [source Quick Start](docs/operations/getting-started/QUICK_START.md)

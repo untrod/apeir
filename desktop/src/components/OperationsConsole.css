@@ -19,3 +19,9 @@
 .operations-console footer { margin-top:28px; color:var(--nous-text-tertiary); font-size:12px; }.operations-evidence { border:1px solid var(--nous-border); padding:16px; }.operations-evidence pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; }
 .operations-console input { padding:8px; margin:8px; background:var(--nous-surface); color:var(--nous-text); border:1px solid var(--nous-border); }
 @media(max-width:700px) { .operations-console { padding:16px; }.operations-header { align-items:flex-start; flex-direction:column; }.operations-health { flex-wrap:wrap; padding:16px; gap:16px; }.operations-health > div:first-child { width:100%; }.operations-records article { flex-wrap:wrap; gap:10px; }.operations-records article > div:first-child { flex-basis:70%; }.operations-records .operations-controls { width:100%; }.operations-controls button { min-height:44px; flex:1; }.operations-console h1 { font-size:26px; } }
+/* Evidence summaries preserve the same backend records as the raw inspector. */
+.operations-work-chain dl > div { display: grid; grid-template-columns: minmax(9rem, 1fr) minmax(0, 3fr); gap: 1rem; padding: .5rem 0; border-bottom: 1px solid var(--nous-border); }
+.operations-work-chain dt { font-weight: 600; }
+.operations-work-chain dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.operations-demo pre { overflow-x: auto; }
+@media (max-width: 640px) { .operations-work-chain dl > div { grid-template-columns: 1fr; gap: .25rem; } }

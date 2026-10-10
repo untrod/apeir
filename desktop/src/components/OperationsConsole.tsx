@@ -14,6 +14,33 @@ const collections: Collection[] = ["works", "nodes", "devices", "approvals", "ev
 const label = (value: string) => value.replaceAll("_", " ");
 const text = (row: Row, keys: string[]) => String(keys.map(key => row[key]).find(value => value !== undefined && value !== null) ?? "UNKNOWN");
 const pkceKey = "apeir.human.pkce";
+const record = (value: unknown): Row => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
+const refs = (value: unknown) => Array.isArray(value) && value.length ? value.map(String).join("\n") : "Not recorded";
+
+function WorkEvidence({ work }: { work: Row }) {
+  const provenance = record(work.provenance);
+  const receipt = record(record(work.result_summary).remote_execution_receipt);
+  const verification = record(work.effect_verification);
+  const fields = [
+    ["Goal / intent", text(work, ["intent"])],
+    ["AgentSession", text(provenance, ["agent_session_id"])],
+    ["Plan", text(provenance, ["plan_id"])],
+    ["Workflow", text(provenance, ["workflow_run_id"])],
+    ["Authorization", text(record(work.execution_arguments), ["authorization_id"])],
+    ["Operation", text(provenance, ["operation_id"])],
+    ["Capability", text(work, ["execution_capability"])],
+    ["Target resource", text(work, ["target_resource_id"])],
+    ["Assigned Node", text(work, ["assigned_node"])],
+    ["Receipt operation", text(receipt, ["operation_id"])],
+    ["Independent observation IDs", refs(verification.observation_ids)],
+    ["Effect verification", text(verification, ["verdict"])],
+    ["Work state", text(work, ["state"])],
+    ["Input artifacts", refs(work.input_artifacts)],
+    ["Output artifacts", refs(work.output_artifacts)],
+    ["Evidence references", refs(work.evidence_refs)],
+  ];
+  return <section className="operations-work-chain" aria-label="Work execution chain"><h2>Work execution chain</h2><p>Values from the selected backend record. Receipt and observation are separate evidence; missing values remain UNKNOWN.</p><dl>{fields.map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}</dl></section>;
+}
 
 export function OperationsConsole() {
   const [snapshot, setSnapshot] = useState<OperationsSnapshot | null>(null);
@@ -25,9 +52,11 @@ export function OperationsConsole() {
   const [endpoint, setEndpoint] = useState(getConfig().url);
   const callbackHandled = useRef(false);
   const sequence = useRef(0);
+  const refreshSequence = useRef(0);
   const reload = useCallback(async () => {
-    try { setSnapshot(await api<OperationsSnapshot>("/api/v1/control/operations")); setError(""); }
-    catch (err) { setError(err instanceof Error ? err.message : "Runtime unavailable"); }
+    const request = ++refreshSequence.current;
+    try { const value = await api<OperationsSnapshot>("/api/v1/control/operations"); if (request === refreshSequence.current) { setSnapshot(value); setError(""); } }
+    catch (err) { if (request === refreshSequence.current) { setSnapshot(null); setDetails(null); setError(err instanceof Error ? err.message : "Runtime unavailable"); } }
   }, []);
   useEffect(() => { void reload(); const timer = setInterval(() => { void reload(); }, 10000); return () => clearInterval(timer); }, [reload]);
   useEffect(() => {
@@ -111,10 +140,12 @@ export function OperationsConsole() {
     finally { setBusy(false); }
   }
   const enabled = !!human && human.expires_at * 1000 > Date.now() && !busy;
+  const simulatedDevices = new Set((snapshot?.devices ?? []).filter(row => record(row.metadata).simulation === true && typeof row.device_id === "string" && row.device_id.length > 0).map(row => String(row.device_id)));
   return <main className="operations-console" aria-label="Operations console">
     <header className="operations-header"><div><p className="operations-eyebrow">APEIR / OPERATIONS</p><h1>Execution &amp; reality</h1><p>Observe state, inspect evidence, govern the next action.</p></div>
       <div className="operations-controls"><button onClick={() => void reload()} disabled={busy}>Refresh</button><button onClick={() => void signIn()} disabled={busy}>{human ? "Renew human session" : "Sign in as human"}</button>{human && <button onClick={() => void signOut()} disabled={busy}>Sign out</button>}</div>
     </header>
+    <details className="operations-demo"><summary>Run the verified simulated demo</summary><p>Start with the source Quick Start. Run these CLI commands in an empty dedicated workspace; results and evidence come from the existing Runtime. Approval here is an explicit local OS-user action.</p><pre>apeir demo --workspace ./demo-match --phase prepare --json{"\n"}apeir demo --workspace ./demo-match --phase resume --approve-once --json</pre><p>SIMULATED · Runtime-service · Kernel not traversed. No physical or remote-human qualification.</p><a href="https://github.com/untrod/apeir/blob/main/examples/hello_runtime/README.md" target="_blank" rel="noreferrer">Failure scenarios and evidence guide</a></details>
     <details><summary>Controller connection</summary><form onSubmit={event => { event.preventDefault(); try { const address = new URL(endpoint); if (address.username || address.password || !(address.protocol === "https:" || (address.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(address.hostname)))) throw new Error("Controller requires HTTPS or loopback HTTP"); setConfig({ url: endpoint, token: endpoint === getConfig().url ? getConfig().token : "" }); setHuman(null); setSnapshot(null); void reload(); } catch (err) { setError(err instanceof Error ? err.message : "Invalid controller URL"); } }}><label>API URL <input aria-label="API URL" value={endpoint} onChange={event => setEndpoint(event.target.value)} /></label><button>Connect</button></form></details>
     {error && <p role="alert" className="operations-error">{error}</p>}
     <section className="operations-health" aria-label="System health"><div><span className={`operations-badge ${!snapshot || snapshot.health.degraded ? "uncertain" : "healthy"}`}>{!snapshot ? "UNKNOWN" : snapshot.health.degraded ? "DEGRADED" : "HEALTHY"}</span><p>{human ? `Human: ${human.subject_id}` : "Observe mode · human authentication required for actions"}</p></div>
@@ -125,7 +156,8 @@ export function OperationsConsole() {
       {!snapshot ? <p>Waiting for authoritative runtime data.</p> : snapshot[collection].length === 0 ? <p>No {label(collection)} recorded.</p> : snapshot[collection].map((row, index) => {
         const id = text(row, ["request_id", "work_id", "node_id", "device_id", "session_id", "grant_id", "lease_id", "run_id", "digest", "incident_id", "sequence"]);
         const status = text(row, ["effective_status", "state", "status", "lifecycle", "event_type", "integrity"]);
-        return <article key={`${id}-${index}`}><div><button className="operations-identity" onClick={() => setDetails(row)}>{id}</button><p>{text(row, ["objective", "execution_capability", "capability_id", "message", "name", "target_ref", "resource_id"])}</p></div><span className="operations-badge">{status}</span><div className="operations-controls">
+        const simulated = record(row.metadata).simulation === true || simulatedDevices.has(typeof row.target_resource_id === "string" ? row.target_resource_id : "");
+        return <article key={`${id}-${index}`}><div><button className="operations-identity" onClick={() => setDetails(row)}>{id}</button><p>{text(row, ["objective", "execution_capability", "capability_id", "message", "name", "target_ref", "resource_id"])}</p>{["works", "devices"].includes(collection) && <small>{simulated ? "SIMULATED" : "Execution scope not recorded"}</small>}</div><span className="operations-badge">{status}</span><div className="operations-controls">
           {collection === "approvals" && row.status === "PENDING" && <><button disabled={!enabled} onClick={() => void action(collection, "approve_once", id)}>Approve Once</button><button disabled={!enabled} onClick={() => void action(collection, "deny", id)}>Deny</button></>}
           {collection === "works" && <><button disabled={!enabled} onClick={() => void action(collection, "interrupt", id)}>Interrupt</button><button disabled={!enabled} onClick={() => void action(collection, "reconcile", id)}>Reconcile</button>{snapshot.controls.actions.includes("resume") && <button disabled={!enabled} onClick={() => void action(collection, "resume", id)}>Resume original workflow</button>}</>}
           {collection === "incidents" && <button disabled={!enabled || !!row.acknowledged} onClick={() => void action(collection, "acknowledge", id)}>{row.acknowledged ? "Acknowledged" : "Acknowledge"}</button>}
@@ -133,7 +165,7 @@ export function OperationsConsole() {
         </div></article>;
       })}
     </section>
-    {details && <aside className="operations-evidence" aria-label="Evidence details"><button onClick={() => setDetails(null)}>Close details</button><pre>{JSON.stringify(details, null, 2)}</pre></aside>}
+    {details && <aside className="operations-evidence" aria-label="Evidence details"><button onClick={() => setDetails(null)}>Close details</button>{collection === "works" && <WorkEvidence work={details} />}<details open={collection !== "works"}><summary>Raw backend record and diagnostics</summary><pre>{JSON.stringify(details, null, 2)}</pre></details></aside>}
     <footer>UNKNOWN requires reconciliation. Interrupt prevents future admission; an existing physical effect may still require observation.</footer>
   </main>;
 }

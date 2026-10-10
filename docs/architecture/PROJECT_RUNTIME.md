@@ -1,76 +1,41 @@
-# Project Runtime — .nous/ Workspace
+# Project Runtime and workspace state
 
-## What is .nous/?
+An APEIR workspace is a filesystem root containing the compatibility directory
+`.nous/`. A Project is an existing Project Runtime record with a lifecycle,
+plan and checkpoints; it is not a second Work or authority system. See
+[state ownership](STATE_OWNERSHIP.md) for canonical owners and
+[the Source Quick Start](../operations/getting-started/QUICK_START.md) for onboarding.
 
-`.nous/` is the project-level data directory for APEIR Runtime.  It lives
-in your project root and holds everything the Runtime knows about your
-project: configuration, goals, tasks, memory, file index, execution
-traces, and generated artifacts.
-
-## Directory Structure
-
-```
-.nous/
-├── project.json          # project metadata (name, root, created)
-├── config.json           # project-level config overrides
-├── goals.json            # project goals
-├── tasks.json            # project task list
-├── history               # shell command history (plain text)
-├── memory/
-│   ├── timeline.jsonl    # chronological event log
-│   ├── decisions.jsonl   # user-confirmed decisions
-│   ├── summaries.jsonl   # periodic stage summaries
-│   └── facts.jsonl       # stable project facts
-├── index/
-│   └── files.json        # project file index (from /scan)
-├── traces/               # execution traces
-└── artifacts/            # generated assets
-```
-
-## How It Works
-
-### Auto-detection
-
-When you run `nous` with no arguments, Nous walks up from the current
-directory looking for a `.nous/` folder.  If found, it uses that
-workspace.  If not found, it prompts:
-
-```
-No Nous workspace found.
-Create .nous for this project? [Y/n]
-```
-
-Answer `y` (or press Enter) to create one.  Answer `n` to skip —
-you can run `nous project init` later.
-
-### Manual Creation
+## Current public commands
 
 ```bash
-nous project init          # create in current directory
-nous project init --path /path/to/project
+apeir project --help
+apeir project create thermal-review --description "Review simulated evidence" --json
+apeir project list --json
 ```
 
-### Project Scan
+Use `apeir project show`, `start`, `continue`, `pause`, `resume`, `cancel`,
+`progress`, `checkpoints`, `events` and `plan` according to their `--help`.
+These manage existing Project records. The old `project init` and `project scan`
+commands are not supported public commands. Shell-specific workspace detection
+and `/scan` are separate from the Project lifecycle.
 
-```bash
-nous project scan          # index files into .nous/index/files.json
-```
+## Persisted state and safety
 
-Or from the shell: `/scan`
+The existing workspace helper discovers `.nous/` upwards from the current path,
+or uses `NOUS_WORKSPACE_ROOT` when configured. Individual Runtime owners store
+their data under this workspace; the directory is not an authorization source.
+Legacy workspace initialization retains project/config/goals/tasks files,
+memory/index/traces and artifacts. AgentSession, Workflow, Governance,
+Distributed Work, Node and Reality stores remain owned by their canonical
+implementations, not this document or a new unified database.
 
-## Data Privacy
+Keep `.nous/`, generated artifacts, credentials, private keys and local databases
+out of source control. Local-first persistence does not mean every operation is
+offline: an explicitly configured Provider may use network resources under its
+existing policy and credential boundaries.
 
-**All data stays on your machine.**  The `.nous/` directory is a local
-folder — nothing is uploaded, synced, or shared.  Add `.nous/` to your
-`.gitignore` if you don't want to commit it.
-
-```gitignore
-# APEIR Runtime workspace
-.nous/
-```
-
-## Lifecycle
-
-1. **Create** — `nous project init` or auto-prompt
-2. **Use** — every `nous` shell session reads/writes to `.nous/`
-3. **Delete** — `rm -rf .nous` removes everything (no side effects)
+Do not delete workspace state to "reset" uncertain effects or clear revocation.
+Stopping a process or deleting evidence cannot undo an effect. Interrupt future
+admission and reconcile persisted evidence, acquire independent observation and
+verify through the existing recovery path before retiring state.
