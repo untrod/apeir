@@ -647,6 +647,7 @@ function ResourceDock() {
   const nodes = useNodes();
   const models = useModels();
   const tasks = useTasks();
+  const approvals = usePendingApprovals();
   const onlineNodes = nodes.filter((n) => n.online);
   const enabledModels = models.filter((m) => m.state !== "disabled");
   const runningTasks = tasks.filter((t) => ["running", "queued", "awaiting_approval", "verifying"].includes(t.status));
@@ -662,7 +663,7 @@ function ResourceDock() {
       </DockSection>
       <DockSection title="System Status" count={runningTasks.length}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: space.sm, width: "100%" }}>
-          <MiniDockStat label="Runtime" value="Ready" ok />
+          <MiniDockStat label="Approvals" value={String(approvals.length)} ok={approvals.length === 0} />
           <MiniDockStat label="Active" value={String(runningTasks.length)} ok={runningTasks.length === 0} />
         </div>
       </DockSection>
@@ -730,6 +731,9 @@ function AppShell() {
   // Run bootstrap
   const bootstrapRan = useRef(false);
   useEffect(() => {
+    // Browser operations connects through its existing authenticated Controller API.
+    // Native sidecar/bootstrap requirements belong to the Tauri host only.
+    if (!("__TAURI_INTERNALS__" in window)) return;
     if (bootstrapRan.current) return;
     bootstrapRan.current = true;
 
@@ -958,7 +962,7 @@ function AppShell() {
   return (
     <>
       <StatusBar onSearch={() => setPaletteOpen(true)} />
-      <div style={{ display: "flex", flex: 1, overflow: "hidden", height: `calc(100vh - ${page === "chat" ? 44 : 148}px)` }}>
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", height: `calc(100vh - ${page === "chat" || page === "operations" ? 44 : 148}px)` }}>
         <Sidebar currentPage={page} onNavigate={setPage} inspectorOpen={inspectorOpen}
           onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
           taskCount={tasks.filter((t) => ["running", "queued", "awaiting_approval"].includes(t.status)).length}
@@ -986,7 +990,7 @@ function AppShell() {
         </div>
         <DetailDrawer view={drawer} onClose={() => setDrawer(null)} />
       </div>
-      {page !== "chat" && <ResourceDock />}
+      {page !== "chat" && page !== "operations" && <ResourceDock />}
       <CommandPalette
         commands={commands}
         open={paletteOpen}

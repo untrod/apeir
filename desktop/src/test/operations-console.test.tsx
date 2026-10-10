@@ -5,8 +5,81 @@ import { OperationsConsole, type OperationsSnapshot } from "../components/Operat
 const fixture: OperationsSnapshot = {
   agents: [], works: [{ work_id: "uncertain-effect-1", state: "UNKNOWN", execution_capability: "device.firmware.update" }], workflows: [], nodes: [{ node_id: "jetson-sim-1", state: "ONLINE" }], devices: [{ device_id: "actuator-sim-1", lifecycle: "AVAILABLE" }], approvals: [{ request_id: "approval-original-1", status: "PENDING" }], grants: [], credential_leases: [], artifacts: [], evidence: [{ work_id: "uncertain-effect-1", receipt: { status: "SUCCEEDED" }, effect_verification: { verdict: "UNKNOWN" } }], activity: [], incidents: [], health: { degraded: true, components: [] }, controls: { actions: ["approve_once", "deny", "interrupt", "reconcile"] },
 };
-afterEach(() => { vi.unstubAllGlobals(); sessionStorage.clear(); window.history.replaceState({}, "", "/"); });
+afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear(); window.history.replaceState({}, "", "/"); });
 describe("Operations Console", () => {
+  it("restores bounded layout without persisting identity or Runtime evidence", async () => {
+    const data = { ...fixture, activity: [{ sequence: 1, event_type: "work.reconciled", work_id: "uncertain-effect-1" }] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data }) }));
+    const first = render(<OperationsConsole />);
+    fireEvent.click(await screen.findByRole("button", { name: "uncertain-effect-1" }));
+    fireEvent.change(screen.getByLabelText("Resize evidence inspector"), { target: { value: "520" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show activity · 1" }));
+    fireEvent.click(screen.getByRole("button", { name: /^nodes/ }));
+    const saved = JSON.parse(localStorage.getItem("apeir.operations.layout.v1") || "{}");
+    expect(saved).toEqual({ tabs: ["works", "nodes"], active: "nodes", inspectorWidth: 520, activityOpen: true, locale: "en" });
+    expect(JSON.stringify(saved)).not.toContain("uncertain-effect-1");
+    first.unmount();
+    render(<OperationsConsole />);
+    expect(screen.getByRole("tab", { name: "nodes" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("button", { name: "jetson-sim-1" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Activity panel")).toHaveTextContent("work.reconciled");
+    expect(screen.queryByLabelText("Evidence details")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "jetson-sim-1" }));
+    expect(screen.getByLabelText("Resize evidence inspector")).toHaveValue("520");
+  });
+  it("searches real records, navigates tabs by keyboard and localizes navigation", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: fixture }) }));
+    render(<OperationsConsole />);
+    await screen.findByRole("button", { name: "uncertain-effect-1" });
+    fireEvent.keyDown(window, { ctrlKey: true, key: "f" });
+    expect(screen.getByRole("textbox", { name: "Search records" })).toHaveFocus();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search records" }), { target: { value: "absent-node" } });
+    expect(screen.getByText("No matching records.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^nodes/ }));
+    expect(screen.getByRole("textbox", { name: "Search records" })).toHaveValue("");
+    fireEvent.keyDown(screen.getByRole("tab", { name: "nodes" }), { key: "ArrowLeft" });
+    expect(screen.getByRole("tab", { name: "works" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "uncertain-effect-1" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Change language" }));
+    expect(screen.getByRole("main")).toHaveAttribute("lang", "zh-CN");
+    expect(screen.getByRole("heading", { name: "执行与现实" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^节点/ })).toBeInTheDocument();
+  });
+  it("keeps Node trust independent of reported connectivity", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: { ...fixture, nodes: [{ node_id: "candidate", connectivity_state: "ONLINE", trust_status: "REVOKED" }] } }) }));
+    render(<OperationsConsole />);
+    await screen.findByRole("button", { name: "uncertain-effect-1" });
+    fireEvent.click(screen.getByRole("button", { name: /^nodes/ }));
+    const row = screen.getByRole("button", { name: "candidate" }).closest("article")!;
+    expect(within(row).getByText("Trust").nextElementSibling).toHaveTextContent("REVOKED");
+    expect(within(row).getByText("Connection").nextElementSibling).toHaveTextContent("ONLINE");
+  });
+  it("refreshes or removes the selected evidence instead of retaining a stale record", async () => {
+    let data = fixture;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => ({ ok: true, json: async () => ({ ok: true, data }) })));
+    render(<OperationsConsole />);
+    fireEvent.click(await screen.findByRole("button", { name: "uncertain-effect-1" }));
+    data = { ...fixture, works: [{ ...fixture.works[0], state: "VERIFIED", effect_verification: { verdict: "MISMATCH" } }] };
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(screen.getByLabelText("Work execution chain")).toHaveTextContent("MISMATCH"));
+    data = { ...fixture, works: [] };
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(screen.queryByLabelText("Evidence details")).not.toBeInTheDocument());
+  });
+  it("rejects unsafe Controller addresses without leaking credentials or making a request", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: fixture }) });
+    vi.stubGlobal("fetch", fetcher);
+    render(<OperationsConsole />);
+    await screen.findByRole("button", { name: "uncertain-effect-1" });
+    const count = fetcher.mock.calls.length;
+    for (const address of ["http://remote.example", "https://user:fake@remote.example", "https://remote.example?credential=fake", "https://remote.example#token"]) {
+      fireEvent.change(screen.getByRole("textbox", { name: "API URL" }), { target: { value: address } });
+      fireEvent.submit(screen.getByRole("textbox", { name: "API URL" }).closest("form")!);
+      expect(screen.getByRole("alert")).toHaveTextContent("Controller requires HTTPS");
+      expect(fetcher.mock.calls.length).toBe(count);
+      expect(screen.getByRole("alert")).not.toHaveTextContent(address);
+    }
+  });
   it("ignores an earlier successful snapshot after a later refresh failure", async () => {
     let complete: (value: unknown) => void = () => {};
     const earlier = new Promise(resolve => { complete = resolve; });
