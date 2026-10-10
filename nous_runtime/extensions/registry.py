@@ -56,6 +56,8 @@ class ExtensionRegistry:
                         destination = package_root / relative
                         destination.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(path, destination)
+                if package_digest(package_root) != manifest.provenance.digest:
+                    raise ValueError("acquired extension content digest mismatch")
                 _write_json(object_root / "nous.extension.json", manifest.to_dict())
                 security = create_supply_chain_records(object_root, manifest)
             except Exception:
@@ -66,6 +68,8 @@ class ExtensionRegistry:
             if stored.provenance is None or stored.provenance.digest != manifest.provenance.digest:
                 raise ValueError("content-addressed registry object does not match source digest")
             manifest = stored
+            if package_digest(package_root) != manifest.provenance.digest:
+                raise ValueError("installed extension content digest mismatch")
             if not (object_root / "bom.json").exists():
                 security = create_supply_chain_records(object_root, stored)
             else:

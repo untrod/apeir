@@ -33,6 +33,39 @@ def _object_root(registry: ExtensionRegistry, extension_id: str) -> Path:
     return registry.objects / manifest.provenance.digest.removeprefix("sha256:")
 
 
+@pytest.mark.parametrize("updating", [False, True])
+def test_copy_corruption_cannot_publish_or_replace_install_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, updating: bool
+):
+    import shutil
+
+    registry = ExtensionRegistry(tmp_path / "registry")
+    source = _skill(tmp_path / "skill")
+    previous = registry.install(source) if updating else None
+    index_before = registry.index_path.read_bytes() if updating else None
+    lock_before = registry.lock_path.read_bytes() if updating else None
+    (source / "reference.txt").write_text("new reviewed content\n", encoding="utf-8")
+    original_copy = shutil.copy2
+
+    def corrupt_copy(src, dst, *args, **kwargs):
+        result = original_copy(src, dst, *args, **kwargs)
+        if Path(src).name == "reference.txt":
+            Path(dst).write_text("changed during acquisition\n", encoding="utf-8")
+        return result
+
+    monkeypatch.setattr(shutil, "copy2", corrupt_copy)
+    with pytest.raises(ValueError, match="content digest mismatch"):
+        registry.install(source)
+    if updating:
+        assert registry.index_path.read_bytes() == index_before
+        assert registry.lock_path.read_bytes() == lock_before
+        assert registry.verify(previous.extension_id) == previous
+    else:
+        assert not registry.index_path.exists()
+        assert not registry.lock_path.exists()
+        assert not list(registry.objects.iterdir())
+
+
 def test_install_generates_standard_sbom_provenance_and_lock_bindings(tmp_path: Path):
     registry = ExtensionRegistry(tmp_path / "registry")
     manifest = registry.install(_skill(tmp_path / "skill"))
@@ -58,13 +91,17 @@ def test_install_generates_standard_sbom_provenance_and_lock_bindings(tmp_path: 
     validate(
         provenance,
         json.loads(
-            (schema_root / "extension-provenance.schema.json").read_text(encoding="utf-8")
+            (schema_root / "extension-provenance.schema.json").read_text(
+                encoding="utf-8"
+            )
         ),
     )
     validate(
         json.loads((root / "signature.json").read_text(encoding="utf-8")),
         json.loads(
-            (schema_root / "extension-signature.schema.json").read_text(encoding="utf-8")
+            (schema_root / "extension-signature.schema.json").read_text(
+                encoding="utf-8"
+            )
         ),
     )
 

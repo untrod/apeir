@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from typer.testing import CliRunner
 
 from nous_runtime.skills import SkillRegistry, SkillToolRuntime
@@ -213,3 +215,24 @@ def test_skill_tool_runtime_and_cli_expose_summaries_then_load(tmp_path: Path):
     assert loaded["skill"]["instructions"].startswith("Read relevant code")
     assert cli.exit_code == 0
     assert '"skill_id": "code-helper"' in cli.stdout
+
+
+def test_oversized_local_catalog_rejected_without_registration(tmp_path: Path):
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(
+        json.dumps(
+            {
+                "schema": "apeir.skill-catalog/v1",
+                "skills": [],
+                "padding": "x" * (1024 * 1024),
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = SkillRegistry(
+        tmp_path, builtin_dir=tmp_path / "none", user_dir=tmp_path / "user"
+    )
+    with pytest.raises(ValueError, match="exceeds 1048576 bytes"):
+        registry.add_catalog(str(catalog))
+    assert not registry.state_path.exists()
+    assert registry.catalogs() == ()
