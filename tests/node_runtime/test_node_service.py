@@ -153,6 +153,19 @@ def test_node_workload_is_bounded_and_idempotent(tmp_path: Path):
         "work-1", "system.echo", {"message": "must-not-reexecute"}
     )
     assert persisted == first
+    events = [
+        json.loads(line)
+        for line in service.telemetry_path.read_text(encoding="utf-8").splitlines()
+    ]
+    finished = [
+        event for event in events if event["event_type"] == "node.workload.finished"
+    ]
+    assert len(finished) == 2  # Cached delivery and restart do not execute again.
+    for event in finished:
+        timing = event["payload"]["timing"]
+        assert timing["clock"] == "node-local-monotonic"
+        assert timing["execute_and_persist_seconds"] >= 0
+    assert "timing" not in first  # Timing telemetry cannot alter receipt evidence.
 
 
 def test_at_most_once_workload_fails_closed_after_uncertain_crash(tmp_path: Path):

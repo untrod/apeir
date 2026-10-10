@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from websockets.asyncio.client import connect
+from websockets.exceptions import ConnectionClosed
 
 from nous_runtime.artifact import ArtifactType, ContentAddressedArtifactStore
 from nous_runtime.node_runtime.protocol import (
+    NODE_PROTOCOL_VERSION,
     NodeProtocolEnvelope,
     NodeProtocolError,
     ReplayWindow,
@@ -86,6 +90,72 @@ def test_remote_plaintext_websocket_is_rejected(tmp_path: Path):
         NodeRelayClient(service, "ws://192.0.2.1:9770", "00" * 32)
     with pytest.raises(ValueError, match="requires TLS"):
         NodeRelayServer(host="0.0.0.0", port=9770)
+
+
+def test_superseded_socket_cannot_observe_or_consume_new_connection_sequence(
+    tmp_path: Path,
+):
+    async def scenario():
+        service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+        server = NodeRelayServer()
+        node_id = service.identity.node_id
+        server.register_node(node_id, service.identity.public_key)
+        key = service.load_private_key()
+
+        def message(kind, sequence, payload):
+            return (
+                NodeProtocolEnvelope(
+                    message_type=kind,
+                    source=node_id,
+                    target="control_plane",
+                    sequence=sequence,
+                    payload=payload,
+                )
+                .sign(key)
+                .to_json()
+            )
+
+        registration = {
+            "node_id": node_id,
+            "identity": service.identity.to_dict(),
+            "supported_versions": [NODE_PROTOCOL_VERSION],
+        }
+        url = await server.start()
+        try:
+            async with connect(url) as old, connect(url) as current:
+                await old.send(message("REGISTER", 1, registration))
+                assert (
+                    NodeProtocolEnvelope.from_json(await old.recv()).message_type
+                    == "ACK"
+                )
+                await current.send(message("REGISTER", 2, registration))
+                assert (
+                    NodeProtocolEnvelope.from_json(await current.recv()).message_type
+                    == "ACK"
+                )
+                heartbeat = {
+                    "node_id": node_id,
+                    "status": "ONLINE",
+                    "heartbeat_sequence": 1,
+                }
+                await old.send(message("HEARTBEAT", 3, heartbeat))
+                rejected = NodeProtocolEnvelope.from_json(await old.recv())
+                assert rejected.message_type == "ERROR"
+                assert "superseded" in rejected.payload["message"]
+                with pytest.raises(ConnectionClosed):
+                    await old.recv()
+                assert "HEARTBEAT" not in server.reports[node_id]
+                # Rejected old traffic must not consume the current sequence.
+                await current.send(message("HEARTBEAT", 3, heartbeat))
+                accepted = NodeProtocolEnvelope.from_json(await current.recv())
+                assert accepted.message_type == "ACK"
+                assert server.reports[node_id]["HEARTBEAT"] == heartbeat
+                assert node_id in server.connections
+        finally:
+            await server.stop()
+        assert not server.connections
+
+    asyncio.run(scenario())
 
 
 def test_relay_identity_and_explicit_node_trust_are_durable(tmp_path: Path):
@@ -340,14 +410,69 @@ def test_external_provider_spool_reaches_signed_node_protocol(tmp_path: Path):
         task = asyncio.create_task(client.run_forever(stop))
         try:
             await _wait_for(lambda: service.identity.node_id in server.connections)
-            response = await asyncio.to_thread(
-                execute_remote_provider,
-                {"schema_version": 2, "type": "execute", "request": operation},
-                {
-                    "APEIR_RELAY_STATE_DIR": str(relay_state),
-                    "APEIR_REALITY_CONFIG": str(reality_config),
-                },
-            )
+            started = time.monotonic()
+            try:
+                response = await asyncio.to_thread(
+                    execute_remote_provider,
+                    {"schema_version": 2, "type": "execute", "request": operation},
+                    {
+                        "APEIR_RELAY_STATE_DIR": str(relay_state),
+                        "APEIR_REALITY_CONFIG": str(reality_config),
+                    },
+                )
+            except TimeoutError as exc:
+                # Preserve the timeout and collect only stage facts, never
+                # arguments, output, keys or credentials. Host-local elapsed
+                # time does not subtract clocks from different machines.
+                try:
+                    node_journal = (
+                        json.loads(service.workloads_path.read_text(encoding="utf-8"))
+                        if service.workloads_path.is_file()
+                        else {}
+                    )
+                    journal_error = ""
+                except (OSError, ValueError) as diagnostic_error:
+                    node_journal = {}
+                    journal_error = type(diagnostic_error).__name__
+                diagnostic = json.dumps(
+                    {
+                        "journal_read_error": journal_error,
+                        "operation_id": operation["operation_id"],
+                        "node_id": service.identity.node_id,
+                        "local_elapsed_seconds": time.monotonic() - started,
+                        "connected": service.identity.node_id in server.connections,
+                        "reported_types": sorted(
+                            server.reports.get(service.identity.node_id, {})
+                        ),
+                        "pending": operation["operation_id"]
+                        in server.pending.get(service.identity.node_id, {}),
+                        "node_journal_state": node_journal.get(
+                            operation["operation_id"], {}
+                        ).get("state", "ABSENT"),
+                        "relay_result_state": server.results.get(
+                            operation["operation_id"], {}
+                        ).get("state", "ABSENT"),
+                        "signed_result_present": operation["operation_id"]
+                        in server.result_envelopes,
+                        "spool_request_present": (
+                            relay_state
+                            / "provider-requests"
+                            / f"{operation['operation_id']}.json"
+                        ).is_file(),
+                        "spool_result_present": (
+                            relay_state
+                            / "provider-results"
+                            / f"{operation['operation_id']}.json"
+                        ).is_file(),
+                        "client_task_done": task.done(),
+                    },
+                    sort_keys=True,
+                )
+                if hasattr(exc, "add_note"):
+                    exc.add_note(diagnostic)
+                else:
+                    exc.args = (f"{exc}\n{diagnostic}",)
+                raise
             assert response["ok"] is True
             assert json.loads(response["output"]) == {"echo": "provider-path"}
             remote = response["remote_execution_receipt"]
@@ -355,6 +480,26 @@ def test_external_provider_spool_reaches_signed_node_protocol(tmp_path: Path):
             assert remote["node_id"] == service.identity.node_id
             assert remote["target_ref"] == target["target_ref"]
             assert remote["signed_envelope"]["signature"]
+            authenticated = [
+                json.loads(line)["payload"]
+                for line in service.telemetry_path.read_text(
+                    encoding="utf-8"
+                ).splitlines()
+                if json.loads(line)["event_type"] == "node.relay.authenticated"
+            ]
+            assert authenticated
+            timing = authenticated[-1]
+            assert timing["clock"] == "node-local-monotonic"
+            assert timing["transport"] == "ws-loopback"
+            assert timing["report_delivery_confirmed"] is False
+            assert all(
+                timing[name] >= 0
+                for name in (
+                    "connect_seconds",
+                    "authenticate_seconds",
+                    "initial_probe_and_report_send_seconds",
+                )
+            )
         finally:
             stop.set()
             await asyncio.wait_for(task, timeout=2)

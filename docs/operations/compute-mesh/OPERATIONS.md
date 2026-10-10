@@ -101,3 +101,72 @@ requires the normal capability, policy, and Kernel authorization path.
 - Artifact bytes are verified against SHA-256 before they become ready on a Node.
 - Completed workload results retain the signed Node envelope.
 - Unknown remote effects must not be replayed as a recovery shortcut.
+
+## Signed result timeout diagnosis
+
+A local wait deadline is UNKNOWN, not proof of failure or permission to execute
+again. Inspect the existing Node journal, Controller signed result and provider
+spool for the original operation before any recovery decision. Never subtract
+absolute timestamps across hosts unless their clock error is independently known.
+
+Main `15bc285dd46b7a088e042b35b63114be1e7d7354` Core CI run
+[38069080761](https://github.com/untrod/apeir/actions/runs/38069080761) failed
+on Windows in `test_external_provider_spool_reaches_signed_node_protocol`: one
+failed, 4017 passed, 53 skipped. The five-second provider deadline expired. Its
+execution code and test were unchanged by the workbench PR; the available failure
+log does not establish where delivery stalled. This is unresolved evidence, not
+a claimed recovery fix. Issues #4 and #8 remain open.
+
+That integration test now attaches bounded stage facts on a timeout: original
+operation/node IDs, host-local monotonic elapsed time, connection/report presence,
+pending assignment, Node journal state, Relay state, signed result and spool-file
+presence. It does not print arguments, outputs, credentials, keys or file contents.
+The existing deadline, success assertions and cleanup remain unchanged. A later
+passing run alone cannot explain or close the original failure.
+
+A newer authenticated connection for the same Node supersedes the previous
+transport. Application messages from the previous socket are rejected before
+replay-sequence admission or observation/result updates. This does not enroll
+a new key, grant Work authority, or reconcile an uncertain effect by replay.
+The regression opens two actual WebSockets: the old socket is rejected; its
+sequence remains usable by the current connection; Controller shutdown closes
+the transports. This fixes that specific ownership bug, not every Windows
+shutdown or delivery deadline issue.
+
+## Local measurement baseline
+
+The existing rotating Node telemetry now records authenticated connection spans
+and new workload execution/persistence spans using the Node's monotonic clock.
+`node.relay.authenticated` separates transport connect, signed registration, and
+initial local probe/report send. The last span is not Controller receipt proof.
+`node.workload.finished.payload.timing` measures execution and durable result
+publication; cached delivery does not emit another execution span. Timing stays
+in telemetry and does not change the signed receipt or its effect digest.
+
+Measure the existing public CLI in distinct empty workspaces (this explicitly
+approves each simulated mutation once):
+
+```sh
+python scripts/compute-mesh/measure-verified-demo.py \
+  --samples 12 --output /tmp/apeir-mesh-measurement-new
+```
+
+The destination must not exist. Each sample retains original Runtime state, CLI
+evidence JSON and diagnostic stderr. Failures are counted, never retried or
+removed from the percentiles; UNKNOWN is not PASS. Output reports nearest-rank
+p50/p95/p99 of the complete CLI, including startup and evidence serialization.
+This wrapper calls the existing CLI, not a second executor or verification path.
+
+Cloud Linux x86_64 / CPython 3.12.14 measured 12/12 COMMITTED/MATCH samples with
+one effect each: p50 **1.524 s**, p95/p99 **1.669 s**. An independent 20 ms process
+sampler on 12 additional fresh CLI runs measured a maximum sampled process-tree
+RSS of **83,599,360 bytes**, **1 process**, and **1.60 CPU seconds**. Process count
+does not measure thread/PID-cgroup consumption; sampling can miss shorter peaks.
+These are local simulation baselines, not a before/after optimization claim,
+production tail estimates, Windows installation or cross-network qualification.
+The existing Demo's runtime-service path does not traverse the locked native
+Kernel; its evidence labels that explicitly.
+
+Queue/dispatch, Artifact transfer, independent Observation/Verification spans,
+real reconnect distributions and Windows/Jetson/NAT measurements still require
+additional qualification. This measurement does not close Issues #4 or #8.

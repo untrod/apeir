@@ -1147,6 +1147,11 @@ class NodeRelayServer:
                 )
 
             async for raw in websocket:
+                if self.connections.get(node_id) is not websocket:
+                    # A newer authenticated connection owns this Node. Reject
+                    # old transport traffic before it consumes replay sequence
+                    # or changes observations, acknowledgements or results.
+                    raise NodeProtocolError("node connection was superseded")
                 envelope = NodeProtocolEnvelope.from_json(raw)
                 if envelope.source != node_id or envelope.target != CONTROL_PLANE_ID:
                     raise NodeProtocolError(
@@ -1544,6 +1549,7 @@ class NodeRelayClient:
                 delay = min(delay * 2, 60.0)
 
     async def run_session(self, stop_event: asyncio.Event) -> None:
+        connection_started = time.monotonic()
         async with connect(
             self.relay_url,
             ssl=self.ssl_context,
@@ -1554,6 +1560,7 @@ class NodeRelayClient:
             ping_interval=self.heartbeat_seconds,
             ping_timeout=self.heartbeat_seconds * 2,
         ) as websocket:
+            authentication_started = time.monotonic()
             await self._send(
                 websocket,
                 "REGISTER",
@@ -1570,10 +1577,28 @@ class NodeRelayClient:
                 or welcome.payload.get("acknowledged") != "REGISTER"
             ):
                 raise NodeProtocolError("relay did not accept node registration")
+            authenticated_at = time.monotonic()
             self._save_session_id(str(welcome.payload["session_id"]))
             status = self.service.run_once()
             await self._send(websocket, "RESOURCE_REPORT", status["resources"])
             await self._send(websocket, "DEVICE_REPORT", {"devices": status["devices"]})
+            self.service._emit(
+                "node.relay.authenticated",
+                {
+                    "controller_key_sha256": hashlib.sha256(
+                        bytes.fromhex(self.server_public_key)
+                    ).hexdigest(),
+                    "transport": "wss"
+                    if self.relay_url.startswith("wss:")
+                    else "ws-loopback",
+                    "clock": "node-local-monotonic",
+                    "connect_seconds": authentication_started - connection_started,
+                    "authenticate_seconds": authenticated_at - authentication_started,
+                    "initial_probe_and_report_send_seconds": time.monotonic()
+                    - authenticated_at,
+                    "report_delivery_confirmed": False,
+                },
+            )
             resource_digest = _payload_digest(status["resources"])
             device_digest = _payload_digest(status["devices"])
             loop = asyncio.get_running_loop()
