@@ -35,6 +35,14 @@ if (-not $preflight.ready) {
     throw "Windows X64 launcher prerequisites are incomplete: $($preflight.missing -join ', ')."
 }
 
+# Verify the immutable native inputs before tests or sidecar output are written.
+& (Join-Path $repo "scripts\stage-kernel-components.ps1") `
+    -KernelRoot $kernel `
+    -RepoRoot $repo `
+    -Target $Target `
+    -SkipBuild
+if ($LASTEXITCODE -ne 0) { throw "Kernel component verification failed." }
+
 if (-not $SkipRuntimeSidecarBuild) {
     & python -c "import PyInstaller"
     if ($LASTEXITCODE -ne 0) {
@@ -80,12 +88,6 @@ New-Item -ItemType Directory -Force -Path $binaryRoot | Out-Null
 $runtimeSidecar = Join-Path $binaryRoot "nous-runtime-$Target.exe"
 Copy-Item -LiteralPath $runtimeBuildOutput -Destination $runtimeSidecar -Force
 
-& (Join-Path $repo "scripts\stage-kernel-components.ps1") `
-    -KernelRoot $kernel `
-    -RepoRoot $repo `
-    -Target $Target `
-    -SkipBuild
-if ($LASTEXITCODE -ne 0) { throw "Kernel component verification failed." }
 $kernelSidecar = Join-Path $binaryRoot "nousd-$Target.exe"
 $workerSidecar = Join-Path $binaryRoot "nous-provider-worker-$Target.exe"
 

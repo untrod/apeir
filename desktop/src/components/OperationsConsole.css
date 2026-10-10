@@ -25,3 +25,43 @@
 .operations-work-chain dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .operations-demo pre { overflow-x: auto; }
 @media (max-width: 640px) { .operations-work-chain dl > div { grid-template-columns: 1fr; gap: .25rem; } }
+
+.operations-console { padding:20px; }
+.operations-header h1 { font-size:24px; letter-spacing:-.5px; }
+.operations-header { flex-wrap:wrap; }
+.operations-health { margin:16px 0; padding:16px 20px; }
+.operations-workbench { display:flex; min-height:340px; border:1px solid var(--nous-border); border-radius:10px; overflow:hidden; background:var(--nous-surface); }
+.operations-resources { width:170px; flex-shrink:0; padding:12px 8px; border-right:1px solid var(--nous-border); background:var(--nous-bg); }
+.operations-resources h2 { font-size:11px; font-weight:600; color:var(--nous-text-secondary); padding:0 8px; }
+.operations-resources button { width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px; background:transparent; border:1px solid transparent; padding:8px; text-align:left; text-transform:capitalize; }
+.operations-resources button[aria-pressed=true] { background:var(--nous-accent-soft); color:var(--nous-accent); }
+.operations-resources small { color:var(--nous-text-secondary); }
+.operations-center { flex:1; min-width:0; }
+.operations-tabs { padding:8px 8px 0; gap:4px; border-bottom:1px solid var(--nous-border); }
+.operations-tabs > div { display:flex; flex-shrink:0; align-items:center; }
+.operations-tabs button { border:none; background:transparent; padding:8px; }
+.operations-tabs button[aria-selected=true] { color:var(--nous-accent); box-shadow:inset 0 -2px var(--nous-accent); }
+.operations-search { display:flex; align-items:center; justify-content:space-between; padding:8px 16px; gap:12px; color:var(--nous-text-secondary); font-size:12px; border-bottom:1px solid var(--nous-border); }
+.operations-search input { margin:0; min-width:0; width:55%; border-radius:6px; }
+.operations-records { padding:0 16px; max-height:64vh; overflow:auto; }
+.operations-records article { flex-wrap:wrap; gap:8px; }
+.operations-records article:first-child { border-top:none; }
+.operations-records .operations-controls { width:100%; }
+.operations-records .operations-controls button { min-height:32px; padding:6px 10px; font-size:12px; }
+.operations-evidence { flex-shrink:0; max-width:50%; max-height:75vh; overflow:auto; border:none; border-left:1px solid var(--nous-border); box-sizing:border-box; background:var(--nous-bg); }
+.operations-evidence header { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.operations-evidence h2 { font-size:14px; }
+.operations-work-chain dl > div { grid-template-columns:1fr; gap:4px; font-size:12px; }
+.operations-work-chain p { font-size:12px; }
+.operations-work-chain dt { color:var(--nous-text-secondary); font-weight:400; }
+.operations-resize { display:flex; flex-direction:column; font-size:11px; color:var(--nous-text-secondary); }
+.operations-resize input { padding:0; margin:8px 0; width:100%; }
+.operations-activity { margin-top:12px; border:1px solid var(--nous-border); border-radius:8px; overflow:hidden; }
+.operations-activity > button { border:none; background:transparent; width:100%; text-align:left; font-size:12px; }
+.operations-activity > div { max-height:180px; overflow:auto; padding:0 12px; }
+.operations-activity pre { font-size:11px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.operations-node-state { display:grid; grid-template-columns:auto 1fr; gap:4px 8px; font-size:11px; margin-bottom:0; }
+.operations-node-state dt { color:var(--nous-text-secondary); }
+.operations-node-state dd { margin:0; }
+@media(max-width:900px) { .operations-workbench { flex-wrap:wrap; }.operations-evidence { width:100%!important; max-width:100%; border-left:none; border-top:1px solid var(--nous-border); }.operations-resize { display:none; } }
+@media(max-width:600px) { .operations-console { padding:12px; }.operations-workbench { display:block; }.operations-header > .operations-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; }.operations-resources { width:auto; display:flex; overflow:auto; gap:4px; border-right:none; border-bottom:1px solid var(--nous-border); }.operations-resources h2 { display:none; }.operations-resources button { width:auto; flex-shrink:0; }.operations-center { width:auto; }.operations-search { flex-wrap:wrap; }.operations-search input { width:100%; }.operations-records { max-height:55vh; } }
