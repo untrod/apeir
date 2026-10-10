@@ -345,6 +345,7 @@ class NodeRelayServer:
             nodes.append(
                 {
                     "node_id": node_id,
+                    "trust_status": "TRUSTED",
                     "node_name": str(identity.get("node_name", "")),
                     "connected": connected,
                     "session_id": self.sessions.get(node_id, ""),

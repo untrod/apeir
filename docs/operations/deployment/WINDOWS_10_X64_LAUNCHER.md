@@ -1,9 +1,9 @@
 # Windows 10 X64 Launcher build
 
-Nous Desktop is the launcher and control surface for the complete local product.
+APEIR Desktop is the launcher and control surface for the complete local product.
 The package contains these layers:
 
-1. `Nous.exe`: the Tauri 2 native launcher with the React/Vite interface embedded.
+1. `APEIR.exe`: the portable Tauri 2 native launcher with the React/Vite interface embedded.
 2. `nous-runtime.exe`: the Python Runtime API sidecar.
 3. `nousd.exe`: the authoritative Rust Kernel daemon.
 4. `nous-provider-worker.exe`: the out-of-process provider worker.
@@ -21,13 +21,42 @@ The build requires:
 - Visual Studio 2022 C++ Build Tools;
 - MSVC X64 `cl.exe` and `link.exe`;
 - a Windows SDK containing X64 `kernel32.lib`;
-- Node.js/npm dependencies already installed under `desktop`;
+- Node.js 22/npm dependencies already installed under `desktop`;
 - Python with the project `installer-build` extra, including PyInstaller;
 - the sibling locked Kernel checkout at the revision in
-  `runtime-components.lock.json`.
+  `runtime-components.lock.json`, plus the exact locked release bytes already
+  staged under `desktop/src-tauri/binaries`.
 
 The build script does not install system software. It fails before writing
 sidecars if the native toolchain is incomplete.
+
+## Locked native inputs
+
+The current lock targets Windows x64 and freezes Kernel
+`87fd1b2ff28ef14ab1a515a58162592b452fda2e`. Required bytes are:
+
+| File under `desktop/src-tauri/binaries/` | SHA-256 |
+| --- | --- |
+| `nousd-x86_64-pc-windows-msvc.exe` | `62AFAC19A5315BF9BBE19BBB1A3BE3011C1B4FA47E0653782E19F0BF7CC63E1B` |
+| `nous-provider-worker-x86_64-pc-windows-msvc.exe` | `C4B65DB9844E752653C5CE8694105D1820BDF076B633E61F137DA7AC597F52B7` |
+
+Obtain the original pinned release bundle from the maintainer and stage those
+two files without changing the lock. `stage-kernel-components.ps1 -SkipBuild`
+checks the Kernel checkout revision and invokes the actual PE/hash verifier; it
+does not copy files or rebuild them. Verify before running packaging:
+
+```powershell
+python scripts/ci/verify_kernel_components.py --repo-root . --kernel-root ..\kernel
+.\scripts\stage-kernel-components.ps1 -KernelRoot ..\kernel -Target x86_64-pc-windows-msvc -SkipBuild
+```
+
+The 2026-10-10 product audit found both files absent, no published Kernel Release
+assets and zero Kernel Actions artifacts. The original bundle's current public
+download location is unavailable: this is [issue #2](https://github.com/untrod/apeir/issues/2),
+not a hash-validation PASS. A source rebuild with a different digest requires
+separate normalization/re-lock/version review and maintainer approval. Packaging
+now verifies these inputs before full tests or Runtime sidecar generation. The
+source frontend can be developed independently while this gate is BLOCKED.
 
 ## Build
 
@@ -55,10 +84,10 @@ Do not use `-SkipSidecarSmoke` for a deliverable build.
 
 Successful builds write only under `artifacts\windows-x64`:
 
-- `Nous-Portable\Nous.exe` plus the three base-named sidecars;
-- `Nous-Portable-2.0.0-rc3-windows-x64.zip`;
-- `Nous_2.0.0-rc3_x64-setup.exe`;
-- `Nous-2.0.0-rc3-windows-x64.manifest.json`;
+- `APEIR-Portable\APEIR.exe` plus the three base-named sidecars;
+- `APEIR-Portable-0.1.0-rc1-windows-x64.zip`;
+- the Tauri-generated `APEIR_0.1.0-rc1_x64-setup.exe`;
+- `APEIR-0.1.0-rc1-windows-x64.manifest.json`;
 - `release-manifest.json`;
 - `native-validation-report.json`;
 - `SHA256SUMS.txt` and `SHA256SUMS-x64.txt`.
@@ -80,7 +109,15 @@ Logs are under:
 %LOCALAPPDATA%\Nous\logs\runtime-api.log
 ```
 
-## Current host status
+## Historical Windows host evidence (2026-08-29)
+
+The following retained evidence describes the older `2.0.0-rc3` package and its
+then-available host. It does not certify today's `0.1.0-rc1` bytes or installed
+product. Current Windows installation, restart/uninstall, APEIR.exe screenshots,
+SBOM, signing, security and supply-chain qualification must follow the
+[Release Runbook](../../acceptance/RELEASE_RUNBOOK.md). No Windows host is attached
+to the current Cloud audit; no new NSIS/portable artifact or native screenshot
+was produced.
 
 The recorded host is Windows 10 19045 X64 and now has the complete official
 MSVC build chain: Visual Studio 2022 C++ Build Tools, X64 `cl.exe`/`link.exe`, a

@@ -18,6 +18,12 @@ def test_windows_x64_launcher_builds_all_authoritative_layers() -> None:
     assert "nous-sidecar.spec" in script
     assert "SkipRuntimeSidecarBuild" in script
     assert "stage-kernel-components.ps1" in script
+    assert script.index("stage-kernel-components.ps1") < script.index(
+        "if (-not $SkipValidation)"
+    )
+    assert script.index("stage-kernel-components.ps1") < script.index(
+        "python -m PyInstaller"
+    )
     assert "nousd-$Target.exe" in script
     assert "nous-provider-worker-$Target.exe" in script
     assert "verify_windows_native_sidecars.ps1" in script
@@ -50,12 +56,8 @@ def test_native_sidecar_gate_is_architecture_and_authentication_aware() -> None:
 
 def test_launcher_preflights_runtime_before_starting_kernel() -> None:
     source = _read("desktop/src-tauri/src/main.rs")
-    start = source.index(
-        "fn start_runtime_api_inner(manager: &RuntimeManager)"
-    )
-    stop = source.index(
-        "fn stop_runtime_api_inner(manager: &RuntimeManager)"
-    )
+    start = source.index("fn start_runtime_api_inner(manager: &RuntimeManager)")
+    stop = source.index("fn stop_runtime_api_inner(manager: &RuntimeManager)")
     section = source[start:stop]
 
     assert section.index("find_nous_executable()?") < section.index(
@@ -68,16 +70,10 @@ def test_launcher_preflights_runtime_before_starting_kernel() -> None:
     assert "let _ = stop_runtime_api_inner(manager);" in section
 
 
-
-
 def test_kernel_launcher_cleanup_is_fail_safe() -> None:
     source = _read("desktop/src-tauri/src/main.rs")
-    start = source.index(
-        "fn start_nousd_inner(manager: &RuntimeManager)"
-    )
-    end = source.index(
-        "fn managed_nousd_status(manager: &RuntimeManager)"
-    )
+    start = source.index("fn start_nousd_inner(manager: &RuntimeManager)")
+    end = source.index("fn managed_nousd_status(manager: &RuntimeManager)")
     section = source[start:end]
 
     assert "match manager.nousd_child.lock()" in section
@@ -86,11 +82,10 @@ def test_kernel_launcher_cleanup_is_fail_safe() -> None:
     assert "let process_result =" in section
     assert "manager.kernel_token.lock().map(|mut token| token.take())" in section
 
+
 def test_launcher_shutdown_attempts_runtime_and_kernel_cleanup() -> None:
     source = _read("desktop/src-tauri/src/main.rs")
-    start = source.index(
-        "fn stop_runtime_api_inner(manager: &RuntimeManager)"
-    )
+    start = source.index("fn stop_runtime_api_inner(manager: &RuntimeManager)")
     end = source.index("#[tauri::command]", start)
     section = source[start:end]
 

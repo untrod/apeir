@@ -22,6 +22,7 @@ describe("desktop UI state migration", () => {
   });
 
   it("resets disposable UI state without clearing workspace or provider references", () => {
+    localStorage.setItem("apeir.operations.layout.v1", JSON.stringify({ tabs: ["nodes"] }));
     localStorage.setItem("nous_onboarding_completed", "1");
     localStorage.setItem("nous_workspace_path", "D:/Workspace");
     localStorage.setItem("nous_provider_id", "deepseek");
@@ -30,6 +31,7 @@ describe("desktop UI state migration", () => {
     resetUIState();
 
     expect(localStorage.getItem("nous_onboarding_completed")).toBeNull();
+    expect(localStorage.getItem("apeir.operations.layout.v1")).toBeNull();
     expect(localStorage.getItem("nous_workspace_path")).toBe("D:/Workspace");
     expect(localStorage.getItem("nous_provider_id")).toBe("deepseek");
     expect(sessionStorage.getItem("nous_server_token")).toBeNull();

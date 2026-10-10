@@ -54,6 +54,7 @@ def test_controller_cli_initializes_artifacts_and_trusts_identity_file(
     assert value["connected_node_count"] == 0
     assert value["nodes"][0]["node_id"] == node.identity.node_id
     assert value["nodes"][0]["connected"] is False
+    assert value["nodes"][0]["trust_status"] == "TRUSTED"
 
 
 def test_controller_selects_arm64_node_by_deterministic_capability_match():
