@@ -14,6 +14,7 @@ import socket
 import struct
 import sys
 import threading
+import tempfile
 import time
 from weakref import WeakValueDictionary
 from dataclasses import dataclass
@@ -322,7 +323,7 @@ class NodeRuntimeService:
             runtime_tier="full",
             word_size_bits=struct.calcsize("P") * 8,
         )
-        _atomic_write_bytes(self.private_key_path, private_pem)
+        _atomic_write_bytes(self.private_key_path, private_pem, private=True)
         try:
             restrict_owner_only_file(
                 self.private_key_path, subject="Node identity private key"
@@ -1134,8 +1135,26 @@ def _atomic_write_json(path: Path, value: dict[str, Any]) -> None:
     )
 
 
-def _atomic_write_bytes(path: Path, value: bytes) -> None:
+def _atomic_write_bytes(path: Path, value: bytes, *, private: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if private:
+        descriptor, name = tempfile.mkstemp(
+            prefix=path.name + ".", suffix=".tmp", dir=path.parent
+        )
+        temporary = Path(name)
+        try:
+            restrict_owner_only_file(temporary, subject="Node identity private key")
+            with os.fdopen(descriptor, "wb") as stream:
+                descriptor = -1
+                stream.write(value)
+                stream.flush()
+                os.fsync(stream.fileno())
+            temporary.replace(path)
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+            temporary.unlink(missing_ok=True)
+        return
     temporary = path.with_name(path.name + ".tmp")
     with temporary.open("wb") as stream:
         stream.write(value)

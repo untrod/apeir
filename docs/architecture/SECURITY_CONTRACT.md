@@ -490,3 +490,11 @@ is not permission. Static KV-v2 reads do not qualify dynamic server leases or
 production deployment. Lost-response reconciliation consumes persisted evidence
 and a fresh independent observation, never another mutation credential resolution.
 See the [reference limitations](PROVIDER_CONTRACT.md#m44-openbao-kv-v2-software-reference).
+
+Node first-key publication creates a unique empty temporary file, applies the
+existing owner-only permission/ACL boundary before writing private material,
+then flushes/fsyncs and atomically publishes it. Permission or write failure
+cleans the temporary file without publishing the identity. Ordinary public Node
+JSON writes retain their existing behavior. Loaded identities still undergo the
+existing key and permission checks. This closes the Node pre-write permission
+window; it does not establish remote human identity or authorize an Operation.
