@@ -59,6 +59,15 @@ or ordinary evidence. This is local software durability, not signed remote-human
 approval, complete one-time pairing, concurrent Node journal writers, Controller
 HA, physical hardware or native Windows installation qualification.
 
+
+Node first-key publication creates a unique empty temporary file, applies the
+existing owner-only permission/ACL boundary before writing private material,
+then flushes/fsyncs and atomically publishes it. Permission or write failure
+cleans the temporary file without publishing the identity. Ordinary public Node
+JSON writes retain their existing behavior. Loaded identities still undergo the
+existing key and permission checks. This closes the Node pre-write permission
+window; it does not establish remote human identity or authorize an Operation.
+
 ## Legacy admission pipeline
 
 ```
@@ -491,10 +500,20 @@ production deployment. Lost-response reconciliation consumes persisted evidence
 and a fresh independent observation, never another mutation credential resolution.
 See the [reference limitations](PROVIDER_CONTRACT.md#m44-openbao-kv-v2-software-reference).
 
-Node first-key publication creates a unique empty temporary file, applies the
-existing owner-only permission/ACL boundary before writing private material,
-then flushes/fsyncs and atomically publishes it. Permission or write failure
-cleans the temporary file without publishing the identity. Ordinary public Node
-JSON writes retain their existing behavior. Loaded identities still undergo the
-existing key and permission checks. This closes the Node pre-write permission
-window; it does not establish remote human identity or authorize an Operation.
+### Skill/Extension acquisition before publication
+
+Installation reuses `ExtensionRegistry`, `SkillRegistry` and the Artifact CAS;
+package metadata is not permission and installing never executes package scripts.
+The copied package digest must match the inspected source digest before publishing
+normalized/supply-chain records, the registry index or the extension lock. A copy
+failure or changed content removes the new object and leaves any prior valid
+install/index/lock intact. Reuse of an existing object also checks its content
+before publishing an install record. Admission and execution still require their
+existing authority checks; acquisition does not issue a grant.
+
+Skill catalog JSON files are bounded to 1 MiB, matching the existing HTTPS metadata
+fetch limit, and nonregular local files are rejected. This bounds metadata reads;
+it does not establish trust in a catalog or enable remote package installation.
+Remote catalogs remain discovery metadata, not authority or executable content.
+Controlled remote acquisition and a complete catalog UI still require their own
+existing Governance/SDK integration and qualification.
