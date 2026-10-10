@@ -29,6 +29,36 @@ not M3.4+ Operation policy. Operation policy is governed by the
 [M3.4-A contract](#m34-a-operation-governance-audit), with current human identity
 at the [M3.5 boundary](#m35-remote-human-boundary).
 
+## Signed Node identity and trust persistence
+
+The product connectivity audit at Distribution `edb932c` classifies signed
+Node Protocol, NodeRuntimeService identity, NodeRelayServer's durable
+`trusted-nodes.json`, existing file locks and Work journals as REUSE.
+Cross-process read/check/write and first-identity provisioning are EXTEND;
+lost enrollment updates, silent key replacement and replacement of incomplete
+identities are FIX. The old in-memory Connectivity PairingService remains a
+compatibility mechanism; it is not an authority for signed Node enrollment.
+One-time invitations, durable human-approved pairing and real multi-network
+qualification still require their own implementation and evidence.
+
+Trust updates now reload the existing authoritative map under its file lock.
+Same-ID/same-key registration is idempotent; a changed key is rejected. Failed
+persistence restores the previous in-memory trust, preventing admission of an
+unpersisted enrollment. Node and Controller initialization share an identity
+file lock and preserve the pinned identity. Partial Node identity or missing
+Controller key alongside durable records fails closed before generating a new
+key or changing original evidence. Node trust still grants no Capability or
+Operation authority; Device lifecycle remains owned by Reality.
+
+Eight controlled contracts fail against the original owners at `edb932c`; their
+corrected cases pass. The focused suite has 11 passing cases, including actual
+independent-process enrollment and concurrent identity initialization; affected
+Node/Governance/Reality/Control Plane/Agent/Workflow regression has 669 passing
+cases. Raw identity keys remain protected owner-only files and never enter audit
+or ordinary evidence. This is local software durability, not signed remote-human
+approval, complete one-time pairing, concurrent Node journal writers, Controller
+HA, physical hardware or native Windows installation qualification.
+
 ## Legacy admission pipeline
 
 ```
