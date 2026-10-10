@@ -1687,7 +1687,8 @@ class NodeRelayClient:
                 {"acknowledged": "WORKLOAD_START", "workload_id": workload_id},
                 reply_to=envelope.message_id,
             )
-            result = self.service.execute_workload(
+            result = await asyncio.to_thread(
+                self.service.execute_workload,
                 workload_id,
                 str(envelope.payload.get("capability", "")),
                 envelope.payload.get("arguments", {}),
