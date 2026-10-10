@@ -20,6 +20,7 @@ from nous_runtime.skills.models import SkillRecord
 
 _STATE_SCHEMA = "apeir.skill-registry-state/v1"
 _CATALOG_SCHEMA = "apeir.skill-catalog/v1"
+_MAX_CATALOG_BYTES = 1024 * 1024
 _PROVIDER_PRIORITY = {
     "project": 50,
     "installed": 40,
@@ -396,7 +397,7 @@ class SkillRegistry:
                     url=source,
                     method="GET",
                     timeout_seconds=30,
-                    max_size_bytes=1024 * 1024,
+                    max_size_bytes=_MAX_CATALOG_BYTES,
                     approval_requirement="not_required",
                 )
             )
@@ -407,7 +408,13 @@ class SkillRegistry:
             path = Path(source).expanduser().resolve()
             if path.is_dir():
                 return _directory_catalog(path)
-            text = path.read_text(encoding="utf-8")
+            if not path.is_file():
+                raise ValueError("skill catalog must be a regular file or directory")
+            with path.open("rb") as stream:
+                content = stream.read(_MAX_CATALOG_BYTES + 1)
+            if len(content) > _MAX_CATALOG_BYTES:
+                raise ValueError("skill catalog exceeds 1048576 bytes")
+            text = content.decode("utf-8")
         try:
             value = json.loads(text)
         except json.JSONDecodeError as exc:

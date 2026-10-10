@@ -490,3 +490,21 @@ is not permission. Static KV-v2 reads do not qualify dynamic server leases or
 production deployment. Lost-response reconciliation consumes persisted evidence
 and a fresh independent observation, never another mutation credential resolution.
 See the [reference limitations](PROVIDER_CONTRACT.md#m44-openbao-kv-v2-software-reference).
+
+### Skill/Extension acquisition before publication
+
+Installation reuses `ExtensionRegistry`, `SkillRegistry` and the Artifact CAS;
+package metadata is not permission and installing never executes package scripts.
+The copied package digest must match the inspected source digest before publishing
+normalized/supply-chain records, the registry index or the extension lock. A copy
+failure or changed content removes the new object and leaves any prior valid
+install/index/lock intact. Reuse of an existing object also checks its content
+before publishing an install record. Admission and execution still require their
+existing authority checks; acquisition does not issue a grant.
+
+Skill catalog JSON files are bounded to 1 MiB, matching the existing HTTPS metadata
+fetch limit, and nonregular local files are rejected. This bounds metadata reads;
+it does not establish trust in a catalog or enable remote package installation.
+Remote catalogs remain discovery metadata, not authority or executable content.
+Controlled remote acquisition and a complete catalog UI still require their own
+existing Governance/SDK integration and qualification.

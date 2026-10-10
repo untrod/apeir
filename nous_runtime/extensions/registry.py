@@ -44,34 +44,52 @@ class ExtensionRegistry:
             package_root.mkdir(parents=True, exist_ok=False)
             try:
                 with ExtensionSource(source) as resolved:
-                    standalone = resolved.preferred_file is not None and not is_package_manifest(
-                        resolved.preferred_file
+                    standalone = (
+                        resolved.preferred_file is not None
+                        and not is_package_manifest(resolved.preferred_file)
                     )
                     files = (
-                        (resolved.preferred_file,) if standalone else package_files(resolved.root)
+                        (resolved.preferred_file,)
+                        if standalone
+                        else package_files(resolved.root)
                     )
                     for path in files:
                         assert path is not None
-                        relative = path.name if standalone else path.relative_to(resolved.root)
+                        relative = (
+                            path.name if standalone else path.relative_to(resolved.root)
+                        )
                         destination = package_root / relative
                         destination.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(path, destination)
+                if package_digest(package_root) != manifest.provenance.digest:
+                    raise ValueError("acquired extension content digest mismatch")
                 _write_json(object_root / "nous.extension.json", manifest.to_dict())
                 security = create_supply_chain_records(object_root, manifest)
             except Exception:
                 shutil.rmtree(object_root, ignore_errors=True)
                 raise
         else:
-            stored = ExtensionManifest.from_dict(_read_json(object_root / "nous.extension.json"))
-            if stored.provenance is None or stored.provenance.digest != manifest.provenance.digest:
-                raise ValueError("content-addressed registry object does not match source digest")
+            stored = ExtensionManifest.from_dict(
+                _read_json(object_root / "nous.extension.json")
+            )
+            if (
+                stored.provenance is None
+                or stored.provenance.digest != manifest.provenance.digest
+            ):
+                raise ValueError(
+                    "content-addressed registry object does not match source digest"
+                )
             manifest = stored
+            if package_digest(package_root) != manifest.provenance.digest:
+                raise ValueError("installed extension content digest mismatch")
             if not (object_root / "bom.json").exists():
                 security = create_supply_chain_records(object_root, stored)
             else:
                 existing = self._record_for_digest(manifest.provenance.digest)
                 if existing:
-                    security = verify_supply_chain_records(object_root, stored, existing)
+                    security = verify_supply_chain_records(
+                        object_root, stored, existing
+                    )
                 else:
                     security = self._evidence_metadata(object_root)
         projection_path = object_root / "kernel-admission-request.json"
@@ -299,7 +317,9 @@ class ExtensionRegistry:
         manifest = self.verify(extension_id)
         assert manifest.provenance is not None
         if receipt.get("content_digest") != manifest.provenance.digest:
-            raise ValueError("execution receipt digest does not match installed extension")
+            raise ValueError(
+                "execution receipt digest does not match installed extension"
+            )
         receipt_id = str(receipt.get("receipt_id") or "")
         if not receipt_id or any(value in receipt_id for value in ("/", "\\", "..")):
             raise ValueError("invalid execution receipt id")
@@ -324,8 +344,12 @@ class ExtensionRegistry:
         manifest = self.verify(extension_id)
         assert manifest.provenance is not None
         if claim.get("content_digest") != manifest.provenance.digest:
-            raise ValueError("execution claim digest does not match installed extension")
-        if not operation_id or any(value in operation_id for value in ("/", "\\", "..")):
+            raise ValueError(
+                "execution claim digest does not match installed extension"
+            )
+        if not operation_id or any(
+            value in operation_id for value in ("/", "\\", "..")
+        ):
             raise ValueError("invalid extension operation id")
         path = (
             self.objects
@@ -378,7 +402,11 @@ class ExtensionRegistry:
         manifest = self.verify(extension_id)
         assert manifest.provenance is not None
         names = [str(item.get("name") or "") for item in tools]
-        if not names or any(not name for name in names) or len(names) != len(set(names)):
+        if (
+            not names
+            or any(not name for name in names)
+            or len(names) != len(set(names))
+        ):
             raise ValueError("discovered MCP tools require unique non-empty names")
         catalog = {
             "schema": "nous.mcp-tool-catalog/v1",
@@ -422,7 +450,9 @@ class ExtensionRegistry:
         ):
             raise ValueError("MCP tool catalog binding check failed")
         tools = catalog.get("tools")
-        if not isinstance(tools, list) or any(not isinstance(item, dict) for item in tools):
+        if not isinstance(tools, list) or any(
+            not isinstance(item, dict) for item in tools
+        ):
             raise ValueError("MCP tool catalog is invalid")
         return [dict(item) for item in tools]
 
@@ -465,7 +495,9 @@ class ExtensionRegistry:
         if not self.index_path.exists():
             return {"schema": "nous.extension-registry/v1", "extensions": {}}
         data = _read_json(self.index_path)
-        if data.get("schema") != "nous.extension-registry/v1" or not isinstance(data.get("extensions"), dict):
+        if data.get("schema") != "nous.extension-registry/v1" or not isinstance(
+            data.get("extensions"), dict
+        ):
             raise ValueError("invalid extension registry index")
         return data
 
@@ -483,9 +515,11 @@ class ExtensionRegistry:
         return {
             "normalized_ir_digest": str(provenance.get("normalized_ir_digest") or ""),
             "sbom_digest": "sha256:" + hashlib.sha256(_canonical_json(bom)).hexdigest(),
-            "provenance_digest": "sha256:" + hashlib.sha256(_canonical_json(provenance)).hexdigest(),
+            "provenance_digest": "sha256:"
+            + hashlib.sha256(_canonical_json(provenance)).hexdigest(),
             "signature_status": str(signature.get("status") or "Unknown"),
-            "signature_digest": "sha256:" + hashlib.sha256(_canonical_json(signature)).hexdigest(),
+            "signature_digest": "sha256:"
+            + hashlib.sha256(_canonical_json(signature)).hexdigest(),
         }
 
     def _write_lock(self, index: dict[str, Any]) -> None:
@@ -504,7 +538,9 @@ class ExtensionRegistry:
                     "granted_capabilities": list(
                         record.get("granted_capabilities") or ()
                     ),
-                    "capability_requests": [item.__dict__ for item in manifest.capabilities],
+                    "capability_requests": [
+                        item.__dict__ for item in manifest.capabilities
+                    ],
                     "normalized_ir_digest": record.get("normalized_ir_digest", ""),
                     "sbom_digest": record.get("sbom_digest", ""),
                     "provenance_digest": record.get("provenance_digest", ""),
@@ -528,7 +564,10 @@ def _read_json(path: Path) -> dict[str, Any]:
 def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     temporary.replace(path)
 
 
