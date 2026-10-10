@@ -134,6 +134,13 @@ class _DemoComponents:
         self.client_task = None
 
     async def start(self):
+        node_id = self.node.identity.node_id
+        previous_report = (
+            self.server.reports.get(node_id, {})
+            .get("signed_envelopes", {})
+            .get("RESOURCE_REPORT", {})
+            .get("message_id")
+        )
         url = await self.server.start()
         client = NodeRelayClient(
             self.node, url, self.server.public_key, heartbeat_seconds=5
@@ -145,8 +152,12 @@ class _DemoComponents:
         )
         await _wait(
             lambda: (
-                "RESOURCE_REPORT"
-                in self.server.reports.get(self.node.identity.node_id, {})
+                node_id in self.server.connections
+                and self.server.reports.get(node_id, {})
+                .get("signed_envelopes", {})
+                .get("RESOURCE_REPORT", {})
+                .get("message_id")
+                not in {None, previous_report}
             )
         )
 
