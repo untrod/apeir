@@ -512,11 +512,37 @@ before publishing an install record. Admission and execution still require their
 existing authority checks; acquisition does not issue a grant.
 
 Skill catalog JSON files are bounded to 1 MiB, matching the existing HTTPS metadata
-fetch limit, and nonregular local files are rejected. This bounds metadata reads;
+fetch limit, to 512 entries and 32 registered sources; nonregular local files are rejected. This bounds metadata reads;
 it does not establish trust in a catalog or enable remote package installation.
 Remote catalogs remain discovery metadata, not authority or executable content.
-Controlled remote acquisition and a complete catalog UI still require their own
-existing Governance/SDK integration and qualification.
+The source Operations Console now manages registered local catalogs through the
+existing human session, exact-body nonce and Governance permission checks. Review
+binds the exact skill ID, version, digest and declared capabilities; changed or
+ambiguous entries fail closed. Package paths must remain under the registered
+catalog directory. UI/API callers cannot register arbitrary catalogs or URLs.
+Passive snapshots never fetch remote catalogs. Remote package acquisition remains
+unqualified and is rejected, not delegated to an unrestricted downloader.
+
+The Registry snapshots bounded content and writes CAS evidence before Extension
+publication. The CAS reference is bound into the existing Extension index/lock;
+legacy Skill artifact references remain readable. Publication revalidates current
+human authority after content acquisition. An ordinary failed publication restores
+the old index/lock; a hard crash between those files remains fail-closed rather than
+being presented as a multi-file atomic transaction. Staged CAS objects may remain
+pinned for failure inspection. Disabled state survives updates/restart, and revoked
+installed Skills cannot be reenabled by Catalog installation. Invalid CAS evidence
+prevents loading. Install/enable/load never executes scripts or issues execution
+grants. Human identity, package digest and artifact references use the existing
+Governance audit. Actual Operations still require existing Work authorization.
+
+Local software qualification: **17 focused package/authority cases passed**, plus
+**594 affected Skill/Extension/Control Plane/repository/public SDK cases passed,
+17 skipped**; source Desktop lint/typecheck/build and **65 tests in 25 files passed**.
+Sandboxed Chromium using real Runtime HTTP/CAS and a cryptographic fake IdP exercised
+review/install/instruction-load/disable/enable/remove, along with live Node pairing
+and revocation. These records qualify local source software, not installed Windows,
+real remote identity, remote packages, device Operations or physical hardware.
+See the [public Skill example](../../examples/hello_skill/README.md) for commands.
 
 ### Signed one-time Node enrollment
 

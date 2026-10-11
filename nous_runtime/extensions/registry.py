@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import hashlib
 import shutil
+import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from nous_runtime.extensions.adapters import ExtensionInspector
 from nous_runtime.extensions.models import ExtensionManifest
@@ -21,6 +22,7 @@ from nous_runtime.extensions.supply_chain import (
     sign_supply_chain_records,
     verify_supply_chain_records,
 )
+from nous_runtime.locking import file_lock
 
 
 class ExtensionRegistry:
@@ -33,7 +35,28 @@ class ExtensionRegistry:
         self.lock_path = self.root / "nous.extensions.lock.json"
         self.inspector = inspector or ExtensionInspector()
 
-    def install(self, source: str | Path) -> ExtensionManifest:
+    def install(
+        self,
+        source: str | Path,
+        *,
+        artifact_ref: str = "",
+        before_publish: Callable[[], None] | None = None,
+    ) -> ExtensionManifest:
+        """Publish verified content and optional pre-existing CAS evidence together."""
+        if artifact_ref and not re.fullmatch(r"sha256:[0-9a-f]{64}", artifact_ref):
+            raise ValueError("invalid extension artifact reference")
+        with file_lock(self.root / ".install.lock"):
+            return self._install(
+                source, artifact_ref=artifact_ref, before_publish=before_publish
+            )
+
+    def _install(
+        self,
+        source: str | Path,
+        *,
+        artifact_ref: str,
+        before_publish: Callable[[], None] | None,
+    ) -> ExtensionManifest:
         manifest = self.inspector.inspect(source)
         assert manifest.provenance is not None
         digest = manifest.provenance.digest.removeprefix("sha256:")
@@ -118,11 +141,31 @@ class ExtensionRegistry:
                 previous.get("granted_capabilities") or ()
             ),
             "granted_capabilities": [],
+            "artifact_ref": artifact_ref,
             **security,
         }
-        _write_json(self.index_path, index)
-        self._write_lock(index)
-        return self.verify(manifest.extension_id)
+        if before_publish is not None:
+            before_publish()
+        previous_files = {
+            path: path.read_bytes() if path.exists() else None
+            for path in (self.index_path, self.lock_path)
+        }
+        try:
+            _write_json(self.index_path, index)
+            self._write_lock(index)
+            return self.verify(manifest.extension_id)
+        except Exception:
+            # Failed publication must retain the prior valid installation. This
+            # is rollback of local metadata, never replay of package code. A hard
+            # crash between the two files still fails closed in verify().
+            for path, content in previous_files.items():
+                if content is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    temporary = path.with_name(path.name + ".restore")
+                    temporary.write_bytes(content)
+                    temporary.replace(path)
+            raise
 
     def verify(self, extension_id: str) -> ExtensionManifest:
         """Verify index, lock, normalized manifest, admission projection, and source."""
@@ -154,6 +197,10 @@ class ExtensionRegistry:
         ):
             if locked.get(field) != record.get(field):
                 raise ValueError(f"extension lock {field} does not match registry")
+        if locked.get("artifact_ref", "") != record.get("artifact_ref", ""):
+            raise ValueError(
+                "extension lock artifact reference does not match registry"
+            )
         digest = str(record.get("digest") or "")
         object_root = self.objects / digest.removeprefix("sha256:")
         manifest = ExtensionManifest.from_dict(
@@ -480,6 +527,10 @@ class ExtensionRegistry:
         return self.objects / digest / "package"
 
     def remove(self, extension_id: str) -> bool:
+        with file_lock(self.root / ".install.lock"):
+            return self._remove(extension_id)
+
+    def _remove(self, extension_id: str) -> bool:
         """Remove a registry reference; immutable objects remain for rollback/audit."""
 
         index = self._index()
@@ -546,6 +597,7 @@ class ExtensionRegistry:
                     "provenance_digest": record.get("provenance_digest", ""),
                     "signature_status": record.get("signature_status", "Unknown"),
                     "signature_digest": record.get("signature_digest", ""),
+                    "artifact_ref": record.get("artifact_ref", ""),
                 }
             )
         _write_json(

@@ -16,7 +16,16 @@ from nous_provider.runtime import (
 
 def run(root: Path, source: Path) -> dict:
     registry = SkillRegistry(root)
-    record = registry.install(source)
+    registry.add_catalog(str(source.parent))
+    entry = next(
+        item for item in registry.catalog_records() if item.skill_id == source.name
+    )
+    record = registry.install_from_catalog(
+        entry.skill_id,
+        catalog_source=str(source.parent),
+        version=entry.version,
+        digest=entry.digest,
+    )
     tools = SkillToolRuntime(root)
     loaded = tools.execute("skill_load", {"skill_id": "installed:" + record.skill_id})
     cas = ContentAddressedArtifactStore(root / ".nous" / "artifacts")
@@ -31,6 +40,7 @@ def run(root: Path, source: Path) -> dict:
     return {
         "workspace": str(root),
         "record": record.to_dict(),
+        "reviewed_catalog_entry": entry.summary(),
         "loaded": loaded,
         "artifact_integrity": True,
         "agent_install_denied": mutation,

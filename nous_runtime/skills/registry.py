@@ -5,22 +5,31 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
+import shutil
+import tempfile
 import zipfile
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from nous_runtime.artifact.content_store import ContentAddressedArtifactStore
 from nous_runtime.artifact.models import ArtifactType
 from nous_runtime.extensions import ExtensionInspector, ExtensionRegistry
 from nous_runtime.extensions.models import ExtensionManifest
-from nous_runtime.extensions.sources import package_files
+from nous_runtime.extensions.sources import (
+    ExtensionSource,
+    is_package_manifest,
+    package_files,
+)
+from nous_runtime.locking import file_lock
 from nous_runtime.skills.models import SkillRecord
 
 
 _STATE_SCHEMA = "apeir.skill-registry-state/v1"
 _CATALOG_SCHEMA = "apeir.skill-catalog/v1"
 _MAX_CATALOG_BYTES = 1024 * 1024
+_MAX_CATALOG_SKILLS = 512
 _PROVIDER_PRIORITY = {
     "project": 50,
     "installed": 40,
@@ -74,10 +83,13 @@ class SkillRegistry:
         self.state_path = self.workspace / ".nous" / "skills.json"
         self.diagnostics: list[dict[str, str]] = []
 
-    def list(self, *, include_disabled: bool = False) -> list[SkillRecord]:
+    def list(
+        self, *, include_disabled: bool = False, include_catalogs: bool = True
+    ) -> list[SkillRecord]:
         records = self._local_records()
         records.extend(self._installed_records())
-        records.extend(self._catalog_records())
+        if include_catalogs:
+            records.extend(self._catalog_records())
         records = [self._apply_state(record) for record in records]
         if not include_disabled:
             records = [record for record in records if record.enabled]
@@ -145,39 +157,132 @@ class SkillRegistry:
             raise ValueError("catalog skills must be installed before loading")
         return record
 
-    def install(self, source: str | Path) -> SkillRecord:
+    def install(
+        self,
+        source: str | Path,
+        *,
+        expected: SkillRecord | None = None,
+        before_publish: Callable[[], None] | None = None,
+    ) -> SkillRecord:
         """Inspect, copy, evidence, and register a Skill without executing scripts."""
 
-        manifest = ExtensionInspector().inspect(source)
-        self._require_skill_manifest(manifest)
-        installed = self.extensions.install(source)
-        assert installed.provenance is not None
-        package_root = self.extensions.package_path(installed.extension_id)
-        bundle = _deterministic_bundle(package_root)
-        artifact = ContentAddressedArtifactStore(self.artifact_root).store_bytes(
-            bundle,
-            artifact_type=ArtifactType.SOURCE_BUNDLE,
-            name=f"{installed.skills[0].name}-{installed.version}.skill.zip",
-            media_type="application/vnd.apeir.skill-bundle+zip",
-            produced_by="apeir.skill-registry",
-            metadata={
-                "extension_id": installed.extension_id,
-                "skill_id": installed.skills[0].name,
-                "version": installed.version,
-                "package_digest": installed.provenance.digest,
-                "authority": "none",
-            },
+        # Snapshot bounded source bytes first. The exact reviewed snapshot, CAS
+        # bundle and Extension object must agree before either index is visible.
+        with tempfile.TemporaryDirectory(prefix="apeir-skill-install-") as temporary:
+            with ExtensionSource(source) as resolved:
+                package_root = Path(temporary) / resolved.root.name
+                package_root.mkdir()
+                standalone = (
+                    resolved.preferred_file is not None
+                    and not is_package_manifest(resolved.preferred_file)
+                )
+                files = (
+                    (resolved.preferred_file,)
+                    if standalone
+                    else package_files(resolved.root)
+                )
+                for original in files:
+                    target = package_root / original.relative_to(resolved.root)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(original, target)
+                staged = (
+                    package_root / resolved.preferred_file.relative_to(resolved.root)
+                    if standalone
+                    else package_root
+                )
+            manifest = ExtensionInspector().inspect(staged)
+            self._require_skill_manifest(manifest)
+            assert manifest.provenance is not None
+            previous = self.extensions.get_record(manifest.extension_id)
+            if previous and previous.get("state") == "revoked":
+                raise PermissionError(
+                    "Revoked Skill requires an explicit authority restoration, not reinstall"
+                )
+            if expected is not None and (
+                manifest.skills[0].name != expected.skill_id
+                or manifest.version != expected.version
+                or manifest.provenance.digest != expected.digest
+                or tuple(sorted({item.capability for item in manifest.capabilities}))
+                != tuple(sorted(expected.requested_capabilities))
+            ):
+                raise ValueError(
+                    "Skill content differs from the reviewed catalog entry"
+                )
+            store = ContentAddressedArtifactStore(self.artifact_root)
+            artifact = store.store_bytes(
+                _deterministic_bundle(package_root),
+                artifact_type=ArtifactType.SOURCE_BUNDLE,
+                name=f"{manifest.skills[0].name}-{manifest.version}.skill.zip",
+                media_type="application/vnd.apeir.skill-bundle+zip",
+                produced_by="apeir.skill-registry",
+                metadata={
+                    "extension_id": manifest.extension_id,
+                    "skill_id": manifest.skills[0].name,
+                    "version": manifest.version,
+                    "package_digest": manifest.provenance.digest,
+                    "authority": "none",
+                },
+            )
+            artifact_ref = str(artifact["artifact"]["digest"])
+            store.pin(artifact_ref, reason=f"installed-skill:{manifest.extension_id}")
+            installed = self.extensions.install(
+                staged, artifact_ref=artifact_ref, before_publish=before_publish
+            )
+        # Existing enable/disable state survives updates. New Skills have the
+        # existing enabled default; neither case grants execution permission.
+        return self.resolve(
+            f"installed:{installed.skills[0].name}", include_disabled=True
         )
-        artifact_ref = str(artifact["artifact"]["digest"])
-        store = ContentAddressedArtifactStore(self.artifact_root)
-        store.pin(artifact_ref, reason=f"installed-skill:{installed.extension_id}")
-        state = self._state()
-        state.setdefault("installed_artifacts", {})[installed.extension_id] = (
-            artifact_ref
+
+    def catalog_records(self, *, local_only: bool = False) -> list[SkillRecord]:
+        """Inspect registered catalogs; passive UI polling never fetches URLs."""
+        return self._catalog_records(local_only=local_only)
+
+    def install_from_catalog(
+        self,
+        skill_id: str,
+        *,
+        catalog_source: str,
+        version: str,
+        digest: str,
+        before_publish: Callable[[], None] | None = None,
+    ) -> SkillRecord:
+        if catalog_source not in self.catalogs():
+            raise PermissionError(
+                "Catalog must first be registered by the workspace owner"
+            )
+        if catalog_source.startswith("https://"):
+            raise ValueError(
+                "Remote package acquisition is not qualified; use a reviewed local catalog"
+            )
+        candidates = [
+            item
+            for item in self.catalog_records(local_only=True)
+            if item.skill_id == skill_id
+            and item.metadata.get("catalog_source") == catalog_source
+        ]
+        if len(candidates) != 1:
+            raise ValueError("Catalog entry is missing or ambiguous")
+        entry = candidates[0]
+        if "://" in entry.source:
+            raise ValueError("Remote package acquisition is not qualified")
+        if (
+            entry.version != version
+            or entry.digest != digest
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest)
+        ):
+            raise ValueError("Catalog version or digest changed; review it again")
+        catalog_path = Path(catalog_source).expanduser().resolve()
+        base = catalog_path if catalog_path.is_dir() else catalog_path.parent
+        source = Path(entry.source).expanduser()
+        source = (
+            (base / source).resolve() if not source.is_absolute() else source.resolve()
         )
-        state.setdefault("enabled", {})[installed.skills[0].name] = True
-        self._write_state(state)
-        return self.resolve(f"installed:{installed.skills[0].name}")
+        if not source.is_relative_to(base):
+            raise PermissionError(
+                "Skill source escapes its registered catalog directory"
+            )
+        return self.install(source, expected=entry, before_publish=before_publish)
 
     def update(self, source: str | Path) -> SkillRecord:
         candidate = ExtensionInspector().inspect(source)
@@ -194,6 +299,10 @@ class SkillRegistry:
         return updated
 
     def remove(self, skill_id: str) -> bool:
+        with file_lock(self.state_path.with_suffix(".lock")):
+            return self._remove(skill_id)
+
+    def _remove(self, skill_id: str) -> bool:
         requested = str(skill_id or "").split(":", 1)[-1]
         try:
             record = self.resolve(f"installed:{requested}", include_disabled=True)
@@ -204,8 +313,9 @@ class SkillRegistry:
         if not removed:
             return False
         state = self._state()
-        artifact_ref = str(
-            state.setdefault("installed_artifacts", {}).pop(extension_id, "")
+        artifact_ref = (
+            str(state.setdefault("installed_artifacts", {}).pop(extension_id, ""))
+            or record.artifact_ref
         )
         state.setdefault("enabled", {}).pop(record.skill_id, None)
         self._write_state(state)
@@ -224,20 +334,24 @@ class SkillRegistry:
         if not source:
             raise ValueError("catalog source is required")
         self._read_catalog(source)
-        state = self._state()
-        catalogs = state.setdefault("catalogs", [])
-        if source not in catalogs:
-            catalogs.append(source)
-            self._write_state(state)
+        with file_lock(self.state_path.with_suffix(".lock")):
+            state = self._state()
+            catalogs = state.setdefault("catalogs", [])
+            if source not in catalogs:
+                if len(catalogs) >= 32:
+                    raise ValueError("Skill Registry exceeds 32 catalogs")
+                catalogs.append(source)
+                self._write_state(state)
 
     def remove_catalog(self, source: str) -> bool:
-        state = self._state()
-        catalogs = state.setdefault("catalogs", [])
-        if source not in catalogs:
-            return False
-        catalogs.remove(source)
-        self._write_state(state)
-        return True
+        with file_lock(self.state_path.with_suffix(".lock")):
+            state = self._state()
+            catalogs = state.setdefault("catalogs", [])
+            if source not in catalogs:
+                return False
+            catalogs.remove(source)
+            self._write_state(state)
+            return True
 
     def catalogs(self) -> tuple[str, ...]:
         return tuple(str(item) for item in self._state().get("catalogs") or ())
@@ -279,6 +393,8 @@ class SkillRegistry:
         for item in self.extensions.list():
             extension_id = str(item.get("extension_id") or "")
             try:
+                if item.get("state") == "revoked":
+                    raise ValueError("Installed Skill Extension has been revoked")
                 manifest = self.extensions.verify(extension_id)
                 if "skill" not in manifest.kinds:
                     continue
@@ -287,11 +403,18 @@ class SkillRegistry:
                     provider="installed",
                     source=self.extensions.package_path(extension_id),
                 )
+                artifact_ref = str(
+                    item.get("artifact_ref") or artifacts.get(extension_id) or ""
+                )
+                if artifact_ref and not ContentAddressedArtifactStore(
+                    self.artifact_root
+                ).verify(artifact_ref):
+                    raise ValueError("Installed Skill Artifact integrity check failed")
                 records.append(
                     replace(
                         record,
                         installed=True,
-                        artifact_ref=str(artifacts.get(extension_id) or ""),
+                        artifact_ref=artifact_ref,
                         trust=(
                             "verified"
                             if item.get("signature_status") == "Verified"
@@ -305,9 +428,18 @@ class SkillRegistry:
                 )
         return records
 
-    def _catalog_records(self) -> list[SkillRecord]:
+    def _catalog_records(self, *, local_only: bool = False) -> list[SkillRecord]:
         records: list[SkillRecord] = []
         for source in self.catalogs():
+            if local_only and source.startswith("https://"):
+                self.diagnostics.append(
+                    {
+                        "provider": "catalog",
+                        "source": source,
+                        "error": "Remote catalog requires explicit refresh; remote package install is not qualified",
+                    }
+                )
+                continue
             try:
                 catalog = self._read_catalog(source)
             except (OSError, ValueError) as exc:
@@ -382,10 +514,11 @@ class SkillRegistry:
         return replace(record, enabled=bool(enabled.get(record.skill_id, True)))
 
     def _set_enabled(self, skill_id: str, enabled: bool) -> SkillRecord:
-        record = self.resolve(skill_id, include_disabled=True)
-        state = self._state()
-        state.setdefault("enabled", {})[record.skill_id] = enabled
-        self._write_state(state)
+        with file_lock(self.state_path.with_suffix(".lock")):
+            record = self.resolve(skill_id, include_disabled=True)
+            state = self._state()
+            state.setdefault("enabled", {})[record.skill_id] = enabled
+            self._write_state(state)
         return replace(record, enabled=enabled)
 
     def _read_catalog(self, source: str) -> dict[str, Any]:
@@ -423,6 +556,8 @@ class SkillRegistry:
             raise ValueError(f"skill catalog schema must be {_CATALOG_SCHEMA}")
         if not isinstance(value.get("skills"), list):
             raise ValueError("skill catalog skills must be an array")
+        if len(value["skills"]) > _MAX_CATALOG_SKILLS:
+            raise ValueError("skill catalog exceeds 512 entries")
         return value
 
     def _state(self) -> dict[str, Any]:
@@ -513,6 +648,8 @@ def _directory_catalog(root: Path) -> dict[str, Any]:
     skills: list[dict[str, Any]] = []
     inspector = ExtensionInspector()
     for source in _skill_sources(root):
+        if len(skills) >= _MAX_CATALOG_SKILLS:
+            raise ValueError("skill catalog exceeds 512 entries")
         manifest = inspector.inspect(source)
         if "skill" not in manifest.kinds or len(manifest.skills) != 1:
             continue
@@ -530,6 +667,8 @@ def _directory_catalog(root: Path) -> dict[str, Any]:
                 ),
                 "suggested_tools": list(skill.allowed_tools),
                 "tags": _string_list(skill.metadata.get("tags")),
+                "risk": str(skill.metadata.get("risk") or "unknown"),
+                "compatibility": skill.compatibility,
             }
         )
     return {"schema": _CATALOG_SCHEMA, "skills": skills}
@@ -555,8 +694,13 @@ def _catalog_record(raw: Mapping[str, Any], catalog_source: str) -> SkillRecord:
         suggested_tools=tuple(_string_list(raw.get("suggested_tools"))),
         tags=tuple(_string_list(raw.get("tags"))),
         risk=str(raw.get("risk") or "unknown"),
-        trust=str(raw.get("trust") or "unverified"),
-        metadata={"authority": "none", "catalog_source": catalog_source},
+        trust="unverified",
+        metadata={
+            "authority": "none",
+            "catalog_source": catalog_source,
+            "compatibility": str(raw.get("compatibility") or "unspecified"),
+            "dependencies": _string_list(raw.get("dependencies")),
+        },
     )
 
 
