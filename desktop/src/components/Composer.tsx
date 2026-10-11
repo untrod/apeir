@@ -43,7 +43,12 @@ export interface ComposerProps {
   nodes: Node[];
   conversationId?: string;
   readOnly?: boolean;
+  attachmentsSupported?: boolean;
+  extendedConstraintsSupported?: boolean;
 }
+
+export const CHAT_ATTACHMENTS_UNAVAILABLE = "File attachment delivery is unavailable. Select a saved file in Workspace instead; the Runtime checks permission before reading it.";
+export const CHAT_CONSTRAINTS_UNAVAILABLE = "Node targeting, privacy and per-request budget controls are unavailable in this Chat path. Use the existing governed configuration before sending.";
 
 
 // Draft persistence
@@ -74,12 +79,14 @@ function saveDraft(conversationId: string | undefined, text: string): void {
 export function Composer({
   onSend, onStop, disabled, streaming,
   models, nodes, conversationId, readOnly = false,
+  attachmentsSupported = true, extendedConstraintsSupported = true,
 }: ComposerProps) {
   const [text, setText] = useState(() => loadDraft(conversationId));
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [constraints, setConstraints] = useState<ComposerConstraints>({});
   const [showConstraints, setShowConstraints] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [admissionError, setAdmissionError] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -96,6 +103,7 @@ export function Composer({
   useEffect(() => {
     setText(loadDraft(conversationId));
     setAttachments([]);
+    setAdmissionError("");
   }, [conversationId]);
 
   // Auto-resize
@@ -107,11 +115,20 @@ export function Composer({
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if ((!trimmed && attachments.length === 0) || disabled) return;
+    if (attachments.length > 0 && !attachmentsSupported) {
+      setAdmissionError(CHAT_ATTACHMENTS_UNAVAILABLE);
+      return;
+    }
+    if (!extendedConstraintsSupported && (constraints.node_id || (constraints.privacy_level && constraints.privacy_level !== "standard") || constraints.budget_limit_usd !== undefined)) {
+      setAdmissionError(CHAT_CONSTRAINTS_UNAVAILABLE);
+      return;
+    }
     onSend(trimmed, attachments, constraints);
+    setAdmissionError("");
     setText("");
     setAttachments([]);
     saveDraft(conversationId, "");
-  }, [text, attachments, constraints, disabled, conversationId, onSend]);
+  }, [text, attachments, constraints, disabled, conversationId, onSend, attachmentsSupported, extendedConstraintsSupported]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -125,6 +142,10 @@ export function Composer({
 
   // File handling
   const addFiles = useCallback((files: FileList | File[]) => {
+    if (!attachmentsSupported) {
+      setAdmissionError(CHAT_ATTACHMENTS_UNAVAILABLE);
+      return;
+    }
     const newAttachments: ComposerAttachment[] = Array.from(files).map((f) => ({
       id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       name: f.name,
@@ -133,7 +154,7 @@ export function Composer({
       preview_url: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
     }));
     setAttachments((prev) => [...prev, ...newAttachments]);
-  }, []);
+  }, [attachmentsSupported]);
 
   const handlePaste = (e: React.ClipboardEvent) => {
     if (e.clipboardData.files.length > 0) {
@@ -177,7 +198,7 @@ export function Composer({
           zIndex: 10, pointerEvents: "none",
         }}>
           <span style={{ fontSize: typo.md, color: colors.accent, fontWeight: typo.semibold }}>
-            Drop files to attach
+            {attachmentsSupported ? "Drop files to attach" : "File attachment delivery is unavailable"}
           </span>
         </div>
       )}
@@ -253,6 +274,8 @@ export function Composer({
           {/* Node target */}
           <select
             value={constraints.node_id || ""}
+            disabled={!extendedConstraintsSupported}
+            aria-label="Node target"
             onChange={(e) => setConstraints((c) => ({ ...c, node_id: e.target.value || undefined }))}
             style={{
               padding: `${space.xs} ${space.sm}`, fontSize: typo.xs,
@@ -270,6 +293,8 @@ export function Composer({
           {/* Privacy */}
           <select
             value={constraints.privacy_level || "standard"}
+            disabled={!extendedConstraintsSupported}
+            aria-label="Privacy level"
             onChange={(e) => setConstraints((c) => ({ ...c, privacy_level: e.target.value as ComposerConstraints["privacy_level"] }))}
             style={{
               padding: `${space.xs} ${space.sm}`, fontSize: typo.xs,
@@ -286,6 +311,7 @@ export function Composer({
           {/* Budget */}
           <input
             type="number"
+            disabled={!extendedConstraintsSupported}
             placeholder="Budget limit ($)"
             value={constraints.budget_limit_usd ?? ""}
             onChange={(e) => setConstraints((c) => ({ ...c, budget_limit_usd: e.target.value ? parseFloat(e.target.value) : undefined }))}
@@ -296,6 +322,7 @@ export function Composer({
               borderRadius: radius.sm,
             }}
           />
+          {!extendedConstraintsSupported && <span style={{ fontSize: typo.xs, color: colors.textTertiary }}>{CHAT_CONSTRAINTS_UNAVAILABLE}</span>}
         </div>
       )}
 
@@ -335,11 +362,13 @@ export function Composer({
           {/* Attach button */}
           <button
             onClick={() => fileInputRef.current?.click()}
+            disabled={!attachmentsSupported}
             title="Attach files"
             style={iconBtnStyle}
           >+</button>
           <input
             ref={fileInputRef} type="file" multiple
+            disabled={!attachmentsSupported}
             onChange={(e) => e.target.files && addFiles(e.target.files)}
             style={{ display: "none" }}
           />
@@ -384,6 +413,9 @@ export function Composer({
           )}
         </div>
       </div>
+
+      {!attachmentsSupported && !admissionError && <div style={{ marginTop: space.sm, fontSize: typo.xs, color: colors.textTertiary }}>{CHAT_ATTACHMENTS_UNAVAILABLE}</div>}
+      {admissionError && <div role="alert" style={{ marginTop: space.sm, fontSize: typo.xs, color: colors.danger }}>{admissionError}</div>}
 
       {/* Footer hint */}
       <div style={{

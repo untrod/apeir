@@ -39,6 +39,7 @@ registration check, not execution acceptance for all 422 endpoints.
 | Operations Console: `control_plane/operations.py`, `OperationsConsole.tsx` | REUSE | Real owner projections, approvals, recovery, local Skills and Node pairing; source-browser acceptance is not installed EXE qualification |
 | Workspace editor: `workspace/workbench.py`, `DeveloperWorkbench.tsx` | REUSE / EXTEND | Real bounded read/search/diff/governed save, hash conflicts, CAS backup, semantic activity and explicit metadata-only discussion. Multi-file editor, symbols, history/rollback UI and a model-generated multi-file proposal flow are not complete |
 | Model context/cost: `context/`, `model_runtime/bridges.py`, `model_runtime/gateway.py` | EXTEND | Chat now records a content-free per-iteration input manifest after Agent admission, including rendered-context truncation and preceding file-read provenance. The inspector replays original EventStream Run IDs, retained through Conversation restart, and separates estimates from Provider usage. This covers application Chat Gateway input, not provider receipt, every collaborative invocation or a newly built Context snapshot |
+| Chat input controls: `Composer.tsx`, `ChatView.tsx`, `lib/api.ts` | FIX / DEFER | File chips were selected locally but ignored by Chat dispatch; Node target, privacy and per-request budget selections were likewise ignored. Disable these unconnected controls and refuse stale/crafted values before model dispatch. Saved Workspace references and existing governed read remain usable; controlled attachment delivery is not implemented by this fix |
 | Skill/Provider: `skills/`, public SDK, `tests/control_plane/test_skill_center.py` | REUSE / EXTEND | Reviewed local catalog install/load/enable/disable/uninstall with integrity and Governance. Instruction loading is not automatic executable Skill permission; general remote catalogs and real account-backed Providers need qualification |
 | Pairing/mesh: `node_runtime/relay.py`, `node_runtime/service.py`, `tests/node_runtime/` | REUSE | Persistent stable Ed25519 identity, once invitations, atomic consumption, revoke-preserving trust and signed Relay exist. Real Windows/Jetson/WAN/CGNAT acceptance and timing Issues #4/#8 remain open |
 | Environment: `environments/`, `EnvironmentInspector.tsx` | REUSE / DEFER | Lifecycle/contracts/evidence and governed UI exist. Default strict process isolation is unavailable here; engine presence alone does not qualify the existing OCI control boundary. Python/scientific/embedded/robotics template promises cannot be inferred from a selector |
@@ -94,6 +95,33 @@ and real EventStream persistence. Local p50/p95/p99 milliseconds are
 are instrumentation cost, not a performance improvement, WAN/Relay result,
 real model benchmark or a completed engineering-loop research experiment.
 No durability, fsync, isolation, resource default or authorization was relaxed.
+
+A separate Chat admission correction extends only the existing Composer and
+ChatView. Four initial reproduction tests failed on unchanged main: file
+selection remained enabled, dropped/pasted files appeared accepted, and a crafted
+attachment reached model dispatch. The corrected UI preserves the typed draft
+when refusing unsupported files, creates no image preview and sends no model
+request or event subscription for unsupported input. Additional negative cases
+cover a handler losing support before Send and crafted Node/privacy/budget
+values, including a zero budget. Model and execution-mode controls remain usable;
+the Workspace assistant still enforces read-only at dispatch.
+
+No file upload, secret access or new execution authority is added. Existing
+API `attachment_ids` refer to Conversation attachment metadata and retain their
+compatibility contract; they are not proof of model delivery. A future attachment
+implementation must bind protected Artifact content, authorization and the actual
+Gateway input. Local selection, installation or a file reference must never be
+shown as evidence that a model received file contents.
+
+Chat correction validation: **15 focused tests** and **120 Desktop tests in
+30 files**, lint/typecheck/build passed. **264 repository tests** passed;
+Ruff/compile, 235 Markdown link targets, hygiene/identity/metadata/version checks
+passed. Security scan remains **0 HIGH / 3 existing MEDIUM**. A sandboxed source
+Chromium run against the real Runtime HTTP confirms file drop/paste rejection,
+draft retention, zero image previews, disabled unsupported request controls and
+zero Chat/model requests, with no page errors or 390px overflow. These source
+checks use the explicitly labelled fake-adapter evidence fixture; they do not
+qualify installed Windows Desktop or real model/identity/hardware paths.
 
 Two configuration distinctions also remain relevant: the main Tasks view covers
 local Work/Runtime tasks, while signed distributed Works are exposed through

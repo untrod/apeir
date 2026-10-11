@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatView } from "../components/ChatView";
 import { fetchRunEvents, runPrompt, setConfig, subscribeRunEvents } from "../lib/api";
+import type { ComposerAttachment, ComposerConstraints } from "../components/Composer";
 
 vi.mock("../lib/api", async importOriginal => ({ ...await importOriginal<typeof import("../lib/api")>(),
   runPrompt: vi.fn(), fetchRunEvents: vi.fn(), subscribeRunEvents: vi.fn(),
@@ -11,8 +12,12 @@ vi.mock("../store", () => ({
   useMessages: () => [], useActiveTasks: () => [], useModels: () => [], useNodes: () => [], useStoreHydrated: () => false,
 }));
 vi.mock("../components/Markdown", () => ({ Markdown: ({ content }: { content: string }) => <span>{content}</span> }));
-vi.mock("../components/Composer", () => ({ Composer: ({ onSend, readOnly }: { onSend: (text: string, attachments: [], constraints: { agent_mode: string }) => void; readOnly: boolean }) =>
-  <button onClick={() => onSend("Explain the selected file", [], { agent_mode: "agent" })}>{readOnly ? "Send read-only request" : "Send request"}</button> }));
+vi.mock("../components/Composer", async importOriginal => ({ ...await importOriginal<typeof import("../components/Composer")>(), Composer: ({ onSend, readOnly }: { onSend: (text: string, attachments: ComposerAttachment[], constraints: ComposerConstraints) => void; readOnly: boolean }) =>
+  <><button onClick={() => onSend("Explain the selected file", [], { agent_mode: "agent" })}>{readOnly ? "Send read-only request" : "Send request"}</button>
+    <button onClick={() => onSend("Read the attachment", [{ id: "attachment", name: "report.pdf", kind: "file" }], { agent_mode: "agent" })}>Send crafted attachment</button>
+    <button onClick={() => onSend("Use a target", [], { node_id: "node" })}>Send node target</button>
+    <button onClick={() => onSend("Private request", [], { privacy_level: "strict" })}>Send privacy constraint</button>
+    <button onClick={() => onSend("Budget request", [], { budget_limit_usd: 0 })}>Send budget constraint</button></> }));
 
 beforeEach(() => {
   vi.resetAllMocks(); sessionStorage.clear();
@@ -25,6 +30,18 @@ beforeEach(() => {
 afterEach(() => { delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView; });
 
 describe("workspace collaboration through the existing Chat Runtime", () => {
+  it("rejects unsupported attachments before any model or event subscription", async () => {
+    render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send crafted attachment" }));
+    expect(await screen.findByText(/File attachment delivery is unavailable/)).toBeInTheDocument();
+    expect(runPrompt).not.toHaveBeenCalled(); expect(subscribeRunEvents).not.toHaveBeenCalled();
+  });
+  it.each(["node target", "privacy constraint", "budget constraint"])("refuses an unsupported %s before dispatch", async label => {
+    render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: `Send ${label}` }));
+    expect(await screen.findByText(/Node targeting, privacy and per-request budget controls are unavailable/)).toBeInTheDocument();
+    expect(runPrompt).not.toHaveBeenCalled(); expect(subscribeRunEvents).not.toHaveBeenCalled();
+  });
   it("does not invoke a model until Send and forces read_only despite crafted Composer constraints", async () => {
     render(<ChatView readOnly workspaceFile={{ path: "src/a.py", sha256: "a".repeat(64), controller: "http://localhost:8770" }} onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
     expect(runPrompt).not.toHaveBeenCalled();
