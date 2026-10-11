@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
+import nous_runtime.model_runtime.gateway as gateway_module
 
 import pytest
 
@@ -77,16 +79,13 @@ def test_gateway_falls_back_and_records_safe_observability() -> None:
             ModelRequest(
                 task_id="task",
                 required_capabilities=frozenset({"reasoning"}),
-                messages=(
-                    {"role": "user", "content": "private prompt"},
-                ),
+                messages=({"role": "user", "content": "private prompt"},),
             )
         )
         assert response.model_id == "b"
         assert response.content == "done"
         assert any(
-            event.event_type == "model.invoke.failed"
-            for event in gateway.events
+            event.event_type == "model.invoke.failed" for event in gateway.events
         )
         request_artifact = artifacts.list(ArtifactType.MODEL_REQUEST)[0]
         assert "private prompt" not in str(request_artifact.metadata)
@@ -96,7 +95,14 @@ def test_gateway_falls_back_and_records_safe_observability() -> None:
     asyncio.run(scenario())
 
 
-def test_gateway_timeout_cancels_adapter_and_releases_lease() -> None:
+def test_gateway_timeout_cancels_adapter_and_releases_lease(monkeypatch) -> None:
+    # This case targets an in-flight provider deadline, not variable routing I/O.
+    # Only Gateway accounting is controlled; asyncio's 10ms timeout remains real.
+    clock = {"now": 0.0}
+    monkeypatch.setattr(
+        gateway_module, "time", SimpleNamespace(monotonic=lambda: clock["now"])
+    )
+
     async def scenario() -> None:
         registry = ModelRuntimeRegistry()
         add_model(registry, "slow", "slow")
@@ -104,7 +110,14 @@ def test_gateway_timeout_cancels_adapter_and_releases_lease() -> None:
         adapter.backend_id = "slow"
         adapters = ModelAdapterRegistry()
         adapters.register(adapter)
-        gateway = ModelGateway(registry, adapters)
+
+        def provider_timeout_exhausts_deadline(event):
+            if event.event_type == "model.invoke.failed":
+                clock["now"] = 0.02
+
+        gateway = ModelGateway(
+            registry, adapters, event_sink=provider_timeout_exhausts_deadline
+        )
         request = ModelRequest(
             task_id="task",
             required_capabilities=frozenset({"reasoning"}),
@@ -112,8 +125,45 @@ def test_gateway_timeout_cancels_adapter_and_releases_lease() -> None:
         )
         with pytest.raises(ModelInvocationError, match="timed out"):
             await gateway.invoke(request)
+        assert adapter.invocations == [request.request_id]
         assert request.request_id in adapter.cancelled
         assert gateway.scheduler.active_leases() == ()
+
+    asyncio.run(scenario())
+
+
+def test_gateway_expired_before_dispatch_never_invokes_or_leases(monkeypatch) -> None:
+    clock = {"now": 0.0}
+    monkeypatch.setattr(
+        gateway_module, "time", SimpleNamespace(monotonic=lambda: clock["now"])
+    )
+
+    async def scenario():
+        registry = ModelRuntimeRegistry()
+        add_model(registry, "not-dispatched", "not-dispatched")
+        adapter = MockModelAdapter(content="must not execute")
+        adapter.backend_id = "not-dispatched"
+        adapters = ModelAdapterRegistry()
+        adapters.register(adapter)
+
+        def routing_exhausts_deadline(event):
+            if event.event_type == "model.route.selected":
+                clock["now"] = 0.02
+
+        gateway = ModelGateway(registry, adapters, event_sink=routing_exhausts_deadline)
+        request = ModelRequest(
+            task_id="task",
+            required_capabilities=frozenset({"reasoning"}),
+            timeout_s=0.01,
+        )
+        with pytest.raises(ModelInvocationError, match="timed out"):
+            await gateway.invoke(request)
+        assert adapter.invocations == []
+        assert adapter.cancelled == set()
+        assert gateway.scheduler.active_leases() == ()
+        assert not any(
+            event.event_type == "model.invoke.completed" for event in gateway.events
+        )
 
     asyncio.run(scenario())
 
@@ -169,8 +219,7 @@ def test_observability_failure_is_recorded_without_losing_response() -> None:
         )
         assert response.content == "ok"
         assert any(
-            item.event_type == "model.observability.failed"
-            for item in gateway.events
+            item.event_type == "model.observability.failed" for item in gateway.events
         )
 
     asyncio.run(scenario())
@@ -315,9 +364,7 @@ def test_existing_provider_executes_behind_unified_gateway() -> None:
             }
 
     async def scenario() -> None:
-        gateway = build_gateway_from_providers(
-            [ExistingProvider()], allow_direct=True
-        )
+        gateway = build_gateway_from_providers([ExistingProvider()], allow_direct=True)
         response = await gateway.invoke(
             ModelRequest(
                 task_id="task",
@@ -340,6 +387,7 @@ def test_gateway_sync_boundary_supports_repeated_calls() -> None:
     adapters = ModelAdapterRegistry()
     adapters.register(adapter)
     gateway = ModelGateway(registry, adapters)
+
     def request(task_id: str) -> ModelRequest:
         return ModelRequest(
             task_id=task_id,
