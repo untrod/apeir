@@ -27,7 +27,6 @@ from nous_runtime.api.responses import err_response, ok_response
 log = logging.getLogger("nous.control_plane")
 
 
-
 # Helpers
 
 
@@ -58,9 +57,12 @@ def _paginate(items: list[Any], page: int, page_size: int) -> dict[str, Any]:
     return {
         "items": items[start:end],
         "pagination": {
-            "page": page, "page_size": page_size,
-            "total": total, "total_pages": total_pages,
-            "has_next": page < total_pages, "has_prev": page > 1,
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1,
         },
     }
 
@@ -88,18 +90,34 @@ def _adapt_model_record(record) -> dict[str, Any]:
         "display_name": d.display_name,
         "provider_id": d.provider_id,
         "provider_kind": provider_kind,
-        "endpoint_type": d.endpoint_type.value if hasattr(d.endpoint_type, 'value') else str(d.endpoint_type),
-        "modalities": [m.value if hasattr(m, 'value') else str(m) for m in (d.modalities or [])],
+        "endpoint_type": d.endpoint_type.value
+        if hasattr(d.endpoint_type, "value")
+        else str(d.endpoint_type),
+        "modalities": [
+            m.value if hasattr(m, "value") else str(m) for m in (d.modalities or [])
+        ],
         "capabilities": sorted(d.capabilities or []),
         "context_length": d.context_length,
         "tool_calling": d.tool_calling,
         "structured_output": d.structured_output,
-        "reasoning_level": d.reasoning_level.value if hasattr(d.reasoning_level, 'value') else str(d.reasoning_level),
-        "coding_level": d.coding_level.value if hasattr(d.coding_level, 'value') else str(d.coding_level),
-        "vision_level": d.vision_level.value if hasattr(d.vision_level, 'value') else str(d.vision_level),
-        "latency_level": d.latency_level.value if hasattr(d.latency_level, 'value') else str(d.latency_level),
-        "cost_level": d.cost_level.value if hasattr(d.cost_level, 'value') else str(d.cost_level),
-        "privacy_class": d.privacy_class.value if hasattr(d.privacy_class, 'value') else str(d.privacy_class),
+        "reasoning_level": d.reasoning_level.value
+        if hasattr(d.reasoning_level, "value")
+        else str(d.reasoning_level),
+        "coding_level": d.coding_level.value
+        if hasattr(d.coding_level, "value")
+        else str(d.coding_level),
+        "vision_level": d.vision_level.value
+        if hasattr(d.vision_level, "value")
+        else str(d.vision_level),
+        "latency_level": d.latency_level.value
+        if hasattr(d.latency_level, "value")
+        else str(d.latency_level),
+        "cost_level": d.cost_level.value
+        if hasattr(d.cost_level, "value")
+        else str(d.cost_level),
+        "privacy_class": d.privacy_class.value
+        if hasattr(d.privacy_class, "value")
+        else str(d.privacy_class),
         "is_local": d.is_local,
         "availability": d.availability,
         "state": state,
@@ -109,19 +127,16 @@ def _adapt_model_record(record) -> dict[str, Any]:
         "cost_per_1k_tokens_usd": float(
             (record.benchmark or {}).get("cost_per_1k_tokens_usd") or 0
         ),
-        "avg_latency_ms": float(
-            (record.benchmark or {}).get("avg_latency_ms") or 0
-        ),
+        "avg_latency_ms": float((record.benchmark or {}).get("avg_latency_ms") or 0),
         "token_limit": d.context_length,
         "recoverable": state not in {"removed"},
         "schema_version": "1.0.0",
         "created_at": record.registered_at,
         "updated_at": record.updated_at,
-        "concurrency_limit": getattr(record, 'concurrency_limit', None),
-        "rate_limit_per_minute": getattr(record, 'rate_limit_per_minute', None),
-        "node_id": getattr(record, 'node_id', None),
+        "concurrency_limit": getattr(record, "concurrency_limit", None),
+        "rate_limit_per_minute": getattr(record, "rate_limit_per_minute", None),
+        "node_id": getattr(record, "node_id", None),
     }
-
 
 
 # Runtime
@@ -133,30 +148,39 @@ def handle_runtime_capabilities(params: dict[str, Any] | None = None) -> dict[st
     by_provider: dict[str, int] = {}
     try:
         from nous_runtime.capability.manifest import list_capability_manifests
+
         capabilities = list_capability_manifests()
         for cap in capabilities:
             cat = cap.get("category", "unknown")
             by_category[cat] = by_category.get(cat, 0) + 1
             prov = cap.get("provider_id", "unknown")
             by_provider[prov] = by_provider.get(prov, 0) + 1
-        return ok_response({
-            "capabilities": capabilities, "total": len(capabilities),
-            "by_category": by_category, "by_provider": by_provider,
-        })
+        return ok_response(
+            {
+                "capabilities": capabilities,
+                "total": len(capabilities),
+                "by_category": by_category,
+                "by_provider": by_provider,
+            }
+        )
     except ImportError:
         from nous_runtime.provider.registry import ProviderRegistry
+
         all_caps = []
         for p in ProviderRegistry().list_all():
             for cap_id in p.get("capabilities", []):
                 all_caps.append({"capability_id": cap_id, "provider_id": p["id"]})
                 by_provider[p["id"]] = by_provider.get(p["id"], 0) + 1
-        return ok_response({
-            "capabilities": all_caps, "total": len(all_caps),
-            "by_category": by_category, "by_provider": by_provider,
-        })
+        return ok_response(
+            {
+                "capabilities": all_caps,
+                "total": len(all_caps),
+                "by_category": by_category,
+                "by_provider": by_provider,
+            }
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
-
 
 
 # Nodes — uses connectivity.control_plane.node_registry.NodeRegistry
@@ -165,6 +189,7 @@ def handle_runtime_capabilities(params: dict[str, Any] | None = None) -> dict[st
 def _get_node_registry():
     """Get the NodeRegistry — the real one that exists."""
     from nous_runtime.connectivity.control_plane.node_registry import NodeRegistry
+
     return NodeRegistry
 
 
@@ -178,12 +203,17 @@ def handle_node_enable(node_id: str, body: dict) -> dict[str, Any]:
             return err_response("NOUS_NOT_FOUND", f"Node {node_id} not found")
         # enabled stored in metadata; use set_online as the enable/disable toggle
         NodeRegistry.set_online(node_id, enabled)
-        return ok_response({
-            "node_id": node_id, "enabled": enabled,
-            "message": f"Node {node_id} {'enabled' if enabled else 'disabled'}",
-        })
+        return ok_response(
+            {
+                "node_id": node_id,
+                "enabled": enabled,
+                "message": f"Node {node_id} {'enabled' if enabled else 'disabled'}",
+            }
+        )
     except ImportError:
-        return err_response("NOUS_DEPENDENCY_MISSING", "Connectivity module not available")
+        return err_response(
+            "NOUS_DEPENDENCY_MISSING", "Connectivity module not available"
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
@@ -202,21 +232,32 @@ def handle_node_test(node_id: str, body: dict | None = None) -> dict[str, Any]:
             return err_response("NOUS_NOT_FOUND", f"Node {node_id} not found")
         # Simple TCP reachability check
         import socket
+
         host = node.get("platform_hostname", "127.0.0.1")
         port = 9770  # default node port
         import time
+
         start = time.monotonic()
         try:
             with socket.create_connection((host, port), timeout=5.0):
                 latency_ms = (time.monotonic() - start) * 1000
-                return ok_response({"node_id": node_id, "reachable": True, "latency_ms": round(latency_ms, 1)})
+                return ok_response(
+                    {
+                        "node_id": node_id,
+                        "reachable": True,
+                        "latency_ms": round(latency_ms, 1),
+                    }
+                )
         except (socket.timeout, ConnectionRefusedError, OSError) as e:
-            return ok_response({"node_id": node_id, "reachable": False, "error": str(e)})
+            return ok_response(
+                {"node_id": node_id, "reachable": False, "error": str(e)}
+            )
     except ImportError:
-        return err_response("NOUS_DEPENDENCY_MISSING", "Connectivity module not available")
+        return err_response(
+            "NOUS_DEPENDENCY_MISSING", "Connectivity module not available"
+        )
     except Exception as e:
         return ok_response({"node_id": node_id, "reachable": False, "error": str(e)})
-
 
 
 # Models — uses model_runtime.registry.ModelRuntimeRegistry
@@ -256,40 +297,59 @@ def handle_list_models(params: dict[str, Any] | None = None) -> dict[str, Any]:
             models.append(m)
         if sort_by and models:
             try:
-                models.sort(key=lambda x: x.get(sort_by, ""), reverse=(sort_order == "desc"))
+                models.sort(
+                    key=lambda x: x.get(sort_by, ""), reverse=(sort_order == "desc")
+                )
             except TypeError:
                 pass
         result = _paginate(models, page, page_size)
-        return ok_response({
-            "models": result["items"], "pagination": result["pagination"],
-            "total_count": len(models),
-            "available_count": sum(1 for m in models if m["availability"]),
-        })
+        return ok_response(
+            {
+                "models": result["items"],
+                "pagination": result["pagination"],
+                "total_count": len(models),
+                "available_count": sum(1 for m in models if m["availability"]),
+            }
+        )
     except ImportError:
         # Fallback via provider list
         try:
             from nous_runtime.provider.registry import ProviderRegistry
+
             models = []
             for p in ProviderRegistry().list_all():
                 health_status = p.get("health", {}).get("status", "unknown")
-                models.append({
-                    "model_id": p.get("id", "unknown"),
-                    "display_name": p.get("name", p.get("id", "unknown")),
-                    "provider_id": p.get("id", "unknown"),
-                    "endpoint_type": "CLOUD_API", "modalities": ["TEXT"],
-                    "capabilities": p.get("capabilities", []),
-                    "context_length": 8192, "tool_calling": True, "structured_output": False,
-                    "reasoning_level": "MEDIUM", "coding_level": "MEDIUM",
-                    "vision_level": "NONE", "latency_level": "MEDIUM", "cost_level": "MEDIUM",
-                    "privacy_class": "STANDARD", "is_local": False,
-                    "availability": health_status == "ok", "health_status": health_status,
-                })
+                models.append(
+                    {
+                        "model_id": p.get("id", "unknown"),
+                        "display_name": p.get("name", p.get("id", "unknown")),
+                        "provider_id": p.get("id", "unknown"),
+                        "endpoint_type": "CLOUD_API",
+                        "modalities": ["TEXT"],
+                        "capabilities": p.get("capabilities", []),
+                        "context_length": 8192,
+                        "tool_calling": True,
+                        "structured_output": False,
+                        "reasoning_level": "MEDIUM",
+                        "coding_level": "MEDIUM",
+                        "vision_level": "NONE",
+                        "latency_level": "MEDIUM",
+                        "cost_level": "MEDIUM",
+                        "privacy_class": "STANDARD",
+                        "is_local": False,
+                        "availability": health_status == "ok",
+                        "health_status": health_status,
+                    }
+                )
             result = _paginate(models, page, page_size)
-            return ok_response({
-                "models": result["items"], "pagination": result["pagination"],
-                "total_count": len(models),
-                "available_count": sum(1 for m in models if m["availability"]),
-            })
+            return ok_response(
+                {
+                    "models": result["items"],
+                    "pagination": result["pagination"],
+                    "total_count": len(models),
+                    "available_count": sum(1 for m in models if m["availability"]),
+                }
+            )
         except Exception as e:
             return err_response("NOUS_INTERNAL_ERROR", str(e))
     except Exception as e:
@@ -317,6 +377,7 @@ def handle_model_test(model_id: str, body: dict | None = None) -> dict[str, Any]
         from nous_runtime.model_runtime.models import ModelRequest, RoutingMode
         from nous_runtime.model_runtime.factory import gateway_service
         import time
+
         gateway = gateway_service.get()
         registry = getattr(gateway, "registry", None)
         record = registry.get(model_id) if registry is not None else None
@@ -342,24 +403,26 @@ def handle_model_test(model_id: str, body: dict | None = None) -> dict[str, Any]
         response = gateway.invoke_sync(request)
         latency_ms = (time.monotonic() - start) * 1000
         metadata = dict(getattr(response, "metadata", {}) or {})
-        return ok_response({
-            "model_id": model_id,
-            "selected_model_id": getattr(response, "model_id", model_id),
-            "instance_id": getattr(response, "instance_id", ""),
-            "request_id": request.request_id,
-            "response_id": getattr(response, "response_id", ""),
-            "healthy": response.finish_reason not in ("error", "timeout"),
-            "latency_ms": round(latency_ms, 1),
-            "response_preview": (response.content or "")[:200],
-            "finish_reason": response.finish_reason,
-            "tokens_used": getattr(response, 'usage', {}).get('total_tokens', 0),
-            "execution": {
-                "path": metadata.get("execution_path", "gateway"),
-                "operation_id": metadata.get("operation_id", ""),
-                "workload_id": metadata.get("workload_id", ""),
-                "backend": metadata.get("backend", ""),
-            },
-        })
+        return ok_response(
+            {
+                "model_id": model_id,
+                "selected_model_id": getattr(response, "model_id", model_id),
+                "instance_id": getattr(response, "instance_id", ""),
+                "request_id": request.request_id,
+                "response_id": getattr(response, "response_id", ""),
+                "healthy": response.finish_reason not in ("error", "timeout"),
+                "latency_ms": round(latency_ms, 1),
+                "response_preview": (response.content or "")[:200],
+                "finish_reason": response.finish_reason,
+                "tokens_used": getattr(response, "usage", {}).get("total_tokens", 0),
+                "execution": {
+                    "path": metadata.get("execution_path", "gateway"),
+                    "operation_id": metadata.get("operation_id", ""),
+                    "workload_id": metadata.get("workload_id", ""),
+                    "backend": metadata.get("backend", ""),
+                },
+            }
+        )
     except ImportError:
         return err_response("NOUS_DEPENDENCY_MISSING", "Model runtime not available")
     except Exception as e:
@@ -374,7 +437,6 @@ def handle_model_test_request(body: dict) -> dict[str, Any]:
     return handle_model_test(model_id, body)
 
 
-
 # Providers — uses provider.registry.ProviderRegistry (real API)
 
 
@@ -383,7 +445,9 @@ def handle_create_provider(body: dict) -> dict[str, Any]:
     provider_id = body.get("provider_id", "")
     name = body.get("name", "")
     if not provider_id or not name:
-        return err_response("NOUS_VALIDATION_ERROR", "provider_id and name are required")
+        return err_response(
+            "NOUS_VALIDATION_ERROR", "provider_id and name are required"
+        )
     try:
         # Build a simple callable provider adapter
         api_base = body.get("api_base_url", "")
@@ -392,34 +456,48 @@ def handle_create_provider(body: dict) -> dict[str, Any]:
 
         # Use the simplest path: register via the provider setup CLI layer
         from nous_runtime.cli.provider_setup import register_provider_from_config
+
         success = register_provider_from_config(
-            provider_id=provider_id, name=name,
-            api_base_url=api_base, credential_ref=credential_ref,
+            provider_id=provider_id,
+            name=name,
+            api_base_url=api_base,
+            credential_ref=credential_ref,
             capabilities=capabilities,
             model=body.get("model"),
             capability_models=body.get("capability_models"),
         )
         if success:
-            return ok_response({
-                "provider_id": provider_id, "name": name,
-                "message": f"Provider {provider_id} registered",
-            })
-        return err_response("NOUS_INTERNAL_ERROR", f"Failed to register provider {provider_id}")
+            return ok_response(
+                {
+                    "provider_id": provider_id,
+                    "name": name,
+                    "message": f"Provider {provider_id} registered",
+                }
+            )
+        return err_response(
+            "NOUS_INTERNAL_ERROR", f"Failed to register provider {provider_id}"
+        )
     except ImportError:
         # Direct registration fallback
         try:
             from nous_runtime.provider.registry import ProviderRegistry
             from nous_runtime.compat.provider import create_simple_provider
+
             provider = create_simple_provider(
-                provider_id, name, body.get("api_base_url", ""),
+                provider_id,
+                name,
+                body.get("api_base_url", ""),
                 capabilities=body.get("capabilities", []),
                 credential_ref=body.get("credential_ref"),
             )
             ProviderRegistry().install(provider)
-            return ok_response({
-                "provider_id": provider_id, "name": name,
-                "message": f"Provider {provider_id} registered",
-            })
+            return ok_response(
+                {
+                    "provider_id": provider_id,
+                    "name": name,
+                    "message": f"Provider {provider_id} registered",
+                }
+            )
         except Exception as e:
             return err_response("NOUS_INTERNAL_ERROR", str(e))
     except Exception as e:
@@ -431,7 +509,9 @@ def handle_validate_provider(body: dict) -> dict[str, Any]:
     provider_id = str(body.get("provider_id") or "")
     name = str(body.get("name") or provider_id)
     if not provider_id or not name:
-        return err_response("NOUS_VALIDATION_ERROR", "provider_id and name are required")
+        return err_response(
+            "NOUS_VALIDATION_ERROR", "provider_id and name are required"
+        )
     try:
         from nous_runtime.cli.provider_setup import validate_provider_from_config
 
@@ -448,13 +528,16 @@ def handle_validate_provider(body: dict) -> dict[str, Any]:
     except ValueError as exc:
         return err_response("NOUS_VALIDATION_ERROR", str(exc))
     except Exception:
-        return err_response("NOUS_PROVIDER_TEST_FAILED", "Provider validation could not be completed")
+        return err_response(
+            "NOUS_PROVIDER_TEST_FAILED", "Provider validation could not be completed"
+        )
 
 
 def handle_update_provider(provider_id: str, body: dict) -> dict[str, Any]:
     """PATCH /api/v1/providers/{provider_id} — remove + re-register (no update API)."""
     try:
         from nous_runtime.provider.registry import ProviderRegistry
+
         registry = ProviderRegistry()
         existing = registry.get(provider_id)
         if not existing:
@@ -462,19 +545,37 @@ def handle_update_provider(provider_id: str, body: dict) -> dict[str, Any]:
         # Remove and re-register with updated config
         registry.remove(provider_id)
         from nous_runtime.compat.provider import create_simple_provider
-        name = body.get("name", getattr(existing, 'name', provider_id))
-        capabilities = body.get("capabilities", getattr(existing, 'capabilities', []))
-        api_base = body.get("api_base_url", getattr(existing, 'api_base_url', ""))
-        cred_ref = body.get("credential_ref", getattr(existing, 'credential_ref', None))
-        new_provider = create_simple_provider(provider_id, name, api_base, capabilities, cred_ref)
+
+        name = body.get("name", getattr(existing, "name", provider_id))
+        capabilities = body.get("capabilities", getattr(existing, "capabilities", []))
+        api_base = body.get("api_base_url", getattr(existing, "api_base_url", ""))
+        cred_ref = body.get("credential_ref", getattr(existing, "credential_ref", None))
+        new_provider = create_simple_provider(
+            provider_id, name, api_base, capabilities, cred_ref
+        )
         registry.install(new_provider)
-        return ok_response({
-            "provider_id": provider_id,
-            "updated": [k for k in body if k in ("name", "api_base_url", "credential_ref", "enabled", "capabilities")],
-            "message": f"Provider {provider_id} updated",
-        })
+        return ok_response(
+            {
+                "provider_id": provider_id,
+                "updated": [
+                    k
+                    for k in body
+                    if k
+                    in (
+                        "name",
+                        "api_base_url",
+                        "credential_ref",
+                        "enabled",
+                        "capabilities",
+                    )
+                ],
+                "message": f"Provider {provider_id} updated",
+            }
+        )
     except ImportError:
-        return err_response("NOUS_DEPENDENCY_MISSING", "Provider registry not available")
+        return err_response(
+            "NOUS_DEPENDENCY_MISSING", "Provider registry not available"
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
@@ -483,11 +584,14 @@ def handle_delete_provider(provider_id: str) -> dict[str, Any]:
     """DELETE /api/v1/providers/{provider_id}"""
     try:
         from nous_runtime.provider.registry import ProviderRegistry
+
         registry = ProviderRegistry()
         if not registry.get(provider_id):
             return err_response("NOUS_NOT_FOUND", f"Provider {provider_id} not found")
         registry.remove(provider_id)
-        return ok_response({"provider_id": provider_id, "message": f"Provider {provider_id} removed"})
+        return ok_response(
+            {"provider_id": provider_id, "message": f"Provider {provider_id} removed"}
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
@@ -496,19 +600,25 @@ def handle_provider_test(provider_id: str, body: dict | None = None) -> dict[str
     """POST /api/v1/providers/{provider_id}/test"""
     try:
         from nous_runtime.provider.registry import ProviderRegistry
+
         provider = ProviderRegistry().get(provider_id)
         if not provider:
             return err_response("NOUS_NOT_FOUND", f"Provider {provider_id} not found")
-        health = provider.health() if hasattr(provider, 'health') else {"status": "unknown"}
-        return ok_response({
-            "provider_id": provider_id,
-            "healthy": health.get("status") == "ok",
-            "status": health.get("status", "unknown"),
-            "details": health,
-        })
+        health = (
+            provider.health() if hasattr(provider, "health") else {"status": "unknown"}
+        )
+        return ok_response(
+            {
+                "provider_id": provider_id,
+                "healthy": health.get("status") == "ok",
+                "status": health.get("status", "unknown"),
+                "details": health,
+            }
+        )
     except Exception as e:
-        return ok_response({"provider_id": provider_id, "healthy": False, "error": str(e)})
-
+        return ok_response(
+            {"provider_id": provider_id, "healthy": False, "error": str(e)}
+        )
 
 
 # Tasks
@@ -516,26 +626,42 @@ def handle_provider_test(provider_id: str, body: dict | None = None) -> dict[str
 
 def _task_to_dict(task) -> dict[str, Any]:
     return {
-        "task_id": getattr(task, 'id', str(task)),
-        "title": getattr(task, 'name', ''),
-        "description": getattr(task, 'description', None),
-        "status": task.status.value if hasattr(task.status, 'value') else str(task.status),
-        "priority": task.priority.value if hasattr(task, 'priority') and hasattr(task.priority, 'value') else "NORMAL",
-        "created_at": str(getattr(task, 'created_at', '')),
-        "updated_at": str(getattr(task, 'updated_at', '')),
-        "model_id": (task.metadata or {}).get("model_id") if hasattr(task, 'metadata') else None,
-        "node_id": (task.metadata or {}).get("node_id") if hasattr(task, 'metadata') else None,
-        "execution_route": (task.metadata or {}).get("execution_route") if hasattr(task, 'metadata') else None,
-        "progress_pct": getattr(task, 'progress', 0.0),
-        "current_step": getattr(task, 'current_step', None),
-        "step_index": getattr(task, 'step_index', 0),
-        "total_steps": getattr(task, 'total_steps', 0),
-        "error": getattr(task, 'error', None),
-        "artifacts": getattr(task, 'artifacts', []),
-        "parent_task_id": (task.metadata or {}).get("retry_of") if hasattr(task, 'metadata') else None,
-        "correlation_id": (task.metadata or {}).get("correlation_id") if hasattr(task, 'metadata') else None,
-        "tags": (task.metadata or {}).get("tags", []) if hasattr(task, 'metadata') else [],
-        "metadata": task.metadata if hasattr(task, 'metadata') else {},
+        "task_id": getattr(task, "id", str(task)),
+        "title": getattr(task, "name", ""),
+        "description": getattr(task, "description", None),
+        "status": task.status.value
+        if hasattr(task.status, "value")
+        else str(task.status),
+        "priority": task.priority.value
+        if hasattr(task, "priority") and hasattr(task.priority, "value")
+        else "NORMAL",
+        "created_at": str(getattr(task, "created_at", "")),
+        "updated_at": str(getattr(task, "updated_at", "")),
+        "model_id": (task.metadata or {}).get("model_id")
+        if hasattr(task, "metadata")
+        else None,
+        "node_id": (task.metadata or {}).get("node_id")
+        if hasattr(task, "metadata")
+        else None,
+        "execution_route": (task.metadata or {}).get("execution_route")
+        if hasattr(task, "metadata")
+        else None,
+        "progress_pct": getattr(task, "progress", 0.0),
+        "current_step": getattr(task, "current_step", None),
+        "step_index": getattr(task, "step_index", 0),
+        "total_steps": getattr(task, "total_steps", 0),
+        "error": getattr(task, "error", None),
+        "artifacts": getattr(task, "artifacts", []),
+        "parent_task_id": (task.metadata or {}).get("retry_of")
+        if hasattr(task, "metadata")
+        else None,
+        "correlation_id": (task.metadata or {}).get("correlation_id")
+        if hasattr(task, "metadata")
+        else None,
+        "tags": (task.metadata or {}).get("tags", [])
+        if hasattr(task, "metadata")
+        else [],
+        "metadata": task.metadata if hasattr(task, "metadata") else {},
     }
 
 
@@ -546,16 +672,28 @@ def handle_list_tasks_ctrl(params: dict[str, Any] | None = None) -> dict[str, An
     status_filter = params.get("status")
     try:
         from nous_runtime.task.manager import TaskManager
+
         tasks = TaskManager().list()
         if status_filter:
-            tasks = [t for t in tasks if (t.status.value if hasattr(t.status, 'value') else str(t.status)) == status_filter]
+            tasks = [
+                t
+                for t in tasks
+                if (t.status.value if hasattr(t.status, "value") else str(t.status))
+                == status_filter
+            ]
         task_dicts = [_task_to_dict(t) for t in tasks]
         status_counts: dict[str, int] = {}
         for t in tasks:
-            s = t.status.value if hasattr(t.status, 'value') else str(t.status)
+            s = t.status.value if hasattr(t.status, "value") else str(t.status)
             status_counts[s] = status_counts.get(s, 0) + 1
         result = _paginate(task_dicts, page, page_size)
-        return ok_response({"tasks": result["items"], "pagination": result["pagination"], "status_counts": status_counts})
+        return ok_response(
+            {
+                "tasks": result["items"],
+                "pagination": result["pagination"],
+                "status_counts": status_counts,
+            }
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
@@ -567,8 +705,10 @@ def handle_create_task(body: dict) -> dict[str, Any]:
         return err_response("NOUS_VALIDATION_ERROR", "title is required")
     try:
         from nous_runtime.task.manager import TaskManager
+
         task = TaskManager().create(
-            name=title, description=body.get("description", ""),
+            name=title,
+            description=body.get("description", ""),
             priority=body.get("priority", "NORMAL"),
             metadata={
                 "model_id": body.get("model_id"),
@@ -591,6 +731,7 @@ def handle_get_task(task_id: str) -> dict[str, Any]:
     """GET /api/v1/tasks/{task_id}"""
     try:
         from nous_runtime.task.manager import TaskManager
+
         task = TaskManager().get(task_id)
         if not task:
             return err_response("NOUS_NOT_FOUND", f"Task {task_id} not found")
@@ -607,20 +748,26 @@ def handle_task_analyze(body: dict) -> dict[str, Any]:
     try:
         from nous_runtime.intelligence.engine import RuntimePolicyEngine
         from nous_runtime.intelligence.models import DecisionRequest
+
         # Try to get a real decision
         engine = RuntimePolicyEngine()
         try:
-            decision = engine.decide(DecisionRequest(
-                decision_type="task_routing",
-                context={"input_text": input_text, **(body.get("context") or {})},
-                constraints=body.get("constraints") or {},
-            ))
-            decision_id = getattr(decision, 'decision_id', '')
-            candidates = getattr(decision, 'candidates', []) or []
-            suggested = [c if isinstance(c, str) else getattr(c, 'model_id', str(c)) for c in candidates[:5]]
+            decision = engine.decide(
+                DecisionRequest(
+                    decision_type="task_routing",
+                    context={"input_text": input_text, **(body.get("context") or {})},
+                    constraints=body.get("constraints") or {},
+                )
+            )
+            decision_id = getattr(decision, "decision_id", "")
+            candidates = getattr(decision, "candidates", []) or []
+            suggested = [
+                c if isinstance(c, str) else getattr(c, "model_id", str(c))
+                for c in candidates[:5]
+            ]
             required_caps = []
             for c in candidates:
-                caps = getattr(c, 'capabilities', [])
+                caps = getattr(c, "capabilities", [])
                 if caps:
                     required_caps.extend(caps)
         except Exception:
@@ -643,18 +790,21 @@ def handle_task_analyze(body: dict) -> dict[str, Any]:
         }
         return ok_response(analysis)
     except ImportError:
-        return ok_response({
-            "analysis_id": f"analysis_{input_text[:30]}",
-            "intent": _classify_intent(input_text),
-            "complexity": _estimate_complexity(input_text),
-            "required_capabilities": ["model.reason"],
-            "suggested_models": [], "suggested_nodes": [],
-            "suggested_route": _suggest_route(input_text, body),
-            "estimated_steps": _estimate_steps(input_text),
-            "risks": _identify_risks(input_text),
-            "requires_approval": _needs_approval(input_text),
-            "raw_analysis": {},
-        })
+        return ok_response(
+            {
+                "analysis_id": f"analysis_{input_text[:30]}",
+                "intent": _classify_intent(input_text),
+                "complexity": _estimate_complexity(input_text),
+                "required_capabilities": ["model.reason"],
+                "suggested_models": [],
+                "suggested_nodes": [],
+                "suggested_route": _suggest_route(input_text, body),
+                "estimated_steps": _estimate_steps(input_text),
+                "risks": _identify_risks(input_text),
+                "requires_approval": _needs_approval(input_text),
+                "raw_analysis": {},
+            }
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
@@ -672,58 +822,75 @@ def handle_task_plan(body: dict) -> dict[str, Any]:
     try:
         from nous_runtime.intelligence.scheduler import DeterministicScheduler
         from nous_runtime.intelligence.models import SchedulingRequest
+
         scheduler = DeterministicScheduler()
-        sched_result = scheduler.schedule(SchedulingRequest(
-            task_description=input_text,
-            preferred_model=model_id,
-            preferred_node=node_id,
-            route=route,
-            constraints=overrides,
-        ))
+        sched_result = scheduler.schedule(
+            SchedulingRequest(
+                task_description=input_text,
+                preferred_model=model_id,
+                preferred_node=node_id,
+                route=route,
+                constraints=overrides,
+            )
+        )
         steps = []
-        if hasattr(sched_result, 'plan') and sched_result.plan:
+        if hasattr(sched_result, "plan") and sched_result.plan:
             steps = sched_result.plan
-        excluded = getattr(sched_result, 'rejected_alternatives', []) or []
-        return ok_response({
-            "plan_id": f"plan_{analysis_id}" if analysis_id else f"plan_{input_text[:20]}",
-            "task_title": input_text or "Untitled Task",
-            "steps": steps,
-            "selected_model": model_id or getattr(sched_result, 'selected_model_id', None),
-            "selected_node": node_id or getattr(sched_result, 'selected_node_id', None),
-            "selected_route": route,
-            "excluded_models": [_adapt_exclusion(e) for e in excluded],
-            "excluded_nodes": [],
-            "constraints": overrides,
-            "risks": _identify_risks(input_text),
-            "requires_approval": _needs_approval(input_text),
-            "estimated_time_seconds": getattr(sched_result, 'estimated_time_s', None),
-            "estimated_cost_usd": getattr(sched_result, 'estimated_cost_usd', None),
-            "estimated_resources": getattr(sched_result, 'resource_estimate', {}) or {},
-        })
+        excluded = getattr(sched_result, "rejected_alternatives", []) or []
+        return ok_response(
+            {
+                "plan_id": f"plan_{analysis_id}"
+                if analysis_id
+                else f"plan_{input_text[:20]}",
+                "task_title": input_text or "Untitled Task",
+                "steps": steps,
+                "selected_model": model_id
+                or getattr(sched_result, "selected_model_id", None),
+                "selected_node": node_id
+                or getattr(sched_result, "selected_node_id", None),
+                "selected_route": route,
+                "excluded_models": [_adapt_exclusion(e) for e in excluded],
+                "excluded_nodes": [],
+                "constraints": overrides,
+                "risks": _identify_risks(input_text),
+                "requires_approval": _needs_approval(input_text),
+                "estimated_time_seconds": getattr(
+                    sched_result, "estimated_time_s", None
+                ),
+                "estimated_cost_usd": getattr(sched_result, "estimated_cost_usd", None),
+                "estimated_resources": getattr(sched_result, "resource_estimate", {})
+                or {},
+            }
+        )
     except (ImportError, Exception):
         # Fallback: reasonable plan from heuristics
-        return ok_response({
-            "plan_id": f"plan_{analysis_id}" if analysis_id else f"plan_{input_text[:20]}",
-            "task_title": input_text or "Untitled Task",
-            "steps": _generate_plan_steps(input_text, route),
-            "selected_model": model_id,
-            "selected_node": node_id,
-            "selected_route": route,
-            "excluded_models": [],
-            "excluded_nodes": [],
-            "constraints": overrides,
-            "risks": _identify_risks(input_text),
-            "requires_approval": _needs_approval(input_text),
-            "estimated_time_seconds": _estimate_time(input_text),
-            "estimated_cost_usd": _estimate_cost(input_text),
-            "estimated_resources": {"cpu_cores": 1, "memory_mb": 512},
-        })
+        return ok_response(
+            {
+                "plan_id": f"plan_{analysis_id}"
+                if analysis_id
+                else f"plan_{input_text[:20]}",
+                "task_title": input_text or "Untitled Task",
+                "steps": _generate_plan_steps(input_text, route),
+                "selected_model": model_id,
+                "selected_node": node_id,
+                "selected_route": route,
+                "excluded_models": [],
+                "excluded_nodes": [],
+                "constraints": overrides,
+                "risks": _identify_risks(input_text),
+                "requires_approval": _needs_approval(input_text),
+                "estimated_time_seconds": _estimate_time(input_text),
+                "estimated_cost_usd": _estimate_cost(input_text),
+                "estimated_resources": {"cpu_cores": 1, "memory_mb": 512},
+            }
+        )
 
 
 def handle_task_approve(task_id: str, body: dict) -> dict[str, Any]:
     approved = body.get("approved", True)
     try:
         from nous_runtime.task.manager import TaskManager
+
         manager = TaskManager()
         manager.require(task_id)
         target = "RUNNING" if approved else "CANCELLED"
@@ -736,6 +903,7 @@ def handle_task_approve(task_id: str, body: dict) -> dict[str, Any]:
 def handle_task_pause(task_id: str, body: dict | None = None) -> dict[str, Any]:
     try:
         from nous_runtime.task.manager import TaskManager
+
         TaskManager().transition(task_id, "PAUSED")
         return ok_response({"task_id": task_id, "status": "PAUSED"})
     except Exception as e:
@@ -745,6 +913,7 @@ def handle_task_pause(task_id: str, body: dict | None = None) -> dict[str, Any]:
 def handle_task_resume(task_id: str, body: dict | None = None) -> dict[str, Any]:
     try:
         from nous_runtime.task.manager import TaskManager
+
         TaskManager().transition(task_id, "RUNNING")
         return ok_response({"task_id": task_id, "status": "RUNNING"})
     except Exception as e:
@@ -754,6 +923,7 @@ def handle_task_resume(task_id: str, body: dict | None = None) -> dict[str, Any]
 def handle_task_cancel(task_id: str, body: dict | None = None) -> dict[str, Any]:
     try:
         from nous_runtime.task.manager import TaskManager
+
         TaskManager().transition(task_id, "CANCELLED")
         return ok_response({"task_id": task_id, "status": "CANCELLED"})
     except Exception as e:
@@ -763,6 +933,7 @@ def handle_task_cancel(task_id: str, body: dict | None = None) -> dict[str, Any]
 def handle_task_retry(task_id: str, body: dict | None = None) -> dict[str, Any]:
     try:
         from nous_runtime.task.manager import TaskManager
+
         manager = TaskManager()
         task = manager.require(task_id)
         new_task = manager.create(
@@ -771,24 +942,42 @@ def handle_task_retry(task_id: str, body: dict | None = None) -> dict[str, Any]:
             priority=task.priority,
             metadata={"retry_of": task_id, **(task.metadata or {})},
         )
-        return ok_response({"original_task_id": task_id, "retry_task_id": new_task.id, "status": "CREATED"})
+        return ok_response(
+            {
+                "original_task_id": task_id,
+                "retry_task_id": new_task.id,
+                "status": "CREATED",
+            }
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
 
-def handle_task_events(task_id: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+def handle_task_events(
+    task_id: str, params: dict[str, Any] | None = None
+) -> dict[str, Any]:
     params = params or {}
     page, page_size, _, _ = _parse_pagination(params)
     try:
         from nous_runtime.events.bus import get_event_bus
+
         events = get_event_bus().query(task_id=task_id)
         result = _paginate(events, page, page_size)
-        return ok_response({
-            "events": result["items"], "pagination": result["pagination"],
-            "latest_sequence": events[-1].get("sequence", 0) if events else 0,
-        })
+        return ok_response(
+            {
+                "events": result["items"],
+                "pagination": result["pagination"],
+                "latest_sequence": events[-1].get("sequence", 0) if events else 0,
+            }
+        )
     except ImportError:
-        return ok_response({"events": [], "pagination": _paginate([], 1, 50)["pagination"], "latest_sequence": 0})
+        return ok_response(
+            {
+                "events": [],
+                "pagination": _paginate([], 1, 50)["pagination"],
+                "latest_sequence": 0,
+            }
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
@@ -796,9 +985,15 @@ def handle_task_events(task_id: str, params: dict[str, Any] | None = None) -> di
 def handle_task_artifacts(task_id: str) -> dict[str, Any]:
     try:
         from nous_runtime.artifact.registry import ArtifactRegistry
+
         artifacts = [
-            {"id": a.id, "type": a.type.value if hasattr(a.type, 'value') else str(a.type),
-             "name": a.name, "location": a.location, "created_at": str(a.created_at)}
+            {
+                "id": a.id,
+                "type": a.type.value if hasattr(a.type, "value") else str(a.type),
+                "name": a.name,
+                "location": a.location,
+                "created_at": str(a.created_at),
+            }
             for a in ArtifactRegistry().list()
             if (a.metadata or {}).get("task_id") == task_id
         ]
@@ -812,6 +1007,7 @@ def handle_task_report(task_id: str) -> dict[str, Any]:
     try:
         from nous_runtime.task.manager import TaskManager
         from nous_runtime.artifact.registry import ArtifactRegistry
+
         manager = TaskManager()
         task = manager.get(task_id)
         if not task:
@@ -819,8 +1015,12 @@ def handle_task_report(task_id: str) -> dict[str, Any]:
 
         # Collect real artifacts
         artifacts = [
-            {"id": a.id, "type": a.type.value if hasattr(a.type, 'value') else str(a.type),
-             "name": a.name, "location": a.location}
+            {
+                "id": a.id,
+                "type": a.type.value if hasattr(a.type, "value") else str(a.type),
+                "name": a.name,
+                "location": a.location,
+            }
             for a in ArtifactRegistry().list()
             if (a.metadata or {}).get("task_id") == task_id
         ]
@@ -828,21 +1028,23 @@ def handle_task_report(task_id: str) -> dict[str, Any]:
         # Get events for timing
         try:
             from nous_runtime.events.bus import get_event_bus
+
             events = get_event_bus().query(task_id=task_id)
             created = events[0]["timestamp"] if events else None
             completed = events[-1]["timestamp"] if events else None
             duration = 0.0
             if created and completed:
                 from datetime import datetime
+
                 try:
-                    dt1 = datetime.fromisoformat(created.replace('Z', '+00:00'))
-                    dt2 = datetime.fromisoformat(completed.replace('Z', '+00:00'))
+                    dt1 = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                    dt2 = datetime.fromisoformat(completed.replace("Z", "+00:00"))
                     duration = (dt2 - dt1).total_seconds()
                 except Exception:
                     pass
         except Exception:
-            created = str(getattr(task, 'created_at', ''))
-            completed = str(getattr(task, 'updated_at', ''))
+            created = str(getattr(task, "created_at", ""))
+            completed = str(getattr(task, "updated_at", ""))
             duration = 0.0
 
         # Check verification
@@ -852,26 +1054,40 @@ def handle_task_report(task_id: str) -> dict[str, Any]:
                 verification = {"artifact_id": a["id"], "status": "completed"}
                 break
 
-        status = task.status.value if hasattr(task.status, 'value') else str(task.status)
-        return ok_response({
-            "task_id": task_id, "status": status,
-            "summary": f"Task: {getattr(task, 'name', task_id)}",
-            "steps_completed": getattr(task, 'step_index', 0),
-            "total_steps": getattr(task, 'total_steps', 0),
-            "duration_seconds": duration,
-            "model_used": (task.metadata or {}).get("model_id") if hasattr(task, 'metadata') else None,
-            "node_used": (task.metadata or {}).get("node_id") if hasattr(task, 'metadata') else None,
-            "artifacts": artifacts,
-            "verification": verification,
-            "cost_usd": (task.metadata or {}).get("cost_usd", 0) if hasattr(task, 'metadata') else 0,
-            "tokens_used": (task.metadata or {}).get("tokens_used", 0) if hasattr(task, 'metadata') else 0,
-            "errors": [getattr(task, 'error', '')] if getattr(task, 'error', None) else [],
-            "created_at": created,
-            "completed_at": completed,
-        })
+        status = (
+            task.status.value if hasattr(task.status, "value") else str(task.status)
+        )
+        return ok_response(
+            {
+                "task_id": task_id,
+                "status": status,
+                "summary": f"Task: {getattr(task, 'name', task_id)}",
+                "steps_completed": getattr(task, "step_index", 0),
+                "total_steps": getattr(task, "total_steps", 0),
+                "duration_seconds": duration,
+                "model_used": (task.metadata or {}).get("model_id")
+                if hasattr(task, "metadata")
+                else None,
+                "node_used": (task.metadata or {}).get("node_id")
+                if hasattr(task, "metadata")
+                else None,
+                "artifacts": artifacts,
+                "verification": verification,
+                "cost_usd": (task.metadata or {}).get("cost_usd", 0)
+                if hasattr(task, "metadata")
+                else 0,
+                "tokens_used": (task.metadata or {}).get("tokens_used", 0)
+                if hasattr(task, "metadata")
+                else 0,
+                "errors": [getattr(task, "error", "")]
+                if getattr(task, "error", None)
+                else [],
+                "created_at": created,
+                "completed_at": completed,
+            }
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
-
 
 
 # Conversations — uses conversation.store.ConversationStore (real API)
@@ -883,6 +1099,7 @@ def _get_workspace_and_owner() -> tuple[str, str]:
     owner_id = "local-user"
     try:
         from nous_runtime.kernel.config import get_config
+
         cfg = get_config()
         workspace_id = cfg.data_dir or os.path.join(os.getcwd(), ".nous")
         owner_id = cfg.server_name or "local-user"
@@ -903,6 +1120,8 @@ def _conversation_message_to_api(message) -> dict[str, Any]:
         "content": str(getattr(message, "content", "")),
         "model_id": str(metadata.get("model_id") or ""),
         "trace_id": str(metadata.get("trace_id") or getattr(message, "event_id", "")),
+        "run_id": str(getattr(message, "run_id", "")),
+        "task_id": str(getattr(message, "task_id", "")),
         "cards": [],
         "schema_version": "1.0.0",
         "created_at": created_at,
@@ -936,13 +1155,20 @@ def handle_list_conversations(params: dict[str, Any] | None = None) -> dict[str,
     page, page_size, _, _ = _parse_pagination(params)
     try:
         from nous_runtime.conversation.store import ConversationStore
+
         store = ConversationStore(root=os.environ.get("NOUS_WORKSPACE_ROOT", "."))
         conversations = store.list(limit=500)
-        conv_dicts = [_conversation_to_api(store, conversation) for conversation in conversations]
+        conv_dicts = [
+            _conversation_to_api(store, conversation) for conversation in conversations
+        ]
         result = _paginate(conv_dicts, page, page_size)
-        return ok_response({"conversations": result["items"], "pagination": result["pagination"]})
+        return ok_response(
+            {"conversations": result["items"], "pagination": result["pagination"]}
+        )
     except ImportError:
-        return ok_response({"conversations": [], "pagination": _paginate([], 1, 50)["pagination"]})
+        return ok_response(
+            {"conversations": [], "pagination": _paginate([], 1, 50)["pagination"]}
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
@@ -951,18 +1177,25 @@ def handle_create_conversation(body: dict) -> dict[str, Any]:
     workspace_id, owner_id = _get_workspace_and_owner()
     try:
         from nous_runtime.conversation.store import ConversationStore
+
         store = ConversationStore(root=os.environ.get("NOUS_WORKSPACE_ROOT", "."))
         conv = store.create(
-            workspace_id=workspace_id, owner_id=owner_id,
+            workspace_id=workspace_id,
+            owner_id=owner_id,
             title=body.get("title") or "",
         )
         return ok_response(_conversation_to_api(store, conv))
     except ImportError:
         import uuid
-        return ok_response({
-            "conversation_id": f"conv_{uuid.uuid4().hex[:12]}",
-            "title": body.get("title"), "created_at": "", "message_count": 0,
-        })
+
+        return ok_response(
+            {
+                "conversation_id": f"conv_{uuid.uuid4().hex[:12]}",
+                "title": body.get("title"),
+                "created_at": "",
+                "message_count": 0,
+            }
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
@@ -970,10 +1203,13 @@ def handle_create_conversation(body: dict) -> dict[str, Any]:
 def handle_get_conversation(conversation_id: str) -> dict[str, Any]:
     try:
         from nous_runtime.conversation.store import ConversationStore
+
         store = ConversationStore(root=os.environ.get("NOUS_WORKSPACE_ROOT", "."))
         conv = store.get(conversation_id)
         if not conv:
-            return err_response("NOUS_NOT_FOUND", f"Conversation {conversation_id} not found")
+            return err_response(
+                "NOUS_NOT_FOUND", f"Conversation {conversation_id} not found"
+            )
         data = _conversation_to_api(store, conv)
         data["messages"] = [
             _conversation_message_to_api(message)
@@ -981,7 +1217,9 @@ def handle_get_conversation(conversation_id: str) -> dict[str, Any]:
         ]
         return ok_response(data)
     except ImportError:
-        return err_response("NOUS_NOT_FOUND", f"Conversation {conversation_id} not found")
+        return err_response(
+            "NOUS_NOT_FOUND", f"Conversation {conversation_id} not found"
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
@@ -994,14 +1232,21 @@ def handle_create_message(conversation_id: str, body: dict) -> dict[str, Any]:
     try:
         from nous_runtime.conversation.models import ConversationMessage
         from nous_runtime.conversation.store import ConversationStore
+
         store = ConversationStore(root=os.environ.get("NOUS_WORKSPACE_ROOT", "."))
         message = store.append(ConversationMessage(conversation_id, role, content))
         return ok_response(_conversation_message_to_api(message))
     except ImportError:
-        return ok_response({"conversation_id": conversation_id, "role": role, "content": content, "timestamp": ""})
+        return ok_response(
+            {
+                "conversation_id": conversation_id,
+                "role": role,
+                "content": content,
+                "timestamp": "",
+            }
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
-
 
 
 # Inspector
@@ -1011,32 +1256,45 @@ def handle_inspector_snapshot() -> dict[str, Any]:
     try:
         from datetime import datetime, timezone
         from nous_runtime.runtime.lifecycle import Runtime
+
         r = Runtime()
         s = r.status()
 
         providers = []
         try:
             from nous_runtime.provider.registry import ProviderRegistry
+
             for p in ProviderRegistry().list_all():
-                providers.append({
-                    "provider_id": p.get("id", "unknown"),
-                    "name": p.get("name", p.get("id", "")),
-                    "status": p.get("health", {}).get("status", "unknown"),
-                    "capabilities": p.get("capabilities", []), "models": 0,
-                })
+                providers.append(
+                    {
+                        "provider_id": p.get("id", "unknown"),
+                        "name": p.get("name", p.get("id", "")),
+                        "status": p.get("health", {}).get("status", "unknown"),
+                        "capabilities": p.get("capabilities", []),
+                        "models": 0,
+                    }
+                )
         except Exception:
             pass
 
         tasks = []
         try:
             from nous_runtime.task.manager import TaskManager
+
             for t in TaskManager().list():
-                tasks.append({
-                    "task_id": t.id, "title": t.name,
-                    "status": t.status.value if hasattr(t.status, 'value') else str(t.status),
-                    "priority": t.priority.value if hasattr(t.priority, 'value') else "NORMAL",
-                    "progress_pct": getattr(t, 'progress', 0.0),
-                })
+                tasks.append(
+                    {
+                        "task_id": t.id,
+                        "title": t.name,
+                        "status": t.status.value
+                        if hasattr(t.status, "value")
+                        else str(t.status),
+                        "priority": t.priority.value
+                        if hasattr(t.priority, "value")
+                        else "NORMAL",
+                        "progress_pct": getattr(t, "progress", 0.0),
+                    }
+                )
         except Exception:
             pass
 
@@ -1044,34 +1302,47 @@ def handle_inspector_snapshot() -> dict[str, Any]:
         try:
             NodeRegistry = _get_node_registry()
             for n in NodeRegistry.list_all():
-                nodes.append({
-                    "node_id": n.get("node_id", ""),
-                    "node_name": n.get("node_name", ""),
-                    "online": bool(n.get("is_online", False)),
-                    "enabled": bool(n.get("is_online", False)),
-                    "capabilities": n.get("capabilities", []),
-                    "current_tasks": 0,
-                    "last_heartbeat": n.get("last_seen"),
-                })
+                nodes.append(
+                    {
+                        "node_id": n.get("node_id", ""),
+                        "node_name": n.get("node_name", ""),
+                        "online": bool(n.get("is_online", False)),
+                        "enabled": bool(n.get("is_online", False)),
+                        "capabilities": n.get("capabilities", []),
+                        "current_tasks": 0,
+                        "last_heartbeat": n.get("last_seen"),
+                    }
+                )
         except Exception:
             pass
 
-        return ok_response({
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "runtime": {
-                "version": s.version, "running": s.running, "demo_mode": s.demo_mode,
-                "uptime_seconds": getattr(s, 'uptime_seconds', 0),
-                "providers_count": len(providers), "capabilities_count": s.capabilities,
-                "nodes_count": len(nodes), "tasks_pending": getattr(s, 'jobs_pending', 0),
-                "tasks_running": sum(1 for t in tasks if t.get("status") == "running"),
-                "workspace_path": "", "errors": [],
-            },
-            "providers": providers, "tasks": tasks, "nodes": nodes,
-            "metrics": None, "diagnostics": [],
-        })
+        return ok_response(
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "runtime": {
+                    "version": s.version,
+                    "running": s.running,
+                    "demo_mode": s.demo_mode,
+                    "uptime_seconds": getattr(s, "uptime_seconds", 0),
+                    "providers_count": len(providers),
+                    "capabilities_count": s.capabilities,
+                    "nodes_count": len(nodes),
+                    "tasks_pending": getattr(s, "jobs_pending", 0),
+                    "tasks_running": sum(
+                        1 for t in tasks if t.get("status") == "running"
+                    ),
+                    "workspace_path": "",
+                    "errors": [],
+                },
+                "providers": providers,
+                "tasks": tasks,
+                "nodes": nodes,
+                "metrics": None,
+                "diagnostics": [],
+            }
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
-
 
 
 # Decisions & Logs
@@ -1083,18 +1354,23 @@ def handle_list_decisions(params: dict[str, Any] | None = None) -> dict[str, Any
     try:
         from nous_runtime.intelligence.store import JsonlDecisionStore
         from nous_runtime.kernel.config import get_config
+
         cfg = get_config()
         store_path = os.path.join(cfg.data_dir or ".nous", "intelligence")
         if os.path.isdir(store_path):
             store = JsonlDecisionStore(store_path)
             records = store.list_recent(limit=page_size, offset=(page - 1) * page_size)
             result = _paginate(records, page, page_size)
-            return ok_response({"decisions": result["items"], "pagination": result["pagination"]})
+            return ok_response(
+                {"decisions": result["items"], "pagination": result["pagination"]}
+            )
     except ImportError:
         pass
     except Exception:
         pass
-    return ok_response({"decisions": [], "pagination": _paginate([], 1, 50)["pagination"]})
+    return ok_response(
+        {"decisions": [], "pagination": _paginate([], 1, 50)["pagination"]}
+    )
 
 
 def handle_logs(params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -1104,6 +1380,7 @@ def handle_logs(params: dict[str, Any] | None = None) -> dict[str, Any]:
     entries = []
     try:
         from nous_runtime.kernel.config import get_config
+
         log_dir = get_config().log_dir or ""
         if log_dir:
             log_file = os.path.join(log_dir, "nous.log")
@@ -1111,8 +1388,15 @@ def handle_logs(params: dict[str, Any] | None = None) -> dict[str, Any]:
                 with open(log_file, "r", encoding="utf-8", errors="replace") as f:
                     lines = f.readlines()[-2000:]
                     for line in lines:
-                        entries.append({"timestamp": "", "level": "INFO", "logger": "nous",
-                                       "message": line.strip(), "metadata": {}})
+                        entries.append(
+                            {
+                                "timestamp": "",
+                                "level": "INFO",
+                                "logger": "nous",
+                                "message": line.strip(),
+                                "metadata": {},
+                            }
+                        )
         if level_filter:
             entries = [e for e in entries if e["level"].upper() == level_filter.upper()]
     except Exception:
@@ -1122,8 +1406,13 @@ def handle_logs(params: dict[str, Any] | None = None) -> dict[str, Any]:
     for e in entries:
         lv = e.get("level", "INFO")
         levels[lv] = levels.get(lv, 0) + 1
-    return ok_response({"entries": result["items"], "pagination": result["pagination"], "levels": levels})
-
+    return ok_response(
+        {
+            "entries": result["items"],
+            "pagination": result["pagination"],
+            "levels": levels,
+        }
+    )
 
 
 # Heuristic helpers (used as supplement, not replacement, for analysis)
@@ -1131,7 +1420,18 @@ def handle_logs(params: dict[str, Any] | None = None) -> dict[str, Any]:
 
 def _classify_intent(text: str) -> str:
     t = text.lower()
-    if any(w in t for w in ["code", "program", "function", "debug", "fix", "implement", "refactor"]):
+    if any(
+        w in t
+        for w in [
+            "code",
+            "program",
+            "function",
+            "debug",
+            "fix",
+            "implement",
+            "refactor",
+        ]
+    ):
         return "code_task"
     if any(w in t for w in ["research", "analyze", "study", "investigate", "audit"]):
         return "research"
@@ -1189,8 +1489,21 @@ def _estimate_cost(text: str) -> float:
 
 
 def _needs_approval(text: str) -> bool:
-    sensitive = ["delete", "remove", "uninstall", "format", "wipe", "production",
-                 "deploy", "payment", "credit", "password", "secret", "sudo", "admin"]
+    sensitive = [
+        "delete",
+        "remove",
+        "uninstall",
+        "format",
+        "wipe",
+        "production",
+        "deploy",
+        "payment",
+        "credit",
+        "password",
+        "secret",
+        "sudo",
+        "admin",
+    ]
     return any(w in text.lower() for w in sensitive)
 
 
@@ -1230,22 +1543,33 @@ def _adapt_exclusion(alternative) -> dict[str, Any]:
     if isinstance(alternative, dict):
         return alternative
     return {
-        "model_id": getattr(alternative, 'model_id', str(alternative)),
-        "reason": getattr(alternative, 'rejection_reason', 'Not selected'),
+        "model_id": getattr(alternative, "model_id", str(alternative)),
+        "reason": getattr(alternative, "rejection_reason", "Not selected"),
     }
 
 
 def _generate_plan_steps(text: str, route: str = "standard") -> list[dict[str, Any]]:
     """Generate a reasonable default plan when scheduler is unavailable."""
     steps = [
-        {"step": 1, "phase": "analyze", "title": "分析任务需求" if any('一' <= c <= '鿿' for c in text) else "Analyze task requirements", "estimated_time_s": 5},
+        {
+            "step": 1,
+            "phase": "analyze",
+            "title": "分析任务需求"
+            if any("一" <= c <= "鿿" for c in text)
+            else "Analyze task requirements",
+            "estimated_time_s": 5,
+        },
         {"step": 2, "phase": "plan", "title": "制定执行计划", "estimated_time_s": 8},
-        {"step": 3, "phase": "execute", "title": "执行任务", "estimated_time_s": _estimate_time(text) * 0.6},
+        {
+            "step": 3,
+            "phase": "execute",
+            "title": "执行任务",
+            "estimated_time_s": _estimate_time(text) * 0.6,
+        },
         {"step": 4, "phase": "verify", "title": "验证结果", "estimated_time_s": 8},
         {"step": 5, "phase": "report", "title": "生成报告", "estimated_time_s": 4},
     ]
     return steps
-
 
 
 # Route Table — add to ROUTES in routes.py
@@ -1295,19 +1619,63 @@ CONTROL_PLANE_ROUTES = {
 }
 
 CONTROL_PLANE_GOVERNANCE = {
-    ("POST", "/api/v1/nodes/{node_id}/enable"): ("node.configure", "local_write", "reversible"),
-    ("POST", "/api/v1/nodes/{node_id}/disable"): ("node.configure", "local_write", "reversible"),
+    ("POST", "/api/v1/nodes/{node_id}/enable"): (
+        "node.configure",
+        "local_write",
+        "reversible",
+    ),
+    ("POST", "/api/v1/nodes/{node_id}/disable"): (
+        "node.configure",
+        "local_write",
+        "reversible",
+    ),
     ("POST", "/api/v1/providers"): ("provider.create", "local_write", "reversible"),
-    ("POST", "/api/v1/providers/validate"): ("provider.test", "read_only", "reversible"),
-    ("POST", "/api/v1/providers/{provider_id}/test"): ("provider.test", "read_only", "reversible"),
-    ("PATCH", "/api/v1/providers/{provider_id}"): ("provider.configure", "local_write", "reversible"),
-    ("DELETE", "/api/v1/providers/{provider_id}"): ("provider.remove", "destructive", "partially_reversible"),
+    ("POST", "/api/v1/providers/validate"): (
+        "provider.test",
+        "read_only",
+        "reversible",
+    ),
+    ("POST", "/api/v1/providers/{provider_id}/test"): (
+        "provider.test",
+        "read_only",
+        "reversible",
+    ),
+    ("PATCH", "/api/v1/providers/{provider_id}"): (
+        "provider.configure",
+        "local_write",
+        "reversible",
+    ),
+    ("DELETE", "/api/v1/providers/{provider_id}"): (
+        "provider.remove",
+        "destructive",
+        "partially_reversible",
+    ),
     ("POST", "/api/v1/tasks/analyze"): ("task.analyze", "local_read", "reversible"),
     ("POST", "/api/v1/tasks/plan"): ("task.plan", "local_read", "reversible"),
     ("POST", "/api/v1/tasks"): ("task.create", "local_write", "reversible"),
-    ("POST", "/api/v1/tasks/{task_id}/approve"): ("task.approve", "local_write", "reversible"),
-    ("POST", "/api/v1/tasks/{task_id}/pause"): ("task.pause", "local_write", "reversible"),
-    ("POST", "/api/v1/tasks/{task_id}/resume"): ("task.resume", "local_write", "reversible"),
-    ("POST", "/api/v1/tasks/{task_id}/cancel"): ("task.cancel", "local_write", "reversible"),
-    ("POST", "/api/v1/tasks/{task_id}/retry"): ("task.retry", "local_write", "reversible"),
+    ("POST", "/api/v1/tasks/{task_id}/approve"): (
+        "task.approve",
+        "local_write",
+        "reversible",
+    ),
+    ("POST", "/api/v1/tasks/{task_id}/pause"): (
+        "task.pause",
+        "local_write",
+        "reversible",
+    ),
+    ("POST", "/api/v1/tasks/{task_id}/resume"): (
+        "task.resume",
+        "local_write",
+        "reversible",
+    ),
+    ("POST", "/api/v1/tasks/{task_id}/cancel"): (
+        "task.cancel",
+        "local_write",
+        "reversible",
+    ),
+    ("POST", "/api/v1/tasks/{task_id}/retry"): (
+        "task.retry",
+        "local_write",
+        "reversible",
+    ),
 }

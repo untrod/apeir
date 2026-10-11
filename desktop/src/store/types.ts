@@ -57,6 +57,8 @@ export interface Message extends EntityBase {
   model_id?: string;
   trace_id?: string;
   tokens_used?: number;
+  run_id?: EntityId;
+  task_id?: EntityId;
   cards: RuntimeEventEnvelope[];
 }
 

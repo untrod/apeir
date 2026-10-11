@@ -20,6 +20,7 @@ import {
 } from "../lib/api";
 import { errorMessage } from "../lib/format";
 import { ChatView } from "./ChatView";
+import { ContextInspector } from "./ContextInspector";
 import type { RuntimeEventEnvelope } from "../store";
 import "./DeveloperWorkbench.css";
 
@@ -72,6 +73,9 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
   const [error, setError] = useState("");
   const [layout, setLayout] = useState(preferences);
   const [runs, setRuns] = useState<DeveloperRun[]>([]);
+  const [contextRuns, setContextRuns] = useState<DeveloperRun[]>([]);
+  const [runController, setRunController] = useState(getConfig().url);
+  const [contextView, setContextView] = useState<{ runId: string; controller: string } | null>(null);
   const [events, setEvents] = useState<Partial<RuntimeEventEnvelope>[]>([]);
   const [selectedRun, setSelectedRun] = useState("");
   const [pending, setPending] = useState<PendingAction | null>(null);
@@ -89,7 +93,10 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
       fetchCapabilityAvailability(), fetchDeveloperRuns(),
     ]);
     if (controller !== getConfig().url) throw new Error("Controller changed; reopen the original workspace.");
-    if (runRecords.status === "fulfilled") setRuns(runRecords.value.runs.filter(item => item.run_id.startsWith("workbench-")));
+    if (runRecords.status === "fulfilled") {
+      setRuns(runRecords.value.runs.filter(item => item.run_id.startsWith("workbench-")));
+      setContextRuns(runRecords.value.runs); setRunController(controller);
+    } else setContextRuns([]);
     if (filesResult.status === "fulfilled") setListing(filesResult.value);
     if (capabilityResult.status === "fulfilled") setCapabilities(capabilityResult.value);
     const failure = [filesResult, capabilityResult, runRecords].find((item) => item.status === "rejected");
@@ -260,6 +267,15 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
     </section>
 
     {error && <section style={{ ...panel, padding: space.md, color: colors.danger, background: colors.dangerSoft }}>{error}</section>}
+
+    <section aria-label="Recorded model input" style={{ ...panel, padding: space.md }}>
+      <label>Inspect recorded Run <select aria-label="Recorded input Run" style={{ ...input, maxWidth: "100%" }} value={contextView?.runId || ""} onChange={event => setContextView(event.target.value ? { runId: event.target.value, controller: runController } : null)}>
+        <option value="">Select a persisted Run</option>
+        {contextRuns.map(item => <option key={item.run_id} value={item.run_id}>{item.run_id} · {item.state}</option>)}
+      </select></label>
+      <p>Recent canonical Runtime Runs. Non-model or legacy Runs may have no input manifest; missing evidence remains UNKNOWN.</p>
+      {contextView && <ContextInspector {...contextView} onClose={() => setContextView(null)} />}
+    </section>
 
     <div className={`developer-columns ${layout.conversation ? "with-collaboration" : ""}`}>
       <aside style={{ ...panel, overflow: "hidden" }}>

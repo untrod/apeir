@@ -132,4 +132,15 @@ describe("existing workspace developer panel", () => {
     expect(await screen.findByText(/Outcome may be UNKNOWN/)).toBeInTheDocument();
     expect(runWorkbenchProfile).toHaveBeenCalledTimes(1); expect(runWorkbenchProfile).toHaveBeenCalledWith("pytest", "tests", 120);
   });
+
+  it("inspects a persisted non-workbench Run without calling a model or mutating files", async () => {
+    vi.mocked(fetchDeveloperRuns).mockResolvedValue({ runs: [{ run_id: "gateway-original", task_id: "task-original", state: "COMPLETED", current_step: "", total_steps: 0, completed_steps: 0, progress_pct: 0, created_at: "now", updated_at: "now", last_sequence: 3 }], total: 1 });
+    vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: "gateway-original", events: [], next_after_sequence: 0 });
+    render(<DeveloperWorkbench />);
+    await screen.findByRole("option", { name: "gateway-original · COMPLETED" });
+    fireEvent.change(screen.getByRole("combobox", { name: "Recorded input Run" }), { target: { value: "gateway-original" } });
+    expect(await screen.findByText(/no recorded model input/)).toBeInTheDocument();
+    expect(fetchRunEvents).toHaveBeenCalledWith("gateway-original", 0);
+    expect(writeWorkbenchFile).not.toHaveBeenCalled(); expect(runWorkbenchProfile).not.toHaveBeenCalled();
+  });
 });

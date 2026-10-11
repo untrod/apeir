@@ -99,6 +99,11 @@ Its October 11 product-wiring audit also distinguishes connected Runtime paths,
 corrected evidence views, configuration-only Automation endpoints and unfinished
 Workspace/Terminal/context experiences. These corrections do not promote overall
 product delivery beyond PARTIAL or qualify an installed native Desktop.
+The [actual-input inspector](docs/development/DEVELOPER_PLATFORM.md#inspecting-actual-model-input)
+now connects admitted Chat Gateway iterations to persisted message/tool manifests,
+file-read provenance and recorded usage. It does not complete multi-file model
+proposals, persistent Terminal, Workflow Recorder, native release or real hardware
+qualification; those product limits remain unchanged.
 
 ## Ordered software qualification and interoperability Gates
 
