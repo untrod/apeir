@@ -231,7 +231,7 @@ class WorkspaceToolRuntime:
         authorization_context: Mapping[str, Any] | None = None,
         governance_surface: str = "server",
     ) -> None:
-        self.guard = WorkspaceGuard(workspace)
+        self.guard = WorkspaceGuard(workspace, protect_runtime_state=True)
         self.root = Path(self.guard.root)
         self.allow_mutations = bool(allow_mutations)
         self.gate = gate or EffectGate()
@@ -503,6 +503,10 @@ class WorkspaceToolRuntime:
                 for part in relative.parts
             ):
                 continue
+            try:
+                self._path(str(item))
+            except ValueError:
+                continue
             entries.append(
                 {
                     "path": item.relative_to(self.root).as_posix(),
@@ -549,6 +553,10 @@ class WorkspaceToolRuntime:
         matches: list[dict[str, Any]] = []
         candidates = [root] if root.is_file() else root.rglob("*")
         for path in candidates:
+            try:
+                path = self._path(str(path))
+            except ValueError:
+                continue
             if not path.is_file() or path.stat().st_size > _MAX_READ_BYTES:
                 continue
             relative = path.relative_to(self.root)
@@ -592,6 +600,10 @@ class WorkspaceToolRuntime:
                 part in {".git", ".nous", "node_modules", "target", "__pycache__"}
                 for part in relative_to_workspace.parts
             ):
+                continue
+            try:
+                self._path(str(item))
+            except ValueError:
                 continue
             if not fnmatch(relative_to_root, pattern) and not fnmatch(
                 item.name, pattern

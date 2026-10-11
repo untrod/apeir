@@ -24,8 +24,42 @@ _MAX_FILES = 500
 _MAX_SCAN_FILES = 5_000
 _MAX_MATCHES = 200
 _MAX_OUTPUT_BYTES = 256 * 1024
-_IGNORED = {".git", ".nous", ".venv", "venv", "node_modules", "target", "dist", "build", "__pycache__", "artifacts"}
-_CODE_SUFFIXES = {".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".rs", ".go", ".java", ".c", ".cc", ".cpp", ".h", ".hpp", ".cs", ".json", ".toml", ".yaml", ".yml", ".md", ".txt"}
+_IGNORED = {
+    ".git",
+    ".nous",
+    ".venv",
+    "venv",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    "__pycache__",
+    "artifacts",
+}
+_CODE_SUFFIXES = {
+    ".py",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".rs",
+    ".go",
+    ".java",
+    ".c",
+    ".cc",
+    ".cpp",
+    ".h",
+    ".hpp",
+    ".cs",
+    ".json",
+    ".toml",
+    ".yaml",
+    ".yml",
+    ".md",
+    ".txt",
+}
 _PROFILE_NAMES = ("python", "python-compile", "pytest", "node", "cargo-test")
 
 
@@ -84,7 +118,9 @@ class DeveloperWorkbench:
     def __init__(self, workspace_root: str | Path):
         self.root = Path(workspace_root).expanduser().resolve()
         if not self.root.is_dir():
-            raise WorkbenchError("The active workspace does not exist or is not a directory.")
+            raise WorkbenchError(
+                "The active workspace does not exist or is not a directory."
+            )
         self.events = EventStream(str(self.root))
 
     @staticmethod
@@ -97,7 +133,11 @@ class DeveloperWorkbench:
             "cargo-test": shutil.which("cargo") or "",
         }
         return [
-            {"name": name, "available": bool(candidates[name]), "executable": candidates[name]}
+            {
+                "name": name,
+                "available": bool(candidates[name]),
+                "executable": candidates[name],
+            }
             for name in _PROFILE_NAMES
         ]
 
@@ -109,12 +149,16 @@ class DeveloperWorkbench:
         files: list[dict[str, Any]] = []
         for candidate in self._iter_files(base):
             relative = candidate.relative_to(self.root).as_posix()
-            files.append({
-                "path": relative,
-                "size_bytes": candidate.stat().st_size,
-                "modified_at": datetime.fromtimestamp(candidate.stat().st_mtime, timezone.utc).isoformat(),
-                "language": self._language(candidate.suffix),
-            })
+            files.append(
+                {
+                    "path": relative,
+                    "size_bytes": candidate.stat().st_size,
+                    "modified_at": datetime.fromtimestamp(
+                        candidate.stat().st_mtime, timezone.utc
+                    ).isoformat(),
+                    "language": self._language(candidate.suffix),
+                }
+            )
             if len(files) >= maximum:
                 break
         return {
@@ -134,7 +178,9 @@ class DeveloperWorkbench:
         try:
             content = data.decode("utf-8")
         except UnicodeDecodeError as exc:
-            raise WorkbenchError("The workbench currently supports UTF-8 text files only.") from exc
+            raise WorkbenchError(
+                "The workbench currently supports UTF-8 text files only."
+            ) from exc
         return {
             "path": self._relative(target),
             "content": content,
@@ -143,14 +189,18 @@ class DeveloperWorkbench:
             "language": self._language(target.suffix),
         }
 
-    def search(self, query: str, *, path: str = ".", limit: int = _MAX_MATCHES) -> dict[str, Any]:
+    def search(
+        self, query: str, *, path: str = ".", limit: int = _MAX_MATCHES
+    ) -> dict[str, Any]:
         needle = str(query or "").strip()
         if len(needle) < 2:
             raise WorkbenchError("Search query must contain at least two characters.")
         base = self._resolve(path, require_exists=True)
         maximum = max(1, min(int(limit), _MAX_MATCHES))
         matches: list[dict[str, Any]] = []
-        candidates: Iterable[Path] = [base] if base.is_file() else self._iter_files(base)
+        candidates: Iterable[Path] = (
+            [base] if base.is_file() else self._iter_files(base)
+        )
         for candidate in candidates:
             try:
                 data = self._read_bytes(candidate)
@@ -159,12 +209,30 @@ class DeveloperWorkbench:
                 continue
             for line_number, line in enumerate(lines, 1):
                 if needle.casefold() in line.casefold():
-                    matches.append({"path": self._relative(candidate), "line": line_number, "text": line[:500]})
+                    matches.append(
+                        {
+                            "path": self._relative(candidate),
+                            "line": line_number,
+                            "text": line[:500],
+                        }
+                    )
                     if len(matches) >= maximum:
-                        return {"query": needle, "matches": matches, "total": len(matches), "truncated": True}
-        return {"query": needle, "matches": matches, "total": len(matches), "truncated": False}
+                        return {
+                            "query": needle,
+                            "matches": matches,
+                            "total": len(matches),
+                            "truncated": True,
+                        }
+        return {
+            "query": needle,
+            "matches": matches,
+            "total": len(matches),
+            "truncated": False,
+        }
 
-    def preview_write(self, path: str, content: str, *, expected_sha256: str = "") -> dict[str, Any]:
+    def preview_write(
+        self, path: str, content: str, *, expected_sha256: str = ""
+    ) -> dict[str, Any]:
         target = self._write_target(path)
         encoded = str(content).encode("utf-8")
         if len(encoded) > _MAX_WRITE_BYTES:
@@ -172,21 +240,29 @@ class DeveloperWorkbench:
         before = self._read_bytes(target) if target.is_file() else b""
         before_hash = hashlib.sha256(before).hexdigest() if target.is_file() else ""
         if target.is_file() and not expected_sha256:
-            raise WorkbenchConflict("An expected SHA-256 is required when replacing an existing file.")
+            raise WorkbenchConflict(
+                "An expected SHA-256 is required when replacing an existing file."
+            )
         if expected_sha256 and expected_sha256 != before_hash:
-            raise WorkbenchConflict("The file changed after it was loaded; reload it before saving.")
+            raise WorkbenchConflict(
+                "The file changed after it was loaded; reload it before saving."
+            )
         try:
             before_text = before.decode("utf-8")
         except UnicodeDecodeError as exc:
-            raise WorkbenchError("The workbench currently supports UTF-8 text files only.") from exc
+            raise WorkbenchError(
+                "The workbench currently supports UTF-8 text files only."
+            ) from exc
         relative = self._relative(target)
-        diff = "\n".join(difflib.unified_diff(
-            before_text.splitlines(),
-            str(content).splitlines(),
-            fromfile=f"a/{relative}",
-            tofile=f"b/{relative}",
-            lineterm="",
-        ))
+        diff = "\n".join(
+            difflib.unified_diff(
+                before_text.splitlines(),
+                str(content).splitlines(),
+                fromfile=f"a/{relative}",
+                tofile=f"b/{relative}",
+                lineterm="",
+            )
+        )
         return {
             "path": relative,
             "exists": target.is_file(),
@@ -197,7 +273,9 @@ class DeveloperWorkbench:
             "diff": diff,
         }
 
-    def write_file(self, path: str, content: str, *, expected_sha256: str = "") -> dict[str, Any]:
+    def write_file(
+        self, path: str, content: str, *, expected_sha256: str = ""
+    ) -> dict[str, Any]:
         return self._write_file(
             path,
             content,
@@ -256,7 +334,9 @@ class DeveloperWorkbench:
         )
         try:
             if target.exists() and not target.is_dir():
-                raise WorkbenchConflict("The directory target already exists as a file.")
+                raise WorkbenchConflict(
+                    "The directory target already exists as a file."
+                )
             changed = not target.exists()
             target.mkdir(parents=True, exist_ok=True)
             change = self.change_record(
@@ -320,8 +400,13 @@ class DeveloperWorkbench:
             "workspace.remove",
             {"path": relative, "recovery": "backup"},
         )
-        backup = self.root / ".nous" / "backups" / "workbench" / run_id / Path(
-            *PurePosixPath(relative).parts
+        backup = (
+            self.root
+            / ".nous"
+            / "backups"
+            / "workbench"
+            / run_id
+            / Path(*PurePosixPath(relative).parts)
         )
         try:
             backup.parent.mkdir(parents=True, exist_ok=True)
@@ -366,7 +451,9 @@ class DeveloperWorkbench:
             {"path": preview["path"]},
         )
         if not preview["changed"]:
-            self.events.emit_state_change(run_id, RunState.COMPLETED, task_id=task_id, changed=False)
+            self.events.emit_state_change(
+                run_id, RunState.COMPLETED, task_id=task_id, changed=False
+            )
             change = self.change_record(
                 path=preview["path"],
                 operation=operation,
@@ -387,16 +474,29 @@ class DeveloperWorkbench:
         try:
             # Recheck immediately before mutation to close the preview/write race.
             current = self._read_bytes(target) if target.is_file() else b""
-            current_hash = hashlib.sha256(current).hexdigest() if target.is_file() else ""
+            current_hash = (
+                hashlib.sha256(current).hexdigest() if target.is_file() else ""
+            )
             if current_hash != preview["before_sha256"]:
-                raise WorkbenchConflict("The file changed while the save was being prepared; reload it.")
+                raise WorkbenchConflict(
+                    "The file changed while the save was being prepared; reload it."
+                )
             if target.is_file():
-                backup = self.root / ".nous" / "backups" / "workbench" / run_id / Path(*PurePosixPath(preview["path"]).parts)
+                backup = (
+                    self.root
+                    / ".nous"
+                    / "backups"
+                    / "workbench"
+                    / run_id
+                    / Path(*PurePosixPath(preview["path"]).parts)
+                )
                 backup.parent.mkdir(parents=True, exist_ok=True)
                 backup.write_bytes(current)
                 backup_path = backup.relative_to(self.root).as_posix()
             target.parent.mkdir(parents=True, exist_ok=True)
-            descriptor, temporary = tempfile.mkstemp(prefix=".nous-workbench-", dir=target.parent)
+            descriptor, temporary = tempfile.mkstemp(
+                prefix=".nous-workbench-", dir=target.parent
+            )
             try:
                 with os.fdopen(descriptor, "wb") as stream:
                     stream.write(encoded)
@@ -424,25 +524,41 @@ class DeveloperWorkbench:
                 "change": change,
             }
         except Exception as exc:
-            self.events.emit_state_change(run_id, RunState.FAILED, task_id=task_id, error=str(exc))
+            self.events.emit_state_change(
+                run_id, RunState.FAILED, task_id=task_id, error=str(exc)
+            )
             raise
 
-    def run_profile(self, profile: str, *, target: str = "", timeout_seconds: int = 60) -> dict[str, Any]:
+    def run_profile(
+        self, profile: str, *, target: str = "", timeout_seconds: int = 60
+    ) -> dict[str, Any]:
         name = str(profile or "").strip().lower()
         timeout = max(1, min(int(timeout_seconds), 300))
         argv, target_path, is_test = self._profile_command(name, target)
         run_id = self._new_run_id("exec")
         task_id = f"workspace.run:{name}"
-        self._start_run(run_id, task_id, "workspace.run", {"profile": name, "target": target_path})
-        self.events.emit(RunEvent(
-            run_id=run_id,
-            task_id=task_id,
-            event_type="command.started",
-            actor="developer.workbench",
-            payload={"profile": name, "argv": self._display_argv(argv), "cwd": "."},
-        ))
+        self._start_run(
+            run_id, task_id, "workspace.run", {"profile": name, "target": target_path}
+        )
+        self.events.emit(
+            RunEvent(
+                run_id=run_id,
+                task_id=task_id,
+                event_type="command.started",
+                actor="developer.workbench",
+                payload={"profile": name, "argv": self._display_argv(argv), "cwd": "."},
+            )
+        )
         if is_test:
-            self.events.emit(RunEvent(run_id=run_id, task_id=task_id, event_type="test.started", actor="developer.workbench", payload={"profile": name, "target": target_path}))
+            self.events.emit(
+                RunEvent(
+                    run_id=run_id,
+                    task_id=task_id,
+                    event_type="test.started",
+                    actor="developer.workbench",
+                    payload={"profile": name, "target": target_path},
+                )
+            )
         try:
             result = run_process_strict(
                 argv,
@@ -450,15 +566,20 @@ class DeveloperWorkbench:
                 timeout_seconds=timeout,
                 max_output_bytes=_MAX_OUTPUT_BYTES,
             )
-            for stream_name, text in (("stdout", result.stdout), ("stderr", result.stderr)):
+            for stream_name, text in (
+                ("stdout", result.stdout),
+                ("stderr", result.stderr),
+            ):
                 if text:
-                    self.events.emit_chunked(RunEvent(
-                        run_id=run_id,
-                        task_id=task_id,
-                        event_type="command.output",
-                        actor="developer.workbench",
-                        payload={"stream": stream_name, "text": text},
-                    ))
+                    self.events.emit_chunked(
+                        RunEvent(
+                            run_id=run_id,
+                            task_id=task_id,
+                            event_type="command.output",
+                            actor="developer.workbench",
+                            payload={"stream": stream_name, "text": text},
+                        )
+                    )
             result_payload = {
                 "profile": name,
                 "target": target_path,
@@ -473,9 +594,19 @@ class DeveloperWorkbench:
                 "unenforced_controls": list(result.unenforced_controls),
             }
             if is_test:
-                self.events.emit(RunEvent(run_id=run_id, task_id=task_id, event_type="test.completed", actor="developer.workbench", payload=result_payload))
+                self.events.emit(
+                    RunEvent(
+                        run_id=run_id,
+                        task_id=task_id,
+                        event_type="test.completed",
+                        actor="developer.workbench",
+                        payload=result_payload,
+                    )
+                )
             final_state = RunState.COMPLETED if result.ok else RunState.FAILED
-            self.events.emit_state_change(run_id, final_state, task_id=task_id, **result_payload)
+            self.events.emit_state_change(
+                run_id, final_state, task_id=task_id, **result_payload
+            )
             return {
                 **result_payload,
                 "run_id": run_id,
@@ -483,17 +614,25 @@ class DeveloperWorkbench:
                 "stderr": result.stderr,
             }
         except Exception as exc:
-            self.events.emit_state_change(run_id, RunState.FAILED, task_id=task_id, error=str(exc))
+            self.events.emit_state_change(
+                run_id, RunState.FAILED, task_id=task_id, error=str(exc)
+            )
             raise
 
-    def _profile_command(self, profile: str, target: str) -> tuple[list[str], str, bool]:
+    def _profile_command(
+        self, profile: str, target: str
+    ) -> tuple[list[str], str, bool]:
         if profile not in _PROFILE_NAMES:
-            raise WorkbenchError(f"Unknown execution profile: {profile}. Allowed: {', '.join(_PROFILE_NAMES)}")
+            raise WorkbenchError(
+                f"Unknown execution profile: {profile}. Allowed: {', '.join(_PROFILE_NAMES)}"
+            )
         if profile in {"python", "python-compile", "node", "pytest"}:
             default = "tests" if profile == "pytest" else ""
             value = str(target or default).strip()
             if not value:
-                raise WorkbenchError(f"The {profile} profile requires a workspace-relative target.")
+                raise WorkbenchError(
+                    f"The {profile} profile requires a workspace-relative target."
+                )
             resolved = self._resolve(value, require_exists=True)
             relative = self._relative(resolved)
         else:
@@ -504,7 +643,9 @@ class DeveloperWorkbench:
 
         if profile == "python":
             if not resolved.is_file() or resolved.suffix.casefold() != ".py":
-                raise WorkbenchError("The python profile requires an existing .py file.")
+                raise WorkbenchError(
+                    "The python profile requires an existing .py file."
+                )
             executable = _python_executable()
             if not executable:
                 raise WorkbenchError("Python is not installed or is not on PATH.")
@@ -523,8 +664,14 @@ class DeveloperWorkbench:
             executable = shutil.which("node")
             if not executable:
                 raise WorkbenchError("Node.js is not installed or is not on PATH.")
-            if not resolved.is_file() or resolved.suffix.casefold() not in {".js", ".mjs", ".cjs"}:
-                raise WorkbenchError("The node profile requires an existing .js, .mjs, or .cjs file.")
+            if not resolved.is_file() or resolved.suffix.casefold() not in {
+                ".js",
+                ".mjs",
+                ".cjs",
+            }:
+                raise WorkbenchError(
+                    "The node profile requires an existing .js, .mjs, or .cjs file."
+                )
             return [executable, relative], relative, False
         executable = shutil.which("cargo")
         if not executable:
@@ -533,11 +680,30 @@ class DeveloperWorkbench:
             raise WorkbenchError("Cargo.toml was not found at the workspace root.")
         return [executable, "test"], "", True
 
-    def _start_run(self, run_id: str, task_id: str, operation: str, payload: dict[str, Any]) -> None:
-        self.events.create_run(run_id, task_id=task_id, total_steps=1, metadata={"authority": "EventStream", "operation": operation})
-        self.events.emit_state_change(run_id, RunState.CREATED, task_id=task_id, operation=operation, **payload)
-        self.events.emit(RunEvent(run_id=run_id, task_id=task_id, event_type="command.proposed", actor="developer.workbench", payload={"operation": operation, **payload}))
-        self.events.emit_state_change(run_id, RunState.RUNNING, task_id=task_id, operation=operation)
+    def _start_run(
+        self, run_id: str, task_id: str, operation: str, payload: dict[str, Any]
+    ) -> None:
+        self.events.create_run(
+            run_id,
+            task_id=task_id,
+            total_steps=1,
+            metadata={"authority": "EventStream", "operation": operation},
+        )
+        self.events.emit_state_change(
+            run_id, RunState.CREATED, task_id=task_id, operation=operation, **payload
+        )
+        self.events.emit(
+            RunEvent(
+                run_id=run_id,
+                task_id=task_id,
+                event_type="command.proposed",
+                actor="developer.workbench",
+                payload={"operation": operation, **payload},
+            )
+        )
+        self.events.emit_state_change(
+            run_id, RunState.RUNNING, task_id=task_id, operation=operation
+        )
 
     def _resolve(self, value: str, *, require_exists: bool) -> Path:
         text = str(value or ".").replace("\\", "/")
@@ -545,9 +711,11 @@ class DeveloperWorkbench:
         if pure.is_absolute() or ".." in pure.parts:
             raise WorkbenchError("Path must remain relative to the active workspace.")
         try:
-            resolved = normalize_workspace_path(str(self.root), str(Path(*pure.parts)))
+            resolved = normalize_workspace_path(
+                str(self.root), str(Path(*pure.parts)), protect_runtime_state=True
+            )
         except PermissionError as exc:
-            raise WorkbenchError("Path escapes the active workspace.") from exc
+            raise WorkbenchError(str(exc)) from exc
         if require_exists and not resolved.exists():
             raise WorkbenchError(f"Workspace path does not exist: {text}")
         return resolved
@@ -574,7 +742,10 @@ class DeveloperWorkbench:
         relative = PurePosixPath(self._relative(target))
         if not allow_root and (not relative.parts or relative.as_posix() == "."):
             raise WorkbenchError("The workspace root cannot be mutated.")
-        if relative.parts[0] in {".git", ".nous"} or relative.as_posix() == "workspace.json":
+        if (
+            relative.parts[0] in {".git", ".nous"}
+            or relative.as_posix() == "workspace.json"
+        ):
             raise WorkbenchError("Git, Nous, and workspace metadata are protected.")
         return target
 
@@ -590,9 +761,13 @@ class DeveloperWorkbench:
         after_text = after.decode("utf-8", errors="replace").splitlines()
         added = 0
         removed = 0
-        for tag, before_start, before_end, after_start, after_end in difflib.SequenceMatcher(
-            None, before_text, after_text
-        ).get_opcodes():
+        for (
+            tag,
+            before_start,
+            before_end,
+            after_start,
+            after_end,
+        ) in difflib.SequenceMatcher(None, before_text, after_text).get_opcodes():
             if tag in {"replace", "delete"}:
                 removed += before_end - before_start
             if tag in {"replace", "insert"}:
@@ -600,8 +775,12 @@ class DeveloperWorkbench:
         return FileChange(
             path=path,
             operation=operation,
-            before_digest=("sha256:" + hashlib.sha256(before).hexdigest()) if before else "",
-            after_digest=("sha256:" + hashlib.sha256(after).hexdigest()) if after else "",
+            before_digest=("sha256:" + hashlib.sha256(before).hexdigest())
+            if before
+            else "",
+            after_digest=("sha256:" + hashlib.sha256(after).hexdigest())
+            if after
+            else "",
             lines_added=added,
             lines_removed=removed,
             timestamp=datetime.now(timezone.utc).isoformat(),
@@ -651,8 +830,9 @@ class DeveloperWorkbench:
                 if scanned > _MAX_SCAN_FILES:
                     return
                 try:
-                    resolved = candidate.resolve()
-                    resolved.relative_to(self.root)
+                    resolved = normalize_workspace_path(
+                        str(self.root), str(candidate), protect_runtime_state=True
+                    )
                 except (OSError, ValueError):
                     continue
                 if resolved.is_file():
@@ -679,5 +859,18 @@ class DeveloperWorkbench:
     @staticmethod
     def _language(suffix: str) -> str:
         value = suffix.casefold()
-        names = {".py": "python", ".js": "javascript", ".mjs": "javascript", ".cjs": "javascript", ".ts": "typescript", ".tsx": "typescript", ".rs": "rust", ".md": "markdown", ".json": "json", ".toml": "toml", ".yaml": "yaml", ".yml": "yaml"}
+        names = {
+            ".py": "python",
+            ".js": "javascript",
+            ".mjs": "javascript",
+            ".cjs": "javascript",
+            ".ts": "typescript",
+            ".tsx": "typescript",
+            ".rs": "rust",
+            ".md": "markdown",
+            ".json": "json",
+            ".toml": "toml",
+            ".yaml": "yaml",
+            ".yml": "yaml",
+        }
         return names.get(value, "text" if value in _CODE_SUFFIXES else "unknown")

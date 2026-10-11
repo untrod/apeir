@@ -22,6 +22,47 @@ requires_strong_sandbox = pytest.mark.skipif(
 )
 
 
+@pytest.mark.parametrize("reserved", [".nous", ".git", "nested/.NOUS"])
+def test_ordinary_agent_context_excludes_runtime_private_state(tmp_path, reserved):
+    private = tmp_path / reserved / "protected.txt"
+    private.parent.mkdir(parents=True)
+    private.write_text("FAKE_ONLY_PRIVATE_MARKER")
+    runtime = WorkspaceToolRuntime(str(tmp_path), allow_mutations=True)
+    for name, arguments in (
+        (
+            "read_file",
+            {"path": f"{reserved}/protected.txt", "protect_runtime_state": False},
+        ),
+        ("list_workspace", {"path": reserved}),
+        ("search_workspace", {"path": reserved, "query": "FAKE_ONLY"}),
+        ("find_workspace", {"path": reserved, "pattern": "*.txt"}),
+    ):
+        result = runtime.execute(name, arguments)
+        assert result["ok"] is False
+        assert "FAKE_ONLY_PRIVATE_MARKER" not in str(result)
+
+
+def test_agent_scan_and_read_exclude_aliases_into_private_state(tmp_path):
+    private = tmp_path / ".nous" / "protected.txt"
+    private.parent.mkdir()
+    private.write_text("FAKE_ONLY_PRIVATE_MARKER")
+    (tmp_path / "ordinary.txt").write_text("ordinary")
+    try:
+        (tmp_path / "alias.txt").symlink_to(private)
+    except OSError:
+        pytest.skip("This platform does not permit symlink creation")
+    runtime = WorkspaceToolRuntime(str(tmp_path))
+    assert runtime.execute("read_file", {"path": "alias.txt"})["ok"] is False
+    assert runtime.execute("search_workspace", {"query": "FAKE_ONLY"})["matches"] == []
+    assert [
+        entry["path"] for entry in runtime.execute("list_workspace", {})["entries"]
+    ] == ["ordinary.txt"]
+    assert [
+        entry["path"]
+        for entry in runtime.execute("find_workspace", {"pattern": "*.txt"})["matches"]
+    ] == ["ordinary.txt"]
+
+
 def test_nous_persona_hides_provider_identity(tmp_path: Path) -> None:
     prompt = nous_system_prompt(workspace=str(tmp_path), agent_mode="agent")
     assert "You are Nous" in prompt

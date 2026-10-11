@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from nous_runtime.api.developer_routes import (
     DEVELOPER_ROUTES,
     handle_developer_experiment_create,
@@ -20,6 +22,24 @@ from nous_runtime.api.routes import route
 from nous_runtime.events import EventStream, RunEvent
 
 
+@pytest.mark.parametrize("reserved", [".nous", ".git", "nested/.NOUS"])
+def test_workspace_file_api_keeps_private_state_out_of_ordinary_context(
+    tmp_path, monkeypatch, reserved
+):
+    monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(tmp_path))
+    private = tmp_path / reserved / "protected.txt"
+    private.parent.mkdir(parents=True)
+    private.write_text("FAKE_ONLY_PRIVATE_MARKER")
+    responses = (
+        handle_developer_workspace_file({"path": f"{reserved}/protected.txt"}),
+        handle_developer_workspace_search({"path": reserved, "q": "FAKE_ONLY"}),
+        handle_developer_workspace_files({"path": reserved}),
+    )
+    for response in responses:
+        assert response["ok"] is False
+        assert "FAKE_ONLY_PRIVATE_MARKER" not in str(response)
+
+
 def test_developer_route_contract_is_registered():
     assert ("GET", "/api/v1/developer/projects") in DEVELOPER_ROUTES
     assert ("GET", "/api/v1/developer/runs") in DEVELOPER_ROUTES
@@ -27,14 +47,25 @@ def test_developer_route_contract_is_registered():
     assert ("GET", "/api/v1/developer/workspace/files") in DEVELOPER_ROUTES
     assert ("POST", "/api/v1/developer/workspace/write") in DEVELOPER_ROUTES
     assert ("POST", "/api/v1/developer/workspace/run") in DEVELOPER_ROUTES
-    assert ("POST", "/api/v1/developer/experiments/{experiment_id}/evaluate") in DEVELOPER_ROUTES
+    assert (
+        "POST",
+        "/api/v1/developer/experiments/{experiment_id}/evaluate",
+    ) in DEVELOPER_ROUTES
 
 
 def test_run_center_reads_canonical_event_stream(tmp_path, monkeypatch):
     monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(tmp_path))
     stream = EventStream(str(tmp_path))
-    stream.emit(RunEvent(run_id="run_platform", task_id="task_platform", event_type="run.started"))
-    stream.emit(RunEvent(run_id="run_platform", task_id="task_platform", event_type="run.completed"))
+    stream.emit(
+        RunEvent(
+            run_id="run_platform", task_id="task_platform", event_type="run.started"
+        )
+    )
+    stream.emit(
+        RunEvent(
+            run_id="run_platform", task_id="task_platform", event_type="run.completed"
+        )
+    )
 
     response = handle_developer_runs()
 
@@ -45,7 +76,9 @@ def test_run_center_reads_canonical_event_stream(tmp_path, monkeypatch):
 
 def test_project_center_uses_durable_project_service(tmp_path, monkeypatch):
     monkeypatch.setenv("NOUS_DATA_DIR", str(tmp_path / "data"))
-    created = handle_developer_project_create({"name": "Kernel work", "description": "Ship evidence"})
+    created = handle_developer_project_create(
+        {"name": "Kernel work", "description": "Ship evidence"}
+    )
     project_id = created["data"]["project_id"]
 
     started = handle_developer_project_action(project_id, {"action": "start"})
@@ -56,7 +89,9 @@ def test_project_center_uses_durable_project_service(tmp_path, monkeypatch):
     assert listed["data"]["projects"][0]["project_id"] == project_id
 
 
-def test_model_lab_reports_empty_evidence_without_fabricating_metrics(tmp_path, monkeypatch):
+def test_model_lab_reports_empty_evidence_without_fabricating_metrics(
+    tmp_path, monkeypatch
+):
     monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(tmp_path))
 
     response = handle_developer_model_lab()
@@ -68,21 +103,29 @@ def test_model_lab_reports_empty_evidence_without_fabricating_metrics(tmp_path, 
 
 def test_experiment_api_requires_real_measurements(tmp_path, monkeypatch):
     monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(tmp_path))
-    created = handle_developer_experiment_create({
-        "hypothesis": "Candidate improves quality",
-        "baseline_name": "base",
-        "candidate_name": "candidate",
-    })
+    created = handle_developer_experiment_create(
+        {
+            "hypothesis": "Candidate improves quality",
+            "baseline_name": "base",
+            "candidate_name": "candidate",
+        }
+    )
     experiment_id = created["data"]["experiment_id"]
 
-    invalid = handle_developer_experiment_evaluate(experiment_id, {
-        "baseline_scores": [0.5],
-        "candidate_scores": [0.7],
-    })
-    valid = handle_developer_experiment_evaluate(experiment_id, {
-        "baseline_scores": [0.5, 0.5, 0.5, 0.5, 0.5],
-        "candidate_scores": [0.7, 0.7, 0.7, 0.7, 0.7],
-    })
+    invalid = handle_developer_experiment_evaluate(
+        experiment_id,
+        {
+            "baseline_scores": [0.5],
+            "candidate_scores": [0.7],
+        },
+    )
+    valid = handle_developer_experiment_evaluate(
+        experiment_id,
+        {
+            "baseline_scores": [0.5, 0.5, 0.5, 0.5, 0.5],
+            "candidate_scores": [0.7, 0.7, 0.7, 0.7, 0.7],
+        },
+    )
     snapshot = handle_developer_experiments()
 
     assert invalid["ok"] is False
@@ -107,16 +150,20 @@ def test_developer_workspace_api_read_search_preview_and_write(tmp_path, monkeyp
     listing = handle_developer_workspace_files({})
     read = handle_developer_workspace_file({"path": "hello.py"})
     search = handle_developer_workspace_search({"q": "before"})
-    preview = handle_developer_workspace_preview({
-        "path": "hello.py",
-        "content": "print('after')\n",
-        "expected_sha256": read["data"]["sha256"],
-    })
-    written = handle_developer_workspace_write({
-        "path": "hello.py",
-        "content": "print('after')\n",
-        "expected_sha256": read["data"]["sha256"],
-    })
+    preview = handle_developer_workspace_preview(
+        {
+            "path": "hello.py",
+            "content": "print('after')\n",
+            "expected_sha256": read["data"]["sha256"],
+        }
+    )
+    written = handle_developer_workspace_write(
+        {
+            "path": "hello.py",
+            "content": "print('after')\n",
+            "expected_sha256": read["data"]["sha256"],
+        }
+    )
 
     assert listing["data"]["files"][0]["path"] == "hello.py"
     assert search["data"]["matches"][0]["line"] == 1
@@ -133,11 +180,13 @@ def test_developer_workspace_api_reports_stale_write_conflict(tmp_path, monkeypa
     read = handle_developer_workspace_file({"path": "hello.py"})
     source.write_text("two", encoding="utf-8")
 
-    response = handle_developer_workspace_write({
-        "path": "hello.py",
-        "content": "three",
-        "expected_sha256": read["data"]["sha256"],
-    })
+    response = handle_developer_workspace_write(
+        {
+            "path": "hello.py",
+            "content": "three",
+            "expected_sha256": read["data"]["sha256"],
+        }
+    )
 
     assert response["ok"] is False
     assert response["error"]["code"] == "NOUS_WORKSPACE_CONFLICT"

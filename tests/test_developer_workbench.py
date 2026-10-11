@@ -5,7 +5,44 @@ import pytest
 
 from nous_runtime.capability.sandbox import SandboxResult
 from nous_runtime.events import EventStream
-from nous_runtime.workspace.workbench import DeveloperWorkbench, WorkbenchConflict, WorkbenchError
+from nous_runtime.workspace.workbench import (
+    DeveloperWorkbench,
+    WorkbenchConflict,
+    WorkbenchError,
+)
+
+
+@pytest.mark.parametrize("reserved", [".nous", ".git", "nested/.NOUS"])
+def test_workbench_ordinary_file_context_excludes_private_state(tmp_path, reserved):
+    private = tmp_path / reserved / "protected.txt"
+    private.parent.mkdir(parents=True)
+    private.write_text("FAKE_ONLY_PRIVATE_MARKER")
+    workbench = DeveloperWorkbench(tmp_path)
+    with pytest.raises(WorkbenchError, match="Runtime-private"):
+        workbench.read_file(f"{reserved}/protected.txt")
+    with pytest.raises(WorkbenchError, match="Runtime-private"):
+        workbench.search("FAKE_ONLY", path=reserved)
+    with pytest.raises(WorkbenchError, match="Runtime-private"):
+        workbench.list_files(path=reserved)
+    assert workbench.search("FAKE_ONLY")["matches"] == []
+
+
+def test_workbench_scan_and_read_exclude_private_aliases(tmp_path):
+    private = tmp_path / ".nous" / "protected.txt"
+    private.parent.mkdir()
+    private.write_text("FAKE_ONLY_PRIVATE_MARKER")
+    (tmp_path / "ordinary.txt").write_text("ordinary")
+    try:
+        (tmp_path / "alias.txt").symlink_to(private)
+    except OSError:
+        pytest.skip("This platform does not permit symlink creation")
+    workbench = DeveloperWorkbench(tmp_path)
+    with pytest.raises(WorkbenchError, match="Runtime-private"):
+        workbench.read_file("alias.txt")
+    assert [item["path"] for item in workbench.list_files()["files"]] == [
+        "ordinary.txt"
+    ]
+    assert workbench.search("FAKE_ONLY")["matches"] == []
 
 
 def test_workbench_lists_reads_and_searches_utf8_files(tmp_path):
@@ -46,7 +83,9 @@ def test_workbench_preview_atomic_write_backup_and_event_ledger(tmp_path):
     assert "-print('before')" in preview["diff"]
     assert "+print('after')" in preview["diff"]
     assert target.read_text(encoding="utf-8") == "print('after')\n"
-    assert (tmp_path / written["backup_path"]).read_text(encoding="utf-8") == "print('before')\n"
+    assert (tmp_path / written["backup_path"]).read_text(
+        encoding="utf-8"
+    ) == "print('before')\n"
     events = EventStream(str(tmp_path)).load_events(written["run_id"])
     assert [event.event_type for event in events] == [
         "run.created",
@@ -115,14 +154,18 @@ def test_workbench_mkdir_move_and_recoverable_remove(tmp_path):
     assert (tmp_path / removed["backup_path"]).is_dir()
 
 
-def test_workbench_runs_only_fixed_profiles_through_strict_sandbox(tmp_path, monkeypatch):
+def test_workbench_runs_only_fixed_profiles_through_strict_sandbox(
+    tmp_path, monkeypatch
+):
     script = tmp_path / "hello.py"
     script.write_text("print('hello')\n", encoding="utf-8")
     calls = []
 
     def fake_run(argv, **kwargs):
         calls.append((argv, kwargs))
-        return SandboxResult(ok=True, stdout="hello\n", returncode=0, runtime_seconds=0.01)
+        return SandboxResult(
+            ok=True, stdout="hello\n", returncode=0, runtime_seconds=0.01
+        )
 
     monkeypatch.setattr("nous_runtime.workspace.workbench.run_process_strict", fake_run)
     workbench = DeveloperWorkbench(tmp_path)
@@ -138,7 +181,10 @@ def test_workbench_runs_only_fixed_profiles_through_strict_sandbox(tmp_path, mon
     with pytest.raises(WorkbenchError):
         workbench.run_profile("powershell", target="hello.py")
 
-def test_packaged_runtime_resolves_real_python_instead_of_sidecar(tmp_path, monkeypatch):
+
+def test_packaged_runtime_resolves_real_python_instead_of_sidecar(
+    tmp_path, monkeypatch
+):
     import nous_runtime.workspace.workbench as module
 
     monkeypatch.setattr(module.sys, "frozen", True, raising=False)
