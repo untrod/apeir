@@ -3,9 +3,12 @@ import { colors, typo, radius, shadow, space, btnPrimary, btnSecondary } from ".
 import {
   approvalAction,
   fetchApprovals,
+  fetchArtifact,
   fetchModelObservations,
   fetchNodes,
   fetchTasks,
+  fetchTaskTimeline,
+  fetchTaskVerification,
   fetchTrace,
   fetchTraceTimeline,
   testModel,
@@ -16,10 +19,11 @@ export type DrawerView =
   | null
   | { kind: "task"; taskId: string }
   | { kind: "trace"; traceId: string }
+  | { kind: "run"; runId: string }
   | { kind: "node"; nodeId: string }
   | { kind: "approval"; requestId: string }
   | { kind: "artifact"; artifactId: string }
-  | { kind: "verification"; capabilityId: string }
+  | { kind: "verification"; taskId: string }
   | { kind: "model-observations"; modelId: string };
 
 interface DetailDrawerProps {
@@ -59,10 +63,11 @@ export function DetailDrawer({ view, onClose }: DetailDrawerProps) {
         <div style={{ flex: 1, overflowY: "auto", padding: space.xl }}>
           {view.kind === "task" && <TaskDetails taskId={view.taskId} />}
           {view.kind === "trace" && <TraceDetails traceId={view.traceId} />}
+          {view.kind === "run" && <TaskTimelineDetails taskId={view.runId} />}
           {view.kind === "node" && <NodeDetails nodeId={view.nodeId} />}
           {view.kind === "approval" && <ApprovalDetails requestId={view.requestId} />}
-          {view.kind === "artifact" && <PlaceholderDetails title="Artifact" id={view.artifactId} />}
-          {view.kind === "verification" && <PlaceholderDetails title="Verification" id={view.capabilityId} />}
+          {view.kind === "artifact" && <ArtifactDetails artifactId={view.artifactId} />}
+          {view.kind === "verification" && <VerificationDetails taskId={view.taskId} />}
           {view.kind === "model-observations" && <ModelObservationDetails modelId={view.modelId} />}
         </div>
       </aside>
@@ -74,6 +79,7 @@ function titleFor(view: Exclude<DrawerView, null>): string {
   switch (view.kind) {
     case "task": return "Task Details";
     case "trace": return "Trace Timeline";
+    case "run": return "Persisted Run Activity";
     case "node": return "Node Details";
     case "approval": return "Approval Request";
     case "artifact": return "Artifact";
@@ -87,12 +93,19 @@ function TaskDetails({ taskId }: { taskId: string }) {
     const response = await fetchTasks("", 200);
     return response.tasks?.find((task: any) => task.id === taskId || task.task_id === taskId) || null;
   }, [taskId]);
-  const { data, loading } = useAsync(loader);
+  const { data, loading, error } = useAsync(loader);
 
   if (loading) return <LoadingView />;
+  if (error) return <ErrorView text={error} />;
   if (!data) return <EmptyView text="Task not found in current runtime window." />;
 
-  return <ObjectPanel data={data as unknown as Record<string, unknown>} preferred={["id", "task_id", "name", "status", "priority", "model_id", "node_id", "progress_pct", "created_at", "updated_at"]} />;
+  return <>
+    <ObjectPanel data={data as unknown as Record<string, unknown>} preferred={["id", "task_id", "name", "status", "priority", "model_id", "node_id", "progress_pct", "created_at", "updated_at"]} />
+    <h3>Recorded effect verification</h3>
+    <VerificationDetails taskId={taskId} />
+    <h3>Persisted activity</h3>
+    <TaskTimelineDetails taskId={taskId} />
+  </>;
 }
 
 function TraceDetails({ traceId }: { traceId: string }) {
@@ -101,11 +114,13 @@ function TraceDetails({ traceId }: { traceId: string }) {
     return {
       trace: trace.status === "fulfilled" ? trace.value : null,
       timeline: timeline.status === "fulfilled" ? timeline.value : null,
+      errors: [trace, timeline].flatMap(result => result.status === "rejected" ? [String(result.reason)] : []),
     };
   }, [traceId]);
-  const { data, loading } = useAsync(loader);
+  const { data, loading, error } = useAsync(loader);
 
   if (loading) return <LoadingView />;
+  if (error) return <ErrorView text={error} />;
   return <ObjectPanel data={{ trace_id: traceId, ...(data || {}) }} />;
 }
 
@@ -114,9 +129,10 @@ function NodeDetails({ nodeId }: { nodeId: string }) {
     const response = await fetchNodes();
     return response.find((node: any) => node.id === nodeId || node.node_id === nodeId) || null;
   }, [nodeId]);
-  const { data, loading } = useAsync(loader);
+  const { data, loading, error } = useAsync(loader);
 
   if (loading) return <LoadingView />;
+  if (error) return <ErrorView text={error} />;
   if (!data) return <EmptyView text="Node not found in current runtime window." />;
   return <ObjectPanel data={data as unknown as Record<string, unknown>} preferred={["id", "node_id", "name", "platform", "arch", "role", "online", "status", "last_seen"]} />;
 }
@@ -127,7 +143,7 @@ function ApprovalDetails({ requestId }: { requestId: string }) {
     const response = await fetchApprovals();
     return response.approvals?.find((approval: any) => approval.id === requestId || approval.request_id === requestId) || null;
   }, [requestId]);
-  const { data, loading, reload } = useAsync(loader);
+  const { data, loading, error, reload } = useAsync(loader);
 
   const submit = async (action: "approve" | "deny") => {
     setBusy(true);
@@ -144,10 +160,10 @@ function ApprovalDetails({ requestId }: { requestId: string }) {
 
   return (
     <div>
-      {loading ? <LoadingView /> : data ? <ObjectPanel data={data as unknown as Record<string, unknown>} /> : <EmptyView text="Approval not found." />}
+      {loading ? <LoadingView /> : error ? <ErrorView text={error} /> : data ? <ObjectPanel data={data as unknown as Record<string, unknown>} /> : <EmptyView text="Approval not found." />}
       <div style={{ display: "flex", gap: space.sm, marginTop: space.lg }}>
-        <button disabled={busy} onClick={() => submit("approve")} style={{ ...btnPrimary, flex: 1, justifyContent: "center", background: colors.success }}>Approve</button>
-        <button disabled={busy} onClick={() => submit("deny")} style={{ ...btnSecondary, flex: 1, justifyContent: "center", color: colors.danger, borderColor: colors.danger }}>Deny</button>
+        <button disabled={busy || loading || !!error || !data} onClick={() => submit("approve")} style={{ ...btnPrimary, flex: 1, justifyContent: "center", background: colors.success }}>Approve Once</button>
+        <button disabled={busy || loading || !!error || !data} onClick={() => submit("deny")} style={{ ...btnSecondary, flex: 1, justifyContent: "center", color: colors.danger, borderColor: colors.danger }}>Deny</button>
       </div>
     </div>
   );
@@ -155,7 +171,7 @@ function ApprovalDetails({ requestId }: { requestId: string }) {
 
 function ModelObservationDetails({ modelId }: { modelId: string }) {
   const loader = useCallback(() => fetchModelObservations(modelId), [modelId]);
-  const { data, loading } = useAsync(loader);
+  const { data, loading, error } = useAsync(loader);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<Record<string, unknown> | null>(null);
   const runTest = async () => {
@@ -174,6 +190,7 @@ function ModelObservationDetails({ modelId }: { modelId: string }) {
     }
   };
   if (loading) return <LoadingView />;
+  if (error) return <ErrorView text={error} />;
   return (
     <div>
       <button
@@ -194,8 +211,31 @@ function ModelObservationDetails({ modelId }: { modelId: string }) {
   );
 }
 
-function PlaceholderDetails({ title, id }: { title: string; id: string }) {
-  return <ObjectPanel data={{ type: title, id, note: "Detailed runtime data is loaded through the related task or trace." }} />;
+function ArtifactDetails({ artifactId }: { artifactId: string }) {
+  const loader = useCallback(() => fetchArtifact(artifactId), [artifactId]);
+  const { data, loading, error } = useAsync(loader);
+  if (loading) return <LoadingView />;
+  if (error) return <ErrorView text={error} />;
+  return <ObjectPanel data={data || {}} />;
+}
+
+function VerificationDetails({ taskId }: { taskId: string }) {
+  const loader = useCallback(() => fetchTaskVerification(taskId), [taskId]);
+  const { data, loading, error } = useAsync(loader);
+  if (loading) return <LoadingView />;
+  if (error) return <ErrorView text={error} />;
+  return <>
+    <p style={{ color: colors.textSecondary, fontSize: typo.sm }}>Recorded Runtime-service evidence. Evaluation scores and receipts do not establish a physical effect. This view does not acquire a new observation.</p>
+    <ObjectPanel data={data || {}} preferred={["verdict", "verified", "committed", "scope", "effect_verification"]} />
+  </>;
+}
+
+function TaskTimelineDetails({ taskId }: { taskId: string }) {
+  const loader = useCallback(() => fetchTaskTimeline(taskId), [taskId]);
+  const { data, loading, error } = useAsync(loader);
+  if (loading) return <LoadingView />;
+  if (error) return <ErrorView text={error} />;
+  return <ObjectPanel data={data || {}} />;
 }
 
 function ObjectPanel({ data, preferred = [] }: { data: Record<string, unknown>; preferred?: string[] }) {
@@ -239,21 +279,28 @@ function EmptyView({ text }: { text: string }) {
   return <div style={{ color: colors.textTertiary, fontSize: typo.sm }}>{text}</div>;
 }
 
+function ErrorView({ text }: { text: string }) {
+  return <div role="alert" style={{ color: colors.danger, fontSize: typo.sm }}>{text}</div>;
+}
+
 function useAsync<T>(loader: () => Promise<T>) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const reload = useCallback(() => setRevision((value) => value + 1), []);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setData(null);
+    setError(null);
     loader()
       .then((value) => { if (active) setData(value); })
-      .catch(() => { if (active) setData(null); })
+      .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [loader, revision]);
 
-  return { data, loading, reload };
+  return { data, loading, error, reload };
 }

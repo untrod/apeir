@@ -843,7 +843,7 @@ function AppShell() {
       setPage("chat");
       setActiveConversationId(result.id);
     } else if (result.kind === "run") {
-      setDrawer({ kind: "trace", traceId: result.id });
+      setDrawer({ kind: "run", runId: result.id });
     } else if (result.kind === "artifact") {
       setDrawer({ kind: "artifact", artifactId: result.id });
     } else if (result.kind === "file") {

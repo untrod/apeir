@@ -6,6 +6,22 @@ import { entityStore, type Task } from "../store";
 
 
 describe("Task Center Work projection", () => {
+  it.each([
+    ["queued", "Active"], ["planning", "Active"], ["verifying", "Active"],
+    ["recovering", "Active"], ["waiting_for_node", "Active"],
+    ["completed_with_warnings", "Completed"], ["failed_verification", "Failed"],
+  ] as const)("keeps %s visible in the %s filter", (status, label) => {
+    const task: Task = {
+      id: `task_filter_${status}`, name: `Filter ${status}`, status,
+      priority: "normal", steps: [], progress_pct: 0,
+      cancellation_requested: false, recoverable: false,
+      schema_version: "1.0.0", created_at: "2026-10-11T00:00:00Z", updated_at: "2026-10-11T00:00:00Z",
+    };
+    entityStore.reconcile({ tasks: { [task.id]: task } });
+    render(<TaskCenter onTaskClick={vi.fn()} onTraceClick={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${label} `) }));
+    expect(screen.getByText(task.name)).toBeInTheDocument();
+  });
   it("shows durable Work plan and artifact progress", () => {
     const work: Task = {
       id: "work_desktop_projection",
@@ -39,7 +55,9 @@ describe("Task Center Work projection", () => {
     };
     entityStore.reconcile({ tasks: { [work.id]: work } });
 
-    render(<TaskCenter onTaskClick={vi.fn()} onTraceClick={vi.fn()} />);
+    const onTaskClick = vi.fn();
+    const onTraceClick = vi.fn();
+    render(<TaskCenter onTaskClick={onTaskClick} onTraceClick={onTraceClick} />);
 
     expect(screen.getByText("Needs Input")).toBeInTheDocument();
     expect(screen.getByText("Work")).toBeInTheDocument();
@@ -49,5 +67,8 @@ describe("Task Center Work projection", () => {
     fireEvent.click(screen.getByText("Fix the repository"));
     expect(screen.getByText("Run targeted verification")).toBeInTheDocument();
     expect(screen.getByText("verify")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View Work Activity" }));
+    expect(onTaskClick).toHaveBeenCalledWith(work.id);
+    expect(onTraceClick).not.toHaveBeenCalled();
   });
 });
