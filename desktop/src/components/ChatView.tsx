@@ -28,7 +28,7 @@ import {
   type PlanStage,
 } from "./RuntimeCard";
 import { Markdown } from "./Markdown";
-import { Composer, type ComposerAttachment, type ComposerConstraints } from "./Composer";
+import { Composer, CHAT_ATTACHMENTS_UNAVAILABLE, CHAT_CONSTRAINTS_UNAVAILABLE, type ComposerAttachment, type ComposerConstraints } from "./Composer";
 import { toast } from "./Toast";
 import { summarizeRuntimeActivity } from "../lib/runtimeActivity";
 import { ContextInspector } from "./ContextInspector";
@@ -275,6 +275,13 @@ export function ChatView({
 
 
   const handleSend = useCallback(async (text: string, attachments: ComposerAttachment[], constraints: ComposerConstraints) => {
+    const unsupported = attachments.length > 0 ? CHAT_ATTACHMENTS_UNAVAILABLE
+      : constraints.node_id || (constraints.privacy_level && constraints.privacy_level !== "standard") || constraints.budget_limit_usd !== undefined
+        ? CHAT_CONSTRAINTS_UNAVAILABLE : "";
+    if (unsupported) {
+      setLocalMessages(prev => [...prev, { id: `e_${Date.now()}`, role: "system", content: unsupported, timestamp: new Date().toISOString() }]);
+      return;
+    }
     if (workspaceFile?.controller && workspaceFile.controller !== getConfig().url) {
       setLocalMessages(prev => [...prev, { id: `e_${Date.now()}`, role: "system", content: "Controller changed; remove the original file reference before continuing.", timestamp: new Date().toISOString() }]);
       return;
@@ -424,6 +431,8 @@ export function ChatView({
         nodes={nodes}
         conversationId={conversationId}
         readOnly={readOnly}
+        attachmentsSupported={false}
+        extendedConstraintsSupported={false}
       />
     </div>
   );

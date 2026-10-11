@@ -192,6 +192,13 @@ UNKNOWN; declared tools do not authorize an operation. A metadata-only file
 reference is not proof that its contents were sent. See the
 [scope and bounds](../../development/DEVELOPER_PLATFORM.md#inspecting-actual-model-input).
 
+Chat file attachment delivery is not available: the picker is disabled and file
+drop/paste is refused without clearing the draft. Use a saved Workspace reference
+and inspect the admitted read instead. Node targeting, privacy and per-request
+budget controls are also disabled in this Chat path; their values must not be
+silently ignored. Configure the existing governed model/provider settings before
+sending. Model selection and read-only requests retain their existing behavior.
+
 ### Environment workbench
 
 The existing Operations Console now opens **environments** alongside Work, Nodes

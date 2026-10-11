@@ -55,6 +55,14 @@ truncation. Old events remain readable without fabricated manifests. A selected
 workspace reference is still metadata only: selecting it does not automatically
 upload its contents or establish that a model read the file.
 
+The current Chat handler supports text, model choice and execution mode. File
+attachments and Node/privacy/per-request-budget controls are disabled because
+this request path does not deliver them. Drop/paste and stale or crafted values
+are refused before dispatch; the Composer preserves the draft. Existing saved
+Workspace references, protected read tools and governed model/provider
+configuration remain the supported route. Conversation attachment metadata is
+not model input, and installation or selection grants no permission.
+
 ## Interactive project execution
 
 Code, workflow, and device requests submitted through Chat are promoted to a
