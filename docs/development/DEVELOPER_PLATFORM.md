@@ -176,6 +176,20 @@ feedback**. Its later Console/preflight code commit selects full regression;
 the resulting main still runs all platforms. These are observed workflow costs,
 not a controlled runtime performance comparison or a reduced main quality gate.
 
+The Product Closure main regression at `1a66e2514c222f432534b5362ae590ab789d20d7`
+recorded **1 failed, 4083 passed, 53 skipped** on Windows in
+[Core CI](https://github.com/untrod/apeir/actions/runs/38101910531): the existing
+Model Gateway timeout test expected provider cancellation within a 10 ms total
+request budget. That budget also includes routing and evidence recording; a
+request that expires before dispatch must not invoke or cancel a provider.
+The original log does not establish which deadline phase occurred. Tests now
+control only Gateway accounting to cover both phases explicitly: a real asyncio
+10 ms in-flight deadline still requires cancellation and lease cleanup, while a
+controlled pre-dispatch expiry requires zero invocations and zero leases.
+The provider's 100 ms delay, production timeouts, retry policy and runtime code
+are unchanged. This test correction does not qualify Windows network timing or
+close issues #4 and #8; their separate Relay failure evidence remains open.
+
 ### Packaging and compatibility
 
 Controller, Node and CLI share the existing `apeir-distribution` wheel and its
