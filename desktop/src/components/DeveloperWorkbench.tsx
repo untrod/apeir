@@ -21,6 +21,7 @@ import {
 import { errorMessage } from "../lib/format";
 import { ChatView } from "./ChatView";
 import { ContextInspector } from "./ContextInspector";
+import { DetailDrawer } from "./DetailDrawer";
 import type { RuntimeEventEnvelope } from "../store";
 import "./DeveloperWorkbench.css";
 
@@ -76,6 +77,7 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
   const [contextRuns, setContextRuns] = useState<DeveloperRun[]>([]);
   const [runController, setRunController] = useState(getConfig().url);
   const [contextView, setContextView] = useState<{ runId: string; controller: string } | null>(null);
+  const [traceView, setTraceView] = useState<{ traceId: string; controller: string } | null>(null);
   const [events, setEvents] = useState<Partial<RuntimeEventEnvelope>[]>([]);
   const [selectedRun, setSelectedRun] = useState("");
   const [pending, setPending] = useState<PendingAction | null>(null);
@@ -125,6 +127,14 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
       if (controller !== getConfig().url) throw new Error("Controller changed; reopen original evidence.");
       if (read === eventRead.current) setEvents(result.events);
     } catch (cause) { if (read === eventRead.current) setError(errorMessage(cause, "Persisted activity is unavailable.")); }
+  };
+
+  const showTrace = (traceId: string) => {
+    if (loadedController !== getConfig().url) {
+      setError("Controller changed; review the original Trace again.");
+      return;
+    }
+    setTraceView({ traceId, controller: loadedController });
   };
 
   const loadFile = async (path: string) => {
@@ -332,10 +342,11 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
           {runResult && <pre style={{ margin: `${space.md} 0 0`, maxHeight: 300, overflow: "auto", padding: space.md, borderRadius: radius.md, background: colors.bg, color: runResult.ok ? colors.text : colors.danger, fontFamily: typo.mono, fontSize: typo.xs, whiteSpace: "pre-wrap" }}>{`run ${runResult.run_id}\nexit ${runResult.exit_code}\n${runResult.stdout}${runResult.stderr ? `\n${runResult.stderr}` : ""}`}</pre>}
         </section>
       </main>
-      <aside hidden={!layout.conversation} className="developer-collaboration" aria-label="Workspace collaboration"><ChatView conversationId={conversationId} onConversationCreated={setConversationId} workspaceFile={reference} onClearWorkspaceFile={() => setReference(undefined)} readOnly onCardClick={event => { const runId = String(event.payload?.run_id || event.metadata?.run_id || ""); if (runId) void showEvents(runId); }} onTraceClick={runId => void showEvents(runId)} /></aside>
+      <aside hidden={!layout.conversation} className="developer-collaboration" aria-label="Workspace collaboration"><ChatView conversationId={conversationId} onConversationCreated={setConversationId} workspaceFile={reference} onClearWorkspaceFile={() => setReference(undefined)} readOnly onCardClick={event => { const runId = String(event.payload?.run_id || event.metadata?.run_id || ""); if (runId) void showEvents(runId); }} onTraceClick={showTrace} /></aside>
     </div>
     {switchTarget !== null && <section role="alert" style={{ ...panel, padding: space.md }}><p>Unsaved changes. Keep editing or explicitly discard this draft before switching files.</p><button style={btnSecondary} onClick={() => setSwitchTarget(null)}>Keep editing</button><button style={btnSecondary} onClick={() => { const path = switchTarget; setSwitchTarget(null); if (path) void loadFile(path); else newFile(); }}>Discard draft and switch</button></section>}
     {pending && <section aria-label="Workbench approval" style={{ ...panel, padding: space.md }}><h3>Explicit approval required</h3><p>Review the original {pending.kind} request: {pending.kind === "save" ? pending.path : `${pending.profile} ${pending.target}`}. Installation, model output and layout settings grant no authority.</p><p>Request {pending.approvalId}</p><button disabled={busy} style={btnPrimary} onClick={() => void decide("approve")}>Approve once and {pending.kind}</button><button disabled={busy} style={btnSecondary} onClick={() => void decide("deny")}>Deny original request</button></section>}
     {layout.activity && <section aria-label="Workspace persisted activity" style={{ ...panel, padding: space.md }}><h3>Workspace activity</h3><p>Actual EventStream file changes and executions, not keystrokes or monitoring of other applications. File content is not automatically sent to a model.</p><div className="developer-activity">{runs.length ? runs.map(item => <button key={item.run_id} onClick={() => void showEvents(item.run_id)} style={btnSecondary}>{item.task_id} · {item.state}</button>) : <p>No persisted workspace operations.</p>}</div>{selectedRun && <p>Run {selectedRun}</p>}{events.map((event, index) => <details key={event.event_id || index}><summary>{event.sequence} · {event.event_type} · {event.timestamp}</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(event.payload, null, 2)}</pre></details>)}</section>}
+    {traceView && traceView.controller === getConfig().url && <DetailDrawer view={{ kind: "trace", traceId: traceView.traceId }} onClose={() => setTraceView(null)} />}
   </div>;
 }
