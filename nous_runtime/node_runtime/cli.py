@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import ssl
+import sys
 from pathlib import Path
 
 import typer
@@ -132,6 +133,11 @@ def pair_node(
     server_public_key: str = typer.Option(..., "--server-public-key"),
     state_dir: Path = typer.Option(DEFAULT_NODE_STATE_DIR, "--state-dir"),
     ca_file: Path | None = typer.Option(None, "--ca-file"),
+    code_stdin: bool = typer.Option(
+        False,
+        "--code-stdin",
+        help="Read a single bounded code from redirected stdin; never from command arguments.",
+    ),
     status: bool = typer.Option(
         False,
         "--status",
@@ -141,6 +147,20 @@ def pair_node(
     """Prove the persistent Node identity; the Controller human must still approve."""
     from nous_runtime.node_runtime.relay import NodeRelayClient
 
+    if code_stdin and (status or sys.stdin.isatty()):
+        raise typer.BadParameter(
+            "--code-stdin requires redirected input and cannot be combined with --status"
+        )
+    if status:
+        code = ""
+    elif code_stdin:
+        code = sys.stdin.readline(10).strip()
+        if len(code) != 8 or not code.isascii() or not code.isalnum():
+            raise typer.BadParameter(
+                "A single eight-character pairing code is required"
+            )
+    else:
+        code = typer.prompt("One-time pairing code", hide_input=True, err=True)
     service = NodeRuntimeService(NodeRuntimeConfig(state_dir=state_dir))
     context = (
         ssl.create_default_context(cafile=str(ca_file) if ca_file else None)
@@ -148,11 +168,6 @@ def pair_node(
         else None
     )
     client = NodeRelayClient(service, relay_url, server_public_key, ssl_context=context)
-    code = (
-        ""
-        if status
-        else typer.prompt("One-time pairing code", hide_input=True, err=True)
-    )
     result = asyncio.run(client.pair(request_id, pairing_code=code))
     typer.echo(json.dumps(result, sort_keys=True))
 

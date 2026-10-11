@@ -248,6 +248,14 @@ def test_corrupt_trust_is_not_an_empty_store(tmp_path, corrupt):
         NodeRelayServer(state_dir=tmp_path)
 
 
+async def wait_until(predicate):
+    async def poll():
+        while not predicate():
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(poll(), timeout=5)
+
+
 def test_real_node_cli_process_pairs_and_restart_queries_original_proof(setup):
     server, node, plane = setup
 
@@ -271,7 +279,7 @@ def test_real_node_cli_process_pairs_and_restart_queries_original_proof(setup):
             ]
             first = await asyncio.to_thread(
                 subprocess.run,
-                args,
+                args + ["--code-stdin"],
                 input=invite["pairing_code"] + "\n",
                 text=True,
                 capture_output=True,
@@ -312,9 +320,7 @@ def test_revocation_closes_live_connection_and_denies_new_work(setup):
         client = NodeRelayClient(node, url, server.public_key, heartbeat_seconds=0.1)
         task = asyncio.create_task(client.run_session(asyncio.Event()))
         try:
-            async with asyncio.timeout(5):
-                while node.identity.node_id not in server.connections:
-                    await asyncio.sleep(0.01)
+            await wait_until(lambda: node.identity.node_id in server.connections)
             # Separate Controller instance models CLI/API revocation while listener lives.
             other = NodeRelayServer(state_dir=server.state_dir)
             revoker = OperationsPlane(plane.root, gate=plane.gate, controller=other)
@@ -330,9 +336,7 @@ def test_revocation_closes_live_connection_and_denies_new_work(setup):
                 await server.queue_workload(
                     node.identity.node_id, "after-revoke", "system.echo"
                 )
-            async with asyncio.timeout(5):
-                while node.identity.node_id in server.connections:
-                    await asyncio.sleep(0.01)
+            await wait_until(lambda: node.identity.node_id not in server.connections)
             await asyncio.gather(task, return_exceptions=True)
             assert "after-revoke" not in server.pending.get(node.identity.node_id, {})
         finally:
@@ -355,9 +359,9 @@ def test_lost_pairing_response_queries_persisted_original_without_spent_code(set
             envelope = proof(node, server, invite)
             async with connect(url) as socket:
                 await socket.send(envelope.to_json())
-                async with asyncio.timeout(5):
-                    while server.list_pairings()[0]["status"] != "PENDING":
-                        await asyncio.sleep(0.01)
+                await wait_until(
+                    lambda: server.list_pairings()[0]["status"] == "PENDING"
+                )
                 # Close without reading the signed ACK; Controller has persisted proof.
             assert not server.node_keys
             # The ordinary CLI sequence belongs to the same persistent identity.
@@ -517,3 +521,36 @@ def test_bounded_invitations_retain_terminal_original_evidence(setup):
         == "APPROVED"
     )
     assert len(server.list_pairings()) == 33
+
+
+@pytest.mark.parametrize(
+    "options,code",
+    [
+        (["--code-stdin"], "TOO-LONG-CODE\n"),
+        (["--code-stdin", "--status"], "ABCD2345\n"),
+    ],
+)
+def test_cli_rejects_invalid_stdin_before_creating_identity(tmp_path, options, code):
+    from typer.testing import CliRunner
+    from nous_runtime.node_runtime.cli import node_daemon_app
+
+    state = tmp_path / "node"
+    result = CliRunner().invoke(
+        node_daemon_app,
+        [
+            "pair",
+            "--request-id",
+            "pair-invalid",
+            "--relay-url",
+            "ws://127.0.0.1:1",
+            "--server-public-key",
+            "a" * 64,
+            "--state-dir",
+            str(state),
+            *options,
+        ],
+        input=code,
+    )
+    assert result.exit_code != 0
+    assert code.strip() not in result.output
+    assert not state.exists()

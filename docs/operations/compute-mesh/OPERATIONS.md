@@ -272,6 +272,23 @@ share the existing Controller trust-file lock; pending invitations are bounded
 to 32; 1,024 retained request records are the storage ceiling, with no automatic
 deletion of original decisions. Incorrect identity, replay, expired proof or invalid state fails closed.
 
+Interactive onboarding uses concealed terminal input. Automation must use
+`apeir-node pair ... --code-stdin` with redirected, bounded input; it must not put
+the code in arguments, shell history or logs. This avoids Windows console-input
+APIs waiting on an unavailable console when stdin is a pipe. The option rejects
+terminal stdin and `--status`, and invalid input is rejected before identity
+creation. Status recovery never needs a code. Python 3.10 pairing tests use the
+same five-second bounds through `asyncio.wait_for`; no timeout was increased.
+
+The first merged onboarding main run **38099724857** exposed two Python 3.10
+`asyncio.timeout` compatibility failures (**4053 passed, 60 skipped**) and a
+Windows concealed-pipe input timeout (**4061 passed, 53 skipped**). Multi-Arch
+Windows run **38099724853** reproduced that pipe timeout (**3772 passed,
+53 skipped, 272 deselected**). These are onboarding regressions, distinct from
+the older unexplained signed-response/keepalive failures in Issues #4/#8. The
+failure evidence is retained; corrected-source platform CI is required before
+claiming the onboarding platform gate.
+
 The Operations Workbench **Add Node** form uses the same authority. Sign in through
 the configured trusted human boundary, confirm the Controller key, enter its WSS
 Relay address and create an invitation. Inspect the submitted Node key in
