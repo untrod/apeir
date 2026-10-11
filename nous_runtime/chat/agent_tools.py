@@ -529,7 +529,11 @@ class WorkspaceToolRuntime:
             raise ValueError("The requested workspace path is not a file.")
         if path.stat().st_size > _MAX_READ_BYTES:
             raise ValueError("The file exceeds the 256 KiB agent read limit.")
-        text = path.read_text(encoding="utf-8")
+        with path.open("rb") as stream:
+            data = stream.read(_MAX_READ_BYTES + 1)
+        if len(data) > _MAX_READ_BYTES:
+            raise ValueError("The file exceeds the 256 KiB agent read limit.")
+        text = data.decode("utf-8")
         lines = text.splitlines()
         start = max(1, int(arguments.get("start_line") or 1))
         end = min(
@@ -542,7 +546,7 @@ class WorkspaceToolRuntime:
             "start_line": start,
             "end_line": end,
             "content": "\n".join(selected),
-            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "sha256": hashlib.sha256(data).hexdigest(),
         }
 
     def _search_workspace(self, arguments: dict[str, Any]) -> dict[str, Any]:

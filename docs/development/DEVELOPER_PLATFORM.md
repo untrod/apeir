@@ -34,7 +34,9 @@ message roles, character counts, estimated tokens and SHA-256; declared tools;
 selected context chunks marked included, partial or omitted by the actual
 28,000-character rendering bound; and preceding tool results. A successful
 `read_file` result identifies the relative file, selected lines and original
-file digest. Failed reads never appear as successful file access. Source IDs
+file digest computed from the same bounded bytes as its selected content.
+This does not prevent later edits or prove an atomic filesystem snapshot.
+Failed reads never appear as successful file access. Source IDs
 are hashed, not copied; message text, file contents and tool arguments are not
 duplicated into this manifest. Available tool declarations are not permission.
 

@@ -4,7 +4,7 @@ import { DeveloperWorkbench } from "../components/DeveloperWorkbench";
 import {
   ApiError, approvalAction, fetchCapabilityAvailability, fetchDeveloperRuns,
   fetchRunEvents, fetchWorkbenchFile, fetchWorkbenchFiles, previewWorkbenchWrite,
-  runWorkbenchProfile, setConfig, writeWorkbenchFile,
+  runWorkbenchProfile, setConfig, writeWorkbenchFile, fetchTrace, fetchTraceTimeline,
 } from "../lib/api";
 
 vi.mock("../lib/api", async importOriginal => ({
@@ -12,9 +12,10 @@ vi.mock("../lib/api", async importOriginal => ({
   approvalAction: vi.fn(), fetchCapabilityAvailability: vi.fn(), fetchDeveloperRuns: vi.fn(),
   fetchRunEvents: vi.fn(), fetchWorkbenchFile: vi.fn(), fetchWorkbenchFiles: vi.fn(),
   previewWorkbenchWrite: vi.fn(), runWorkbenchProfile: vi.fn(), writeWorkbenchFile: vi.fn(),
+  fetchTrace: vi.fn(), fetchTraceTimeline: vi.fn(),
 }));
-vi.mock("../components/ChatView", () => ({ ChatView: ({ workspaceFile, readOnly }: { workspaceFile?: { path: string; sha256: string }; readOnly: boolean }) =>
-  <div aria-label="Collaboration contract">{readOnly ? "read_only" : "agent"}{workspaceFile && <output>{JSON.stringify(workspaceFile)}</output>}</div> }));
+vi.mock("../components/ChatView", () => ({ ChatView: ({ workspaceFile, readOnly, onTraceClick }: { workspaceFile?: { path: string; sha256: string }; readOnly: boolean; onTraceClick: (traceId: string) => void }) =>
+  <div aria-label="Collaboration contract">{readOnly ? "read_only" : "agent"}{workspaceFile && <output>{JSON.stringify(workspaceFile)}</output>}<button onClick={() => onTraceClick("trace-original")}>View recorded Trace</button></div> }));
 
 const before = "a".repeat(64), after = "b".repeat(64);
 const change = { path: "a.py", exists: true, changed: true, before_sha256: before, after_sha256: after, size_bytes: 9, diff: "-old\n+new" };
@@ -32,6 +33,8 @@ beforeEach(() => {
   vi.mocked(previewWorkbenchWrite).mockResolvedValue(change);
   vi.mocked(writeWorkbenchFile).mockResolvedValue({ ...change, ok: true, run_id: "workbench-write-1", backup_path: "backup/a.py" });
   vi.mocked(approvalAction).mockResolvedValue({});
+  vi.mocked(fetchTrace).mockResolvedValue({ trace_id: "trace-original", session_id: "", task_id: "task-original", root_span_id: "", total_duration_ms: 0, span_count: 0, has_errors: false, spans: [] });
+  vi.mocked(fetchTraceTimeline).mockResolvedValue({ trace_id: "trace-original", spans: [], count: 0, global_statistics: {} });
 });
 
 async function edit() {
@@ -47,6 +50,24 @@ async function requestSave() {
 }
 
 describe("existing workspace developer panel", () => {
+  it("opens a Trace through the existing Trace inspector rather than querying a Run", async () => {
+    render(<DeveloperWorkbench />);
+    fireEvent.click(screen.getByRole("button", { name: "View recorded Trace" }));
+    expect(await screen.findByRole("heading", { name: "Trace Timeline" })).toBeInTheDocument();
+    await waitFor(() => expect(fetchTrace).toHaveBeenCalledWith("trace-original"));
+    expect(fetchTraceTimeline).toHaveBeenCalledWith("trace-original");
+    expect(fetchRunEvents).not.toHaveBeenCalled();
+    expect(writeWorkbenchFile).not.toHaveBeenCalled(); expect(runWorkbenchProfile).not.toHaveBeenCalled();
+  });
+  it("refuses a Trace click after the original Controller changes", async () => {
+    render(<DeveloperWorkbench />);
+    await screen.findByRole("button", { name: "a.py" });
+    setConfig({ url: "http://another-controller:8770", token: "another.fake.service" });
+    fireEvent.click(screen.getByRole("button", { name: "View recorded Trace" }));
+    expect(await screen.findByText(/Controller changed; review the original Trace again/)).toBeInTheDocument();
+    expect(fetchTrace).not.toHaveBeenCalled(); expect(fetchTraceTimeline).not.toHaveBeenCalled();
+    expect(fetchRunEvents).not.toHaveBeenCalled();
+  });
   it("protects unsaved contents and path changes before switching", async () => {
     await edit();
     fireEvent.click(screen.getByRole("button", { name: "b.py" }));

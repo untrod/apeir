@@ -32,7 +32,7 @@ registration check, not execution acceptance for all 422 endpoints.
 | Task filtering: `desktop/src/components/TaskCenter.tsx` | FIX | Counts included queued/planning/verifying, warning completion and verification failure while filters hid those rows; one shared status grouping now drives counts and rows |
 | Task route composition: `api/routes.py`, `api/desktop_routes.py` | FIX | Later Control Plane registration hid the durable Work list and replaced Artifact reads with a newly constructed empty registry. The public routes now bind the existing Work/CAS projections, preserving pagination, status counts and legacy `total`. Actual HTTP tests cover the selected route, not merely a directly imported helper |
 | Task timeline: `api/task_center_routes.py`, `events/stream.py` | FIX | The view read nonexistent `RunEvent.data` and discarded payloads; now retains original event/run/task/actor/sequence and the compatible `data` field. Task-ID and all-runs queries read bounded persisted evidence; legacy projected records are labelled |
-| Run/Trace navigation: `App.tsx`, `TaskCenter.tsx`, `DetailDrawer.tsx` | FIX | Search returned EventStream Run IDs but opened the unrelated ExecutionTracer endpoint. Run search now opens persisted activity; local Work activity opens its real task inspector. Actual trace IDs retain the existing tracer view |
+| Run/Trace navigation: `App.tsx`, `TaskCenter.tsx`, `DeveloperWorkbench.tsx`, `DetailDrawer.tsx` | FIX | Search returned EventStream Run IDs but opened the unrelated ExecutionTracer endpoint. Run search now opens persisted activity; local Work activity opens its real task inspector. Workbench Chat Trace links now use the existing Trace inspector rather than querying a Run; original Controller changes are refused |
 | Artifact search/detail: `api/routes.py`, `artifact/registry.py`, `artifact/content_store.py`, `DetailDrawer.tsx` | FIX | Search used only the legacy in-memory registry and detail was a static placeholder. Existing durable metadata and CAS are now searchable/readable; CAS bytes are checked by the existing store. Missing/corrupt records cannot display fake availability or a physical-effect claim |
 | Task Artifact association: `api/task_center_routes.py` | FIX | Filesystem guesses omitted registered metadata/CAS. Existing task/work/operation provenance is now included; unregistered legacy files remain explicitly unverified metadata |
 | Effect status: `api/task_center_routes.py`, `node_runtime/distributed_work.py` | FIX | A passing EvaluationRecord formerly set `verified=true`. Evaluation stays separate; only a bound recorded Reality MATCH can set that flag, with committed state shown separately. Reading this view performs no new Observation or verification |
@@ -122,6 +122,35 @@ draft retention, zero image previews, disabled unsupported request controls and
 zero Chat/model requests, with no page errors or 390px overflow. These source
 checks use the explicitly labelled fake-adapter evidence fixture; they do not
 qualify installed Windows Desktop or real model/identity/hardware paths.
+
+File-read evidence review reproduced a separate consistency defect in
+`chat/agent_tools.py`: a controlled edit between text reading and the second
+byte read returned the old content with the new file's digest. Two regression
+cases fail on the original implementation, including growth after the size
+precheck. The existing tool now obtains one bounded byte buffer, checks its
+actual size, decodes the selected lines and hashes that same buffer. UTF-8 and
+LF/CRLF/CR behavior and the 256 KiB limit are retained. Permission/path checks,
+Governance, model admission and EffectVerification do not change. This binds
+the tool's content and digest; it does not lock out subsequent user edits or
+provide an atomic filesystem snapshot or independent physical Observation.
+
+Snapshot correction validation: **194 focused passed / 2 skipped**, **956
+affected passed / 2 skipped**, **264 repository tests passed**. Full bare-host
+regression: **4134 passed / 60 skipped / 2 unchanged orphan-process failures /
+4 warnings**, 283.03 seconds. Both failures are the same unsupported bare-PID-1
+cleanup assertions recorded above, not relaxed or skipped. Ruff, two changed
+Python format checks, compile, 235 Markdown links, standard hygiene/version
+checks and **0 HIGH / 3 existing MEDIUM** security findings are recorded. No UI,
+Kernel, component lock, sandbox defaults or execution/retry policy change is
+required for this correction; source/main platform CI is reported in its PR.
+
+The same evidence review found Workbench's Chat Trace callback still queried
+Run events. Reuse the existing DetailDrawer/ExecutionTracer path instead of
+opening a misleading empty Run. Two controlled frontend cases fail before the
+correction and verify both the original Trace endpoint and refusal after a
+Controller change. **122 Desktop tests in 30 files**, lint/typecheck/build pass.
+The Snapshot Python changes have not changed since the full run above; no second
+local full Python run is needed for this bounded UI wiring correction.
 
 Two configuration distinctions also remain relevant: the main Tasks view covers
 local Work/Runtime tasks, while signed distributed Works are exposed through
