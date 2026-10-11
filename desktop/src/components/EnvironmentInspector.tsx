@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { btnPrimary, btnSecondary, card, colors, input, radius, space, typo } from "../design";
 import {
   ApiError,
+  api,
   approvalAction,
   createEnvironment,
   destroyEnvironment,
@@ -41,6 +42,7 @@ export function EnvironmentInspector() {
   const [argvText, setArgvText] = useState('["python", "-V"]');
   const [commandResult, setCommandResult] = useState<EnvironmentRunResult | null>(null);
   const [logs, setLogs] = useState("");
+  const [artifactMetadata, setArtifactMetadata] = useState<Record<string, unknown>[] | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -206,6 +208,19 @@ export function EnvironmentInspector() {
     }
   };
 
+  const inspectArtifacts = async () => {
+    if (!selected || busy) return;
+    const controller = getConfig().url;
+    setBusy(true); setError(""); setArtifactMetadata(null);
+    try {
+      const result = await api<{ artifacts: Record<string, unknown>[] }>(`/api/v1/artifacts?environment_id=${encodeURIComponent(selected)}`);
+      if (getConfig().url !== controller) throw new Error("Controller changed; review the original environment again.");
+      setArtifactMetadata(result.artifacts);
+    } catch (cause) {
+      setError(errorMessage(cause, "Artifact registry metadata is unavailable."));
+    } finally { setBusy(false); }
+  };
+
   const openLogs = async () => {
     if (!selected) return;
     setBusy(true);
@@ -300,7 +315,7 @@ export function EnvironmentInspector() {
 
           <section style={card}>
             <div style={{ color: colors.text, fontWeight: typo.semibold }}>Inspect and control</div>
-            <select aria-label="Environment library" value={selected} onChange={(event) => { setSelected(event.target.value); setLogs(""); setCommandResult(null); }} style={{ ...input, marginTop: space.md }}>
+            <select aria-label="Environment library" disabled={busy} value={selected} onChange={(event) => { setSelected(event.target.value); setLogs(""); setCommandResult(null); setArtifactMetadata(null); }} style={{ ...input, marginTop: space.md }}>
               <option value="">Select an environment</option>
               {environments.map((item) => (
                 <option key={item.environment_id} value={item.environment_id}>
@@ -327,6 +342,7 @@ export function EnvironmentInspector() {
                   {["ready", "running", "suspended"].includes(current.state) && <button onClick={() => void executeLifecycle("stop", current.environment_id)} disabled={busy} style={btnSecondary}>Stop</button>}
                   {current.state !== "destroyed" && <button onClick={() => void executeLifecycle("destroy", current.environment_id)} disabled={busy} style={{ ...btnSecondary, color: colors.danger }}>Destroy</button>}
                   <button onClick={() => void openLogs()} disabled={busy} style={btnSecondary}>Open logs</button>
+                  <button onClick={() => void inspectArtifacts()} disabled={busy} style={btnSecondary}>Inspect Artifact metadata</button>
                 </div>
                 {current.state === "ready" && (
                   <div style={{ borderTop: `1px solid ${colors.borderLight}`, paddingTop: space.md }}>
@@ -345,6 +361,7 @@ export function EnvironmentInspector() {
                 <pre style={preStyle}>{commandResult.stdout || commandResult.stderr || "(no output)"}</pre>
               </div>
             )}
+            {artifactMetadata && <section aria-label="Environment Artifact metadata" style={{ marginTop: space.md }}><h3>Registered Artifact metadata</h3><p>Registration does not verify file contents or effects. Independently compare file bytes with the recorded checksum; receipt and observation remain separate.</p>{artifactMetadata.length ? artifactMetadata.map(item => <pre key={String(item.id)} style={preStyle}>{JSON.stringify(item, null, 2)}</pre>) : <p>No Artifact metadata registered for this environment.</p>}</section>}
             {logs && <pre style={{ ...preStyle, marginTop: space.md }}>{logs}</pre>}
           </section>
         </div>
