@@ -8,6 +8,86 @@ This record distinguishes reproduced defects, inspected risks and unqualified
 external dependencies. It is not an exhaustive proof that the repository is
 bug-free, a physical acceptance, or production certification.
 
+## Product wiring audit — 2026-10-11
+
+Read-only starting main was `e5424305ec90fb0a072f21fbef371ebd5bc110f6`;
+local/remote HEAD matched and the worktree was clean. Requeried branches, open
+PRs, Issues and latest main CI before editing. Issues #1/#2/#4/#8 remained open;
+there were no open PRs. Kernel and the component lock remain frozen. This audit
+extends the existing review, rather than creating another roadmap.
+
+The repository is **not comprehensively product-qualified**. A registered route,
+class, UI panel or passing fixture does not establish an installed, connected
+product. A temporary route inventory found 422 callable registered handlers and
+no missing complete URL references in the Desktop API client (78 on the starting
+tree, 81 after three evidence helpers). Two dynamically assembled Research URL
+prefixes were checked against their existing routes separately. This is a
+registration check, not execution acceptance for all 422 endpoints.
+
+| Surface and authoritative source | Classification | Exercised or inspected boundary / remaining gap |
+| --- | --- | --- |
+| Work/Workflow/AgentSession: `work/runtime.py`, `workflow/runtime.py`, `agent/coordination.py` | REUSE | Durable owners and recovery tests exist; local Work checkpoints and distributed Work are distinct scopes, not interchangeable success records |
+| Governance/credentials: `governance/`, `control_plane/human_sessions.py` | REUSE | Existing approval, nonce, grant/lease, revocation and negative-security suites; real deployed IdP qualification remains unavailable |
+| Verified Demo: `reality/preview.py`, `tests/reality/test_verified_preview.py` | REUSE | Real simulated mutation through signed Distributed Work, receipt, independent read and MATCH-only commit; no physical acceptance |
+| Task filtering: `desktop/src/components/TaskCenter.tsx` | FIX | Counts included queued/planning/verifying, warning completion and verification failure while filters hid those rows; one shared status grouping now drives counts and rows |
+| Task route composition: `api/routes.py`, `api/desktop_routes.py` | FIX | Later Control Plane registration hid the durable Work list and replaced Artifact reads with a newly constructed empty registry. The public routes now bind the existing Work/CAS projections, preserving pagination, status counts and legacy `total`. Actual HTTP tests cover the selected route, not merely a directly imported helper |
+| Task timeline: `api/task_center_routes.py`, `events/stream.py` | FIX | The view read nonexistent `RunEvent.data` and discarded payloads; now retains original event/run/task/actor/sequence and the compatible `data` field. Task-ID and all-runs queries read bounded persisted evidence; legacy projected records are labelled |
+| Run/Trace navigation: `App.tsx`, `TaskCenter.tsx`, `DetailDrawer.tsx` | FIX | Search returned EventStream Run IDs but opened the unrelated ExecutionTracer endpoint. Run search now opens persisted activity; local Work activity opens its real task inspector. Actual trace IDs retain the existing tracer view |
+| Artifact search/detail: `api/routes.py`, `artifact/registry.py`, `artifact/content_store.py`, `DetailDrawer.tsx` | FIX | Search used only the legacy in-memory registry and detail was a static placeholder. Existing durable metadata and CAS are now searchable/readable; CAS bytes are checked by the existing store. Missing/corrupt records cannot display fake availability or a physical-effect claim |
+| Task Artifact association: `api/task_center_routes.py` | FIX | Filesystem guesses omitted registered metadata/CAS. Existing task/work/operation provenance is now included; unregistered legacy files remain explicitly unverified metadata |
+| Effect status: `api/task_center_routes.py`, `node_runtime/distributed_work.py` | FIX | A passing EvaluationRecord formerly set `verified=true`. Evaluation stays separate; only a bound recorded Reality MATCH can set that flag, with committed state shown separately. Reading this view performs no new Observation or verification |
+| Operations Console: `control_plane/operations.py`, `OperationsConsole.tsx` | REUSE | Real owner projections, approvals, recovery, local Skills and Node pairing; source-browser acceptance is not installed EXE qualification |
+| Workspace editor: `workspace/workbench.py`, `DeveloperWorkbench.tsx` | REUSE / EXTEND | Real bounded read/search/diff/governed save, hash conflicts, CAS backup, semantic activity and explicit metadata-only discussion. Multi-file editor, symbols, history/rollback UI and a model-generated multi-file proposal flow are not complete |
+| Model context/cost: `context/`, `model_runtime/bridges.py`, `model_runtime/gateway.py` | EXTEND | Existing selected snapshots, actual model invocation events, usage/cost and routing. The current Context endpoint is not a complete manifest of every message/tool result sent to a model; a transparent per-invocation inspector still needs connection to that seam |
+| Skill/Provider: `skills/`, public SDK, `tests/control_plane/test_skill_center.py` | REUSE / EXTEND | Reviewed local catalog install/load/enable/disable/uninstall with integrity and Governance. Instruction loading is not automatic executable Skill permission; general remote catalogs and real account-backed Providers need qualification |
+| Pairing/mesh: `node_runtime/relay.py`, `node_runtime/service.py`, `tests/node_runtime/` | REUSE | Persistent stable Ed25519 identity, once invitations, atomic consumption, revoke-preserving trust and signed Relay exist. Real Windows/Jetson/WAN/CGNAT acceptance and timing Issues #4/#8 remain open |
+| Environment: `environments/`, `EnvironmentInspector.tsx` | REUSE / DEFER | Lifecycle/contracts/evidence and governed UI exist. Default strict process isolation is unavailable here; engine presence alone does not qualify the existing OCI control boundary. Python/scientific/embedded/robotics template promises cannot be inferred from a selector |
+| Terminal: `cli/terminal_session.py`, `cli/shell.py` | REUSE / EXTEND | Existing bounded sessions/commands; the workspace fixed-profile execution panel is not a persistent PTY or complete local/remote/container Terminal Studio |
+| Automation API: `api/desktop_routes.py` | DEFER | `automations.json` CRUD persists configuration; inspection found no consumer of that file driving the canonical Workflow Runtime. Enabled configuration is not an executed schedule or Workflow Recorder |
+| Legacy v2 research/plugin/genome endpoints: `api/v2_routes.py` | DEFER | Six handlers explicitly return `NOUS_NOT_IMPLEMENTED`; they are not functioning integrations. Research Claims and reports use the existing v1 Evidence/Document owners |
+| Research/reporting: `evidence/`, `documents/`, `scientific/`, `simulations/` | REUSE / DEFER | Numerical claims, independent reference, Artifact and report contracts exist; strict-sandbox numerical qualification stays blocked, and manually supplied experiment scores are not a completed engineering-loop experiment |
+| Native Desktop/release: component lock, `desktop/src-tauri/`, build runbook | DEFER | Two exact locked Windows Kernel binary files remain missing; no native hash, NSIS, installed UI, uninstall or production-signing qualification can be inferred from frontend CI |
+
+The focused correction reproduces the old timeline payload loss, false
+evaluation/effect equivalence and missing registered Task Artifacts before
+changing the implementation. It replaces both evidence drawer placeholders,
+surfaces load errors, clears stale detail data when the selected ID changes,
+and disables approval actions when the original record cannot be loaded.
+No new registry, permission source, verifier, workflow or executor is introduced.
+CAS integrity is distinct from effect verification; the UI states explicitly
+that recorded evidence does not acquire a fresh observation.
+
+Two configuration distinctions also remain relevant: the main Tasks view covers
+local Work/Runtime tasks, while signed distributed Works are exposed through
+Operations; legacy Connectivity nodes and signed Relay nodes likewise have
+different owners. A panel title cannot merge their identities or trust. Some
+legacy API defaults use HOME-based storage while newer workspace services use
+the configured workspace. Configure `NOUS_WORKSPACE_ROOT` and the existing
+`NOUS_DATA_DIR` explicitly for reproducible development; this correction does
+not silently migrate those stores or create a second registry. Legacy Task
+report/event/graph helpers do not provide full distributed evidence coverage;
+use the canonical Operations views and recorded effect endpoint.
+
+Performance scope is bounded: Artifact search reads metadata, while list results
+verify content only for the selected bounded window. Existing CAS index loading
+and legacy filesystem scans still need measurement for large workspaces;
+this correction claims no unmeasured latency/Token improvement and changes no
+fsync, grant fence, sandbox profile or retry semantics. Production installation,
+physical/network qualification and research experiments remain separate Gates.
+
+Final local correction evidence: **66 focused passed**, **1030 affected passed /
+4 skipped**, **262 repository passed**, and **98 Desktop tests in 28 files**;
+Desktop lint/typecheck/build also pass. Full bare-host regression is **4119 passed /
+60 skipped / 2 failures / 4 existing warnings** (284.69 s). The two unchanged
+process-session orphan cleanup assertions see zombies retained by bare PID 1;
+their assertions and failure logs are preserved, not skipped. No new regression
+remains in that final run. Ruff, changed-file formatting, compile, 235 Markdown
+link targets, hygiene/identity/metadata/version and security checks pass; security
+has zero HIGH and three existing MEDIUM findings. Component-lock contract tests
+have **3 passed**, while actual native hash verification again fails on the
+missing locked Windows daemon. PR/main platform CI is reported separately in
+the integration PR; these local results do not substitute for it.
+
 ## Repository and architecture audit
 
 Requeried GitHub branches, PRs, issues and baseline workflow runs. Local HEAD and

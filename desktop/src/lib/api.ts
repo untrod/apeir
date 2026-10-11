@@ -366,6 +366,15 @@ export const submitWork = (data: {
 export const inspectWork = (runId: string) =>
   api(`/api/v1/work/${encodeURIComponent(runId)}`);
 
+export const fetchArtifact = (artifactId: string) =>
+  api<Record<string, unknown>>(`/api/v1/artifacts?${new URLSearchParams({ artifact_id: artifactId })}`);
+
+export const fetchTaskVerification = (taskId: string) =>
+  api<Record<string, unknown>>(`/api/v1/tasks/${encodeURIComponent(taskId)}/verification`);
+
+export const fetchTaskTimeline = (taskId: string) =>
+  api<Record<string, unknown>>(`/api/v1/tasks/timeline?${new URLSearchParams({ task_id: taskId })}`);
+
 // Devices
 export const fetchDevices = () =>
   api<{ devices: DeviceView[]; total: number; online: number }>("/api/v1/devices");

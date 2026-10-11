@@ -46,6 +46,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from nous_runtime.api.responses import err_response, ok_response
+from nous_runtime.core.errors import ArtifactError
 
 log = logging.getLogger("nous.api")
 
@@ -482,11 +483,30 @@ def _workspace_artifact_records():
     return ArtifactRegistry(storage).list()
 
 
+def _workspace_content_stores():
+    """Read the same CAS locations projected by the Operations Plane."""
+    from nous_runtime.artifact import ContentAddressedArtifactStore
+
+    root = Path(os.environ.get("NOUS_WORKSPACE_ROOT", ".")).expanduser().resolve()
+    controller = (
+        Path(os.environ.get("NOUS_CONTROLLER_STATE_DIR") or root / ".nous" / "relay")
+        .expanduser()
+        .resolve()
+    )
+    for path in dict.fromkeys((controller / "artifacts", root / ".nous" / "artifacts")):
+        if (path / "index.json").is_file():
+            yield ContentAddressedArtifactStore(path)
+
+
 def handle_list_artifacts(
-    task_id: str = "", limit: int = 50, environment_id: str = ""
+    task_id: str = "", limit: int = 50, environment_id: str = "", artifact_id: str = ""
 ) -> dict[str, Any]:
     """List actual registered metadata; registration is not effect verification."""
     try:
+        if artifact_id:
+            # CAS IDs contain a colon, which is intentionally excluded from
+            # generic route path parameters. Resolve them through this query.
+            return handle_get_artifact(artifact_id)
         maximum = max(1, min(int(limit), 500))
         artifacts = [
             item.to_dict()
@@ -497,17 +517,46 @@ def handle_list_artifacts(
                 or item.metadata.get("environment_id") == environment_id
             )
         ]
+        content_stores = {}
+        for store in _workspace_content_stores():
+            matching = [
+                item
+                for item in store.list()
+                if (
+                    not task_id
+                    or task_id
+                    in (
+                        item.produced_by,
+                        item.metadata.get("task_id"),
+                        item.metadata.get("work_id"),
+                        item.metadata.get("operation_id"),
+                    )
+                )
+                and (
+                    not environment_id
+                    or item.metadata.get("environment_id") == environment_id
+                )
+            ]
+            artifacts.extend(item.to_dict() for item in matching)
+            content_stores.update({item.digest: store for item in matching})
+        selected = artifacts[-maximum:]
+        for item in selected:
+            digest = item.get("digest")
+            if digest in content_stores:
+                item["integrity"] = (
+                    "MATCH" if content_stores[digest].verify(digest) else "MISMATCH"
+                )
         return ok_response(
             {
                 "task_id": task_id,
-                "artifacts": artifacts[-maximum:],
+                "artifacts": selected,
                 "count": len(artifacts),
                 "scope": "runtime-service-artifact-metadata",
             }
         )
     except (TypeError, ValueError):
         return err_response("NOUS_INVALID_REQUEST", "Artifact query is invalid")
-    except (OSError, PermissionError):
+    except (OSError, PermissionError, ArtifactError):
         return err_response("NOT_AVAILABLE", "Artifact registry is unavailable")
 
 
@@ -519,6 +568,26 @@ def handle_get_artifact(artifact_id: str) -> dict[str, Any]:
             None,
         )
         if artifact is None:
+            from nous_runtime.artifact import registry as artifact_registry
+
+            artifact = artifact_registry.get(artifact_id)
+        if artifact is None:
+            if re.fullmatch(r"sha256:[0-9a-f]{64}", artifact_id):
+                for store in _workspace_content_stores():
+                    content = store.get(artifact_id)
+                    if content is not None:
+                        return ok_response(
+                            {
+                                "artifact_id": content.artifact_id,
+                                "artifact": content.to_dict(),
+                                "status": "registered",
+                                "integrity": "MATCH"
+                                if store.verify(content.digest)
+                                else "MISMATCH",
+                                "scope": "runtime-service-artifact-cas",
+                                "effect_verification_performed": False,
+                            }
+                        )
             return err_response(
                 "NOUS_NOT_FOUND", "Artifact is not registered in this workspace"
             )
@@ -531,7 +600,7 @@ def handle_get_artifact(artifact_id: str) -> dict[str, Any]:
                 "effect_verification_performed": False,
             }
         )
-    except (OSError, PermissionError):
+    except (OSError, PermissionError, ArtifactError):
         return err_response("NOT_AVAILABLE", "Artifact registry is unavailable")
 
 
@@ -1397,23 +1466,32 @@ def handle_global_search(
         try:
             from nous_runtime.artifact import registry as artifact_registry
 
-            for artifact in artifact_registry.list():
+            records = [item.to_dict() for item in artifact_registry.list()]
+            records.extend(item.to_dict() for item in _workspace_artifact_records())
+            for store in _workspace_content_stores():
+                records.extend(item.to_dict() for item in store.list())
+            seen = set()
+            for artifact in records:
+                artifact_id = artifact.get("id") or artifact.get("digest", "")
+                if artifact_id in seen:
+                    continue
+                seen.add(artifact_id)
                 searchable = " ".join(
                     (
-                        str(getattr(artifact, "name", "")),
-                        str(getattr(artifact, "location", "")),
-                        str(getattr(artifact, "type", "")),
+                        str(artifact.get("name", "")),
+                        str(artifact.get("location", "")),
+                        str(artifact.get("type") or artifact.get("artifact_type", "")),
                     )
                 )
                 if needle in searchable.casefold():
                     add(
                         "artifact",
-                        str(getattr(artifact, "id", "")),
-                        str(getattr(artifact, "name", "Artifact")),
-                        str(getattr(artifact, "type", "")),
-                        str(getattr(artifact, "location", "")),
+                        artifact_id,
+                        str(artifact.get("name", "Artifact")),
+                        str(artifact.get("type") or artifact.get("artifact_type", "")),
+                        str(artifact.get("location", "")),
                     )
-        except (OSError, ValueError):
+        except (OSError, ValueError, ArtifactError):
             pass
 
     if len(results) < maximum and wanted in {"all", "run", "runs", "trace", "traces"}:
@@ -1899,6 +1977,15 @@ try:
     from nous_runtime.control_plane.routes import CONTROL_PLANE_ROUTES
 
     ROUTES.update(CONTROL_PLANE_ROUTES)
+    from nous_runtime.api.desktop_routes import handle_tasks_list
+    from nous_runtime.api.task_center_routes import (
+        handle_task_artifacts as project_task_artifacts,
+    )
+
+    # Legacy overlap must not hide the existing durable Work/CAS projections.
+    # These read adapters retain the Control Plane's pagination/total fields.
+    ROUTES[("GET", "/api/v1/tasks")] = handle_tasks_list
+    ROUTES[("GET", "/api/v1/tasks/{task_id}/artifacts")] = project_task_artifacts
 except ImportError:
     pass
 

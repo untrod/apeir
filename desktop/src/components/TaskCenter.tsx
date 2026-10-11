@@ -29,19 +29,22 @@ export function TaskCenter({ onTaskClick, onTraceClick }: TaskCenterProps) {
   const allTasks = useTasks();
   const [filter, setFilter] = useState<string>("all");
 
+  const statusGroups: Record<string, string[]> = {
+    running: ["running", "queued", "dispatching", "planning", "verifying", "recovering", "waiting_for_model", "waiting_for_node"],
+    needs_input: ["awaiting_approval", "waiting_user", "blocked"],
+    completed: ["completed", "completed_with_warnings"],
+    failed: ["failed", "failed_verification"],
+  };
+  const matches = (task: Task, key: string) => key === "all" || statusGroups[key]?.includes(task.status);
   const tabs = [
     { key: "all", label: "All", count: allTasks.length },
-    { key: "running", label: "Active", count: allTasks.filter((t) => ["running", "queued", "dispatching", "planning", "verifying"].includes(t.status)).length },
-    { key: "needs_input", label: "Needs Input", count: allTasks.filter((t) => ["awaiting_approval", "waiting_user", "blocked"].includes(t.status)).length },
-    { key: "completed", label: "Completed", count: allTasks.filter((t) => t.status === "completed" || t.status === "completed_with_warnings").length },
-    { key: "failed", label: "Failed", count: allTasks.filter((t) => t.status === "failed" || t.status === "failed_verification").length },
-  ];
+    { key: "running", label: "Active", count: 0 },
+    { key: "needs_input", label: "Needs Input", count: 0 },
+    { key: "completed", label: "Completed", count: 0 },
+    { key: "failed", label: "Failed", count: 0 },
+  ].map(tab => ({ ...tab, count: allTasks.filter(task => matches(task, tab.key)).length }));
 
-  const filtered = filter === "all"
-    ? allTasks
-    : filter === "needs_input"
-      ? allTasks.filter((t) => ["awaiting_approval", "waiting_user", "blocked"].includes(t.status))
-      : allTasks.filter((t) => t.status === filter);
+  const filtered = allTasks.filter(task => matches(task, filter));
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: colors.bg }}>
@@ -214,8 +217,8 @@ function TaskRow({ task, onTaskClick, onTraceClick }: {
               View Details
             </button>
             {task.trace_id && (
-              <button onClick={() => onTraceClick(task.trace_id!)} style={{ ...btnSecondary, fontSize: typo.xs, padding: `${space.xs} ${space.md}` }}>
-                View Trace
+              <button onClick={() => task.task_kind === "work" ? onTaskClick(task.id) : onTraceClick(task.trace_id!)} style={{ ...btnSecondary, fontSize: typo.xs, padding: `${space.xs} ${space.md}` }}>
+                {task.task_kind === "work" ? "View Work Activity" : "View Trace"}
               </button>
             )}
             {task.conversation_id && (

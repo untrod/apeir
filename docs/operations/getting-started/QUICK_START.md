@@ -162,6 +162,20 @@ isolation. **Open environments** opens the existing Environment view. Neither
 panel settings nor installation grant execution permission; unavailable isolation
 remains BLOCKED. These are source-browser paths, not installed APEIR.exe acceptance.
 
+### Task and Artifact evidence
+
+In the main Desktop source interface, open **Tasks** and select an original
+task/Work. Its inspector reads persisted activity and recorded Runtime-service
+effect verification. A passing evaluation score stays separate from MATCH;
+UNKNOWN and MISMATCH never show a verified effect. An unavailable owner is shown
+as an error, rather than an empty successful record. The Operations Console's
+**works / evidence** views remain the entry point for distributed Work.
+
+Use global search to find registered Artifact names and open their real metadata
+inspector. CAS-backed Artifacts include an actual byte-integrity result;
+registration or a digest MATCH does not verify a physical effect. Opening a
+record does not perform a new Observation or replay the original Operation.
+
 ### Environment workbench
 
 The existing Operations Console now opens **environments** alongside Work, Nodes
