@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EnvironmentInspector } from "../components/EnvironmentInspector";
 import {
@@ -56,6 +56,8 @@ const readyEnvironment: EnvironmentRecord = {
   last_error: "",
   sha256: "a".repeat(64),
 };
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("environment inspector", () => {
   beforeEach(() => {
@@ -181,6 +183,17 @@ describe("environment inspector", () => {
     expect(await screen.findByText(/Response lost; UNKNOWN effect/)).toBeInTheDocument();
     expect(runEnvironment).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/Exit 0/)).not.toBeInTheDocument();
+  });
+
+  it("inspects actual scoped registry metadata without claiming verification", async () => {
+    vi.mocked(fetchEnvironments).mockResolvedValue({ environments: [readyEnvironment], total: 1 });
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: { artifacts: [{ id: "artifact_contract_real", metadata: { sha256: "f".repeat(64) } }] } }) });
+    vi.stubGlobal("fetch", fetcher);
+    render(<EnvironmentInspector />);
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect Artifact metadata" }));
+    expect(await screen.findByLabelText("Environment Artifact metadata")).toHaveTextContent("artifact_contract_real");
+    expect(screen.getByLabelText("Environment Artifact metadata")).toHaveTextContent("Registration does not verify");
+    expect(fetcher.mock.calls[0][0]).toContain(`environment_id=${readyEnvironment.environment_id}`);
   });
 
 });

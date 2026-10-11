@@ -85,7 +85,9 @@ class EnvironmentRuntime:
             },
             "event_authority": "EventStream",
             "artifact_authority": "ArtifactRegistry",
-            "state_authority": default_workspace_path("environments", "records").as_posix(),
+            "state_authority": default_workspace_path(
+                "environments", "records"
+            ).as_posix(),
         }
 
     def create(self, value: Mapping[str, Any]) -> dict[str, Any]:
@@ -118,15 +120,30 @@ class EnvironmentRuntime:
         try:
             path = self._environment_path(environment.environment_id)
             self._write_environment(path, environment)
+            snapshot = (
+                self.outputs / environment.environment_id / f"{run_id}-contract.json"
+            ).resolve()
+            if not _is_below(self.outputs.resolve(), snapshot) or not _is_below(
+                self.root, snapshot
+            ):
+                raise EnvironmentValidationError(
+                    "environment contract artifact escaped output storage"
+                )
+            self._write_environment(snapshot, environment)
+            encoded = snapshot.read_bytes()
             artifact = self.artifacts.create(
                 ArtifactType.FILE,
                 f"Environment Contract: {environment.environment_id}",
-                location=path.relative_to(self.root).as_posix(),
+                location=snapshot.relative_to(self.root).as_posix(),
                 creator="environment.runtime",
                 metadata={
                     "environment_id": environment.environment_id,
                     "format": "environment-contract",
-                    "sha256": environment.digest(),
+                    "sha256": hashlib.sha256(encoded).hexdigest(),
+                    "size_bytes": len(encoded),
+                    "environment_contract_sha256": environment.digest(),
+                    "run_id": run_id,
+                    "task_id": task_id,
                     "schema_version": environment.schema_version,
                     "provider": environment.provider,
                 },
