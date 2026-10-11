@@ -123,6 +123,27 @@ zero Chat/model requests, with no page errors or 390px overflow. These source
 checks use the explicitly labelled fake-adapter evidence fixture; they do not
 qualify installed Windows Desktop or real model/identity/hardware paths.
 
+File-read evidence review reproduced a separate consistency defect in
+`chat/agent_tools.py`: a controlled edit between text reading and the second
+byte read returned the old content with the new file's digest. Two regression
+cases fail on the original implementation, including growth after the size
+precheck. The existing tool now obtains one bounded byte buffer, checks its
+actual size, decodes the selected lines and hashes that same buffer. UTF-8 and
+LF/CRLF/CR behavior and the 256 KiB limit are retained. Permission/path checks,
+Governance, model admission and EffectVerification do not change. This binds
+the tool's content and digest; it does not lock out subsequent user edits or
+provide an atomic filesystem snapshot or independent physical Observation.
+
+Snapshot correction validation: **194 focused passed / 2 skipped**, **956
+affected passed / 2 skipped**, **264 repository tests passed**. Full bare-host
+regression: **4134 passed / 60 skipped / 2 unchanged orphan-process failures /
+4 warnings**, 283.03 seconds. Both failures are the same unsupported bare-PID-1
+cleanup assertions recorded above, not relaxed or skipped. Ruff, two changed
+Python format checks, compile, 235 Markdown links, standard hygiene/version
+checks and **0 HIGH / 3 existing MEDIUM** security findings are recorded. No UI,
+Kernel, component lock, sandbox defaults or execution/retry policy change is
+required for this correction; source/main platform CI is reported in its PR.
+
 Two configuration distinctions also remain relevant: the main Tasks view covers
 local Work/Runtime tasks, while signed distributed Works are exposed through
 Operations; legacy Connectivity nodes and signed Relay nodes likewise have
