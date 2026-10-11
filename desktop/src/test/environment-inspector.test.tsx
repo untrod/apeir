@@ -196,4 +196,39 @@ describe("environment inspector", () => {
     expect(fetcher.mock.calls[0][0]).toContain(`environment_id=${readyEnvironment.environment_id}`);
   });
 
+  it("shows persisted failure after approval without offering the spent decision again", async () => {
+    const created = { ...readyEnvironment, state: "created" as const };
+    vi.mocked(fetchEnvironments).mockResolvedValue({ environments: [created], total: 1 });
+    vi.mocked(startEnvironment)
+      .mockRejectedValueOnce(new ApiError("NOUS_APPROVAL_REQUIRED", "Approval required", { approval_request_id: "apr_start" }))
+      .mockImplementationOnce(async () => {
+        vi.mocked(fetchEnvironments).mockResolvedValue({ environments: [{ ...created, state: "failed", last_error: "STRICT_SANDBOX_UNAVAILABLE" }], total: 1 });
+        throw new Error("OCI create failed: STRICT_SANDBOX_UNAVAILABLE");
+      });
+    render(<EnvironmentInspector />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve once and start" }));
+    expect(await screen.findByRole("option", { name: /local_sandbox - failed/ })).toBeInTheDocument();
+    expect(screen.getByText("OCI create failed: STRICT_SANDBOX_UNAVAILABLE")).toBeInTheDocument();
+    expect(screen.queryByText("Explicit approval required")).not.toBeInTheDocument();
+    expect(approvalAction).toHaveBeenCalledTimes(1);
+    expect(startEnvironment).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not offer reapproval or execute again after an approved command loses its response", async () => {
+    vi.mocked(fetchEnvironments).mockResolvedValue({ environments: [readyEnvironment], total: 1 });
+    vi.mocked(runEnvironment)
+      .mockRejectedValueOnce(new ApiError("NOUS_APPROVAL_REQUIRED", "Approval required", { approval_request_id: "apr_run" }))
+      .mockRejectedValueOnce(new Error("Response lost"));
+    render(<EnvironmentInspector />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run in environment" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve once and run" }));
+    expect(await screen.findByText(/Response lost.*UNKNOWN/)).toBeInTheDocument();
+    expect(screen.queryByText("Explicit approval required")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Exit 0/)).not.toBeInTheDocument();
+    expect(approvalAction).toHaveBeenCalledTimes(1);
+    expect(runEnvironment).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(runEnvironment).mock.calls[1]).toEqual(vi.mocked(runEnvironment).mock.calls[0]);
+  });
+
 });

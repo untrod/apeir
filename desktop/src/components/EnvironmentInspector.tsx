@@ -48,10 +48,12 @@ export function EnvironmentInspector() {
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
+    const controller = getConfig().url;
     const [nextStatus, nextEnvironments] = await Promise.all([
       fetchEnvironmentStatus(),
       fetchEnvironments(),
     ]);
+    if (getConfig().url !== controller) throw new Error("Controller changed; reload the original environment state.");
     setStatus(nextStatus);
     setEnvironments(nextEnvironments.environments);
     if (!selected && nextEnvironments.environments[0]?.environment_id) {
@@ -95,6 +97,23 @@ export function EnvironmentInspector() {
     return true;
   };
 
+  const refreshAfterFailure = async (controller: string, message: string) => {
+    if (getConfig().url !== controller) {
+      setError("Controller changed; inspect the original request before continuing.");
+      return;
+    }
+    try {
+      await refresh();
+    } catch {
+      message += " Persisted state is unavailable; the outcome remains unconfirmed.";
+    }
+    if (getConfig().url !== controller) {
+      setError("Controller changed; inspect the original request before continuing.");
+      return;
+    }
+    setError(message);
+  };
+
   const executeCreate = async (request: EnvironmentCreateRequest) => {
     const controller = getConfig().url;
     setBusy(true);
@@ -106,7 +125,7 @@ export function EnvironmentInspector() {
       await refresh();
     } catch (cause) {
       if (!captureApproval(cause, { kind: "create", approvalId: "", request, controller })) {
-        setError(errorMessage(cause, "Environment creation failed."));
+        await refreshAfterFailure(controller, errorMessage(cause, "Environment creation failed."));
       }
     } finally {
       setBusy(false);
@@ -128,7 +147,7 @@ export function EnvironmentInspector() {
       await refresh();
     } catch (cause) {
       if (!captureApproval(cause, { kind, approvalId: "", environmentId, controller })) {
-        setError(errorMessage(cause, `Environment ${kind} failed.`));
+        await refreshAfterFailure(controller, errorMessage(cause, `Environment ${kind} failed.`));
       }
     } finally {
       setBusy(false);
@@ -160,7 +179,7 @@ export function EnvironmentInspector() {
       await refresh();
     } catch (cause) {
       if (!captureApproval(cause, { kind: "run", approvalId: "", environmentId, request, controller })) {
-        setError(`${errorMessage(cause, "Environment command response is unavailable.")} Outcome may be UNKNOWN. Inspect original events, logs and Artifacts before repeating the command.`);
+        await refreshAfterFailure(controller, `${errorMessage(cause, "Environment command response is unavailable.")} Outcome may be UNKNOWN. Inspect original events, logs and Artifacts before repeating the command.`);
       }
     } finally {
       setBusy(false);
@@ -175,6 +194,7 @@ export function EnvironmentInspector() {
     try {
       if (getConfig().url !== reviewed.controller) throw new Error("Controller changed; review the original request again.");
       await approvalAction(reviewed.approvalId, "approve");
+      setPending(null);
       if (getConfig().url !== reviewed.controller) throw new Error("Controller changed; the original request was not resumed.");
       setBusy(false);
       if (reviewed.kind === "create") await executeCreate(reviewed.request);

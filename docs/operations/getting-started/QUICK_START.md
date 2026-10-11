@@ -135,6 +135,9 @@ records. Configure the existing service authentication for Environment requests
 and a separately enrolled human session for Approve Once or Deny; a service token
 cannot approve its own request. Review the exact request and Controller before
 approval. Source-browser checks are not installed Desktop qualification.
+After a confirmed approval, a failed start/run must not keep displaying that
+spent decision as pending. The view refreshes persistent state using read-only
+queries; a failed or lost response never triggers another execution request.
 
 Environment creation persists a contract; it does not prove a command ran.
 Inspect the actual start/run outcome, EventStream and Artifact records. Creation
