@@ -95,6 +95,7 @@ def run_node(
 
 @node_daemon_app.callback()
 def node_daemon(
+    ctx: typer.Context,
     state_dir: Path = typer.Option(DEFAULT_NODE_STATE_DIR, "--state-dir"),
     name: str = typer.Option("", "--name"),
     heartbeat_seconds: float = typer.Option(15.0, "--heartbeat-seconds", min=0.1),
@@ -109,6 +110,8 @@ def node_daemon(
     server_public_key: str = typer.Option("", "--server-public-key"),
     ca_file: Path | None = typer.Option(None, "--ca-file"),
 ) -> None:
+    if ctx.invoked_subcommand is not None:
+        return
     run_node(
         state_dir=state_dir,
         name=name,
@@ -120,6 +123,38 @@ def node_daemon(
         server_public_key=server_public_key,
         ca_file=ca_file,
     )
+
+
+@node_daemon_app.command("pair")
+def pair_node(
+    request_id: str = typer.Option(..., "--request-id"),
+    relay_url: str = typer.Option(..., "--relay-url"),
+    server_public_key: str = typer.Option(..., "--server-public-key"),
+    state_dir: Path = typer.Option(DEFAULT_NODE_STATE_DIR, "--state-dir"),
+    ca_file: Path | None = typer.Option(None, "--ca-file"),
+    status: bool = typer.Option(
+        False,
+        "--status",
+        help="Query original request after approval or a lost response; do not reuse its code.",
+    ),
+) -> None:
+    """Prove the persistent Node identity; the Controller human must still approve."""
+    from nous_runtime.node_runtime.relay import NodeRelayClient
+
+    service = NodeRuntimeService(NodeRuntimeConfig(state_dir=state_dir))
+    context = (
+        ssl.create_default_context(cafile=str(ca_file) if ca_file else None)
+        if relay_url.lower().startswith("wss://")
+        else None
+    )
+    client = NodeRelayClient(service, relay_url, server_public_key, ssl_context=context)
+    code = (
+        ""
+        if status
+        else typer.prompt("One-time pairing code", hide_input=True, err=True)
+    )
+    result = asyncio.run(client.pair(request_id, pairing_code=code))
+    typer.echo(json.dumps(result, sort_keys=True))
 
 
 def main() -> None:

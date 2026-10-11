@@ -94,6 +94,73 @@ def trust_node(
     )
 
 
+@app.command("pairing-create")
+def pairing_create(
+    relay_url: str = typer.Option(..., "--relay-url"),
+    state_dir: Path = typer.Option(default_workspace_path("relay"), "--state-dir"),
+) -> None:
+    """Issue an invitation as the authenticated local OS owner; no execution grant."""
+    relay = _controller(state_dir)
+    _node_trust_action(
+        relay,
+        {
+            "kind": "pairings",
+            "action": "create",
+            "target_id": relay.public_key,
+            "relay_url": relay_url,
+        },
+    )
+
+
+@app.command("pairing-list")
+def pairing_list(
+    state_dir: Path = typer.Option(default_workspace_path("relay"), "--state-dir"),
+) -> None:
+    """Inspect pending proofs without codes or private keys."""
+    typer.echo(json.dumps(_controller(state_dir).list_pairings(), sort_keys=True))
+
+
+@app.command("pairing-decide")
+def pairing_decide(
+    request_id: str = typer.Argument(...),
+    node_id: str = typer.Option(..., "--node-id"),
+    public_key: str = typer.Option(..., "--public-key"),
+    approve: bool = typer.Option(False, "--approve-once/--deny"),
+    state_dir: Path = typer.Option(default_workspace_path("relay"), "--state-dir"),
+) -> None:
+    """Explicitly confirm the exact pending Node identity, or deny it."""
+    _node_trust_action(
+        _controller(state_dir),
+        {
+            "kind": "pairings",
+            "action": "approve_once" if approve else "deny",
+            "target_id": request_id,
+            "node_id": node_id,
+            "public_key": public_key,
+        },
+    )
+
+
+@app.command("revoke-node")
+def revoke_node(
+    node_id: str = typer.Argument(...),
+    state_dir: Path = typer.Option(default_workspace_path("relay"), "--state-dir"),
+) -> None:
+    """Persist trust revocation; existing effects still require reconciliation."""
+    _node_trust_action(
+        _controller(state_dir),
+        {"kind": "nodes", "action": "revoke", "target_id": node_id},
+    )
+
+
+def _node_trust_action(relay: NodeRelayServer, body: dict) -> None:
+    from nous_runtime.control_plane.operations import OperationsPlane
+    from nous_runtime.governance.cli import _build_context
+
+    view = OperationsPlane(controller_state=relay.state_dir, controller=relay)
+    typer.echo(json.dumps(view.node_action(body, _build_context()), sort_keys=True))
+
+
 @app.command("status")
 def controller_status(
     state_dir: Path = typer.Option(default_workspace_path("relay"), "--state-dir"),

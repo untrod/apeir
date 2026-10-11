@@ -295,7 +295,17 @@ class RuntimeAPIHandler(BaseHTTPRequestHandler):
         return data
 
     def _write(self, status: int, data: dict[str, Any]) -> None:
-        payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        from nous_runtime.control_plane.operations import PairingInvitationResponse
+
+        wire_data = data
+        if status == 200 and isinstance(data, PairingInvitationResponse):
+            # Only the governed human invitation route produces this type.
+            # The code never enters ordinary route JSON, events or audit content.
+            wire_data = {
+                **data,
+                "data": {**data["data"], "pairing_code": data.pairing_code},
+            }
+        payload = json.dumps(wire_data, ensure_ascii=False).encode("utf-8")
         try:
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")

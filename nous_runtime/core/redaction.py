@@ -22,6 +22,7 @@ _SENSITIVE_MARKERS = (
     "cookie",
     "credential",
     "password",
+    "pairing_code",
     "private_key",
     "secret",
     "session_token",
@@ -145,7 +146,7 @@ def register_sensitive_value(value: str) -> None:
 
 _SECRET_VALUE_PATTERNS = (
     re.compile(
-        r"""(?i)["'](?:access_token|refresh_token|id_token|authorization|password|api_key|client_secret)["']\s*:\s*["'][^"']+["']"""
+        r"""(?i)["'](?:access_token|refresh_token|id_token|authorization|password|pairing_code|api_key|client_secret)["']\s*:\s*["'][^"']+["']"""
     ),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
     re.compile(r"\bAKIA[A-Z0-9]{16}\b"),

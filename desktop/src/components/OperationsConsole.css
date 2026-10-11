@@ -65,3 +65,8 @@
 .operations-node-state dd { margin:0; }
 @media(max-width:900px) { .operations-workbench { flex-wrap:wrap; }.operations-evidence { width:100%!important; max-width:100%; border-left:none; border-top:1px solid var(--nous-border); }.operations-resize { display:none; } }
 @media(max-width:600px) { .operations-console { padding:12px; }.operations-workbench { display:block; }.operations-header > .operations-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; }.operations-resources { width:auto; display:flex; overflow:auto; gap:4px; border-right:none; border-bottom:1px solid var(--nous-border); }.operations-resources h2 { display:none; }.operations-resources button { width:auto; flex-shrink:0; }.operations-center { width:auto; }.operations-search { flex-wrap:wrap; }.operations-search input { width:100%; }.operations-records { max-height:55vh; } }
+.operations-demo form { display:grid; gap:12px; max-width:760px; margin-top:12px; }
+.operations-demo form label { display:block; min-width:0; }
+.operations-demo output,.operations-controls span { overflow-wrap:anywhere; }
+.operations-demo output { display:block; font:12px monospace; padding:8px 0; }
+.operations-controls span { max-width:100%; font-size:12px; }

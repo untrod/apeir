@@ -222,3 +222,89 @@ Kernel; its evidence labels that explicitly.
 Queue/dispatch, Artifact transfer, independent Observation/Verification spans,
 real reconnect distributions and Windows/Jetson/NAT measurements still require
 additional qualification. This measurement does not close Issues #4 or #8.
+
+## One-time signed Node onboarding
+
+The signed Controller owns enrollment in its existing `trusted-nodes.json`;
+legacy Connectivity `PairingService` remains in-memory compatibility code.
+Pairing never issues a Work, CapabilityGrant, credential lease or Device trust.
+
+As the trusted local Controller OS owner, start the existing listener, then issue
+an invitation with its advertised address:
+
+```sh
+apeir-controller serve --state-dir ./controller
+apeir-controller pairing-create --state-dir ./controller --relay-url ws://127.0.0.1:9771
+```
+
+The default listener port is documented by `apeir-controller serve --help`; use
+its actual address. Loopback `ws` is for local development only. A remote address
+requires `wss`, a verified TLS certificate and the Controller public key confirmed
+through a trusted channel. No route, DNS or port-forwarding changes are performed.
+The returned eight-character code expires within five minutes. Do not store it in
+scripts, logs, screenshots or command-line arguments. On the stopped Node:
+
+```sh
+apeir-node pair --state-dir ./node --request-id <request-id> \
+  --relay-url <verified-relay-url> --server-public-key <confirmed-controller-key>
+```
+
+The CLI prompts privately for the code and signs with the existing persistent
+Node key. It publishes a PENDING proof, not an executable session. Inspect the
+exact Node public key and approve or deny explicitly:
+
+```sh
+apeir-controller pairing-list --state-dir ./controller
+apeir-controller pairing-decide <request-id> --state-dir ./controller \
+  --node-id <confirmed-node-id> --public-key <confirmed-node-public-key> --approve-once
+# Replace --approve-once with --deny to refuse trust.
+apeir-node pair --state-dir ./node --request-id <request-id> \
+  --relay-url <verified-relay-url> --server-public-key <confirmed-controller-key> --status
+apeir-node --state-dir ./node --relay-url <verified-relay-url> \
+  --server-public-key <confirmed-controller-key>
+```
+
+Only one Node daemon/journal writer is supported. Run onboarding while that
+daemon is stopped. After a lost pairing ACK, use `--status` on the original
+request, never its spent code. Controller/Node restart preserves the proof,
+identity and original decision. The five-attempt bound and atomic consumption
+share the existing Controller trust-file lock; pending invitations are bounded
+to 32; 1,024 retained request records are the storage ceiling, with no automatic
+deletion of original decisions. Incorrect identity, replay, expired proof or invalid state fails closed.
+
+The Operations Workbench **Add Node** form uses the same authority. Sign in through
+the configured trusted human boundary, confirm the Controller key, enter its WSS
+Relay address and create an invitation. Inspect the submitted Node key in
+**pairings**, then select **Trust this Node once** or **Deny**. The invitation
+code is transient UI state; layout storage contains no code. Its typed human
+HTTP response uses `no-store`; ordinary API serialization and logging redact it.
+The remote human policy must separately allow `governance.approve` and
+`control.node_pair` on the selected `controller:<key>` / `node:<id>` resource.
+Node revocation additionally requires `control.revoke` on that Node. A service
+bearer token, model-supplied user claim or valid Node key cannot perform these
+human mutations. Existing cookie/session, Origin, permission and nonce checks
+remain in place. Fake OIDC Cloud tests are not deployed IdP qualification.
+
+```sh
+apeir-controller revoke-node <node-id> --state-dir ./controller
+```
+
+Revocation retains the original identity and evidence. Existing sessions are
+closed by trust monitoring; inbound messages and new dispatch recheck current
+trust. Ordinary registration, restart and pairing cannot revive a revoked Node.
+Already admitted effects may finish: revocation is not proof of interruption and
+requires original journal reconciliation/independent observation. Explicit
+revoked-identity restoration is not exposed in this slice.
+
+Human decisions are recorded before trust persistence in the existing Governance
+trail, with actor/session/context, request, exact public keys and proof digest.
+`trust_persistence_confirmed=false` denotes decision/admission evidence, not a
+claim that the separate file write succeeded. The canonical trust record confirms
+application. Audit failure blocks publication; a file-write failure leaves the
+original PENDING proof, which can be inspected before another human decision.
+Trust administration uses an empty Work binding and issues no execution grant.
+
+The exercised acceptance scope is signed Cloud loopback, real Node CLI processes,
+Controller reload, concurrent decision processes and fake human HTTP sessions.
+Windows native UI, Jetson, WAN/CGNAT/proxy networks, real IdP and physical Device
+acceptance remain separate PENDING/BLOCKED gates. Issues #4/#8 remain open.
