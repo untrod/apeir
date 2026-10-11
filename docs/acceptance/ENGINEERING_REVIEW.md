@@ -37,7 +37,7 @@ registration check, not execution acceptance for all 422 endpoints.
 | Task Artifact association: `api/task_center_routes.py` | FIX | Filesystem guesses omitted registered metadata/CAS. Existing task/work/operation provenance is now included; unregistered legacy files remain explicitly unverified metadata |
 | Effect status: `api/task_center_routes.py`, `node_runtime/distributed_work.py` | FIX | A passing EvaluationRecord formerly set `verified=true`. Evaluation stays separate; only a bound recorded Reality MATCH can set that flag, with committed state shown separately. Reading this view performs no new Observation or verification |
 | Operations Console: `control_plane/operations.py`, `OperationsConsole.tsx` | REUSE | Real owner projections, approvals, recovery, local Skills and Node pairing; source-browser acceptance is not installed EXE qualification |
-| Workspace editor: `workspace/workbench.py`, `DeveloperWorkbench.tsx` | REUSE / EXTEND | Real bounded read/search/diff/governed save, hash conflicts, CAS backup, semantic activity and explicit metadata-only discussion. Multi-file editor, symbols, history/rollback UI and a model-generated multi-file proposal flow are not complete |
+| Workspace editor: `workspace/workbench.py`, `DeveloperWorkbench.tsx` | REUSE / EXTEND | Real bounded read/search/diff/governed save, hash conflicts, CAS backup, semantic activity and explicit metadata-only discussion. Up to 12 independent in-memory editor tabs now retain drafts/digests/diffs and exact pending approvals. Symbols, history/rollback UI and a model-generated multi-file proposal flow are not complete |
 | Model context/cost: `context/`, `model_runtime/bridges.py`, `model_runtime/gateway.py` | EXTEND | Chat now records a content-free per-iteration input manifest after Agent admission, including rendered-context truncation and preceding file-read provenance. The inspector replays original EventStream Run IDs, retained through Conversation restart, and separates estimates from Provider usage. This covers application Chat Gateway input, not provider receipt, every collaborative invocation or a newly built Context snapshot |
 | Chat input controls: `Composer.tsx`, `ChatView.tsx`, `lib/api.ts` | FIX / DEFER | File chips were selected locally but ignored by Chat dispatch; Node target, privacy and per-request budget selections were likewise ignored. Disable these unconnected controls and refuse stale/crafted values before model dispatch. Saved Workspace references and existing governed read remain usable; controlled attachment delivery is not implemented by this fix |
 | Skill/Provider: `skills/`, public SDK, `tests/control_plane/test_skill_center.py` | REUSE / EXTEND | Reviewed local catalog install/load/enable/disable/uninstall with integrity and Governance. Instruction loading is not automatic executable Skill permission; general remote catalogs and real account-backed Providers need qualification |
@@ -48,6 +48,25 @@ registration check, not execution acceptance for all 422 endpoints.
 | Legacy v2 research/plugin/genome endpoints: `api/v2_routes.py` | DEFER | Six handlers explicitly return `NOUS_NOT_IMPLEMENTED`; they are not functioning integrations. Research Claims and reports use the existing v1 Evidence/Document owners |
 | Research/reporting: `evidence/`, `documents/`, `scientific/`, `simulations/` | REUSE / DEFER | Numerical claims, independent reference, Artifact and report contracts exist; strict-sandbox numerical qualification stays blocked, and manually supplied experiment scores are not a completed engineering-loop experiment |
 | Native Desktop/release: component lock, `desktop/src-tauri/`, build runbook | DEFER | Two exact locked Windows Kernel binary files remain missing; no native hash, NSIS, installed UI, uninstall or production-signing qualification can be inferred from frontend CI |
+
+The multi-file editing slice reuses the existing Workbench endpoints and keeps
+draft state within the existing component; it adds no filesystem, proposal store,
+permission or execution authority. Seven new frontend cases cover independent
+drafts/digests/previews, inactive-draft exit and execution protection, exact
+approval binding, keyboard navigation, changed Controllers, failed reads, the
+12-tab bound and explicit discard/reload. Five initial cases fail before the
+feature; the original discard-before-switch test is strengthened to verify
+preserved contents and renamed paths across tabs instead of requiring discard.
+Local validation has **129 Desktop tests in 30 files** and **264 repository tests
+passed**, with lint/typecheck/build, global Ruff/compile, all 235 Markdown links,
+document/comment/identity/git hygiene, eight version manifests and **0 HIGH /
+3 unchanged MEDIUM** security findings. No Python or Runtime owner changes;
+the preceding full bare-host regression and its two orphan failures remain
+recorded below. Browser candidate qualification uses actual protected Runtime
+file reads and diff endpoints, confirms independent drafts and explicit discard,
+no file mutation, no model calls for editor navigation, and no 390px overflow.
+It remains source-browser qualification with the explicit test-only fake model
+adapter, not installed Desktop, real IdP or a multi-file model proposal Gate.
 
 The focused correction reproduces the old timeline payload loss, false
 evaluation/effect equivalence and missing registered Task Artifacts before

@@ -10,7 +10,7 @@ own a second scheduler, project database, model registry, or execution path.
 
 The desktop `Develop` page provides the following views:
 
-- **Workbench** provides workspace-scoped file browsing, UTF-8 editing, unified diff preview, compare-and-swap atomic writes, and fixed-profile strict execution.
+- **Workbench** provides workspace-scoped file browsing, bounded multi-file UTF-8 editor tabs, unified diff preview, compare-and-swap atomic writes, and fixed-profile strict execution.
 - **Research** provides approval-gated public web fetch, persistent sources, immutable snapshots, artifacts, injection scan results, and run evidence.
 - **Projects** uses the durable project coordinator and project store.
 - **Runs** reads canonical records reconstructed from the Runtime event stream.
@@ -122,6 +122,18 @@ Runtime contracts, but they must not bypass the Gateway, EventStream,
 governance gate, or workspace boundary.
 
 ## Professional Workbench
+
+Editor tabs reuse the existing file endpoints. Up to 12 open files retain
+independent drafts, original digests, previews and write records in memory.
+Selecting a cached tab does not call a model or read the file again; external
+changes remain subject to the original backend hash conflict checks. Close and
+reopen to read the current file. Arrow keys, Home and End navigate the tabs.
+Dirty inactive tabs participate in exit, Environment navigation and execution
+guards. Closing a dirty tab requires explicit discard; pending approval locks
+navigation and retains the exact original write. Cached tabs cannot be reopened
+under another Controller. File contents and drafts are not layout preferences or
+browser-persisted state. This is multi-file editing, not an atomic multi-file
+transaction or model-generated multi-file proposal/approval contract.
 
 The Workbench is a real execution surface, not a capability mock. Its Runtime
 endpoints are:

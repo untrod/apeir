@@ -137,9 +137,16 @@ a separately enrolled human can approve the original request once or deny it.
 Existing hash checks reject stale edits. Lost responses require inspecting the
 original file/events before another write; the panel does not retry automatically.
 
-Drafts remain in memory when switching Console tabs; a dirty or pending workspace
-tab cannot be closed directly. File switches require explicit discard, and browser
-reload/exit asks before losing a draft where the browser supports that prompt.
+Open up to 12 files in editor tabs. Each tab keeps its own draft, loaded SHA-256,
+diff and save record in memory; selecting an already-open file restores that draft.
+Use arrow keys, Home or End on the file tabs to navigate. Closing an unsaved file
+requires explicit discard. A pending approval locks file navigation and resumes
+only its original path, content and digest. All drafts must be saved or discarded
+before execution or leaving for Environment Studio. To reload a file changed
+outside APEIR, close its tab (explicitly discard if needed), then reopen it.
+Drafts also remain in memory when switching Console tabs; a dirty or pending
+workspace tab cannot be closed directly. Browser reload/exit asks before losing
+any active or inactive draft where the browser supports that prompt.
 Editor contents are not stored in layout preferences. Font size, collaboration
 visibility and activity visibility are the only new saved preferences; existing
 Chat conversation/draft persistence retains its existing behavior.

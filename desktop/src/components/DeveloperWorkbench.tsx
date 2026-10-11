@@ -38,6 +38,13 @@ type PendingAction = { approvalId: string; controller: string } & (
   { kind: "save"; path: string; content: string; sha256: string }
   | { kind: "run"; profile: string; target: string }
 );
+type EditorTab = {
+  id: number; controller: string; path: string; content: string;
+  loadedPath: string; loadedContent: string; sha256: string;
+  preview: WorkbenchPreview | null; writeResult: WorkbenchWriteResult | null;
+};
+const maxEditorTabs = 12;
+const tabIsDirty = (tab: EditorTab) => tab.path !== tab.loadedPath || tab.content !== tab.loadedContent;
 
 const panel: React.CSSProperties = {
   background: colors.surface,
@@ -85,7 +92,10 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
   const [loadedController, setLoadedController] = useState(getConfig().url);
   const eventRead = useRef(0);
   const [conversationId, setConversationId] = useState<string>();
-  const [switchTarget, setSwitchTarget] = useState<string | null>(null);
+  const [tabs, setTabs] = useState<EditorTab[]>([]);
+  const [activeTab, setActiveTab] = useState<number | null>(null);
+  const tabSequence = useRef(0);
+  const [closeTarget, setCloseTarget] = useState<number | null>(null);
   useEffect(() => { try { localStorage.setItem(preferenceKey, JSON.stringify(layout)); } catch { /* Preferences are optional. */ } }, [layout]);
 
   const refresh = useCallback(async () => {
@@ -108,12 +118,13 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
   useEffect(() => { void refresh().catch(cause => setError(errorMessage(cause, "Workspace unavailable."))); }, [refresh]);
 
   const dirty = content !== loadedContent || filePath !== loadedPath;
-  useEffect(() => { onDraftChange?.(dirty || !!pending); }, [dirty, pending, onDraftChange]);
+  const protectedDraft = dirty || tabs.some(tab => tab.id !== activeTab && tabIsDirty(tab));
+  useEffect(() => { onDraftChange?.(protectedDraft || !!pending); }, [protectedDraft, pending, onDraftChange]);
   useEffect(() => {
-    const warn = (event: BeforeUnloadEvent) => { if (dirty || pending) { event.preventDefault(); event.returnValue = ""; } };
+    const warn = (event: BeforeUnloadEvent) => { if (protectedDraft || pending) { event.preventDefault(); event.returnValue = ""; } };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty, pending]);
+  }, [protectedDraft, pending]);
   const availableProfiles = useMemo(
     () => (listing?.profiles || []).filter((item) => item.available),
     [listing],
@@ -137,37 +148,91 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
     setTraceView({ traceId, controller: loadedController });
   };
 
+  const currentTab = (): EditorTab => ({ id: activeTab ?? 0, controller: loadedController,
+    path: filePath, content, loadedPath, loadedContent, sha256: loadedSha256, preview, writeResult });
+
+  const rememberTab = (next: EditorTab) => {
+    const original = activeTab === null ? null : currentTab();
+    setTabs(value => {
+      const retained = value.map(tab => tab.id === original?.id ? original : tab);
+      return retained.some(tab => tab.id === next.id) ? retained : [...retained, next];
+    });
+    setActiveTab(next.id);
+  };
+
+  const restoreTab = (tab: EditorTab) => {
+    setFilePath(tab.path); setLoadedPath(tab.loadedPath); setContent(tab.content);
+    setLoadedContent(tab.loadedContent); setLoadedSha256(tab.sha256);
+    setLoadedController(tab.controller); setPreview(tab.preview); setWriteResult(tab.writeResult);
+    setReference(undefined); setError("");
+    if (profile === "python" || profile === "python-compile" || profile === "node") setRunTarget(tab.path);
+  };
+
+  const switchTab = (id: number) => {
+    if (busy || pending || closeTarget !== null || id === activeTab) return;
+    const tab = tabs.find(item => item.id === id);
+    if (!tab) return;
+    if (tab.controller !== getConfig().url) { setError("Controller changed; reopen the original file tab."); return; }
+    rememberTab(tab); restoreTab(tab);
+  };
+
   const loadFile = async (path: string) => {
-    if (!path || busy) return;
+    if (!path || busy || pending || closeTarget !== null) return;
+    const existing = tabs.find(tab => tab.controller === getConfig().url && (tab.path === path || tab.loadedPath === path));
+    if (existing) { switchTab(existing.id); return; }
+    if (tabs.length >= maxEditorTabs) { setError("Close a file tab before opening another; the editor is limited to 12 tabs."); return; }
     const controller = getConfig().url;
-    setBusy(true); setError(""); setPreview(null); setWriteResult(null); setReference(undefined);
+    setBusy(true); setError("");
     try {
       const file = await fetchWorkbenchFile(path);
       if (controller !== getConfig().url) throw new Error("Controller changed; reload the original file.");
-      setFilePath(file.path); setLoadedPath(file.path);
-      setContent(file.content);
-      setLoadedContent(file.content);
-      setLoadedSha256(file.sha256);
-      setLoadedController(controller);
-      if (profile === "python" || profile === "python-compile" || profile === "node") setRunTarget(file.path);
+      const tab: EditorTab = { id: ++tabSequence.current, controller, path: file.path,
+        content: file.content, loadedPath: file.path, loadedContent: file.content,
+        sha256: file.sha256, preview: null, writeResult: null };
+      rememberTab(tab); restoreTab(tab);
     } catch (cause) {
       setError(errorMessage(cause, "File could not be loaded."));
     } finally { setBusy(false); }
   };
 
   const newFile = () => {
-    setLoadedController(getConfig().url);
-    setFilePath("untitled.py"); setLoadedPath("");
-    setContent("");
-    setLoadedContent("");
-    setLoadedSha256("");
-    setPreview(null); setWriteResult(null); setReference(undefined);
+    if (busy || pending || closeTarget !== null) return;
+    if (tabs.length >= maxEditorTabs) { setError("Close a file tab before opening another; the editor is limited to 12 tabs."); return; }
+    const id = ++tabSequence.current;
+    const tab: EditorTab = { id, controller: getConfig().url, path: `untitled-${id}.py`,
+      content: "", loadedPath: "", loadedContent: "", sha256: "", preview: null, writeResult: null };
+    rememberTab(tab); restoreTab(tab);
   };
 
   const selectFile = (path: string) => {
-    if (busy || pending) return;
-    if (dirty) { setSwitchTarget(path); return; }
     if (path) void loadFile(path); else newFile();
+  };
+
+  const closeTab = (id: number, discard = false) => {
+    if (busy || pending) return;
+    const tab = id === activeTab ? currentTab() : tabs.find(item => item.id === id);
+    if (!tab) return;
+    if (!discard && tabIsDirty(tab)) { setCloseTarget(id); return; }
+    const remaining = tabs.filter(item => item.id !== id);
+    setTabs(remaining); setCloseTarget(null);
+    if (id === activeTab) {
+      const next = [...remaining].reverse().find(tab => tab.controller === getConfig().url);
+      setActiveTab(next?.id ?? null);
+      restoreTab(next || { id: 0, controller: getConfig().url, path: "", content: "",
+        loadedPath: "", loadedContent: "", sha256: "", preview: null, writeResult: null });
+    }
+  };
+
+  const tabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, id: number) => {
+    const index = tabs.findIndex(tab => tab.id === id);
+    const nextIndex = event.key === "ArrowLeft" ? (index + tabs.length - 1) % tabs.length
+      : event.key === "ArrowRight" ? (index + 1) % tabs.length
+      : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : -1;
+    if (nextIndex < 0) return;
+    event.preventDefault(); switchTab(tabs[nextIndex].id);
+    if (!busy && !pending && closeTarget === null && tabs[nextIndex].controller === getConfig().url) {
+      document.getElementById(`workbench-tab-${tabs[nextIndex].id}`)?.focus();
+    }
   };
 
   const showPreview = async () => {
@@ -261,7 +326,7 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
       <label>Editor size <select aria-label="Editor font size" value={layout.fontSize} onChange={event => setLayout(value => ({ ...value, fontSize: Number(event.target.value) }))}>{[12, 14, 16, 18].map(size => <option key={size}>{size}</option>)}</select></label>
       <label><input type="checkbox" checked={layout.conversation} onChange={event => setLayout(value => ({ ...value, conversation: event.target.checked }))} /> Collaboration panel</label>
       <label><input type="checkbox" checked={layout.activity} onChange={event => setLayout(value => ({ ...value, activity: event.target.checked }))} /> Persisted activity</label>
-      {onOpenEnvironments && <button onClick={() => { if (dirty || pending) setError("Save or explicitly discard the original draft before leaving this panel."); else onOpenEnvironments(); }} disabled={busy} style={btnSecondary}>Open environments</button>}
+      {onOpenEnvironments && <button onClick={() => { if (protectedDraft || pending) setError("Save or explicitly discard the original drafts before leaving this panel."); else onOpenEnvironments(); }} disabled={busy} style={btnSecondary}>Open environments</button>}
       <p>Layout settings grant no permissions. Files stay in the configured workspace; code and containers still require admission and qualified isolation.</p>
     </div></details>
     <section style={{ ...panel, padding: space.md, display: "flex", justifyContent: "space-between", gap: space.md, flexWrap: "wrap" }}>
@@ -312,14 +377,28 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
 
       <main style={{ display: "grid", gap: space.md, minWidth: 0 }}>
         <section style={{ ...panel, overflow: "hidden" }}>
+          <div role="tablist" aria-label="Open workspace files" className="developer-file-tabs">
+            {tabs.map(tab => <div key={tab.id} className="developer-file-tab">
+              <button id={`workbench-tab-${tab.id}`} role="tab" aria-label={tab.id === activeTab ? filePath : tab.path}
+                aria-controls="workbench-editor" aria-selected={tab.id === activeTab} tabIndex={tab.id === activeTab ? 0 : -1}
+                disabled={busy || !!pending || closeTarget !== null} onClick={() => switchTab(tab.id)} onKeyDown={event => tabKeyDown(event, tab.id)}
+                style={{ ...btnSecondary, background: tab.id === activeTab ? colors.accentSoft : colors.surface }}>
+                {tab.id === activeTab ? filePath : tab.path}{(tab.id === activeTab ? dirty : tabIsDirty(tab)) ? " •" : ""}
+              </button>
+              <button aria-label={`Close ${tab.id === activeTab ? filePath : tab.path}`} disabled={busy || !!pending || closeTarget !== null}
+                onClick={() => closeTab(tab.id)} style={btnSecondary}>×</button>
+            </div>)}
+          </div>
+          <div role="tabpanel" id="workbench-editor" aria-labelledby={activeTab === null ? undefined : `workbench-tab-${activeTab}`}>
           <div style={{ padding: space.md, borderBottom: `1px solid ${colors.borderLight}`, display: "flex", gap: space.sm, alignItems: "center", flexWrap: "wrap" }}>
-            <input disabled={busy || !!pending} aria-label="Workspace file path" value={filePath} onChange={(event) => { setFilePath(event.target.value); setPreview(null); setReference(undefined); }} placeholder="relative/path.py" style={{ ...input, flex: 1, minWidth: 0, fontFamily: typo.mono }} />
+            <input disabled={busy || !!pending || activeTab === null} aria-label="Workspace file path" value={filePath} onChange={(event) => { setFilePath(event.target.value); setPreview(null); setReference(undefined); }} placeholder="Open or create a file" style={{ ...input, flex: 1, minWidth: 0, fontFamily: typo.mono }} />
             <button onClick={() => { setReference({ path: filePath, sha256: loadedSha256, controller: loadedController }); setLayout(value => ({ ...value, conversation: true })); }} disabled={busy || !!pending || dirty || !loadedSha256} style={btnSecondary}>Discuss saved file</button>
-            <span style={{ color: dirty ? colors.warning : colors.textTertiary, fontSize: typo.xs }}>{dirty ? "Unsaved" : "Saved"}</span>
+            <span style={{ color: dirty ? colors.warning : colors.textTertiary, fontSize: typo.xs }}>{dirty ? "Unsaved" : loadedSha256 ? "Saved" : "No file selected"}</span>
             <button onClick={() => void showPreview()} disabled={busy || !!pending || !filePath.trim()} style={btnSecondary}>Preview diff</button>
             <button onClick={() => void save()} disabled={busy || !!pending || !filePath.trim() || !dirty || !preview} style={{ ...btnPrimary, opacity: busy || !!pending || !dirty || !preview ? 0.55 : 1 }}>Save atomically</button>
           </div>
-          <textarea disabled={busy || !!pending} aria-label="Code editor" value={content} onChange={(event) => { setContent(event.target.value); setPreview(null); setReference(undefined); }} spellCheck={false} style={{ width: "100%", minHeight: 420, resize: "vertical", border: "none", outline: "none", padding: space.lg, boxSizing: "border-box", background: colors.surface, color: colors.text, fontFamily: typo.mono, fontSize: layout.fontSize, lineHeight: 1.55 }} />
+          <textarea disabled={busy || !!pending || activeTab === null} aria-label="Code editor" value={content} onChange={(event) => { setContent(event.target.value); setPreview(null); setReference(undefined); }} spellCheck={false} style={{ width: "100%", minHeight: 420, resize: "vertical", border: "none", outline: "none", padding: space.lg, boxSizing: "border-box", background: colors.surface, color: colors.text, fontFamily: typo.mono, fontSize: layout.fontSize, lineHeight: 1.55 }} />
+          </div>
         </section>
 
         {preview && <section style={{ ...panel, padding: space.md }}>
@@ -336,7 +415,7 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
               {availableProfiles.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
             </select>
             <input aria-label="Execution target" value={runTarget} onChange={(event) => setRunTarget(event.target.value)} disabled={busy || !!pending || profile === "cargo-test"} placeholder="workspace-relative target" style={{ ...input, flex: 1, minWidth: 0, fontFamily: typo.mono }} />
-            <button onClick={() => void run()} disabled={busy || !!pending || dirty || !availableProfiles.some(item => item.name === profile) || (profile !== "cargo-test" && !runTarget.trim())} style={btnPrimary}>Run in sandbox</button>
+            <button onClick={() => void run()} disabled={busy || !!pending || protectedDraft || !availableProfiles.some(item => item.name === profile) || (profile !== "cargo-test" && !runTarget.trim())} style={btnPrimary}>Run in sandbox</button>
           </div>
           <div style={{ color: colors.textTertiary, fontSize: typo.xs, marginTop: space.sm }}>Installed profiles are not authorization or proof of isolation. Fixed profiles only, network disabled; missing strict sandbox fails closed. Save changes before running.</div>
           {runResult && <pre style={{ margin: `${space.md} 0 0`, maxHeight: 300, overflow: "auto", padding: space.md, borderRadius: radius.md, background: colors.bg, color: runResult.ok ? colors.text : colors.danger, fontFamily: typo.mono, fontSize: typo.xs, whiteSpace: "pre-wrap" }}>{`run ${runResult.run_id}\nexit ${runResult.exit_code}\n${runResult.stdout}${runResult.stderr ? `\n${runResult.stderr}` : ""}`}</pre>}
@@ -344,7 +423,7 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
       </main>
       <aside hidden={!layout.conversation} className="developer-collaboration" aria-label="Workspace collaboration"><ChatView conversationId={conversationId} onConversationCreated={setConversationId} workspaceFile={reference} onClearWorkspaceFile={() => setReference(undefined)} readOnly onCardClick={event => { const runId = String(event.payload?.run_id || event.metadata?.run_id || ""); if (runId) void showEvents(runId); }} onTraceClick={showTrace} /></aside>
     </div>
-    {switchTarget !== null && <section role="alert" style={{ ...panel, padding: space.md }}><p>Unsaved changes. Keep editing or explicitly discard this draft before switching files.</p><button style={btnSecondary} onClick={() => setSwitchTarget(null)}>Keep editing</button><button style={btnSecondary} onClick={() => { const path = switchTarget; setSwitchTarget(null); if (path) void loadFile(path); else newFile(); }}>Discard draft and switch</button></section>}
+    {closeTarget !== null && <section role="alert" style={{ ...panel, padding: space.md }}><p>Unsaved changes in {closeTarget === activeTab ? filePath : tabs.find(tab => tab.id === closeTarget)?.path}. Keep editing or explicitly discard this draft before closing.</p><button style={btnSecondary} onClick={() => setCloseTarget(null)}>Keep editing</button><button style={btnSecondary} onClick={() => closeTab(closeTarget, true)}>Discard draft and close</button></section>}
     {pending && <section aria-label="Workbench approval" style={{ ...panel, padding: space.md }}><h3>Explicit approval required</h3><p>Review the original {pending.kind} request: {pending.kind === "save" ? pending.path : `${pending.profile} ${pending.target}`}. Installation, model output and layout settings grant no authority.</p><p>Request {pending.approvalId}</p><button disabled={busy} style={btnPrimary} onClick={() => void decide("approve")}>Approve once and {pending.kind}</button><button disabled={busy} style={btnSecondary} onClick={() => void decide("deny")}>Deny original request</button></section>}
     {layout.activity && <section aria-label="Workspace persisted activity" style={{ ...panel, padding: space.md }}><h3>Workspace activity</h3><p>Actual EventStream file changes and executions, not keystrokes or monitoring of other applications. File content is not automatically sent to a model.</p><div className="developer-activity">{runs.length ? runs.map(item => <button key={item.run_id} onClick={() => void showEvents(item.run_id)} style={btnSecondary}>{item.task_id} · {item.state}</button>) : <p>No persisted workspace operations.</p>}</div>{selectedRun && <p>Run {selectedRun}</p>}{events.map((event, index) => <details key={event.event_id || index}><summary>{event.sequence} · {event.event_type} · {event.timestamp}</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(event.payload, null, 2)}</pre></details>)}</section>}
     {traceView && traceView.controller === getConfig().url && <DetailDrawer view={{ kind: "trace", traceId: traceView.traceId }} onClose={() => setTraceView(null)} />}
