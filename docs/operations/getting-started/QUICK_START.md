@@ -127,6 +127,37 @@ remove credentials and private paths. Report reproducible issues through
 [GitHub](https://github.com/untrod/apeir/issues); security reports follow
 [SECURITY](../../../SECURITY.md).
 
+### Workspace developer panel
+
+Open **workspace / 开发者面板** in the existing Operations Console. The panel
+combines the existing bounded workspace file API, diff editor, Chat Runtime and
+persisted EventStream. Select a file, edit it, choose **Preview diff**, then
+**Save atomically**. An approval-required save pauses before changing the file;
+a separately enrolled human can approve the original request once or deny it.
+Existing hash checks reject stale edits. Lost responses require inspecting the
+original file/events before another write; the panel does not retry automatically.
+
+Drafts remain in memory when switching Console tabs; a dirty or pending workspace
+tab cannot be closed directly. File switches require explicit discard, and browser
+reload/exit asks before losing a draft where the browser supports that prompt.
+Editor contents are not stored in layout preferences. Font size, collaboration
+visibility and activity visibility are the only new saved preferences; existing
+Chat conversation/draft persistence retains its existing behavior.
+
+**Discuss saved file** explicitly selects only its path and SHA-256 reference.
+It does not automatically send file contents or call a model. Send uses the existing
+Chat Runtime in `read_only` mode; Runtime admission still controls any file read.
+A configured model and its existing prerequisites are required. Model file writes
+and broader desktop monitoring are not qualified by this panel. **Workspace
+activity** reads actual file-change/execution events, not keystrokes or activity in
+other applications. Inspect the persisted run rather than treating a model reply
+as effect verification.
+
+**Run in sandbox** uses existing fixed profiles, explicit approval and strict
+isolation. **Open environments** opens the existing Environment view. Neither
+panel settings nor installation grant execution permission; unavailable isolation
+remains BLOCKED. These are source-browser paths, not installed APEIR.exe acceptance.
+
 ### Environment workbench
 
 The existing Operations Console now opens **environments** alongside Work, Nodes

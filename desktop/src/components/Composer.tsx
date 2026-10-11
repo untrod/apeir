@@ -42,6 +42,7 @@ export interface ComposerProps {
   models: Model[];
   nodes: Node[];
   conversationId?: string;
+  readOnly?: boolean;
 }
 
 
@@ -72,7 +73,7 @@ function saveDraft(conversationId: string | undefined, text: string): void {
 
 export function Composer({
   onSend, onStop, disabled, streaming,
-  models, nodes, conversationId,
+  models, nodes, conversationId, readOnly = false,
 }: ComposerProps) {
   const [text, setText] = useState(() => loadDraft(conversationId));
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -214,7 +215,8 @@ export function Composer({
         }}>
           {/* Execution mode */}
           <select
-            value={constraints.agent_mode || "agent"}
+            value={readOnly ? "read_only" : constraints.agent_mode || "agent"}
+            disabled={readOnly}
             onChange={(e) => setConstraints((c) => ({
               ...c,
               agent_mode: e.target.value as ComposerConstraints["agent_mode"],

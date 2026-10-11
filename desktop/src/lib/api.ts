@@ -292,6 +292,7 @@ export const runPrompt = (
   }>(
     "/api/v1/chat",
     {
+      credentials: "omit",
       method: "POST",
       signal,
       body: JSON.stringify({
@@ -633,18 +634,21 @@ export const searchWorkbench = (query: string, path = ".", limit = 200) => {
 
 export const previewWorkbenchWrite = (path: string, content: string, expectedSha256: string) =>
   api<WorkbenchPreview>("/api/v1/developer/workspace/preview", {
+    credentials: "omit",
     method: "POST",
     body: JSON.stringify({ path, content, expected_sha256: expectedSha256 }),
   });
 
 export const writeWorkbenchFile = (path: string, content: string, expectedSha256: string) =>
   api<WorkbenchWriteResult>("/api/v1/developer/workspace/write", {
+    credentials: "omit",
     method: "POST",
     body: JSON.stringify({ path, content, expected_sha256: expectedSha256 }),
   });
 
 export const runWorkbenchProfile = (profile: string, target: string, timeoutSeconds = 60) =>
   api<WorkbenchRunResult>("/api/v1/developer/workspace/run", {
+    credentials: "omit",
     method: "POST",
     body: JSON.stringify({ profile, target, timeout_seconds: timeoutSeconds }),
   });
