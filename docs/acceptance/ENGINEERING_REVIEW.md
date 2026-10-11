@@ -38,7 +38,7 @@ registration check, not execution acceptance for all 422 endpoints.
 | Effect status: `api/task_center_routes.py`, `node_runtime/distributed_work.py` | FIX | A passing EvaluationRecord formerly set `verified=true`. Evaluation stays separate; only a bound recorded Reality MATCH can set that flag, with committed state shown separately. Reading this view performs no new Observation or verification |
 | Operations Console: `control_plane/operations.py`, `OperationsConsole.tsx` | REUSE | Real owner projections, approvals, recovery, local Skills and Node pairing; source-browser acceptance is not installed EXE qualification |
 | Workspace editor: `workspace/workbench.py`, `DeveloperWorkbench.tsx` | REUSE / EXTEND | Real bounded read/search/diff/governed save, hash conflicts, CAS backup, semantic activity and explicit metadata-only discussion. Multi-file editor, symbols, history/rollback UI and a model-generated multi-file proposal flow are not complete |
-| Model context/cost: `context/`, `model_runtime/bridges.py`, `model_runtime/gateway.py` | EXTEND | Existing selected snapshots, actual model invocation events, usage/cost and routing. The current Context endpoint is not a complete manifest of every message/tool result sent to a model; a transparent per-invocation inspector still needs connection to that seam |
+| Model context/cost: `context/`, `model_runtime/bridges.py`, `model_runtime/gateway.py` | EXTEND | Chat now records a content-free per-iteration input manifest after Agent admission, including rendered-context truncation and preceding file-read provenance. The inspector replays original EventStream Run IDs, retained through Conversation restart, and separates estimates from Provider usage. This covers application Chat Gateway input, not provider receipt, every collaborative invocation or a newly built Context snapshot |
 | Skill/Provider: `skills/`, public SDK, `tests/control_plane/test_skill_center.py` | REUSE / EXTEND | Reviewed local catalog install/load/enable/disable/uninstall with integrity and Governance. Instruction loading is not automatic executable Skill permission; general remote catalogs and real account-backed Providers need qualification |
 | Pairing/mesh: `node_runtime/relay.py`, `node_runtime/service.py`, `tests/node_runtime/` | REUSE | Persistent stable Ed25519 identity, once invitations, atomic consumption, revoke-preserving trust and signed Relay exist. Real Windows/Jetson/WAN/CGNAT acceptance and timing Issues #4/#8 remain open |
 | Environment: `environments/`, `EnvironmentInspector.tsx` | REUSE / DEFER | Lifecycle/contracts/evidence and governed UI exist. Default strict process isolation is unavailable here; engine presence alone does not qualify the existing OCI control boundary. Python/scientific/embedded/robotics template promises cannot be inferred from a selector |
@@ -56,6 +56,44 @@ and disables approval actions when the original record cannot be loaded.
 No new registry, permission source, verifier, workflow or executor is introduced.
 CAS integrity is distinct from effect verification; the UI states explicitly
 that recorded evidence does not acquire a fresh observation.
+
+The subsequent Context Inspector slice reuses `ContextExplainer`, the admitted
+Chat Gateway, ConversationStore and EventStream. Only their input-manifest
+helper, Chat invocation boundary and additive conversation Run/task projection
+change Python semantics; other changes in those files are the existing required
+formatter. The Workbench can inspect a recorded Run without a model account or
+a new inference call. Live/response Chat inspection retains separate Run and
+Trace identities. Missing manifests/usage, denied reads and truncated replay
+cannot display invented access or success.
+
+Local candidate validation: **19 focused / 819 affected / 262 repository tests
+passed**, **110 Desktop tests in 29 files passed**, lint/typecheck/build,
+Ruff/changed-file format/compile and all 235 Markdown link checks passed.
+Full bare-host regression: **4126 passed, 60 skipped, 2 existing orphan-process
+failures, 4 warnings**. The two failures remain the unsupported PID-1/reaper
+conditions documented in CONTRIBUTING; no assertion or test selection changed.
+Security scan: **0 HIGH / 3 unchanged MEDIUM**. Actual native hash verification
+still fails on missing locked Windows bytes; component-lock contracts pass.
+
+An actual sandboxed Chromium source-browser run reads the real Runtime HTTP
+and persisted three-iteration Gateway/Conversation/EventStream records, with
+a fake MockModelAdapter. It confirms `main.py` was read, `.nous/private.txt`
+was refused, no file changed, and reloaded Run inspection calls no model.
+Mobile 390px has no horizontal overflow and there are no page errors. This
+uses the explicit test-only Gateway compatibility mode, not product Kernel
+inference or authenticated real-model/IdP/native Desktop qualification.
+Screenshots and raw scoped records remain local evidence, not source fixtures
+or preset success JSON.
+
+The incremental cost measurement alternates 40 baseline and 40 manifest runs
+against a deterministic fake adapter, using eight 2,048-character context items
+and real EventStream persistence. Local p50/p95/p99 milliseconds are
+**11.539 / 15.449 / 43.653** at main `339b086` and
+**12.575 / 13.830 / 23.976** with the manifest; median event bytes are
+**1,730 → 4,429**. The p50 overhead is 1.036 ms. These small local samples
+are instrumentation cost, not a performance improvement, WAN/Relay result,
+real model benchmark or a completed engineering-loop research experiment.
+No durability, fsync, isolation, resource default or authorization was relaxed.
 
 Two configuration distinctions also remain relevant: the main Tasks view covers
 local Work/Runtime tasks, while signed distributed Works are exposed through

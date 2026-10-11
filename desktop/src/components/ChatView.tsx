@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { colors, typo, radius, space, fadeIn } from "../design";
+import { btnSecondary, colors, typo, radius, space, fadeIn } from "../design";
 import { entityStore } from "../store";
 import { useMessages, useActiveTasks, useModels, useNodes, useStoreHydrated } from "../store";
 import type { RuntimeEventEnvelope, Conversation, Message as MessageType } from "../store";
@@ -31,17 +31,19 @@ import { Markdown } from "./Markdown";
 import { Composer, type ComposerAttachment, type ComposerConstraints } from "./Composer";
 import { toast } from "./Toast";
 import { summarizeRuntimeActivity } from "../lib/runtimeActivity";
+import { ContextInspector } from "./ContextInspector";
 
 
 // Message Bubble
 
 
 function MessageBubble({
-  msg, onCardClick, onTraceClick,
+  msg, onCardClick, onTraceClick, onContextClick,
 }: {
-  msg: { id: string; role: string; content: string; timestamp: string; traceId?: string; modelId?: string; cards?: RuntimeEventEnvelope[] };
+  msg: { id: string; role: string; content: string; timestamp: string; traceId?: string; runId?: string; modelId?: string; cards?: RuntimeEventEnvelope[] };
   onCardClick: (event: RuntimeEventEnvelope) => void;
   onTraceClick: (traceId: string) => void;
+  onContextClick: (runId: string) => void;
 }) {
   const isUser = msg.role === "user";
   const isSystem = msg.role === "system";
@@ -89,6 +91,7 @@ function MessageBubble({
           View trace →
         </div>
       )}
+      {msg.runId && !isUser && <button onClick={() => onContextClick(msg.runId!)} style={{ ...btnSecondary, marginTop: space.sm }}>Inspect model input</button>}
     </div>
   );
 }
@@ -201,12 +204,14 @@ export function ChatView({
   const hydrated = useStoreHydrated();
 
   const [localMessages, setLocalMessages] = useState<Array<{
-    id: string; role: string; content: string; timestamp: string; traceId?: string; modelId?: string; cards?: RuntimeEventEnvelope[];
+    id: string; role: string; content: string; timestamp: string; traceId?: string; runId?: string; modelId?: string; cards?: RuntimeEventEnvelope[];
   }>>([]);
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [liveEvents, setLiveEvents] = useState<RuntimeEventEnvelope[]>([]);
   const [activeRunId, setActiveRunId] = useState("");
+  const [contextView, setContextView] = useState<{ runId: string; controller: string } | null>(null);
+  const inspectContext = (runId: string) => setContextView({ runId, controller: getConfig().url });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => () => { abortRef.current?.abort(); }, []);
@@ -255,7 +260,7 @@ export function ChatView({
     ...messages.map((m) => ({
       id: m.id, role: m.role, content: m.content,
       timestamp: m.created_at, traceId: m.trace_id,
-      modelId: m.model_id, cards: m.cards,
+      modelId: m.model_id, runId: m.run_id, cards: m.cards,
     })),
     ...localMessages,
   ].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -326,7 +331,7 @@ export function ChatView({
 
       const asstMsg = {
         id: `a_${Date.now()}`, role: "assistant", content,
-        timestamp: new Date().toISOString(), traceId: runId || traceId,
+        timestamp: new Date().toISOString(), traceId, runId,
         modelId: constraints.model_id || "default",
         cards: terminalEvents.filter((event) =>
           event.event_type.startsWith("approval.")
@@ -370,7 +375,9 @@ export function ChatView({
           {activeTasks.length > 0 ? `${activeTasks.length} active` : "Ready"}
         </span>
         {loading && <span style={{ fontSize: typo.xs, color: colors.accent, animation: "nousPulse 1.5s infinite" }}>Running</span>}
+        {activeRunId && <button onClick={() => inspectContext(activeRunId)} style={btnSecondary}>Inspect active input</button>}
       </div>
+      {contextView && <ContextInspector {...contextView} onClose={() => setContextView(null)} />}
       {workspaceFile && <div aria-label="Selected workspace reference" style={{ padding: space.md, overflowWrap: "anywhere", fontSize: typo.xs }}>
         {workspaceFile.path} · SHA-256 {workspaceFile.sha256}<br />
         Reference only. File content is not automatically sent; access still requires Runtime admission.
@@ -385,7 +392,7 @@ export function ChatView({
           </div>
         ) : (
           allMessages.map((msg) => (
-            <MessageBubble key={msg.id} msg={msg} onCardClick={onCardClick} onTraceClick={onTraceClick} />
+            <MessageBubble key={msg.id} msg={msg} onCardClick={onCardClick} onTraceClick={onTraceClick} onContextClick={inspectContext} />
           ))
         )}
 

@@ -53,6 +53,20 @@ describe("workspace collaboration through the existing Chat Runtime", () => {
     expect(runPrompt).toHaveBeenCalledTimes(1);
   });
 
+  it("opens actual Run context separately from its Trace identity", async () => {
+    vi.mocked(runPrompt).mockResolvedValue({ conversation_id: "", status: "completed", message: "Read result", trace_id: "trace-original", run_id: "run-original" });
+    vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: "run-original", events: [], next_after_sequence: 0 });
+    const trace = vi.fn();
+    render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={trace} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect model input" }));
+    expect(await screen.findByLabelText("Model Context Inspector")).toHaveTextContent("Run run-original");
+    expect(runPrompt).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText("View trace →"));
+    expect(trace).toHaveBeenCalledWith("trace-original");
+    expect(fetchRunEvents).toHaveBeenCalledWith("run-original", 0);
+  });
+
   it("aborts an active request when its panel is closed without claiming execution stopped", async () => {
     vi.mocked(runPrompt).mockImplementation((_prompt, _model, _conversation, _mode, signal) => new Promise((_resolve, reject) => {
       signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });

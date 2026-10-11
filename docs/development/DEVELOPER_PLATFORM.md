@@ -8,7 +8,7 @@ own a second scheduler, project database, model registry, or execution path.
 
 ## Surfaces
 
-The desktop `Develop` page provides five views:
+The desktop `Develop` page provides the following views:
 
 - **Workbench** provides workspace-scoped file browsing, UTF-8 editing, unified diff preview, compare-and-swap atomic writes, and fixed-profile strict execution.
 - **Research** provides approval-gated public web fetch, persistent sources, immutable snapshots, artifacts, injection scan results, and run evidence.
@@ -18,6 +18,42 @@ The desktop `Develop` page provides five views:
 - **Model Lab** combines the model registry with recorded execution observations.
 
 Equivalent API endpoints are available under `/api/v1/developer/`.
+
+### Inspecting actual model input
+
+Chat and the Workbench's read-only assistant expose **Inspect model input** on
+a recorded response and **Inspect active input** during a request. Workbench's
+**Recorded model input** selector also opens a recent canonical Run after restart,
+including in the browser Operations Console without making a new model call. The inspector
+replays the existing EventStream for the original Run; reopening a persisted
+conversation retains that Run binding independently of its Trace ID. It does
+not call a model, build a new ContextSnapshot or grant authority.
+
+Each admitted Chat Gateway iteration records a content-free input manifest:
+message roles, character counts, estimated tokens and SHA-256; declared tools;
+selected context chunks marked included, partial or omitted by the actual
+28,000-character rendering bound; and preceding tool results. A successful
+`read_file` result identifies the relative file, selected lines and original
+file digest. Failed reads never appear as successful file access. Source IDs
+are hashed, not copied; message text, file contents and tool arguments are not
+duplicated into this manifest. Available tool declarations are not permission.
+
+The manifest identifies the application Gateway input after Agent admission,
+not the provider's final HTTP envelope or proof of provider receipt. Retries,
+provider-specific formatting and collaborative worker/reviewer calls are not
+covered by this Chat manifest. Token estimates include structured calls and
+tool definitions; normalized Runtime usage, cache counters, latency and cost are
+separate recorded telemetry. Normalization may supply zero for an absent counter;
+zero alone cannot establish an original Provider measurement. Missing usage, legacy/unsupported manifests,
+replay errors and missing terminal events remain UNKNOWN. Input inspection
+does not verify an effect or restore expired authority.
+
+Details are bounded to 256 messages, 64 tools and 128 selected context sources
+per invocation; counts and the input digest cover the complete Gateway input.
+The UI replays up to 1,600 events with cursor pagination and explicitly labels
+truncation. Old events remain readable without fabricated manifests. A selected
+workspace reference is still metadata only: selecting it does not automatically
+upload its contents or establish that a model read the file.
 
 ## Interactive project execution
 

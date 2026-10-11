@@ -10,15 +10,92 @@ Answers:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from nous_runtime.context.models import ContextItem, ContextSnapshot
 from nous_runtime.context.types import ContextExplanation
+from nous_runtime.context.token_estimator import estimate_tokens
 
 _log = logging.getLogger("nous.context.explain")
 
+
+def explain_model_input(
+    messages: Sequence[Mapping[str, Any]],
+    tools: Sequence[Mapping[str, Any]],
+    provenance: Mapping[int, dict[str, Any]],
+) -> dict[str, Any]:
+    """Describe the admitted Gateway input without copying prompt/tool contents.
+
+    Positional provenance describes the final input after inserted prompts
+    and subsequent tool turns. This is an input manifest, not permission, proof
+    of provider receipt, or an explanation of a newly built ContextSnapshot.
+    """
+
+    def encoded(value: Any) -> str:
+        return json.dumps(
+            value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+
+    def digest(value: Any) -> str:
+        return hashlib.sha256(encoded(value).encode("utf-8")).hexdigest()
+
+    records = []
+    estimated_tokens = 3
+    for index, message in enumerate(messages):
+        content = message.get("content") or ""
+        text = content if isinstance(content, str) else encoded(content)
+        # Structured tool calls are part of the input even when content is empty.
+        structured = {k: v for k, v in message.items() if k not in {"role", "content"}}
+        tokens = (
+            estimate_tokens(text)
+            + (estimate_tokens(encoded(structured)) if structured else 0)
+            + 4
+        )
+        estimated_tokens += tokens
+        if index < 256:
+            role = str(message.get("role") or "unknown")
+            records.append(
+                {
+                    "index": index,
+                    "role": role
+                    if role in {"system", "user", "assistant", "tool"}
+                    else "unknown",
+                    "content_characters": len(text),
+                    "estimated_tokens": tokens,
+                    "sha256": digest(message),
+                    "source": provenance.get(
+                        index,
+                        {"kind": "instruction" if role == "system" else "conversation"},
+                    ),
+                }
+            )
+    tool_tokens = estimate_tokens(encoded(tools)) if tools else 0
+    return {
+        "schema_version": 1,
+        "scope": "admitted-gateway-input",
+        "input_sha256": digest({"messages": messages, "tools": tools}),
+        "message_count": len(messages),
+        "messages": records,
+        "messages_truncated": len(messages) > len(records),
+        "tool_count": len(tools),
+        "tools": [
+            {
+                "name": str((tool.get("function") or {}).get("name") or "unknown"),
+                "sha256": digest(tool),
+            }
+            for tool in tools[:64]
+        ],
+        "tools_truncated": len(tools) > 64,
+        "estimated_input_tokens": estimated_tokens + tool_tokens,
+        "input_measurement": "estimate",
+        "raw_content_recorded": False,
+        "execution_authority": False,
+    }
 
 
 # Explanation result
@@ -27,6 +104,7 @@ _log = logging.getLogger("nous.context.explain")
 @dataclass
 class SnapshotExplanation:
     """Full explanation of a snapshot — what, why, confidence."""
+
     snapshot_id: str = ""
     timestamp: str = ""
 
@@ -71,7 +149,6 @@ class SnapshotExplanation:
         }
 
 
-
 # Explainer
 
 
@@ -85,9 +162,7 @@ class ContextExplainer:
         print(exp.build_summary)
     """
 
-
     # Snapshot-level explanation
-
 
     def explain_snapshot(self, snapshot: ContextSnapshot) -> SnapshotExplanation:
         """Explain a complete snapshot — why it exists and what it contains."""
@@ -99,19 +174,34 @@ class ContextExplainer:
 
         # Sources
         sources_used = list(snapshot.sources)
-        all_sources = {"memory", "project", "agent", "device", "decision", "retrieval", "experience", "runtime"}
+        all_sources = {
+            "memory",
+            "project",
+            "agent",
+            "device",
+            "decision",
+            "retrieval",
+            "experience",
+            "runtime",
+        }
         sources_missing = sorted(all_sources - set(sources_used))
 
         # Selected vs discarded
         selected = items[:20]  # Top 20 by construction order
-        discarded: list[ContextItem] = []  # Built snapshots don't carry discards directly
+        discarded: list[
+            ContextItem
+        ] = []  # Built snapshots don't carry discards directly
 
         # Confidence
         confidence = snapshot.confidence
-        conf_explanation = self._explain_confidence(confidence, len(items), len(sources_used))
+        conf_explanation = self._explain_confidence(
+            confidence, len(items), len(sources_used)
+        )
 
         # Reasoning chain
-        reasoning = self._build_reasoning_chain(snapshot, items, sources_used, sources_missing)
+        reasoning = self._build_reasoning_chain(
+            snapshot, items, sources_used, sources_missing
+        )
 
         return SnapshotExplanation(
             snapshot_id=snapshot.id,
@@ -137,9 +227,7 @@ class ContextExplainer:
             reasoning=reasoning,
         )
 
-
     # Resolution-level explanation
-
 
     def explain_resolution(self, explanation: ContextExplanation) -> dict[str, Any]:
         """Format a resolution explanation for human consumption."""
@@ -186,10 +274,10 @@ class ContextExplainer:
             result["why_selected"] = [
                 f"Top source: {selected[0].source_type}",
                 f"Average composite score: {sum(r.score.composite for r in selected) / len(selected):.3f}",
-                f"Score breakdown: r={sum(r.score.relevance for r in selected)/len(selected):.3f} "
-                f"f={sum(r.score.freshness for r in selected)/len(selected):.3f} "
-                f"c={sum(r.score.confidence for r in selected)/len(selected):.3f} "
-                f"i={sum(r.score.importance for r in selected)/len(selected):.3f}",
+                f"Score breakdown: r={sum(r.score.relevance for r in selected) / len(selected):.3f} "
+                f"f={sum(r.score.freshness for r in selected) / len(selected):.3f} "
+                f"c={sum(r.score.confidence for r in selected) / len(selected):.3f} "
+                f"i={sum(r.score.importance for r in selected) / len(selected):.3f}",
             ]
 
         # Why ignored?
@@ -201,9 +289,7 @@ class ContextExplainer:
 
         return result
 
-
     # Item-level explanation
-
 
     def explain_item(self, item: ContextItem, intent: str = "") -> dict[str, Any]:
         """Explain why a single context item was included."""
@@ -220,9 +306,7 @@ class ContextExplainer:
             "created_at": item.created_at,
         }
 
-
     # Helpers
-
 
     @staticmethod
     def _describe_snapshot(snapshot: ContextSnapshot, items: list[ContextItem]) -> str:
@@ -232,7 +316,9 @@ class ContextExplainer:
         parts: list[str] = []
 
         if snapshot.project:
-            name = snapshot.project.get("summary", snapshot.project.get("project_id", ""))
+            name = snapshot.project.get(
+                "summary", snapshot.project.get("project_id", "")
+            )
             if name:
                 parts.append(f"Project: {name}")
 
@@ -241,12 +327,16 @@ class ContextExplainer:
             parts.append(f"Phase: {phase}")
 
         if n > 0:
-            parts.append(f"{n} context items from {len(sources)} sources ({', '.join(sources[:4])})")
+            parts.append(
+                f"{n} context items from {len(sources)} sources ({', '.join(sources[:4])})"
+            )
 
         return " | ".join(parts) if parts else f"Snapshot {snapshot.id} with {n} items."
 
     @staticmethod
-    def _explain_confidence(confidence: float, item_count: int, source_count: int) -> str:
+    def _explain_confidence(
+        confidence: float, item_count: int, source_count: int
+    ) -> str:
         """Explain the confidence score."""
         if confidence >= 0.8:
             base = "High confidence"
@@ -263,7 +353,9 @@ class ContextExplainer:
         elif source_count < 2:
             reasons.append("due to limited source diversity")
 
-        return f"{base} ({confidence:.2f})" + (": " + ", ".join(reasons) if reasons else "")
+        return f"{base} ({confidence:.2f})" + (
+            ": " + ", ".join(reasons) if reasons else ""
+        )
 
     @staticmethod
     def _build_reasoning_chain(
@@ -280,7 +372,9 @@ class ContextExplainer:
         chain.append(f"Snapshot created for intent: '{intent}'.")
 
         # 2. Sources
-        chain.append(f"Context collected from {len(sources_used)} sources: {', '.join(sources_used)}.")
+        chain.append(
+            f"Context collected from {len(sources_used)} sources: {', '.join(sources_used)}."
+        )
         if sources_missing:
             chain.append(f"Sources not available: {', '.join(sources_missing)}.")
 
@@ -298,7 +392,6 @@ class ContextExplainer:
         chain.append(f"Aggregate confidence: {snapshot.confidence:.2f}.")
 
         return chain
-
 
 
 # Convenience functions

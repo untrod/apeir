@@ -176,6 +176,22 @@ inspector. CAS-backed Artifacts include an actual byte-integrity result;
 registration or a digest MATCH does not verify a physical effect. Opening a
 record does not perform a new Observation or replay the original Operation.
 
+### Inspect model context
+
+In Chat or the Workbench assistant, submit a request explicitly. Choose
+**Inspect model input** below its response, or **Inspect active input** while it
+runs. To inspect existing history without invoking a model, open Workspace and
+select **Recorded input Run**. Select an iteration to inspect the persisted message/tool manifest and
+any file read returned in preceding tool turns. Reopening a conversation uses
+the original Run ID; **View trace** remains a separate Trace view.
+
+The panel makes no model call. It distinguishes token estimates from recorded
+Provider usage, and successful file reads from failures. Context source chunks
+may be partial or omitted. Legacy/missing evidence and unavailable usage are
+UNKNOWN; declared tools do not authorize an operation. A metadata-only file
+reference is not proof that its contents were sent. See the
+[scope and bounds](../../development/DEVELOPER_PLATFORM.md#inspecting-actual-model-input).
+
 ### Environment workbench
 
 The existing Operations Console now opens **environments** alongside Work, Nodes

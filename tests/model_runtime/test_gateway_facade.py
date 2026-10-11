@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -366,6 +368,104 @@ def test_chat_handler_injects_context_as_untrusted_evidence() -> None:
     assert "untrusted evidence" in facade.request.messages[1]["content"]
     assert result["context_snapshot_id"] == "snapshot-1"
     assert result["citations"][0]["source_id"] == "fact-1"
+
+
+@pytest.mark.parametrize("path", ["workspace.txt", ".nous/private.txt"])
+def test_input_manifest_matches_each_real_gateway_turn_and_replays(
+    tmp_path, monkeypatch, path
+):
+    from nous_runtime.api.routes import route_server
+    from nous_runtime.events import EventStream
+
+    (tmp_path / "workspace.txt").write_text("PRIVATE-CONTEXT-CONTENT", encoding="utf-8")
+    (tmp_path / ".nous").mkdir(exist_ok=True)
+    (tmp_path / ".nous" / "private.txt").write_text("NEVER-READ-PRIVATE-STATE")
+    facade, adapter = build_facade(None)
+    requests = []
+    original = adapter.invoke
+
+    async def capture(request, descriptor, instance):
+        requests.append(request)
+        adapter.content = (
+            {
+                "tool_calls": [
+                    {
+                        "id": "read-1",
+                        "type": "function",
+                        "function": {
+                            "name": "read_file",
+                            "arguments": json.dumps({"path": path}),
+                        },
+                    }
+                ]
+            }
+            if len(requests) == 1
+            else "Read result reviewed"
+        )
+        return await original(request, descriptor, instance)
+
+    adapter.invoke = capture
+    stream = EventStream(str(tmp_path))
+    result = GatewayChatHandler(facade)(
+        SimpleNamespace(
+            request_id="input-evidence",
+            user_input="Read the selected file",
+            constraints={"workspace_path": str(tmp_path), "agent_mode": "read_only"},
+        ),
+        {"event_stream": stream},
+    )
+    assert result["ok"] and len(requests) == 2
+    monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("NOUS_RUNTIME_MODE", "production")
+    monkeypatch.setenv("NOUS_API_TOKEN", "fake.input.service")
+    page = route_server(
+        "GET",
+        "/api/v1/runtime/runs/input-evidence/events",
+        auth={"headers": {"Authorization": "Bearer fake.input.service"}},
+    )
+    assert page["ok"], page
+    manifests = [
+        event["payload"]["input_manifest"]
+        for event in page["data"]["events"]
+        if event["event_type"] == "model.invocation.started"
+    ]
+    assert len(manifests) == 2
+    for index, manifest in enumerate(manifests):
+        expected = hashlib.sha256(
+            json.dumps(
+                {
+                    "messages": requests[index].messages,
+                    "tools": requests[index].metadata["tools"],
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        assert manifest["input_sha256"] == expected
+        assert {tool["name"] for tool in manifest["tools"]}.isdisjoint(
+            {"write_file", "write_files", "run_command"}
+        )
+    assert not any(
+        message["source"]["kind"] == "tool_result"
+        for message in manifests[0]["messages"]
+    )
+    source = manifests[1]["messages"][-1]["source"]
+    assert source["kind"] == "tool_result" and source["tool"] == "read_file"
+    if path == "workspace.txt":
+        assert (
+            source["ok"]
+            and source["path"] == path
+            and source["start_line"] == source["end_line"] == 1
+        )
+    else:
+        assert not source["ok"] and "path" not in source
+    persisted = (tmp_path / ".nous" / "events" / "input-evidence.jsonl").read_text()
+    assert (
+        "PRIVATE-CONTEXT-CONTENT" not in persisted
+        and "NEVER-READ-PRIVATE-STATE" not in persisted
+    )
+    assert (tmp_path / "workspace.txt").read_text() == "PRIVATE-CONTEXT-CONTENT"
 
 
 def test_chat_handler_uses_bounded_text_tool_protocol_fallback(tmp_path) -> None:
