@@ -1,6 +1,7 @@
 """Canonical state, durable events and governed remote actions."""
 
 import json
+from pathlib import Path
 import threading
 from urllib.request import Request, urlopen
 
@@ -417,3 +418,154 @@ def test_incident_acknowledgement_survives_activity_window_and_restart(plane):
     assert len(snapshot["activity"]) == 500
     assert snapshot["incidents"][0]["acknowledged"]
     assert snapshot["works"][0]["state"] == "UNKNOWN"
+
+
+def test_node_pairing_requires_enrolled_human_permission_and_exact_nonce(
+    plane, monkeypatch
+):
+    from nous_runtime.node_runtime.relay import NodeRelayServer
+    from nous_runtime.node_runtime.service import NodeRuntimeConfig, NodeRuntimeService
+    from tests.node_runtime.test_node_pairing import proof
+
+    view, auth, client = plane
+    server = NodeRelayServer(state_dir=view.controller_state)
+    view.live_controller = server
+    node = NodeRuntimeService(NodeRuntimeConfig(state_dir=view.root / "node"))
+    for resource in (
+        "controller:" + server.public_key,
+        "node:" + node.identity.node_id,
+    ):
+        auth.permissions.add(
+            PermissionRule("oidc:*:alice", "governance.approve", resource)
+        )
+        auth.permissions.add(
+            PermissionRule("oidc:*:alice", "control.node_pair", resource)
+        )
+    issued, context = login(auth, client)
+    path = "/api/v1/control/operations/actions"
+    body = {
+        "kind": "pairings",
+        "action": "create",
+        "target_id": server.public_key,
+        "relay_url": "ws://127.0.0.1:9770",
+    }
+    monkeypatch.setenv("NOUS_API_TOKEN", "fake-local-service")
+    assert not route_server(
+        "POST", path, body=body, auth={"token": "fake-local-service", "loopback": True}
+    )["ok"]
+    assert server.list_pairings() == []
+    nonce = auth.nonce(context, "POST", path, body)["nonce"]
+    headers = {
+        "cookie": "apeir_human=" + issued.session_cookie,
+        "x-control-nonce": nonce,
+    }
+    created = route_server("POST", path, body=body, auth={"headers": headers})
+    assert created["ok"]
+    assert not route_server("POST", path, body=body, auth={"headers": headers})["ok"]
+    assert created.pairing_code not in json.dumps(created)
+    pending = server.receive_pairing(
+        proof(node, server, {**created["data"], "pairing_code": created.pairing_code})
+    )
+    decision = {
+        "kind": "pairings",
+        "action": "approve_once",
+        "target_id": pending["request_id"],
+        "node_id": node.identity.node_id,
+        "public_key": node.identity.public_key,
+    }
+    approve_nonce = auth.nonce(context, "POST", path, decision)["nonce"]
+    result = route_server(
+        "POST",
+        path,
+        body=decision,
+        auth={"headers": {**headers, "x-control-nonce": approve_nonce}},
+    )
+    assert result["ok"] and result["data"]["status"] == "APPROVED"
+    assert not route_server(
+        "POST",
+        path,
+        body=decision,
+        auth={"headers": {**headers, "x-control-nonce": approve_nonce}},
+    )["ok"]
+    assert view.gate.store.list_active_leases() == []
+
+
+def test_expired_remote_human_cannot_approve_node_trust(plane):
+    from nous_runtime.node_runtime.relay import NodeRelayServer
+    from nous_runtime.node_runtime.service import NodeRuntimeConfig, NodeRuntimeService
+    from tests.node_runtime.test_node_pairing import proof, issue
+
+    view, auth, client = plane
+    server = NodeRelayServer(state_dir=view.controller_state)
+    view.live_controller = server
+    node = NodeRuntimeService(NodeRuntimeConfig(state_dir=view.root / "node"))
+    pending = server.receive_pairing(proof(node, server, issue(server, view)))
+    for action in ("governance.approve", "control.node_pair"):
+        auth.permissions.add(
+            PermissionRule("oidc:*:alice", action, "node:" + node.identity.node_id)
+        )
+    _, context = login(auth, client)
+    with view.gate.store.operation_transaction() as db:
+        db.execute("UPDATE governance_human_sessions SET expires_at=1")
+    with pytest.raises(PermissionError):
+        view.node_action(
+            {
+                "kind": "pairings",
+                "action": "approve_once",
+                "target_id": pending["request_id"],
+                "node_id": node.identity.node_id,
+                "public_key": node.identity.public_key,
+            },
+            context,
+        )
+    assert not server.node_keys
+
+
+def test_only_human_http_invitation_delivery_exposes_one_time_code(plane):
+    from nous_runtime.node_runtime.relay import NodeRelayServer
+
+    view, auth, client = plane
+    controller = NodeRelayServer(state_dir=view.controller_state)
+    view.live_controller = controller
+    resource = "controller:" + controller.public_key
+    for action in ("governance.approve", "control.node_pair"):
+        auth.permissions.add(PermissionRule("oidc:*:alice", action, resource))
+    issued, context = login(auth, client)
+    path = "/api/v1/control/operations/actions"
+    body = {
+        "kind": "pairings",
+        "action": "create",
+        "target_id": controller.public_key,
+        "relay_url": "ws://127.0.0.1:9770",
+    }
+    nonce = auth.nonce(context, "POST", path, body)["nonce"]
+    server = RuntimeHTTPServer(("127.0.0.1", 0), RuntimeAPIHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = Request(
+            f"http://127.0.0.1:{server.server_port}" + path,
+            data=json.dumps(body).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": "apeir_human=" + issued.session_cookie,
+                "X-Control-Nonce": nonce,
+            },
+            method="POST",
+        )
+        with urlopen(request, timeout=5) as response:
+            assert response.headers["Cache-Control"] == "no-store"
+            invitation = json.load(response)["data"]
+        code = invitation["pairing_code"]
+        assert len(code) == 8 and code != "<REDACTED>"
+        assert code not in json.dumps(view.snapshot())
+        assert (
+            code.encode()
+            not in (controller.state_dir / "trusted-nodes.json").read_bytes()
+        )
+        assert code.encode() not in Path(view.gate.store.db_path).read_bytes()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+        assert not thread.is_alive()

@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OperationsConsole, type OperationsSnapshot } from "../components/OperationsConsole";
 
 const fixture: OperationsSnapshot = {
@@ -43,7 +43,7 @@ describe("Operations Console", () => {
     fireEvent.click(screen.getByRole("button", { name: "Change language" }));
     expect(screen.getByRole("main")).toHaveAttribute("lang", "zh-CN");
     expect(screen.getByRole("heading", { name: "执行与现实" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^节点/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "节点" })).toBeInTheDocument();
   });
   it("keeps Node trust independent of reported connectivity", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: { ...fixture, nodes: [{ node_id: "candidate", connectivity_state: "ONLINE", trust_status: "REVOKED" }] } }) }));
@@ -210,5 +210,58 @@ describe("Operations Console", () => {
     expect(fetcher.mock.calls.some(([url]) => url.endsWith("/human/session"))).toBe(false);
     expect(sessionStorage.getItem("apeir.human.pkce")).toBeNull();
     expect(window.location.search).toBe("");
+  });
+});
+
+describe("Secure Node onboarding", () => {
+  beforeEach(() => { vi.stubGlobal("EventSource", class { addEventListener() {} close() {} }); });
+  const publicKey = "ab".repeat(32);
+  const pending = { request_id: "pair-1", status: "PENDING", node_id: "node-new", public_key: publicKey };
+  const data = { ...fixture, controller_public_key: "cd".repeat(32), pairings: [pending] };
+  it("keeps pairing observe-only without human authentication", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data }) }));
+    render(<OperationsConsole />);
+    await screen.findByRole("button", { name: "uncertain-effect-1" });
+    fireEvent.click(screen.getByRole("button", { name: "pairings" }));
+    expect(screen.getByRole("button", { name: "Trust this Node once" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeDisabled();
+    expect(screen.getByText(/Node: node-new/)).toHaveTextContent(publicKey);
+  });
+  it("binds the human nonce and decision to the exact backend Node key", async () => {
+    const requests: { url: string; body?: Record<string, unknown> }[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string, options: RequestInit = {}) => {
+      const body = options.body ? JSON.parse(String(options.body)) : undefined;
+      requests.push({ url, body });
+      const response = url.endsWith("/human/session") ? { subject_id: "verified-human", expires_at: Math.floor(Date.now() / 1000) + 600 } : url.endsWith("/human/nonce") ? { nonce: "bound-nonce" } : data;
+      return { ok: true, json: async () => ({ ok: true, data: response }) };
+    }));
+    render(<OperationsConsole />);
+    await screen.findByText("Human: verified-human");
+    fireEvent.click(screen.getByRole("button", { name: "pairings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Trust this Node once" }));
+    await waitFor(() => expect(requests.some(request => request.url.endsWith("/operations/actions"))).toBe(true));
+    const mutation = requests.find(request => request.url.endsWith("/operations/actions"))!;
+    expect(mutation.body).toEqual({ kind: "pairings", action: "approve_once", target_id: "pair-1", node_id: "node-new", public_key: publicKey });
+    const nonce = requests.find(request => request.url.endsWith("/human/nonce"))!;
+    expect(nonce.body?.body).toEqual(mutation.body);
+    expect(JSON.stringify(localStorage)).not.toContain(publicKey);
+  });
+  it("requires Controller confirmation and keeps the invitation code out of storage", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string) => {
+      const response = url.endsWith("/human/session") ? { subject_id: "verified-human", expires_at: Math.floor(Date.now() / 1000) + 600 } : url.endsWith("/human/nonce") ? { nonce: "bound-nonce" } : url.endsWith("/operations/actions") ? { request_id: "pair-issued", pairing_code: "ABCD2345", expires_at: Math.floor(Date.now() / 1000) + 300, relay_url: "wss://controller.example:9770", controller_public_key: data.controller_public_key } : data;
+      return { ok: true, json: async () => ({ ok: true, data: response }) };
+    }));
+    render(<OperationsConsole />);
+    await screen.findByText("Human: verified-human");
+    fireEvent.click(screen.getByRole("button", { name: "Add Node" }));
+    const create = screen.getByRole("button", { name: "Create one-time invitation" });
+    expect(create).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Relay URL"), { target: { value: "wss://controller.example:9770" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Confirm Controller identity" }));
+    fireEvent.click(create);
+    await screen.findByText("ABCD2345");
+    expect(JSON.stringify(localStorage) + JSON.stringify(sessionStorage)).not.toContain("ABCD2345");
+    fireEvent.click(screen.getByRole("button", { name: "Hide code and inspect pairing" }));
+    expect(screen.queryByText("ABCD2345")).not.toBeInTheDocument();
   });
 });

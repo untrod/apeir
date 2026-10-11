@@ -7,6 +7,7 @@ import base64
 import contextlib
 import hashlib
 import json
+import math
 import os
 import random
 import secrets
@@ -14,7 +15,7 @@ import ssl
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlsplit
 
 from cryptography.hazmat.primitives import serialization
@@ -27,6 +28,13 @@ from nous_runtime.artifact.content_store import ContentAddressedArtifactStore
 from nous_runtime.connectivity.protocol.identity import NodeIdentity
 from nous_runtime.security.private_files import restrict_owner_only_file
 from nous_runtime.locking import file_lock
+from nous_runtime.core.redaction import register_sensitive_value
+from nous_runtime.connectivity.protocol.pairing import (
+    generate_pairing_code,
+    hash_pairing_code,
+    MAX_PAIRING_ATTEMPTS,
+    PAIRING_CODE_TTL_SECONDS,
+)
 
 from .protocol import (
     MAX_MESSAGE_BYTES,
@@ -43,7 +51,7 @@ from .distributed_work import (
     WorkRequirements,
 )
 from .reliability import NodeConnectivityState, project_node_connectivity
-from .service import NodeRuntimeService
+from .service import NodeRuntimeService, _atomic_write_bytes
 
 CONTROL_PLANE_ID = "control_plane"
 OBSERVED_MESSAGE_TYPES = frozenset(
@@ -91,6 +99,7 @@ class NodeRelayServer:
         self.ssl_context = ssl_context
         self.heartbeat_seconds = heartbeat_seconds
         self.artifact_store = artifact_store
+        self._trust_document: dict[str, Any] = {}
         self.node_keys: dict[str, str] = self._load_trusted_nodes()
         self.connections: dict[str, Any] = {}
         self.sessions: dict[str, str] = {}
@@ -111,6 +120,7 @@ class NodeRelayServer:
         self._sequence = self._load_sequence()
         self._server: Any = None
         self._provider_spool_task: asyncio.Task[None] | None = None
+        self._trust_watch_task: asyncio.Task[None] | None = None
         self.provider_requests = (
             self.state_dir / "provider-requests" if self.state_dir else None
         )
@@ -147,6 +157,10 @@ class NodeRelayServer:
                 raise
 
     def _register_node_key(self, node_id: str, public_key: str) -> None:
+        if node_id in self._trust_document.get("revoked", {}):
+            raise PermissionError(
+                "Node trust is revoked; ordinary enrollment cannot revive it"
+            )
         existing = self.node_keys.get(node_id)
         if existing is not None and bytes.fromhex(existing) != bytes.fromhex(
             public_key
@@ -156,23 +170,334 @@ class NodeRelayServer:
 
     def _load_trusted_nodes(self) -> dict[str, str]:
         if self.state_dir is None:
-            return {}
-        value = _read_json(self.state_dir / "trusted-nodes.json")
-        nodes = value.get("nodes", {})
-        if not isinstance(nodes, dict):
-            raise TypeError("relay trusted-node registry is invalid")
-        return {
-            str(node_id): str(public_key)
-            for node_id, public_key in nodes.items()
-            if isinstance(node_id, str) and isinstance(public_key, str)
-        }
+            return self.node_keys if hasattr(self, "node_keys") else {}
+        path = self.state_dir / "trusted-nodes.json"
+        if not path.exists():
+            if any(
+                self._trust_document.get(field)
+                for field in ("nodes", "revoked", "pairings")
+            ):
+                raise PermissionError("Original Controller trust state is missing")
+            self._trust_document = {"schema": "nous.relay-trust/v1", "nodes": {}}
+        else:
+            # Corruption is not an empty trust store or permission to overwrite history.
+            value = json.loads(path.read_text(encoding="utf-8"))
+            if (
+                not isinstance(value, dict)
+                or value.get("schema") != "nous.relay-trust/v1"
+            ):
+                raise ValueError("relay trusted-node registry is invalid")
+            for field in ("nodes", "revoked", "pairings"):
+                if not isinstance(value.get(field, {}), dict):
+                    raise ValueError("relay trusted-node registry is invalid")
+            for node_id, public_key in value.get("nodes", {}).items():
+                if (
+                    not isinstance(node_id, str)
+                    or not node_id.strip()
+                    or not isinstance(public_key, str)
+                    or len(bytes.fromhex(public_key)) != 32
+                ):
+                    raise ValueError("relay trusted-node identity is invalid")
+            for node_id, record in value.get("revoked", {}).items():
+                if (
+                    not isinstance(record, dict)
+                    or record.get("status") != "REVOKED"
+                    or record.get("public_key") != value["nodes"].get(node_id)
+                ):
+                    raise ValueError("relay Node revocation is invalid")
+            for identifier, record in value.get("pairings", {}).items():
+                if (
+                    not isinstance(record, dict)
+                    or record.get("request_id") != identifier
+                    or record.get("status")
+                    not in {"INVITED", "PENDING", "APPROVED", "DENIED"}
+                ):
+                    raise ValueError("relay pairing record is invalid")
+                expiry, attempts = record.get("expires_at"), record.get("attempts")
+                if (
+                    not isinstance(expiry, (int, float))
+                    or isinstance(expiry, bool)
+                    or not math.isfinite(expiry)
+                    or type(attempts) is not int
+                    or not 0 <= attempts <= MAX_PAIRING_ATTEMPTS
+                ):
+                    raise ValueError("relay pairing bounds are invalid")
+                if record["status"] == "INVITED":
+                    if (
+                        not isinstance(record.get("code_hash"), str)
+                        or len(bytes.fromhex(record["code_hash"])) != 32
+                    ):
+                        raise ValueError("relay pairing code digest is invalid")
+                elif (
+                    not isinstance(record.get("node_id"), str)
+                    or not isinstance(record.get("public_key"), str)
+                    or len(bytes.fromhex(record["public_key"])) != 32
+                ):
+                    raise ValueError("relay pairing Node binding is invalid")
+            self._trust_document = value
+        return dict(self._trust_document.get("nodes", {}))
 
     def _save_trusted_nodes(self) -> None:
         if self.state_dir is not None:
             _atomic_json(
                 self.state_dir / "trusted-nodes.json",
-                {"schema": "nous.relay-trust/v1", "nodes": self.node_keys},
+                {
+                    **self._trust_document,
+                    "schema": "nous.relay-trust/v1",
+                    "nodes": self.node_keys,
+                },
+                private=True,
             )
+
+    def _trust_lock(self):
+        if self.state_dir is None:
+            raise PermissionError(
+                "Node pairing and revocation require durable Controller state"
+            )
+        return file_lock(self.state_dir / "trusted-nodes.lock")
+
+    def _require_node_trust(self, node_id: str, public_key: str = "") -> None:
+        if self.state_dir is not None:
+            self.node_keys = self._load_trusted_nodes()
+        if node_id not in self.node_keys or node_id in self._trust_document.get(
+            "revoked", {}
+        ):
+            raise NodeProtocolError("node trust is missing or revoked")
+        if public_key and bytes.fromhex(self.node_keys[node_id]) != bytes.fromhex(
+            public_key
+        ):
+            raise NodeProtocolError("node trust identity changed")
+
+    def create_pairing(self, relay_url: str, *, admit: Callable[[dict], dict]) -> dict:
+        """Trusted human boundary issues a bounded invitation, never execution permission."""
+        _validate_relay_url(relay_url)
+        address = urlsplit(relay_url)
+        if address.username or address.password or address.query or address.fragment:
+            raise ValueError(
+                "pairing address cannot contain credentials, query or fragment"
+            )
+        with self._trust_lock():
+            self.node_keys = self._load_trusted_nodes()
+            now = time.time()
+            pairings = self._trust_document.setdefault("pairings", {})
+            active = sum(
+                (
+                    record["status"] == "PENDING"
+                    or (
+                        record["status"] == "INVITED"
+                        and record["attempts"] < MAX_PAIRING_ATTEMPTS
+                    )
+                )
+                and record["expires_at"] > now
+                for record in pairings.values()
+            )
+            if active >= 32:
+                raise PermissionError("Controller pending pairing limit reached")
+            if len(pairings) >= 1024:
+                raise PermissionError(
+                    "Controller pairing history limit reached; review retention before further enrollment"
+                )
+            identifier = "pair_" + secrets.token_hex(16)
+            code = generate_pairing_code()
+            register_sensitive_value(code)
+            record = {
+                "request_id": identifier,
+                "controller_public_key": self.public_key,
+                "relay_url": relay_url,
+                "expires_at": now + PAIRING_CODE_TTL_SECONDS,
+                "status": "INVITED",
+                "attempts": 0,
+                "code_hash": hash_pairing_code(code),
+            }
+            record.update(admit(self._public_pairing(record)))
+            pairings[identifier] = record
+            self._save_trusted_nodes()
+            return {
+                **self._public_pairing(record),
+                "pairing_code": code,
+                "grants_capabilities": False,
+            }
+
+    @staticmethod
+    def _public_pairing(record: dict) -> dict:
+        result = {key: value for key, value in record.items() if key != "code_hash"}
+        if (
+            record["status"] in {"INVITED", "PENDING"}
+            and record["expires_at"] <= time.time()
+        ):
+            result["status"] = "EXPIRED"
+        elif (
+            record["status"] == "INVITED" and record["attempts"] >= MAX_PAIRING_ATTEMPTS
+        ):
+            result["status"] = "EXHAUSTED"
+        return result
+
+    def list_pairings(self) -> list[dict]:
+        with self._trust_lock():
+            self.node_keys = self._load_trusted_nodes()
+            return [
+                self._public_pairing(item)
+                for item in self._trust_document.get("pairings", {}).values()
+            ]
+
+    def receive_pairing(self, envelope: NodeProtocolEnvelope) -> dict:
+        """Verify Node possession and bind one invitation; no trust is granted here."""
+        payload = envelope.payload
+        try:
+            identity = NodeIdentity.from_dict(payload["identity"])
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            raise NodeProtocolError("pairing identity is invalid") from exc
+        pairing = payload.get("pairing")
+        if (
+            not isinstance(pairing, dict)
+            or not isinstance(pairing.get("request_id"), str)
+            or len(pairing["request_id"]) > 64
+            or not isinstance(identity.node_id, str)
+            or not 1 <= len(identity.node_id) <= 128
+            or not isinstance(identity.public_key, str)
+            or len(identity.public_key) != 64
+            or NODE_PROTOCOL_VERSION not in payload.get("supported_versions", [])
+            or identity.node_id != envelope.source
+            or payload["node_id"] != envelope.source
+            or not envelope.verify(identity.public_key)
+            or pairing.get("controller_public_key") != self.public_key
+        ):
+            raise NodeProtocolError("pairing identity or Controller proof is invalid")
+        with self._trust_lock():
+            self.node_keys = self._load_trusted_nodes()
+            node_id, public = identity.node_id, identity.public_key
+            if node_id in self._trust_document.get("revoked", {}) or (
+                node_id in self.node_keys
+                and bytes.fromhex(self.node_keys[node_id]) != bytes.fromhex(public)
+            ):
+                raise NodeProtocolError(
+                    "pairing cannot replace or revive a Node identity"
+                )
+            record = self._trust_document.get("pairings", {}).get(
+                pairing.get("request_id")
+            )
+            if not record or record["controller_public_key"] != self.public_key:
+                raise NodeProtocolError("pairing request is unknown")
+            if record["status"] == "INVITED":
+                self._bind_pairing(
+                    record,
+                    pairing,
+                    node_id,
+                    public,
+                    envelope,
+                )
+            elif "pairing_code" in pairing:
+                raise NodeProtocolError(
+                    "pairing code was already consumed; query original request"
+                )
+            if record["node_id"] != node_id or record["public_key"] != public:
+                raise NodeProtocolError("pairing request is bound to another Node")
+            if "pairing_code" not in pairing:
+                self._replay.accept(envelope)
+            return self._public_pairing(record)
+
+    def _bind_pairing(
+        self,
+        record: dict,
+        pairing: dict,
+        node_id: str,
+        public: str,
+        envelope: NodeProtocolEnvelope,
+    ) -> None:
+        if (
+            record["expires_at"] <= time.time()
+            or record["attempts"] >= MAX_PAIRING_ATTEMPTS
+        ):
+            raise NodeProtocolError("pairing request expired or exhausted")
+        record["attempts"] += 1
+        code = pairing.get("pairing_code", "")
+        if isinstance(code, str) and len(code) == 8:
+            register_sensitive_value(code)
+        if (
+            not isinstance(code, str)
+            or len(code) != 8
+            or not secrets.compare_digest(record["code_hash"], hash_pairing_code(code))
+        ):
+            self._save_trusted_nodes()
+            raise NodeProtocolError("pairing code is invalid")
+        try:
+            self._replay.accept(envelope)
+        except NodeProtocolError:
+            self._save_trusted_nodes()
+            raise
+        record.update(
+            node_id=node_id,
+            public_key=public,
+            status="PENDING",
+            node_proof_digest=_payload_digest(envelope.to_dict()),
+        )
+        record.pop("code_hash", None)
+        self._save_trusted_nodes()
+
+    def decide_pairing(
+        self,
+        request_id: str,
+        *,
+        approve: bool,
+        node_id: str,
+        public_key: str,
+        admit: Callable[[dict], dict],
+    ) -> dict:
+        with self._trust_lock():
+            self.node_keys = self._load_trusted_nodes()
+            record = self._trust_document.get("pairings", {}).get(request_id)
+            if (
+                not record
+                or record["status"] != "PENDING"
+                or record["expires_at"] <= time.time()
+            ):
+                raise PermissionError("Pairing is not pending or has expired")
+            if record["node_id"] != node_id or record["public_key"] != public_key:
+                raise PermissionError(
+                    "Human confirmation must match the exact Node key"
+                )
+            actor = admit(self._public_pairing(record))
+            if approve:
+                self._register_node_key(node_id, public_key)
+            record.update(actor, status="APPROVED" if approve else "DENIED")
+            try:
+                self._save_trusted_nodes()
+            except BaseException:
+                self.node_keys = self._load_trusted_nodes()
+                raise
+            return self._public_pairing(record)
+
+    def revoke_node(self, node_id: str, *, admit: Callable[[dict], dict]) -> dict:
+        with self._trust_lock():
+            self.node_keys = self._load_trusted_nodes()
+            if node_id not in self.node_keys:
+                raise PermissionError("Node has no existing trust binding")
+            record = {
+                "node_id": node_id,
+                "public_key": self.node_keys[node_id],
+                "controller_public_key": self.public_key,
+            }
+            actor = admit(record)
+            self._trust_document.setdefault("revoked", {})[node_id] = {
+                **record,
+                **actor,
+                "status": "REVOKED",
+            }
+            self._save_trusted_nodes()
+            return {
+                "node_id": node_id,
+                "trust_status": "REVOKED",
+                "effect_interrupt_guarantee": False,
+            }
+
+    async def _watch_node_trust(self) -> None:
+        while True:
+            for node_id, socket in list(self.connections.items()):
+                try:
+                    self._require_node_trust(node_id)
+                except (NodeProtocolError, OSError, ValueError, TypeError):
+                    await socket.close(code=1008, reason="node trust unavailable")
+            await asyncio.sleep(0.1)
 
     def _load_workload_state(self) -> None:
         if self.state_dir is None:
@@ -318,6 +643,14 @@ class NodeRelayServer:
 
     def controller_status(self) -> dict[str, Any]:
         """Return durable controller facts without claiming offline nodes are live."""
+        if self.state_dir is not None and (
+            (self.state_dir / "trusted-nodes.json").is_file()
+            or any(
+                self._trust_document.get(field)
+                for field in ("nodes", "revoked", "pairings")
+            )
+        ):
+            self.node_keys = self._load_trusted_nodes()
         nodes = []
         for node_id in sorted(self.node_keys):
             observation = self.reports.get(node_id, {})
@@ -326,7 +659,8 @@ class NodeRelayServer:
             identity = registration.get("identity", {})
             platform = identity.get("platform", {})
             last_observed_at = str(observation.get("observed_at", ""))
-            connected = node_id in self.connections
+            revoked = node_id in self._trust_document.get("revoked", {})
+            connected = node_id in self.connections and not revoked
             projection = project_node_connectivity(
                 connected=connected,
                 connection_phase=self.connection_states.get(node_id, ""),
@@ -345,7 +679,8 @@ class NodeRelayServer:
             nodes.append(
                 {
                     "node_id": node_id,
-                    "trust_status": "TRUSTED",
+                    "public_key": self.node_keys[node_id],
+                    "trust_status": "REVOKED" if revoked else "TRUSTED",
                     "node_name": str(identity.get("node_name", "")),
                     "connected": connected,
                     "session_id": self.sessions.get(node_id, ""),
@@ -353,7 +688,7 @@ class NodeRelayServer:
                     "connectivity_state": projection.state.value,
                     "connectivity_lease_expires_at": projection.lease_expires_at,
                     "connectivity_lease_valid": projection.lease_valid,
-                    "schedulable": projection.schedulable,
+                    "schedulable": projection.schedulable and not revoked,
                     "last_observed_at": last_observed_at,
                     "observation_age_seconds": observation_age,
                     "heartbeat_sequence": int(heartbeat.get("heartbeat_sequence", 0)),
@@ -378,7 +713,9 @@ class NodeRelayServer:
             "role": "controller",
             "state_dir": str(self.state_dir) if self.state_dir else "",
             "public_key": self.public_key,
-            "trusted_node_count": len(self.node_keys),
+            "trusted_node_count": len(
+                set(self.node_keys) - set(self._trust_document.get("revoked", {}))
+            ),
             "connected_node_count": len(self.connections),
             "pending_workload_count": sum(
                 len(items) for items in self.pending.values()
@@ -914,9 +1251,15 @@ class NodeRelayServer:
             self.provider_requests.mkdir(parents=True, exist_ok=True)
             self.provider_results.mkdir(parents=True, exist_ok=True)
             self._provider_spool_task = asyncio.create_task(self._run_provider_spool())
+        self._trust_watch_task = asyncio.create_task(self._watch_node_trust())
         return f"{scheme}://{self.host}:{port}"
 
     async def stop(self) -> None:
+        if self._trust_watch_task is not None:
+            self._trust_watch_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._trust_watch_task
+            self._trust_watch_task = None
         if self._provider_spool_task is not None:
             self._provider_spool_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -939,8 +1282,7 @@ class NodeRelayServer:
         delivery_semantics: str = "idempotent",
         binding: dict[str, str] | None = None,
     ) -> None:
-        if node_id not in self.node_keys:
-            raise NodeProtocolError("node is not registered")
+        self._require_node_trust(node_id)
         prior = self.result_envelopes.get(workload_id)
         if prior is not None and prior.get("source") != node_id:
             raise NodeProtocolError("workload is already bound to another node")
@@ -1003,8 +1345,7 @@ class NodeRelayServer:
 
     async def queue_artifact(self, node_id: str, digest: str) -> None:
         """Queue a verified CAS artifact (and graph dependencies) for a node."""
-        if node_id not in self.node_keys:
-            raise NodeProtocolError("node is not registered")
+        self._require_node_trust(node_id)
         if self.artifact_store is None:
             raise NodeProtocolError("relay artifact store is not configured")
         record = self.artifact_store.get(digest)
@@ -1059,8 +1400,7 @@ class NodeRelayServer:
         *,
         cancel_workload_id: str | None = None,
     ) -> None:
-        if node_id not in self.node_keys:
-            raise NodeProtocolError("node is not registered")
+        self._require_node_trust(node_id)
         request = {
             "message_type": message_type,
             "payload": payload,
@@ -1106,6 +1446,21 @@ class NodeRelayServer:
             ):
                 raise NodeProtocolError("REGISTER must be the first message")
             node_id = envelope.source
+            if "pairing" in envelope.payload:
+                result = self.receive_pairing(envelope)
+                await self._send(
+                    websocket,
+                    node_id,
+                    "ACK",
+                    {
+                        "acknowledged": "PAIRING",
+                        "pairing": result,
+                        "grants_capabilities": False,
+                    },
+                    reply_to=envelope.message_id,
+                )
+                return
+            self._require_node_trust(node_id)
             if self.state_dir is not None:
                 # The controller CLI may enroll a Node while this listener is
                 # running. Reload the durable registry at the authentication
@@ -1176,6 +1531,7 @@ class NodeRelayServer:
                     # old transport traffic before it consumes replay sequence
                     # or changes observations, acknowledgements or results.
                     raise NodeProtocolError("node connection was superseded")
+                self._require_node_trust(node_id, public_key)
                 envelope = NodeProtocolEnvelope.from_json(raw)
                 if envelope.source != node_id or envelope.target != CONTROL_PLANE_ID:
                     raise NodeProtocolError(
@@ -1500,6 +1856,8 @@ class NodeRelayServer:
         reply_to: str = "",
         idempotency_key: str = "",
     ) -> None:
+        if message_type not in {"ACK", "ERROR"}:
+            self._require_node_trust(target)
         envelope = NodeProtocolEnvelope(
             message_type=message_type,
             source=CONTROL_PLANE_ID,
@@ -1553,6 +1911,50 @@ class NodeRelayClient:
         self.sequence_path = service.state_dir / "relay-sequence.json"
         self._sequence = self._load_sequence()
         self._replay = ReplayWindow()
+
+    async def pair(self, request_id: str, *, pairing_code: str = "") -> dict:
+        """Submit possession proof or query the original request after response loss."""
+        pairing = {
+            "request_id": request_id,
+            "controller_public_key": self.server_public_key,
+        }
+        if pairing_code:
+            register_sensitive_value(pairing_code)
+            pairing["pairing_code"] = pairing_code
+        async with connect(
+            self.relay_url,
+            ssl=self.ssl_context,
+            proxy=None,
+            max_size=MAX_MESSAGE_BYTES,
+            compression=None,
+            open_timeout=10,
+        ) as socket:
+            await self._send(
+                socket,
+                "REGISTER",
+                {
+                    "node_id": self.service.identity.node_id,
+                    "identity": self.service.identity.to_dict(),
+                    "supported_versions": [NODE_PROTOCOL_VERSION],
+                    "pairing": pairing,
+                },
+            )
+            response = await self._receive(socket)
+            result = response.payload.get("pairing", {})
+            if (
+                response.source != CONTROL_PLANE_ID
+                or response.target != self.service.identity.node_id
+                or response.message_type != "ACK"
+                or response.payload.get("acknowledged") != "PAIRING"
+                or result.get("request_id") != request_id
+                or result.get("controller_public_key") != self.server_public_key
+                or result.get("node_id") != self.service.identity.node_id
+                or result.get("public_key") != self.service.identity.public_key
+            ):
+                raise NodeProtocolError(
+                    "Controller did not accept the exact pairing proof"
+                )
+            return result
 
     async def run_forever(self, stop_event: asyncio.Event) -> None:
         delay = 1.0
@@ -1973,7 +2375,16 @@ def _verify_committed_artifacts(
             raise DistributedWorkError("committed Work Artifact verification failed")
 
 
-def _atomic_json(path: Path, value: dict[str, Any]) -> None:
+def _atomic_json(path: Path, value: dict[str, Any], *, private: bool = False) -> None:
+    if private:
+        _atomic_write_bytes(
+            path,
+            (json.dumps(value, ensure_ascii=False, sort_keys=True) + "\n").encode(
+                "utf-8"
+            ),
+            private=True,
+        )
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f"{path.name}.{secrets.token_hex(8)}.tmp")
     try:

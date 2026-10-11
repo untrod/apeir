@@ -21,7 +21,7 @@ from nous_runtime.control_plane.human_sessions import (
 from nous_runtime.core.redaction import redact_sensitive_data
 from nous_runtime.events.models import RunEvent
 from nous_runtime.events.stream import EventStream
-from nous_runtime.governance import get_gate
+from nous_runtime.governance import get_gate, GovernanceRequest
 from nous_runtime.governance.broker import ApprovalBroker
 from nous_runtime.governance.credentials import CredentialBroker
 from nous_runtime.node_runtime.distributed_work import (
@@ -123,6 +123,11 @@ class OperationsPlane:
             "controller", lambda: self.controller().controller_status(), {}
         )
         nodes = controller.get("nodes", [])
+        pairings = (
+            load("pairings", lambda: self.controller().list_pairings(), [])
+            if controller
+            else []
+        )
         broker = ApprovalBroker(self.gate.store)
         approvals = load(
             "approvals", lambda: broker.list_operation_approvals(gate=self.gate), []
@@ -245,6 +250,8 @@ class OperationsPlane:
                 "works": works,
                 "workflows": workflows,
                 "nodes": nodes,
+                "controller_public_key": controller.get("public_key", ""),
+                "pairings": pairings,
                 "devices": devices,
                 "approvals": approvals,
                 "grants": grants,
@@ -311,7 +318,76 @@ class OperationsPlane:
                 ),
             )
 
+    def node_action(self, body, context):
+        """Human-governed trust administration, not Work or Capability authorization."""
+        controller = self.controller()
+        action, target = body.get("action"), body.get("target_id")
+
+        def admit(record):
+            node_id = record.get("node_id", "")
+            resource = (
+                "node:" + node_id if node_id else "controller:" + controller.public_key
+            )
+            request = GovernanceRequest(
+                operation_id=record.get("request_id", "node-trust:" + node_id),
+                work_id="",
+                capability_id="node.trust",
+                resource_id=resource,
+                subject_id="node:" + node_id,
+                node_id=node_id,
+            )
+            self._admit(
+                context, request, "revoke" if action == "revoke" else "node_pair"
+            )
+            with self.gate.store.operation_transaction() as db:
+                self.gate._require_human(context, request, db=db)
+                self.gate.store.append_operation_audit(
+                    db,
+                    "node.trust.decision",
+                    {
+                        "request_id": record.get("request_id", ""),
+                        "node_id": node_id,
+                        "public_key": record.get("public_key", ""),
+                        "node_proof_digest": record.get("node_proof_digest", ""),
+                        "controller_public_key": controller.public_key,
+                        "action": action,
+                        "resource_id": resource,
+                        "actor_id": context.subject_id,
+                        "human_session_id": context.session_id,
+                        "authorization_context_id": context.context_id,
+                        "execution_authority_issued": False,
+                        "trust_persistence_confirmed": False,
+                    },
+                )
+            return {
+                "actor_id": context.subject_id,
+                "human_session_id": context.session_id,
+                "authorization_context_id": context.context_id,
+            }
+
+        if body.get("kind") == "nodes" and action == "revoke":
+            return controller.revoke_node(target, admit=admit)
+        if body.get("kind") != "pairings":
+            raise PermissionError("Unsupported Node trust action")
+        if action == "create":
+            if target != controller.public_key:
+                raise PermissionError("Confirm the exact Controller public key")
+            return controller.create_pairing(body.get("relay_url", ""), admit=admit)
+        if action in {"approve_once", "deny"}:
+            return controller.decide_pairing(
+                target,
+                approve=action == "approve_once",
+                node_id=body.get("node_id", ""),
+                public_key=body.get("public_key", ""),
+                admit=admit,
+            )
+        raise PermissionError("Unsupported pairing decision")
+
     def action(self, body, context):
+        if body.get("kind") == "pairings" or (
+            body.get("kind") == "nodes" and body.get("action") == "revoke"
+        ):
+            return self.node_action(body, context)
         action, kind, target = (
             body.get("action"),
             body.get("kind"),
@@ -445,6 +521,7 @@ class OperationsPlane:
                 "works",
                 "workflows",
                 "nodes",
+                "pairings",
                 "devices",
                 "approvals",
                 "grants",
@@ -517,8 +594,20 @@ def events_route(params=None):
     )
 
 
+class PairingInvitationResponse(dict):
+    """Short-lived code stays outside ordinary API serialization until human HTTP delivery."""
+
+    def __init__(self, result):
+        public = dict(result)
+        self.pairing_code = public.pop("pairing_code")
+        super().__init__(ok_response(public))
+
+
 def action_route(body, *, authorization_context):
-    return ok_response(get_operations().action(body, authorization_context))
+    result = get_operations().action(body, authorization_context)
+    if body.get("kind") == "pairings" and body.get("action") == "create":
+        return PairingInvitationResponse(result)
+    return ok_response(result)
 
 
 def human_challenge_route(body):

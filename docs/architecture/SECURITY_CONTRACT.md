@@ -38,8 +38,8 @@ Cross-process read/check/write and first-identity provisioning are EXTEND;
 lost enrollment updates, silent key replacement and replacement of incomplete
 identities are FIX. The old in-memory Connectivity PairingService remains a
 compatibility mechanism; it is not an authority for signed Node enrollment.
-One-time invitations, durable human-approved pairing and real multi-network
-qualification still require their own implementation and evidence.
+One-time signed invitation software now extends this path as described below;
+real human identity and multi-network qualification remain separate pending gates.
 
 Trust updates now reload the existing authoritative map under its file lock.
 Same-ID/same-key registration is idempotent; a changed key is rejected. Failed
@@ -517,3 +517,45 @@ it does not establish trust in a catalog or enable remote package installation.
 Remote catalogs remain discovery metadata, not authority or executable content.
 Controlled remote acquisition and a complete catalog UI still require their own
 existing Governance/SDK integration and qualification.
+
+### Signed one-time Node enrollment
+
+REUSE the Node/Controller Ed25519 identities, Protocol REGISTER/ACK signatures,
+existing trust file/file lock and Governance human/session validation. EXTEND
+that same trust document with bounded invitations, exact-key PENDING proofs,
+atomic human decisions and persistent revocations. FIX malformed trust files
+that previously became an empty registry. No second PairingService, Node trust
+store, Work or authority is introduced; legacy in-memory pairing remains outside
+canonical signed Node enrollment.
+
+An invitation expires in five minutes, accepts at most five code attempts and
+binds the Controller key, request ID and the submitting Node's possession proof.
+Only an authenticated enrolled human or attested local OS owner can apply the
+exact-key decision. Code possession alone never establishes trust or execution
+permission. Consumed codes cannot be reused; a signed status query reconciles
+the original request after response loss. Approval and revocation retain their
+identity/audit bindings across reload. Revoked identities cannot be revived by
+ordinary registration or reconnect. Original Work/effect evidence is preserved.
+
+Public-key and proof metadata live in the existing owner-restricted trust file.
+Human decision intents use the existing append-oriented Governance audit before
+the atomic file update. An intent is not a persisted-success receipt. Raw codes
+are excluded from ordinary API serialization, audit, events, artifacts, CLI
+arguments and browser storage; the existing HTTP adapter delivers a typed,
+short-lived invitation only after the human gate. General redaction is retained.
+See [onboarding operations](../operations/compute-mesh/OPERATIONS.md#one-time-signed-node-onboarding)
+for the exact commands, permission scopes, persistence-failure handling and limits.
+This software scope does not qualify production remote identity, installed
+Windows Desktop, physical hardware, concurrent Node journal writers or HA.
+
+Scoped Cloud validation: 45 pairing/Control Plane tests passed, 714 affected
+Node/Governance/Reality/Agent/SDK tests passed, and 8 Workflow/external-workflow
+tests passed with 1 real-OCI skip. Repository checks have 262 passed, including
+three lock-contract cases. Desktop lint/typecheck/build and 63 tests in 25 files
+passed. The earlier full host run had 4,051 passed, 60 skipped and the two recorded
+PID1 orphan-cleanup failures; it predates the final two boundary tests and is not
+rewritten as a clean full Gate. Required source/main CI evaluates the final SHA.
+Sandboxed Chromium also exercised actual Runtime HTTP, signed Node CLI processes,
+explicit fake-OIDC human nonce decisions, ONLINE resources and live revocation,
+with no mocked Runtime records, page errors or mobile horizontal overflow.
+Those are source-browser/fake-identity records, not installed APEIR.exe or real IdP.
