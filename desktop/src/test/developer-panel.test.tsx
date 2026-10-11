@@ -50,6 +50,118 @@ async function requestSave() {
 }
 
 describe("existing workspace developer panel", () => {
+  it("keeps independent drafts, digests and previews while navigating file tabs", async () => {
+    await edit();
+    fireEvent.click(screen.getByRole("button", { name: "Preview diff" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save atomically" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "b.py" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Workspace file path" })).toHaveValue("b.py"));
+    expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue("old");
+    expect(screen.getByRole("button", { name: "Save atomically" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Run in sandbox" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("tab", { name: "a.py" }));
+    expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue("new");
+    expect(screen.getByRole("button", { name: "Save atomically" })).toBeEnabled();
+    expect(fetchWorkbenchFile).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "Save atomically" }));
+    await waitFor(() => expect(writeWorkbenchFile).toHaveBeenCalledWith("a.py", "new", before));
+    expect(screen.getByRole("tab", { name: "b.py" })).toBeInTheDocument();
+  });
+
+  it("protects an inactive draft until explicitly discarded and never persists its bytes", async () => {
+    const protectedDraft = vi.fn(); render(<DeveloperWorkbench onDraftChange={protectedDraft} />);
+    fireEvent.click(await screen.findByRole("button", { name: "a.py" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue("old"));
+    fireEvent.change(screen.getByRole("textbox", { name: "Code editor" }), { target: { value: "private draft not for storage" } });
+    fireEvent.click(screen.getByRole("button", { name: "b.py" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Workspace file path" })).toHaveValue("b.py"));
+    expect(protectedDraft).toHaveBeenLastCalledWith(true);
+    const unloading = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unloading); expect(unloading.defaultPrevented).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Close a.py" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Unsaved changes in a.py");
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(screen.getByRole("tab", { name: "a.py" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close a.py" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard draft and close" }));
+    expect(screen.queryByRole("tab", { name: "a.py" })).not.toBeInTheDocument();
+    await waitFor(() => expect(protectedDraft).toHaveBeenLastCalledWith(false));
+    expect(JSON.stringify(localStorage)).not.toContain("private draft not for storage");
+    expect(JSON.stringify(sessionStorage)).not.toContain("private draft not for storage");
+    expect(writeWorkbenchFile).not.toHaveBeenCalled(); expect(runWorkbenchProfile).not.toHaveBeenCalled();
+  });
+
+  it("locks tab navigation while approval binds the original file and contents", async () => {
+    vi.mocked(writeWorkbenchFile).mockRejectedValueOnce(new ApiError("NOUS_APPROVAL_REQUIRED", "Approval required", { approval_request_id: "apr_write" }));
+    render(<DeveloperWorkbench />);
+    fireEvent.click(await screen.findByRole("button", { name: "b.py" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Workspace file path" })).toHaveValue("b.py"));
+    fireEvent.click(screen.getByRole("button", { name: "a.py" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Workspace file path" })).toHaveValue("a.py"));
+    fireEvent.change(screen.getByRole("textbox", { name: "Code editor" }), { target: { value: "new" } });
+    await requestSave();
+    await screen.findByRole("button", { name: "Approve once and save" });
+    expect(screen.getByRole("tab", { name: "b.py" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Close a.py" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Approve once and save" }));
+    await waitFor(() => expect(writeWorkbenchFile).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(writeWorkbenchFile).mock.calls).toEqual([["a.py", "new", before], ["a.py", "new", before]]);
+  });
+
+  it("supports keyboard tab navigation without model calls or file writes", async () => {
+    render(<DeveloperWorkbench />);
+    fireEvent.click(await screen.findByRole("button", { name: "a.py" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Workspace file path" })).toHaveValue("a.py"));
+    fireEvent.click(screen.getByRole("button", { name: "b.py" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Workspace file path" })).toHaveValue("b.py"));
+    fireEvent.keyDown(screen.getByRole("tab", { name: "b.py" }), { key: "ArrowLeft" });
+    expect(screen.getByRole("tab", { name: "a.py" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "a.py" })).toHaveFocus();
+    expect(writeWorkbenchFile).not.toHaveBeenCalled(); expect(runWorkbenchProfile).not.toHaveBeenCalled();
+  });
+
+  it("refuses reopening cached file content under another Controller", async () => {
+    await edit();
+    fireEvent.click(screen.getByRole("button", { name: "b.py" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Workspace file path" })).toHaveValue("b.py"));
+    setConfig({ url: "http://another-controller:8770", token: "another.fake.service" });
+    fireEvent.click(screen.getByRole("tab", { name: "a.py" }));
+    expect(await screen.findByText(/Controller changed; reopen the original file tab/)).toBeInTheDocument();
+    expect(fetchWorkbenchFile).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("textbox", { name: "Workspace file path" })).toHaveValue("b.py");
+    expect(writeWorkbenchFile).not.toHaveBeenCalled();
+  });
+
+  it("bounds file tabs and retains the original draft when another read fails", async () => {
+    await edit();
+    vi.mocked(fetchWorkbenchFile).mockRejectedValueOnce(new Error("File unavailable"));
+    fireEvent.click(screen.getByRole("button", { name: "b.py" }));
+    expect(await screen.findByText("File unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue("new");
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+    for (let index = 0; index < 11; index++) fireEvent.click(screen.getByRole("button", { name: "New file" }));
+    expect(screen.getAllByRole("tab")).toHaveLength(12);
+    fireEvent.click(screen.getByRole("button", { name: "New file" }));
+    expect(screen.getByText(/editor is limited to 12 tabs/)).toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(12);
+    fireEvent.click(screen.getByRole("tab", { name: "a.py" }));
+    expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue("new");
+    expect(writeWorkbenchFile).not.toHaveBeenCalled();
+  });
+
+  it("clears the editor after its final tab closes and reloads changed files from Runtime", async () => {
+    render(<DeveloperWorkbench />);
+    fireEvent.click(await screen.findByRole("button", { name: "a.py" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue("old"));
+    fireEvent.click(screen.getByRole("button", { name: "Close a.py" }));
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "Code editor" })).toBeDisabled();
+    vi.mocked(fetchWorkbenchFile).mockResolvedValueOnce({ path: "a.py", content: "changed outside editor", sha256: after, size_bytes: 22, language: "python" });
+    fireEvent.click(screen.getByRole("button", { name: "a.py" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue("changed outside editor"));
+    expect(fetchWorkbenchFile).toHaveBeenCalledTimes(2);
+  });
   it("opens a Trace through the existing Trace inspector rather than querying a Run", async () => {
     render(<DeveloperWorkbench />);
     fireEvent.click(screen.getByRole("button", { name: "View recorded Trace" }));
@@ -68,19 +180,20 @@ describe("existing workspace developer panel", () => {
     expect(fetchTrace).not.toHaveBeenCalled(); expect(fetchTraceTimeline).not.toHaveBeenCalled();
     expect(fetchRunEvents).not.toHaveBeenCalled();
   });
-  it("protects unsaved contents and path changes before switching", async () => {
+  it("retains unsaved contents and path changes when switching files", async () => {
     await edit();
     fireEvent.click(screen.getByRole("button", { name: "b.py" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Unsaved changes");
-    expect(fetchWorkbenchFile).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
-    expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue("new");
-    fireEvent.click(screen.getByRole("button", { name: "b.py" }));
-    fireEvent.click(screen.getByRole("button", { name: "Discard draft and switch" }));
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Workspace file path" })).toHaveValue("b.py"));
+    expect(fetchWorkbenchFile).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("tab", { name: "a.py" }));
+    expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue("new");
     fireEvent.change(screen.getByRole("textbox", { name: "Workspace file path" }), { target: { value: "other.py" } });
     expect(screen.getByText("Unsaved", { exact: true })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Discuss saved file" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("tab", { name: "b.py" }));
+    fireEvent.click(screen.getByRole("tab", { name: "other.py" }));
+    expect(screen.getByRole("textbox", { name: "Workspace file path" })).toHaveValue("other.py");
+    expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue("new");
   });
 
   it("requires preview and resumes exactly the original write after human approval", async () => {

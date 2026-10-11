@@ -4,6 +4,9 @@
 .developer-settings { display:flex; gap:16px; flex-wrap:wrap; align-items:center; padding:16px; }
 .developer-settings p { width:100%; margin:0; }
 .developer-activity { display:flex; gap:8px; flex-wrap:wrap; }
+.developer-file-tabs { display:flex; gap:6px; padding:8px; overflow-x:auto; min-width:0; }
+.developer-file-tab { display:flex; gap:2px; flex:none; max-width:240px; }
+.developer-file-tab [role=tab] { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 .developer-panel > section, .developer-panel > details { min-width:0; overflow-wrap:anywhere; }
 @media(max-width:1100px) { .developer-columns.with-collaboration { grid-template-columns:minmax(170px,220px) minmax(0,1fr); }.developer-collaboration { grid-column:1/-1; } }
 @media(max-width:650px) { .developer-columns, .developer-columns.with-collaboration { display:flex; flex-direction:column; }.developer-columns > * { width:100%; box-sizing:border-box; }.developer-collaboration { height:580px; }.developer-panel button { white-space:normal; } }
