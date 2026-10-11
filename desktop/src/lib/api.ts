@@ -692,8 +692,17 @@ export const scanNodes = () =>
 
 // New: Approvals API
 
-export const approvalAction = (requestId: string, action: "approve" | "deny") =>
-  api(`/api/v1/approvals/${requestId}/${action}`, { method: "POST" });
+export async function approvalAction(requestId: string, action: "approve" | "deny") {
+  const controller = getConfig().url;
+  const path = `/api/v1/approvals/${encodeURIComponent(requestId)}/${action}`;
+  const body = {};
+  const { nonce } = await api<{ nonce: string }>("/api/v1/control/human/nonce", {
+    method: "POST", body: JSON.stringify({ method: "POST", path, body }),
+  });
+  if (typeof nonce !== "string" || !nonce) throw new ApiError("NOUS_HUMAN_APPROVAL_REQUIRED", "Trusted human approval nonce is unavailable");
+  if (getConfig().url !== controller) throw new ApiError("NOUS_CONTROLLER_CHANGED", "Controller changed; review the original request again");
+  return api(path, { method: "POST", body: JSON.stringify(body), headers: { "X-Control-Nonce": nonce } });
+}
 
 // New: Runtime Events Stream
 
@@ -1247,18 +1256,18 @@ export interface EnvironmentRunResult {
 export const fetchEnvironmentStatus = () => api<EnvironmentRuntimeStatus>("/api/v1/environments/status");
 export const fetchEnvironments = () => api<{ environments: EnvironmentRecord[]; total: number }>("/api/v1/environments");
 export const createEnvironment = (request: EnvironmentCreateRequest) =>
-  api<EnvironmentRecord>("/api/v1/environments", { method: "POST", body: JSON.stringify(request) });
+  api<EnvironmentRecord>("/api/v1/environments", { credentials: "omit", method: "POST", body: JSON.stringify(request) });
 export const startEnvironment = (environmentId: string) =>
-  api<EnvironmentRecord>(`/api/v1/environments/${encodeURIComponent(environmentId)}/start`, { method: "POST" });
+  api<EnvironmentRecord>(`/api/v1/environments/${encodeURIComponent(environmentId)}/start`, { credentials: "omit", method: "POST" });
 export const runEnvironment = (environmentId: string, request: EnvironmentCommandRequest) =>
   api<EnvironmentRunResult>(`/api/v1/environments/${encodeURIComponent(environmentId)}/run`, {
-    method: "POST",
+    credentials: "omit", method: "POST",
     body: JSON.stringify(request),
   });
 export const stopEnvironment = (environmentId: string) =>
-  api<EnvironmentRecord>(`/api/v1/environments/${encodeURIComponent(environmentId)}/stop`, { method: "POST" });
+  api<EnvironmentRecord>(`/api/v1/environments/${encodeURIComponent(environmentId)}/stop`, { credentials: "omit", method: "POST" });
 export const destroyEnvironment = (environmentId: string) =>
-  api<EnvironmentRecord>(`/api/v1/environments/${encodeURIComponent(environmentId)}`, { method: "DELETE" });
+  api<EnvironmentRecord>(`/api/v1/environments/${encodeURIComponent(environmentId)}`, { credentials: "omit", method: "DELETE" });
 export const fetchEnvironmentLogs = (environmentId: string) =>
   api<{ environment_id: string; provider: string; state: string; text: string }>(
     `/api/v1/environments/${encodeURIComponent(environmentId)}/logs`,

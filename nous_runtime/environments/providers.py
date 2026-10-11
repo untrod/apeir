@@ -121,7 +121,7 @@ def _under(root: Path, target: Path) -> bool:
 
 
 class LocalSandboxProvider:
-    """Resource-limited integrated-host environment using the existing ProcessSandbox."""
+    """Strong local environment using the existing ProcessSandbox; no host fallback."""
 
     provider_id = "local-sandbox"
     contract_version = ENVIRONMENT_PROVIDER_SCHEMA_VERSION
@@ -155,7 +155,7 @@ class LocalSandboxProvider:
                 []
                 if available
                 else [
-                    "Windows Sandbox is not ready; complete the pending Windows reboot.",
+                    "No qualified strong local sandbox is available on this platform.",
                     "No ordinary host-process fallback is permitted.",
                 ]
             ),
@@ -192,7 +192,7 @@ class LocalSandboxProvider:
     def start(self, environment: ExecutionEnvironment, handle: str) -> None:
         if not self.probe()["available"]:
             raise EnvironmentProviderError(
-                "local strong sandbox is unavailable; complete the pending Windows reboot"
+                "local strong sandbox is unavailable; no ordinary host-process fallback is permitted"
             )
         workdir = Path(handle).resolve()
         if not workdir.is_dir():

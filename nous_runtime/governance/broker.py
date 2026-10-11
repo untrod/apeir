@@ -10,10 +10,11 @@ the same interface. The external agent must never approve its own request.
 from __future__ import annotations
 
 import logging
+import json
 import threading
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Callable
 
 from nous_runtime.governance.contracts import (
     ActionProposal,
@@ -244,6 +245,133 @@ class ApprovalBroker:
             return self.deny_operation(request_id, context, gate=gate)
         raise ValueError("Operation approval supports only Approve Once and Deny")
 
+    def respond_legacy(self, request_id, action, context, *, gate):
+        """Bind legacy API decisions to the existing human authority and journal."""
+        from pathlib import Path
+        from nous_runtime.control_plane.human_sessions import (
+            is_human_session_context,
+            human_permission,
+        )
+        from nous_runtime.governance import GovernanceRequest
+
+        if action not in {"approve", "deny"}:
+            raise ValueError("Approval supports only Approve Once and Deny")
+        if Path(gate.store.db_path).resolve() != Path(self._store.db_path).resolve():
+            raise PermissionError(
+                "Approval and human authority must share the canonical store"
+            )
+        record = self._store.get_approval_request(request_id)
+        if not record or record.get("operation_governance"):
+            raise PermissionError("Original legacy approval binding is unavailable")
+        raw = self._store.get_proposal(record["proposal_hash"])
+        if not raw:
+            raise PermissionError("Original proposal evidence is unavailable")
+        proposal = ActionProposal.from_dict(raw)
+        if (
+            proposal.proposal_hash != record["proposal_hash"]
+            or proposal._compute_hash() != record["proposal_hash"]
+        ):
+            raise PermissionError("Original proposal digest differs")
+        resources = tuple(proposal.affected_resources) or (
+            proposal.target_workspace or "proposal:" + proposal.proposal_hash,
+        )
+        requests = [
+            GovernanceRequest(
+                operation_id=request_id,
+                work_id="",
+                capability_id=proposal.capability_id,
+                resource_id=resource,
+                subject_id=record["requested_by"],
+            )
+            for resource in resources
+        ]
+
+        def require_human(db=None):
+            for request in requests:
+                gate._require_human(context, request, db=db)
+                if is_human_session_context(
+                    context, gate.store, db=db
+                ) and not human_permission(
+                    context,
+                    "control.approve_once" if action == "approve" else "control.deny",
+                    request.resource_id,
+                ):
+                    raise PermissionError("Human approval permission denied")
+
+        require_human()
+
+        def admit(db):
+            current = db.execute(
+                "SELECT * FROM governance_approval_requests WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+            now = datetime.now(timezone.utc)
+            if (
+                current is None
+                or current["status"] != "PENDING"
+                or (
+                    current["proposal_hash"] != record["proposal_hash"]
+                    or current["requested_by"] != record["requested_by"]
+                    or current["expires_at"] != record["expires_at"]
+                )
+            ):
+                raise PermissionError(
+                    "Original approval is no longer pending or differs"
+                )
+            try:
+                expiry = datetime.fromisoformat(
+                    current["expires_at"].replace("Z", "+00:00")
+                )
+            except (ValueError, TypeError, AttributeError):
+                raise PermissionError(
+                    "Approval lifetime is invalid or unbounded"
+                ) from None
+            if expiry.tzinfo is None or expiry <= now:
+                raise PermissionError("Approval is expired or unbounded")
+            persisted_proposal = db.execute(
+                "SELECT proposal_json FROM governance_proposals WHERE proposal_hash=?",
+                (proposal.proposal_hash,),
+            ).fetchone()
+            if (
+                json.loads(current["request_json"]) != record
+                or persisted_proposal is None
+                or json.loads(persisted_proposal["proposal_json"]) != raw
+            ):
+                raise PermissionError(
+                    "Original approval evidence changed before admission"
+                )
+            require_human(db)
+            gate.store.append_operation_audit(
+                db,
+                "approval.legacy.decision.admitted",
+                {
+                    "request_id": request_id,
+                    "proposal_hash": proposal.proposal_hash,
+                    "run_id": record.get("run_id", ""),
+                    "task_id": record.get("task_id", ""),
+                    "capability_id": proposal.capability_id,
+                    "resources": list(resources),
+                    "action": action,
+                    "actor_id": context.subject_id,
+                    "human_session_id": context.session_id,
+                    "authorization_context_id": context.context_id,
+                },
+            )
+
+        if action == "approve":
+            return self.approve(
+                request_id,
+                approver_id=context.subject_id,
+                reason="Authenticated human approved the original proposal",
+                admission_check=admit,
+            )
+        return self.deny(
+            request_id,
+            approver_id=context.subject_id,
+            reason="Authenticated human denied the original proposal",
+            admission_check=admit,
+        )
+
     def _emit(self, event_type: str, data: dict[str, Any]) -> None:
         for cb in self._listeners:
             try:
@@ -322,6 +450,7 @@ class ApprovalBroker:
         reason: str = "",
         prevent_self_approval: bool = True,
         requester_id: str = "",
+        admission_check: Callable[[Any], None] | None = None,
     ) -> ApprovalResponse:
         """Approve a pending approval request.
 
@@ -398,6 +527,7 @@ class ApprovalBroker:
                 new_status=ApprovalStatus.APPROVED.value,
                 response_dict=response.to_dict(),
                 lease_dict=lease.to_dict(),
+                admission_check=admission_check,
             ):
                 raise ValueError(f"Approval request {request_id} is no longer PENDING")
             self._pending.pop(request_id, None)
@@ -421,6 +551,7 @@ class ApprovalBroker:
         *,
         approver_id: str,
         reason: str = "",
+        admission_check: Callable[[Any], None] | None = None,
     ) -> ApprovalResponse:
         """Deny a pending approval request."""
         record = self._store.get_approval_request(request_id)
@@ -456,6 +587,7 @@ class ApprovalBroker:
                 expected_status=ApprovalStatus.PENDING.value,
                 new_status=ApprovalStatus.DENIED.value,
                 response_dict=response.to_dict(),
+                admission_check=admission_check,
             ):
                 raise ValueError(f"Approval request {request_id} is no longer PENDING")
             self._pending.pop(request_id, None)

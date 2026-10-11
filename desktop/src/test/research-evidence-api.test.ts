@@ -42,6 +42,11 @@ describe("research evidence API", () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
+        json: async () => ({ ok: true, data: { nonce: "bound-human-nonce" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
         json: async () => ({ ok: true, data: { action: "approve" } }),
       })
       .mockResolvedValueOnce({
@@ -69,11 +74,16 @@ describe("research evidence API", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://127.0.0.1:8770/api/v1/approvals/apr_research/approve",
-      expect.objectContaining({ method: "POST" }),
+      "http://127.0.0.1:8770/api/v1/control/human/nonce",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ method: "POST", path: "/api/v1/approvals/apr_research/approve", body: {} }) }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
+      "http://127.0.0.1:8770/api/v1/approvals/apr_research/approve",
+      expect.objectContaining({ method: "POST", body: "{}", headers: expect.objectContaining({ "X-Control-Nonce": "bound-human-nonce" }) }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
       "http://127.0.0.1:8770/api/v1/research/fetch",
       expect.objectContaining({ method: "POST", body: JSON.stringify(request) }),
     );

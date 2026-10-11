@@ -438,6 +438,51 @@ Reconciliation never grants execution authority; existing Reliability/Reality
 journals, receipts and fresh independent Observation remain authoritative.
 A valid grant cannot license replay of a possibly completed side effect.
 
+### Legacy approval and Environment UI boundary
+
+The legacy `POST /api/v1/approvals/{request_id}/{approve|deny}` path now uses
+`ApprovalBroker.respond_legacy`, the existing Gate human attestation and
+GovernanceStore transaction. Service tokens authenticate requests; they cannot
+approve them. Body identity claims grant nothing. A valid decision requires the
+original persisted ActionProposal, matching recomputed digest, current enrolled
+human permissions, bounded request expiry and the existing exact-body one-use
+nonce. ActionProposal serialization retains the canonical parameter hash needed
+for independent digest reconstruction, without persisting raw parameters. Old
+evidence missing that hash is not repaired or implicitly approved. Explicit
+untrusted Origins are rejected here too. Human/session/context,
+original request/proposal, run/task, Capability and resource identities are
+appended to the existing governance audit inside the decision/lease transaction.
+Original records, session and permission facts are checked again before commit;
+audit failure cannot leave a grant. Trusted local Broker compatibility remains,
+without exposing it as an API authority.
+
+Environment UI mutations deliberately use the existing service-authenticated API
+channel without human cookies. Human approval uses the separate attested session
+and nonce; the original service then resumes exactly the reviewed body. Controller
+changes fence that continuation. Deny performs no execution. A lost command
+response is displayed as uncertain; the UI does not automatically repeat it.
+This is Runtime-service execution, not Kernel evidence or a persistent PTY.
+
+The Operations Workbench embeds the existing EnvironmentInspector; no second
+state, provider or executor is introduced. Actual sandboxed Chromium/Runtime HTTP
+qualification exercised service request, human Approve Once, persisted contract,
+start approval and a real fail-closed start error. The fake OIDC fixture does not
+qualify a deployed IdP or installed APEIR.exe. The managed Linux host has Docker,
+but default OCI engine control still requires the existing strict ProcessSandbox,
+which is unavailable here. No fixture runner, host-process fallback, container,
+command or scientific report was substituted. Local sandbox diagnostics now
+report unavailable isolation without inventing a pending Windows reboot. OCI
+static discovery is not engine/containment qualification; PID64 remains unchanged.
+
+Audit classification: **REUSE** Gate/Broker/Store, HumanSessionAuth, PermissionEngine,
+RuntimeCapabilityExecutor, EnvironmentRuntime, EventStream and ArtifactRegistry;
+**EXTEND** legacy decision admission and the existing workbench entry; **FIX**
+service/human channel binding, exact Controller continuation and platform diagnostic;
+**DEFER** native Windows installation, deployed IdP, default OCI execution on this
+host, interactive PTY and scientific strong-isolation acceptance. Focused evidence
+is in `tests/control_plane/test_legacy_approval_identity.py` and existing Environment,
+API and Desktop test suites. Product status remains PARTIAL in ROADMAP.
+
 ### M3.5 validation record
 
 Local directly affected M3.1–M3.4 and Control Plane regressions: **556 passed,

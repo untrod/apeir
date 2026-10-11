@@ -528,18 +528,11 @@ def handle_approval_action(
                 }
             )
 
-        if action == "approve":
-            response = broker.approve(
-                request_id,
-                approver_id="api",
-                reason="Approved via API",
-            )
-        else:
-            response = broker.deny(
-                request_id,
-                approver_id="api",
-                reason="Denied via API",
-            )
+        from nous_runtime.governance.gate import get_gate
+
+        response = broker.respond_legacy(
+            request_id, action, authorization_context, gate=get_gate()
+        )
 
         return ok_response(
             {
@@ -2253,9 +2246,8 @@ def route(
     if not handler:
         return err_response("NOUS_INVALID_REQUEST", f"No route: {method} {path}")
 
-    if (
-        surface in {"server", "api", "control_plane"}
-        and handler in OPERATIONS_ROUTES.values()
+    if surface in {"server", "api", "control_plane"} and (
+        handler in OPERATIONS_ROUTES.values() or handler is handle_approval_action
     ):
         from nous_runtime.control_plane.auth import add_cors_headers
 
