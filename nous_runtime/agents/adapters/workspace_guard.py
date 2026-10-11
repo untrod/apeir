@@ -6,6 +6,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from nous_runtime.workspace.isolation import normalize_workspace_path
+
 
 class WorkspaceGuard:
     """Enforces that all file operations stay within the approved workspace.
@@ -17,10 +19,11 @@ class WorkspaceGuard:
     - Reject symlink escapes
     """
 
-    def __init__(self, workspace_root: str):
+    def __init__(self, workspace_root: str, *, protect_runtime_state: bool = False):
         if not workspace_root:
             raise ValueError("workspace_root is required")
         self._root = str(Path(workspace_root).resolve(strict=False))
+        self._protect_runtime_state = bool(protect_runtime_state)
         if not os.path.isdir(self._root):
             raise ValueError(f"Workspace root does not exist: {self._root}")
 
@@ -59,6 +62,14 @@ class WorkspaceGuard:
         if not self.is_within_workspace(resolved):
             raise ValueError(f"Path escapes workspace: {path} -> {resolved}")
 
+        if self._protect_runtime_state:
+            try:
+                normalize_workspace_path(
+                    self._root, resolved, protect_runtime_state=True
+                )
+            except PermissionError as exc:
+                raise ValueError(str(exc)) from exc
+
         if not allow_nonexistent and not os.path.exists(resolved):
             raise ValueError(f"Path does not exist: {resolved}")
 
@@ -77,9 +88,7 @@ class WorkspaceGuard:
                 self.validate_path(arg, allow_nonexistent=True)
         return args
 
-    def allowed_files_for_command(
-        self, command_args: tuple[str, ...]
-    ) -> list[str]:
+    def allowed_files_for_command(self, command_args: tuple[str, ...]) -> list[str]:
         """Return the set of files a command would affect."""
         affected: list[str] = []
         for arg in command_args:

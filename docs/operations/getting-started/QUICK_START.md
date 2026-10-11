@@ -148,7 +148,11 @@ Chat conversation/draft persistence retains its existing behavior.
 It does not automatically send file contents or call a model. Send uses the existing
 Chat Runtime in `read_only` mode; Runtime admission still controls any file read.
 A configured model and its existing prerequisites are required. Model file writes
-and broader desktop monitoring are not qualified by this panel. **Workspace
+and broader desktop monitoring are not qualified by this panel. Workspace
+file context excludes reserved Runtime/Git metadata, including resolved aliases;
+inspect authoritative state through the Operations and evidence APIs instead.
+This file guard does not replace operating-system isolation or classify arbitrary
+user-created secret files. **Workspace
 activity** reads actual file-change/execution events, not keystrokes or activity in
 other applications. Inspect the persisted run rather than treating a model reply
 as effect verification.
