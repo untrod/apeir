@@ -141,7 +141,9 @@ Inspect the actual start/run outcome, EventStream and Artifact records. Creation
 Artifacts preserve an initial contract snapshot separately from lifecycle state;
 verify file bytes against Artifact metadata `sha256`, and the semantic contract
 against `environment_contract_sha256`. Old mutable Artifact references are not
-rewritten by this fix. Missing
+rewritten by this fix. Use **Inspect Artifact metadata** in the Environment view
+to read actual scoped Registry records; this is not a checksum/effect verification
+claim. Missing
 strong local isolation fails closed, with no ordinary host fallback. In the
 managed Linux qualification, Docker was present but the default OCI engine
 control path was blocked by the strict ProcessSandbox. A fixture-only OCI

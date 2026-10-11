@@ -465,33 +465,74 @@ def handle_scan_nodes() -> dict[str, Any]:
 # Artifacts API
 
 
-def handle_list_artifacts(task_id: str = "", limit: int = 50) -> dict[str, Any]:
-    """List artifacts, optionally filtered by task."""
+def _workspace_artifact_records():
+    """Read the existing Runtime-service registry, without creating a workspace."""
+    from nous_runtime.artifact import ArtifactRegistry
+
+    root = Path(os.environ.get("NOUS_WORKSPACE_ROOT", ".")).expanduser().resolve()
+    storage = root / ".nous" / "artifacts.jsonl"
+    if not storage.is_file():
+        return []
     try:
-        # Collect artifacts from active tasks
-        artifacts = []
-        if task_id:
-            # Return artifacts for a specific task from its result
-            return ok_response({"task_id": task_id, "artifacts": artifacts})
-        return ok_response({"artifacts": artifacts, "count": len(artifacts)})
-    except ImportError:
-        return ok_response({"artifacts": [], "count": 0})
-    except Exception as e:
-        return err_response("NOUS_INTERNAL_ERROR", str(e))
+        storage.resolve().relative_to(root)
+    except ValueError:
+        raise PermissionError(
+            "Artifact registry escaped the active workspace"
+        ) from None
+    return ArtifactRegistry(storage).list()
+
+
+def handle_list_artifacts(
+    task_id: str = "", limit: int = 50, environment_id: str = ""
+) -> dict[str, Any]:
+    """List actual registered metadata; registration is not effect verification."""
+    try:
+        maximum = max(1, min(int(limit), 500))
+        artifacts = [
+            item.to_dict()
+            for item in _workspace_artifact_records()
+            if (not task_id or item.metadata.get("task_id") == task_id)
+            and (
+                not environment_id
+                or item.metadata.get("environment_id") == environment_id
+            )
+        ]
+        return ok_response(
+            {
+                "task_id": task_id,
+                "artifacts": artifacts[-maximum:],
+                "count": len(artifacts),
+                "scope": "runtime-service-artifact-metadata",
+            }
+        )
+    except (TypeError, ValueError):
+        return err_response("NOUS_INVALID_REQUEST", "Artifact query is invalid")
+    except (OSError, PermissionError):
+        return err_response("NOT_AVAILABLE", "Artifact registry is unavailable")
 
 
 def handle_get_artifact(artifact_id: str) -> dict[str, Any]:
-    """Get artifact by ID."""
+    """Return registered metadata only; absent IDs never report availability."""
     try:
+        artifact = next(
+            (item for item in _workspace_artifact_records() if item.id == artifact_id),
+            None,
+        )
+        if artifact is None:
+            return err_response(
+                "NOUS_NOT_FOUND", "Artifact is not registered in this workspace"
+            )
         return ok_response(
             {
-                "artifact_id": artifact_id,
-                "status": "available",
-                "note": "Artifact retrieval available via task artifacts endpoint",
+                "artifact_id": artifact.id,
+                "artifact": artifact.to_dict(),
+                "status": "registered",
+                "scope": "runtime-service-artifact-metadata",
+                "effect_verification_performed": False,
             }
         )
-    except Exception as e:
-        return err_response("NOUS_INTERNAL_ERROR", str(e))
+    except (OSError, PermissionError):
+        return err_response("NOT_AVAILABLE", "Artifact registry is unavailable")
 
 
 # Approvals API

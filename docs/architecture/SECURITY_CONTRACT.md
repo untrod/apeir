@@ -472,7 +472,12 @@ the semantic contract digest. Existing run/task identities and byte size are bou
 to that Artifact. Lifecycle transitions and restart do not overwrite the original
 snapshot. Snapshot failure or an output symlink escape cannot publish an Artifact;
 old mutable references remain historical evidence and are not retroactively
-repaired. This changes neither environment IDs nor schema/compatibility versions. Actual sandboxed Chromium/Runtime HTTP
+repaired. This changes neither environment IDs nor schema/compatibility versions.
+The existing Artifact API lists persisted Registry metadata and rejects unknown
+IDs instead of returning placeholder availability. Queries remain metadata-only:
+registration is not file verification or effect verification. The Environment
+view can inspect those scoped records explicitly; it does not fetch or execute
+file contents. CAS Work/Receipt evidence remains in its existing scope. Actual sandboxed Chromium/Runtime HTTP
 qualification exercised service request, human Approve Once, persisted contract,
 start approval and a real fail-closed start error. The fake OIDC fixture does not
 qualify a deployed IdP or installed APEIR.exe. The managed Linux host has Docker,

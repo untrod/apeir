@@ -77,3 +77,52 @@ def test_contract_snapshot_cannot_escape_workspace_through_symlink(tmp_path):
         runtime.create(_spec())
     assert list(external.iterdir()) == []
     assert runtime.artifacts.list() == []
+
+
+def test_artifact_api_reads_persisted_metadata_and_never_invents_availability(
+    tmp_path, monkeypatch
+):
+    from nous_runtime.api.routes import handle_get_artifact, handle_list_artifacts
+
+    monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(tmp_path))
+    assert not handle_get_artifact("artifact_not_registered")["ok"]
+    assert handle_list_artifacts()["data"]["artifacts"] == []
+    assert not (tmp_path / ".nous").exists()
+    runtime, _ = _runtime(tmp_path)
+    created = runtime.create(_spec())
+    runtime.start(created["environment_id"])
+    metadata = handle_get_artifact(created["artifact_id"])
+    assert metadata["ok"] and metadata["data"]["status"] == "registered"
+    assert metadata["data"]["effect_verification_performed"] is False
+    artifact = metadata["data"]["artifact"]
+    assert (
+        hashlib.sha256((tmp_path / artifact["location"]).read_bytes()).hexdigest()
+        == artifact["metadata"]["sha256"]
+    )
+    listed = handle_list_artifacts(
+        environment_id=created["environment_id"], task_id="task-environment-test"
+    )
+    assert listed["data"]["artifacts"] == [artifact]
+    assert (
+        handle_list_artifacts(environment_id="different-environment")["data"][
+            "artifacts"
+        ]
+        == []
+    )
+    assert handle_list_artifacts(task_id="different-task")["data"]["artifacts"] == []
+    assert not handle_get_artifact("artifact_arbitrary_success")["ok"]
+
+
+def test_artifact_api_does_not_read_external_registry_symlink(tmp_path, monkeypatch):
+    from nous_runtime.api.routes import handle_list_artifacts
+
+    workspace = tmp_path / "workspace"
+    (workspace / ".nous").mkdir(parents=True)
+    external = tmp_path / "external.jsonl"
+    external.write_text("{}\n")
+    try:
+        (workspace / ".nous" / "artifacts.jsonl").symlink_to(external)
+    except (OSError, NotImplementedError):
+        pytest.skip("file symlinks unavailable on this platform")
+    monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(workspace))
+    assert not handle_list_artifacts()["ok"]
