@@ -31,6 +31,7 @@ from nous_runtime.node_runtime.distributed_work import (
 from nous_runtime.node_runtime.relay import NodeRelayServer
 from nous_runtime.reality.contracts import DeviceLifecycle
 from nous_runtime.reality.registry import DeviceRegistry
+from nous_runtime.skills import SkillRegistry, SkillToolRuntime
 from nous_runtime.workflow.runtime import WorkflowRuntime
 from nous_runtime.workflow.store import WorkflowStore
 
@@ -60,6 +61,36 @@ class OperationsPlane:
         self.live_controller = controller
         self.health_loader = health_loader
         self.workflow_handlers = dict(workflow_handlers or {})
+
+    def skills(self):
+        """Read the one existing workspace registry, without background egress."""
+        registry = SkillRegistry(self.root)
+        records = registry.list(include_disabled=True, include_catalogs=False)
+        records.extend(registry.catalog_records(local_only=True))
+        return [
+            item.summary()
+            | {
+                "skill_key": item.provider
+                + ":"
+                + item.skill_id
+                + (
+                    ":"
+                    + hashlib.sha256(
+                        str(item.metadata["catalog_source"]).encode()
+                    ).hexdigest()[:16]
+                    if item.provider == "catalog"
+                    else ""
+                ),
+                "source": item.source,
+                "catalog_source": str(item.metadata.get("catalog_source") or ""),
+                "compatibility": str(
+                    item.metadata.get("compatibility") or "unspecified"
+                ),
+                "dependencies": list(item.metadata.get("dependencies") or ()),
+                "installable": item.provider == "catalog",
+            }
+            for item in records
+        ], registry.diagnostics
 
     def controller(self):
         if self.live_controller is not None:
@@ -128,6 +159,7 @@ class OperationsPlane:
             if controller
             else []
         )
+        skills, skill_diagnostics = load("skills", self.skills, ([], []))
         broker = ApprovalBroker(self.gate.store)
         approvals = load(
             "approvals", lambda: broker.list_operation_approvals(gate=self.gate), []
@@ -252,6 +284,8 @@ class OperationsPlane:
                 "nodes": nodes,
                 "controller_public_key": controller.get("public_key", ""),
                 "pairings": pairings,
+                "skills": skills,
+                "skill_diagnostics": skill_diagnostics,
                 "devices": devices,
                 "approvals": approvals,
                 "grants": grants,
@@ -383,7 +417,95 @@ class OperationsPlane:
             )
         raise PermissionError("Unsupported pairing decision")
 
+    def skill_action(self, body, context):
+        """Human package administration; installed instructions are not authority."""
+        action, target = body.get("action"), body.get("target_id")
+        if action not in {"install", "enable", "disable", "remove", "load"}:
+            raise PermissionError("Unsupported Skill action")
+        row = next(
+            (item for item in self.skills()[0] if item["skill_key"] == target), None
+        )
+        if row is None:
+            raise KeyError(target)
+        if body.get("digest") != row["digest"] or body.get("version") != row["version"]:
+            raise PermissionError("Skill version or digest changed; review it again")
+        request = GovernanceRequest(
+            operation_id="skill-admin:" + target,
+            work_id="",
+            capability_id="skill.manage" if action != "load" else "skill.load",
+            resource_id="skill:" + row["skill_id"],
+            subject_id="skill:" + row["skill_id"],
+        )
+        permission = (
+            "skill_install"
+            if action == "install"
+            else "skill_load"
+            if action == "load"
+            else "skill_manage"
+        )
+        self._admit(context, request, permission)
+
+        def revalidate():
+            self.gate._require_human(context, request)
+            if is_human_session_context(
+                context, self.gate.store
+            ) and not human_permission(
+                context, "control." + permission, request.resource_id
+            ):
+                raise PermissionError("Human Skill permission expired or revoked")
+
+        registry = SkillRegistry(self.root)
+        if action == "install":
+            if row["provider"] != "catalog":
+                raise PermissionError("Install requires a registered catalog entry")
+            result = registry.install_from_catalog(
+                row["skill_id"],
+                catalog_source=row["catalog_source"],
+                version=row["version"],
+                digest=row["digest"],
+                before_publish=revalidate,
+            ).to_dict()
+        else:
+            revalidate()
+            qualified = row["provider"] + ":" + row["skill_id"]
+            if action == "load":
+                result = SkillToolRuntime(self.root).execute(
+                    "skill_load", {"skill_id": qualified}
+                )
+                if not result["ok"]:
+                    raise PermissionError(result["error"])
+            elif action == "remove":
+                if row["provider"] != "installed":
+                    raise PermissionError("Only installed Skills can be removed")
+                result = {
+                    "removed": registry.remove(qualified),
+                    "skill_id": row["skill_id"],
+                }
+            else:
+                result = getattr(registry, action)(qualified).to_dict()
+        with self.gate.store.operation_transaction() as db:
+            self.gate.store.append_operation_audit(
+                db,
+                "skill.management.completed",
+                {
+                    "action": action,
+                    "skill_id": row["skill_id"],
+                    "version": row["version"],
+                    "package_digest": row["digest"],
+                    "catalog_source": row["catalog_source"],
+                    "artifact_ref": result.get("artifact_ref", ""),
+                    "actor_id": context.subject_id,
+                    "human_session_id": context.session_id,
+                    "authorization_context_id": context.context_id,
+                    "execution_performed": False,
+                    "execution_authority_issued": False,
+                },
+            )
+        return {"skill": result, "execution_performed": False, "authority": "none"}
+
     def action(self, body, context):
+        if body.get("kind") == "skills":
+            return self.skill_action(body, context)
         if body.get("kind") == "pairings" or (
             body.get("kind") == "nodes" and body.get("action") == "revoke"
         ):
@@ -522,6 +644,7 @@ class OperationsPlane:
                 "workflows",
                 "nodes",
                 "pairings",
+                "skills",
                 "devices",
                 "approvals",
                 "grants",

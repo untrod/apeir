@@ -265,3 +265,53 @@ describe("Secure Node onboarding", () => {
     expect(screen.queryByText("ABCD2345")).not.toBeInTheDocument();
   });
 });
+
+describe("Controlled Skill Center", () => {
+  const entry = { skill_key: "catalog:review-skill:source", skill_id: "review-skill", name: "Review Skill", description: "Inspect bounded evidence", version: "1.0.0", digest: "sha256:" + "a".repeat(64), provider: "catalog", source: "/reviewed/catalog/review-skill", risk: "high", trust: "unverified", requested_capabilities: ["device.state.read"], dependencies: [], compatibility: "linux", installable: true, enabled: true, installed: false, artifact_ref: "" };
+  beforeEach(() => { vi.stubGlobal("EventSource", class { close() {} addEventListener() {} }); });
+  it("requires exact-package review and submits existing human nonce actions", async () => {
+    let skills = [entry];
+    const requests: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string, options?: RequestInit) => {
+      let data: unknown = { ...fixture, skills };
+      if (url.endsWith("/human/session")) data = { subject_id: "fake-oidc-human", expires_at: Date.now() / 1000 + 300 };
+      if (url.endsWith("/human/nonce")) data = { nonce: "existing-human-nonce" };
+      if (url.endsWith("/operations/actions")) {
+        const body = JSON.parse(String(options?.body)); requests.push(body);
+        expect(options?.headers).toMatchObject({ "X-Control-Nonce": "existing-human-nonce" });
+        if (body.action === "install") skills = [entry, { ...entry, skill_key: "installed:review-skill", provider: "installed", installed: true, artifact_ref: "sha256:" + "b".repeat(64) }];
+        if (body.action === "disable") skills = skills.map(row => row.provider === "installed" ? { ...row, enabled: false } : row);
+        data = body.action === "load" ? { skill: { ok: true, skill: { ...entry, instructions: "Inspect original evidence, never self-approve." } }, execution_performed: false } : { authority: "none", execution_performed: false };
+      }
+      return { ok: true, json: async () => ({ ok: true, data }) };
+    }));
+    render(<OperationsConsole />);
+    await screen.findByText("Human: fake-oidc-human");
+    fireEvent.click(screen.getByRole("button", { name: /^skills/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Review package" }));
+    const install = screen.getByRole("button", { name: "Install reviewed package" });
+    expect(install).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed this exact/ }));
+    fireEvent.click(install);
+    await screen.findByRole("button", { name: "installed:review-skill" });
+    expect(requests[0]).toEqual({ kind: "skills", action: "install", target_id: entry.skill_key, version: entry.version, digest: entry.digest });
+    fireEvent.click(screen.getByRole("button", { name: "installed:review-skill" }));
+    fireEvent.click(screen.getByRole("button", { name: "Load instructions" }));
+    expect(await screen.findByLabelText("Loaded Skill instructions")).toHaveTextContent("never self-approve");
+    fireEvent.click(screen.getByRole("button", { name: "Disable" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Load instructions" })).toBeDisabled());
+    expect(screen.queryByLabelText("Loaded Skill instructions")).not.toBeInTheDocument();
+    expect(localStorage.getItem("apeir.operations.layout.v1")).not.toContain("never self-approve");
+  });
+  it("shows backend denial without claiming installation or executing instructions", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string) => ({ ok: true, json: async () => url.endsWith("/operations/actions") ? { ok: false, error: { code: "NOUS_FORBIDDEN", message: "Catalog digest changed; review again" } } : { ok: true, data: url.endsWith("/human/session") ? { subject_id: "fake-human", expires_at: Date.now() / 1000 + 300 } : url.endsWith("/human/nonce") ? { nonce: "fake-nonce" } : { ...fixture, skills: [entry] } } })));
+    render(<OperationsConsole />);
+    await screen.findByText("Human: fake-human");
+    fireEvent.click(screen.getByRole("button", { name: /^skills/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Review package" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed this exact/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Install reviewed package" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Catalog digest changed");
+    expect(screen.queryByRole("button", { name: "installed:review-skill" })).not.toBeInTheDocument();
+  });
+});
