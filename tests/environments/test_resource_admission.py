@@ -174,3 +174,20 @@ def test_restart_rejects_invalid_record_even_with_its_matching_digest(tmp_path):
     assert restarted.list_environments()[0]["state"] == "invalid"
     with pytest.raises(EnvironmentValidationError, match="cpu_limit"):
         restarted.start(environment.environment_id)
+
+
+def test_unavailable_local_sandbox_never_suggests_a_platform_reboot(monkeypatch):
+    monkeypatch.setattr(
+        "nous_runtime.environments.providers.ProcessSandbox.security_report",
+        lambda self: {
+            "strong": False,
+            "grade": "unavailable",
+            "enforced_controls": [],
+            "unenforced_controls": ["filesystem"],
+        },
+    )
+    provider = LocalSandboxProvider()
+    status = provider.probe()
+    assert not status["available"]
+    assert "No ordinary host-process fallback" in " ".join(status["limitations"])
+    assert "Windows reboot" not in " ".join(status["limitations"])

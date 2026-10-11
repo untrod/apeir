@@ -11,7 +11,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from nous_runtime.core.redaction import redact_sensitive_data
 
 _log = logging.getLogger("nous.governance.store")
@@ -464,12 +464,15 @@ class GovernanceStore:
         new_status: str,
         response_dict: dict[str, Any],
         lease_dict: dict[str, Any] | None = None,
+        admission_check: Callable[[sqlite3.Connection], None] | None = None,
     ) -> bool:
         """Atomically record one terminal response and optional authorization lease."""
         with self._lock:
             try:
                 with _db_connect(self.db_path) as db:
                     db.execute("BEGIN IMMEDIATE")
+                    if admission_check is not None:
+                        admission_check(db)
                     updated = db.execute(
                         "UPDATE governance_approval_requests SET status = ? "
                         "WHERE request_id = ? AND status = ?",

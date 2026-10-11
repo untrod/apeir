@@ -126,3 +126,21 @@ Run `apeir doctor`, retain the command, platform and exact error, and follow
 remove credentials and private paths. Report reproducible issues through
 [GitHub](https://github.com/untrod/apeir/issues); security reports follow
 [SECURITY](../../../SECURITY.md).
+
+### Environment workbench
+
+The existing Operations Console now opens **environments** alongside Work, Nodes
+and Skills. It reads the Environment API for provider status and persistent
+records. Configure the existing service authentication for Environment requests
+and a separately enrolled human session for Approve Once or Deny; a service token
+cannot approve its own request. Review the exact request and Controller before
+approval. Source-browser checks are not installed Desktop qualification.
+
+Environment creation persists a contract; it does not prove a command ran.
+Inspect the actual start/run outcome, EventStream and Artifact records. Missing
+strong local isolation fails closed, with no ordinary host fallback. In the
+managed Linux qualification, Docker was present but the default OCI engine
+control path was blocked by the strict ProcessSandbox. A fixture-only OCI
+reference test does not qualify this default API path. Do not change isolation
+or inject an unrestricted runner to make the UI report success. Lost responses
+need inspection/reconciliation before any new side effect.

@@ -233,7 +233,8 @@ class ActionProposal:
             "agent_id": self.agent_id,
             "deployment_channel": self.deployment_channel,
             "locality": self.locality,
-            "parameter_hash": self.parameter_hash,
+            "parameter_hash": self.parameter_hash
+            or _sha256(_deterministic_json(_normalize_params(self.params))),
             "parameter_summary": self.parameter_summary,
             "target_node": self.target_node,
             "target_workspace": self.target_workspace,

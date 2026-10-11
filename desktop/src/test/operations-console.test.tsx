@@ -7,6 +7,21 @@ const fixture: OperationsSnapshot = {
 };
 afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear(); window.history.replaceState({}, "", "/"); });
 describe("Operations Console", () => {
+  it("opens the existing Environment API view without model requests or duplicated state", async () => {
+    const fetcher = vi.fn().mockImplementation(async (url: string) => ({ ok: true, json: async () => ({ ok: true, data: url.endsWith("/environments/status") ? { environments: 0, providers: [] } : url.endsWith("/environments") ? { environments: [], total: 0 } : fixture }) }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<OperationsConsole />);
+    await screen.findByRole("button", { name: "uncertain-effect-1" });
+    fireEvent.click(screen.getByRole("button", { name: "environments" }));
+    expect(await screen.findByText("Create environment")).toBeInTheDocument();
+    await screen.findByText(/0 environments/);
+    expect(screen.getByRole("tab", { name: "environments" })).toHaveAttribute("aria-selected", "true");
+    const calls = fetcher.mock.calls.map(([url]) => url);
+    expect(calls.some(url => url.endsWith("/environments/status"))).toBe(true);
+    expect(calls.some(url => url.endsWith("/environments"))).toBe(true);
+    expect(calls.some(url => /model|completion|chat/.test(url))).toBe(false);
+    expect(localStorage.getItem("apeir.operations.layout.v1")).not.toContain("environment_id");
+  });
   it("restores bounded layout without persisting identity or Runtime evidence", async () => {
     const data = { ...fixture, activity: [{ sequence: 1, event_type: "work.reconciled", work_id: "uncertain-effect-1" }] };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data }) }));

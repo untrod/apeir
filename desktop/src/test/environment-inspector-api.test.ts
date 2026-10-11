@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  approvalAction,
   createEnvironment,
+  getConfig,
   destroyEnvironment,
   runEnvironment,
   setConfig,
@@ -41,10 +43,27 @@ describe("environment inspector API", () => {
     await stopEnvironment("env_1");
     await destroyEnvironment("env_1");
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:8770/api/v1/environments", expect.objectContaining({ method: "POST", body: JSON.stringify(request) }));
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://127.0.0.1:8770/api/v1/environments/env_1/start", expect.objectContaining({ method: "POST" }));
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://127.0.0.1:8770/api/v1/environments/env_1/run", expect.objectContaining({ method: "POST", body: JSON.stringify({ argv: ["python", "-V"] }) }));
-    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://127.0.0.1:8770/api/v1/environments/env_1/stop", expect.objectContaining({ method: "POST" }));
-    expect(fetchMock).toHaveBeenNthCalledWith(5, "http://127.0.0.1:8770/api/v1/environments/env_1", expect.objectContaining({ method: "DELETE" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:8770/api/v1/environments", expect.objectContaining({ credentials: "omit", method: "POST", body: JSON.stringify(request), headers: expect.objectContaining({ Authorization: `Bearer ${getConfig().token}` }) }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://127.0.0.1:8770/api/v1/environments/env_1/start", expect.objectContaining({ credentials: "omit", method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://127.0.0.1:8770/api/v1/environments/env_1/run", expect.objectContaining({ credentials: "omit", method: "POST", body: JSON.stringify({ argv: ["python", "-V"] }) }));
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://127.0.0.1:8770/api/v1/environments/env_1/stop", expect.objectContaining({ credentials: "omit", method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(5, "http://127.0.0.1:8770/api/v1/environments/env_1", expect.objectContaining({ credentials: "omit", method: "DELETE" }));
   });
+  it("does not send an approval when the human nonce is absent", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: {} }) });
+    vi.stubGlobal("fetch", fetcher);
+    await expect(approvalAction("apr_original", "approve")).rejects.toThrow("Trusted human approval nonce");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("binds a human nonce and refuses a Controller change before decision", async () => {
+    setConfig({ url: "http://127.0.0.1:8770", token: "fake-service" });
+    const fetcher = vi.fn().mockImplementation(async () => {
+      setConfig({ url: "https://other.example.test", token: "other-fake-service" });
+      return { ok: true, json: async () => ({ ok: true, data: { nonce: "original-human-nonce" } }) };
+    });
+    vi.stubGlobal("fetch", fetcher);
+    await expect(approvalAction("apr_original", "approve")).rejects.toThrow("Controller changed");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
 });

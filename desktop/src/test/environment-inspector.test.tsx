@@ -6,6 +6,7 @@ import {
   ApiError,
   approvalAction,
   createEnvironment,
+  setConfig,
   destroyEnvironment,
   fetchEnvironmentLogs,
   fetchEnvironments,
@@ -59,6 +60,7 @@ const readyEnvironment: EnvironmentRecord = {
 describe("environment inspector", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setConfig({ url: "http://localhost:8770", token: "environment.fake.service" });
     vi.mocked(fetchEnvironmentStatus).mockResolvedValue({
       schema_version: "nous.environment-runtime/v1",
       workspace: "C:/workspace",
@@ -104,7 +106,7 @@ describe("environment inspector", () => {
       .mockResolvedValueOnce({ ...readyEnvironment, state: "created", artifact_id: "artifact_environment" });
 
     render(<EnvironmentInspector />);
-    expect(await screen.findByText(/integrated-host only/)).toBeInTheDocument();
+    expect(await screen.findByText(/No ordinary host-process fallback/)).toBeInTheDocument();
     expect(screen.getByText(/OCI not installed/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Create governed environment" }));
@@ -149,4 +151,36 @@ describe("environment inspector", () => {
       expect.objectContaining({ argv: ["python", "-V"] }),
     );
   });
+  it("denies the original request without executing it", async () => {
+    vi.mocked(createEnvironment).mockRejectedValueOnce(new ApiError("NOUS_APPROVAL_REQUIRED", "Approval required", { approval_request_id: "apr_denied" }));
+    render(<EnvironmentInspector />);
+    fireEvent.click(await screen.findByRole("button", { name: "Create governed environment" }));
+    await screen.findByText("Explicit approval required");
+    fireEvent.click(screen.getByRole("button", { name: "Deny original request" }));
+    await waitFor(() => expect(approvalAction).toHaveBeenCalledWith("apr_denied", "deny"));
+    expect(createEnvironment).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByText("Explicit approval required")).not.toBeInTheDocument());
+  });
+  it("cannot retarget a reviewed pending request to a different Controller", async () => {
+    vi.mocked(createEnvironment).mockRejectedValueOnce(new ApiError("NOUS_APPROVAL_REQUIRED", "Approval required", { approval_request_id: "apr_original" }));
+    render(<EnvironmentInspector />);
+    fireEvent.click(await screen.findByRole("button", { name: "Create governed environment" }));
+    await screen.findByText("Explicit approval required");
+    setConfig({ url: "https://other-controller.example", token: "" });
+    fireEvent.click(screen.getByRole("button", { name: "Approve once and create" }));
+    expect(await screen.findByText(/Controller changed; review/)).toBeInTheDocument();
+    expect(approvalAction).not.toHaveBeenCalled();
+    expect(createEnvironment).toHaveBeenCalledTimes(1);
+  });
+  it("does not retry a command when its response is lost", async () => {
+    vi.mocked(fetchEnvironments).mockResolvedValue({ environments: [readyEnvironment], total: 1 });
+    vi.mocked(runEnvironment).mockRejectedValueOnce(new Error("Response lost; UNKNOWN effect"));
+    render(<EnvironmentInspector />);
+    await screen.findByRole("button", { name: "Run in environment" });
+    fireEvent.click(screen.getByRole("button", { name: "Run in environment" }));
+    expect(await screen.findByText(/Response lost; UNKNOWN effect/)).toBeInTheDocument();
+    expect(runEnvironment).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Exit 0/)).not.toBeInTheDocument();
+  });
+
 });

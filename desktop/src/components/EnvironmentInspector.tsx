@@ -9,6 +9,7 @@ import {
   fetchEnvironmentLogs,
   fetchEnvironments,
   fetchEnvironmentStatus,
+  getConfig,
   runEnvironment,
   startEnvironment,
   stopEnvironment,
@@ -20,10 +21,10 @@ import {
 } from "../lib/api";
 import { errorMessage } from "../lib/format";
 
-type Pending =
+type Pending = (
   | { kind: "create"; approvalId: string; request: EnvironmentCreateRequest }
   | { kind: "start" | "stop" | "destroy"; approvalId: string; environmentId: string }
-  | { kind: "run"; approvalId: string; environmentId: string; request: EnvironmentCommandRequest };
+  | { kind: "run"; approvalId: string; environmentId: string; request: EnvironmentCommandRequest }) & { controller: string };
 
 export function EnvironmentInspector() {
   const [status, setStatus] = useState<EnvironmentRuntimeStatus | null>(null);
@@ -84,6 +85,7 @@ export function EnvironmentInspector() {
   });
 
   const captureApproval = (cause: unknown, value: Pending): boolean => {
+    if (getConfig().url !== value.controller) return false;
     if (!(cause instanceof ApiError) || cause.code !== "NOUS_APPROVAL_REQUIRED") return false;
     const approvalId = String(cause.details?.approval_request_id || "");
     if (!approvalId) return false;
@@ -92,6 +94,7 @@ export function EnvironmentInspector() {
   };
 
   const executeCreate = async (request: EnvironmentCreateRequest) => {
+    const controller = getConfig().url;
     setBusy(true);
     setError("");
     try {
@@ -100,7 +103,7 @@ export function EnvironmentInspector() {
       setPending(null);
       await refresh();
     } catch (cause) {
-      if (!captureApproval(cause, { kind: "create", approvalId: "", request })) {
+      if (!captureApproval(cause, { kind: "create", approvalId: "", request, controller })) {
         setError(errorMessage(cause, "Environment creation failed."));
       }
     } finally {
@@ -112,6 +115,7 @@ export function EnvironmentInspector() {
     kind: "start" | "stop" | "destroy",
     environmentId: string,
   ) => {
+    const controller = getConfig().url;
     setBusy(true);
     setError("");
     try {
@@ -121,7 +125,7 @@ export function EnvironmentInspector() {
       setPending(null);
       await refresh();
     } catch (cause) {
-      if (!captureApproval(cause, { kind, approvalId: "", environmentId })) {
+      if (!captureApproval(cause, { kind, approvalId: "", environmentId, controller })) {
         setError(errorMessage(cause, `Environment ${kind} failed.`));
       }
     } finally {
@@ -146,14 +150,15 @@ export function EnvironmentInspector() {
     setBusy(true);
     setError("");
     setCommandResult(null);
+    const controller = getConfig().url;
     try {
       const result = await runEnvironment(environmentId, request);
       setCommandResult(result);
       setPending(null);
       await refresh();
     } catch (cause) {
-      if (!captureApproval(cause, { kind: "run", approvalId: "", environmentId, request })) {
-        setError(errorMessage(cause, "Environment command failed."));
+      if (!captureApproval(cause, { kind: "run", approvalId: "", environmentId, request, controller })) {
+        setError(`${errorMessage(cause, "Environment command response is unavailable.")} Outcome may be UNKNOWN. Inspect original events, logs and Artifacts before repeating the command.`);
       }
     } finally {
       setBusy(false);
@@ -166,7 +171,9 @@ export function EnvironmentInspector() {
     setBusy(true);
     setError("");
     try {
+      if (getConfig().url !== reviewed.controller) throw new Error("Controller changed; review the original request again.");
       await approvalAction(reviewed.approvalId, "approve");
+      if (getConfig().url !== reviewed.controller) throw new Error("Controller changed; the original request was not resumed.");
       setBusy(false);
       if (reviewed.kind === "create") await executeCreate(reviewed.request);
       else if (reviewed.kind === "run") await executeRun(reviewed.environmentId, reviewed.request);
@@ -175,6 +182,19 @@ export function EnvironmentInspector() {
       setError(errorMessage(cause, "Approval could not be applied."));
       setBusy(false);
     }
+  };
+
+  const denyPending = async () => {
+    if (!pending || busy) return;
+    const reviewed = pending;
+    setBusy(true); setError("");
+    try {
+      if (getConfig().url !== reviewed.controller) throw new Error("Controller changed; review the original request again.");
+      await approvalAction(reviewed.approvalId, "deny");
+      if (getConfig().url === reviewed.controller) setPending(null);
+    } catch (cause) {
+      setError(errorMessage(cause, "Denial could not be confirmed."));
+    } finally { setBusy(false); }
   };
 
   const requestRun = () => {
@@ -209,7 +229,7 @@ export function EnvironmentInspector() {
           <div>
             <div style={{ fontSize: typo.lg, fontWeight: typo.semibold, color: colors.text }}>Environments</div>
             <div style={{ color: colors.textSecondary, fontSize: typo.sm, marginTop: space.xs }}>
-              Environment Contract - approval - provider - EventStream - Artifact evidence
+              Environment Contract - human approval - service execution - EventStream - Artifact evidence
             </div>
           </div>
           <div style={{ color: colors.textSecondary, fontSize: typo.sm }}>
@@ -221,11 +241,11 @@ export function EnvironmentInspector() {
 
         {local && !local.hard_network_isolation && (
           <section style={{ ...card, borderColor: colors.warning, background: colors.warningSoft, color: colors.textSecondary, fontSize: typo.sm }}>
-            LocalSandbox is integrated-host only: process/resource limits are active, but Windows network and filesystem namespace isolation are not hard boundaries. OCI remains the production isolation target.
+            Strong local sandbox is unavailable. No ordinary host-process fallback is permitted. OCI discovery does not qualify its engine or isolation; inspect actual execution evidence.
           </section>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(320px, 0.85fr) minmax(0, 1.45fr)", gap: space.lg }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: space.lg }}>
           <section style={card}>
             <div style={{ color: colors.text, fontWeight: typo.semibold, marginBottom: space.md }}>Create environment</div>
             <label style={labelStyle}>Provider type</label>
@@ -333,11 +353,13 @@ export function EnvironmentInspector() {
           <section style={{ ...card, borderColor: colors.warning, background: colors.warningSoft }}>
             <div style={{ color: colors.text, fontWeight: typo.semibold }}>Explicit approval required</div>
             <div style={{ color: colors.textSecondary, fontSize: typo.sm, margin: `${space.sm} 0` }}>
-              Review the scoped Environment effect. Approval is single-use and Nous retries the identical request.
+              Review the exact request below. A verified human approves once; the service then resumes the identical request. No external effect is inferred from a response.
             </div>
+            <pre style={preStyle}>{JSON.stringify({ controller: pending.controller, approval_request_id: pending.approvalId, kind: pending.kind, request: "request" in pending ? pending.request : {}, environment_id: "environmentId" in pending ? pending.environmentId : undefined }, null, 2)}</pre>
             <button onClick={() => void approveAndContinue()} disabled={busy} style={btnPrimary}>
               Approve once and {pending.kind}
             </button>
+            <button onClick={() => void denyPending()} disabled={busy} style={btnSecondary}>Deny original request</button>
           </section>
         )}
         {error && <section style={{ ...card, color: colors.danger, borderColor: colors.danger }}>{error}</section>}
@@ -353,5 +375,5 @@ function Detail({ label, value }: { label: string; value: string }) {
 const labelStyle: React.CSSProperties = { display: "block", color: colors.textSecondary, fontSize: typo.xs, marginTop: space.md, marginBottom: space.xs };
 const warningStyle: React.CSSProperties = { color: colors.warning, fontSize: typo.xs, marginTop: space.sm };
 const policyStyle: React.CSSProperties = { color: colors.textTertiary, fontSize: typo.xs, lineHeight: 1.6, marginTop: space.md };
-const detailGrid: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: space.md, padding: space.md, border: `1px solid ${colors.borderLight}`, borderRadius: radius.md };
+const detailGrid: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 120px), 1fr))", gap: space.md, padding: space.md, border: `1px solid ${colors.borderLight}`, borderRadius: radius.md };
 const preStyle: React.CSSProperties = { whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 260, overflow: "auto", background: colors.bg, color: colors.text, border: `1px solid ${colors.borderLight}`, borderRadius: radius.md, padding: space.md, fontSize: typo.xs };
