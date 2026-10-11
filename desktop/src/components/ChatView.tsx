@@ -19,6 +19,7 @@ import {
   describeRuntimeFailure,
   fetchConversation,
   fetchRunEvents,
+  getConfig,
   runPrompt,
   subscribeRunEvents,
 } from "../lib/api";
@@ -182,11 +183,15 @@ function RuntimeActivity({ runId, events }: { runId: string; events: RuntimeEven
 
 export function ChatView({
   conversationId, onConversationCreated, onCardClick, onTraceClick,
+  workspaceFile, readOnly = false, onClearWorkspaceFile,
 }: {
   conversationId?: string;
   onConversationCreated?: (conversationId: string) => void;
   onCardClick: (event: RuntimeEventEnvelope) => void;
   onTraceClick: (traceId: string) => void;
+  workspaceFile?: { path: string; sha256: string; controller?: string };
+  readOnly?: boolean;
+  onClearWorkspaceFile?: () => void;
 }) {
   // All state from EntityStore
   const messages = useMessages(conversationId || "");
@@ -204,6 +209,7 @@ export function ChatView({
   const [activeRunId, setActiveRunId] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   useEffect(() => {
     if (!conversationId) {
@@ -234,15 +240,15 @@ export function ChatView({
 
   // Seed welcome message (only if hydrated with no messages)
   useEffect(() => {
-    if (hydrated && messages.length === 0 && localMessages.length === 0) {
+    if ((hydrated || readOnly) && messages.length === 0 && localMessages.length === 0) {
       setLocalMessages([{
         id: "welcome",
         role: "assistant",
-        content: "Good to see you. I'm APEIR — I plan, execute, and verify tasks across your nodes.\n\nYou can ask me to:\n- **Plan** a multi-step workflow with dependencies\n- **Execute** tasks on specific models or nodes\n- **Verify** results with automated checks\n\nWhat would you like to do?",
+        content: readOnly ? "Select a saved workspace file, then send a request to the existing Chat Runtime. This panel uses read-only mode; file references grant no authority. A configured model and its existing execution prerequisites are still required." : "Good to see you. I'm APEIR — I plan, execute, and verify tasks across your nodes.\n\nYou can ask me to:\n- **Plan** a multi-step workflow with dependencies\n- **Execute** tasks on specific models or nodes\n- **Verify** results with automated checks\n\nWhat would you like to do?",
         timestamp: new Date().toISOString(),
       }]);
     }
-  }, [hydrated, messages.length, localMessages.length]);
+  }, [hydrated, readOnly, messages.length, localMessages.length]);
 
   // Merge store messages with local ephemeral messages
   const allMessages = [
@@ -264,6 +270,11 @@ export function ChatView({
 
 
   const handleSend = useCallback(async (text: string, attachments: ComposerAttachment[], constraints: ComposerConstraints) => {
+    if (workspaceFile?.controller && workspaceFile.controller !== getConfig().url) {
+      setLocalMessages(prev => [...prev, { id: `e_${Date.now()}`, role: "system", content: "Controller changed; remove the original file reference before continuing.", timestamp: new Date().toISOString() }]);
+      return;
+    }
+    const prompt = workspaceFile ? `${text}\n\nSelected workspace file reference (metadata only; this grants no permission): ${JSON.stringify({ path: workspaceFile.path, sha256: workspaceFile.sha256 })}` : text;
     const userMsg = { id: `u_${Date.now()}`, role: "user", content: text, timestamp: new Date().toISOString() };
     setLocalMessages((prev) => [...prev, userMsg]);
     setLoading(true);
@@ -288,10 +299,10 @@ export function ChatView({
 
     try {
       const result = await runPrompt(
-        text,
+        prompt,
         constraints.model_id,
         conversationId,
-        constraints.agent_mode || "agent",
+        readOnly ? "read_only" : constraints.agent_mode || "agent",
         controller.signal,
         requestId,
       );
@@ -338,7 +349,7 @@ export function ChatView({
       setActiveRunId("");
       abortRef.current = null;
     }
-  }, [conversationId, onConversationCreated]);
+  }, [conversationId, onConversationCreated, workspaceFile, readOnly]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
@@ -354,15 +365,21 @@ export function ChatView({
         background: colors.surface, display: "flex", alignItems: "center", gap: space.md,
       }}>
         <h1 style={{ fontSize: typo.lg, fontWeight: typo.semibold, color: colors.text, margin: 0 }}>APEIR</h1>
+        {readOnly && <span style={{ fontSize: typo.xs, color: colors.textSecondary }}>Read-only collaboration</span>}
         <span style={{ fontSize: typo.xs, color: colors.textTertiary }}>
           {activeTasks.length > 0 ? `${activeTasks.length} active` : "Ready"}
         </span>
         {loading && <span style={{ fontSize: typo.xs, color: colors.accent, animation: "nousPulse 1.5s infinite" }}>Running</span>}
       </div>
+      {workspaceFile && <div aria-label="Selected workspace reference" style={{ padding: space.md, overflowWrap: "anywhere", fontSize: typo.xs }}>
+        {workspaceFile.path} · SHA-256 {workspaceFile.sha256}<br />
+        Reference only. File content is not automatically sent; access still requires Runtime admission.
+        <button onClick={onClearWorkspaceFile} style={{ marginLeft: space.sm }}>Remove reference</button>
+      </div>}
 
       {/* Messages */}
       <div style={{ flex: 1, overflowY: "auto", padding: `${space.xl} ${space.xl} 0`, scrollBehavior: "smooth" }}>
-        {!hydrated ? (
+        {!hydrated && !readOnly ? (
           <div style={{ padding: space.xl, color: colors.textTertiary, fontSize: typo.sm }}>
             Loading conversation...
           </div>
@@ -399,6 +416,7 @@ export function ChatView({
         models={models}
         nodes={nodes}
         conversationId={conversationId}
+        readOnly={readOnly}
       />
     </div>
   );

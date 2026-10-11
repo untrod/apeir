@@ -97,6 +97,25 @@ a stretched mobile navigation defect was corrected. Browser screenshots remain
 local validation evidence and are not presented as installed APEIR.exe captures.
 Native binary inputs and Windows installation qualification remain BLOCKED.
 
+The workspace developer panel reuses `DeveloperWorkbench`, the existing workspace
+API, `ChatView`/`Composer` and canonical EventStream. It is an Operations view,
+not a second editor backend or Agent executor. File writes and fixed-profile runs
+keep the existing service requester separate from human approval cookies; decisions
+reuse the bound nonce and Governance admission. The same distinction applies to
+read-only preview and Chat requests. Controller changes invalidate the original
+file reference and pending action instead of retargeting them.
+
+Workspace tabs retain unsaved drafts in memory during view changes. New panel
+preferences contain only font size and collaboration/activity visibility, not
+file contents, identity, grants or evidence. Explicit saved-file collaboration
+passes a path/hash reference to the existing Chat Runtime with `read_only` enforced
+by the send handler. It grants no file access and enables no model writes. Existing
+Chat persistence is unchanged. Closing an active Chat panel aborts its request;
+an aborted HTTP request does not prove a previously admitted effect was stopped.
+There is no operating-system desktop/keystroke recorder or unrestricted container
+launcher. See the [Quick Start](../operations/getting-started/QUICK_START.md#workspace-developer-panel)
+for the actual user path and qualified scope.
+
 ## Build commands
 
 Web asset validation:
