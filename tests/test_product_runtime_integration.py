@@ -8,6 +8,11 @@ from nous_runtime.runtime.orchestrator import RuntimeOrchestrator
 from nous_runtime.runtime.pipeline import PRODUCT_CAPABILITIES, RuntimePipeline
 from nous_runtime.runtime.request import RuntimeRequest
 from nous_runtime.context.models import ContextItem, ContextSnapshot
+from tests.context.test_guard_admission import (
+    admitted_context as admitted_context_fixture,
+)
+
+admitted_context = admitted_context_fixture
 
 
 class ExecuteGate:
@@ -139,7 +144,12 @@ def test_product_bindings_are_explicit_and_fail_closed(tmp_path, monkeypatch):
 def test_context_snapshot_is_bounded_and_reaches_product_handler(
     tmp_path,
     monkeypatch,
+    admitted_context,
 ):
+    guard, gate, authenticated = admitted_context
+    from nous_runtime.services.lifecycle import seed_capabilities
+
+    seed_capabilities()
     snapshot = ContextSnapshot(
         id="snapshot-evidence",
         items=(
@@ -169,9 +179,9 @@ def test_context_snapshot_is_bounded_and_reaches_product_handler(
         }
 
     pipeline = RuntimePipeline(
-        workspace_root=str(tmp_path),
+        workspace_root=guard._workspace,
         product_handlers={"chat": handler},
-        gate=ExecuteGate(),
+        gate=gate,
     )
     monkeypatch.setattr(
         pipeline,
@@ -195,9 +205,15 @@ def test_context_snapshot_is_bounded_and_reaches_product_handler(
     )
 
     response = pipeline.run(
-        RuntimeRequest("continue", constraints={"product_capability": "chat"})
+        RuntimeRequest(
+            "continue",
+            user_id=authenticated.subject_id,
+            authenticated_context=authenticated,
+            constraints={"product_capability": "chat"},
+        )
     )
 
+    assert response.status == "ok", response.to_dict()
     assert observed["snapshot_id"] == "snapshot-evidence"
     assert observed["items"][0]["source_id"] == "fact-1"
     assert response.result["citations"][0]["source_id"] == "fact-1"

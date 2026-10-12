@@ -109,9 +109,11 @@ class ContextGuard:
             # proceed
     """
 
-    def __init__(self, workspace: str = ""):
+    def __init__(self, workspace: str = "", *, gate: Any = None):
         self._workspace = str(Path(workspace or Path.cwd() / ".nous").resolve())
-        self._store = ContextStore(self._workspace)
+        root = Path(self._workspace)
+        self._store = ContextStore(root if root.name == ".nous" else root / ".nous")
+        self._gate = gate
 
     def authorize(self, request: ContextAccessRequest) -> ContextAccessDecision:
         """Admit the bound read using identity established by the trusted caller.
@@ -214,7 +216,7 @@ class ContextGuard:
         try:
             from nous_runtime.governance.gate import get_gate
 
-            gate = get_gate()
+            gate = self._gate or get_gate()
             if request.actor_type == "user" and not self._human_is_current(
                 context, gate, request.context_id
             ):

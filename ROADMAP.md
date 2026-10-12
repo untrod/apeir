@@ -100,9 +100,12 @@ owners, with exact human review and fresh file evidence. This scoped software
 slice does not qualify installed Desktop, live-model engineering, persistent PTY,
 strong-sandbox scientific execution, physical hardware or overall product PASS.
 Main `d19a22e` subsequently failed Windows Core/Multi-Arch checks. Byte-fixture
-corrections and execution-scope/admission hardening are under review; the response
-loss deadline evidence remains unresolved. See the existing engineering review
-for exact runs. Passing Linux checks alone do not make this main Gate PASS.
+corrections and execution-scope/admission hardening merged through
+[PR #52](https://github.com/untrod/apeir/pull/52), after all required source checks
+and an additional four-platform Core run passed. The response-loss deadline
+evidence remains unresolved; Issues #4/#8 stay open. See the existing engineering
+review for the retained failures. Resulting main checks remain required;
+passing source/Linux checks alone does not make a main Gate PASS.
 
 Its October 11 product-wiring audit also distinguishes connected Runtime paths,
 corrected evidence views, configuration-only Automation endpoints and unfinished
@@ -113,6 +116,13 @@ now connects admitted Chat Gateway iterations to persisted message/tool manifest
 file-read provenance and recorded usage. It does not qualify live-model multi-file
 proposals, persistent Terminal, Workflow Recorder, native release or real hardware
 qualification; those product limits remain unchanged.
+Source delivery now extends that same path with live identity, canonical
+pre-collection admission, whole selected items, source/version/permission
+digests and revalidation before another Chat model call. Normal initialization
+declares the existing reader without issuing permission; default source readers
+use actual private state paths and JSONL record shapes. This scoped correction
+does not qualify cross-task context caching, measured Token/cost savings or a
+live-model comparison. Product remains PARTIAL.
 
 ## Ordered software qualification and interoperability Gates
 

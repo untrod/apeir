@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 
 import typer
 
@@ -26,7 +28,22 @@ def run(
     session: str = typer.Option("", help="Session id"),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON"),
 ):
-    response = RuntimeOrchestrator().run(RuntimeRequest(text, workspace=workspace, session=session))
+    from nous_runtime.governance.cli import _build_context
+
+    identity = _build_context()
+    root = (
+        Path(os.environ.get("NOUS_WORKSPACE_ROOT") or Path.cwd()).expanduser().resolve()
+    )
+    response = RuntimeOrchestrator(workspace_root=str(root)).run(
+        RuntimeRequest(
+            text,
+            workspace=workspace,
+            session=session,
+            user_id=identity.subject_id,
+            authenticated_context=identity,
+            governance_surface="local_cli",
+        )
+    )
     if as_json:
         _echo_json(response.to_dict())
     else:
@@ -77,20 +94,15 @@ def audit(
     else:
         typer.echo("Runtime Audit")
         typer.echo(
-            f"Gateway Calls: {report.gateway_percentage:.2f}% "
-            f"({report.gateway_calls})"
+            f"Gateway Calls: {report.gateway_percentage:.2f}% ({report.gateway_calls})"
         )
         typer.echo(f"Direct Provider: {report.direct_provider_calls}")
         typer.echo(f"Deprecated: {report.deprecated_calls}")
-        typer.echo(
-            "Security: "
-            + ("PASS" if report.security_findings == 0 else "FAIL")
-        )
+        typer.echo("Security: " + ("PASS" if report.security_findings == 0 else "FAIL"))
         typer.echo(f"Result: {'PASS' if report.passed else 'FAIL'}")
         for finding in report.findings:
             typer.echo(
-                f"- {finding.path}:{finding.line} "
-                f"[{finding.category}] {finding.detail}"
+                f"- {finding.path}:{finding.line} [{finding.category}] {finding.detail}"
             )
     if strict and not report.passed:
         raise typer.Exit(code=1)
@@ -109,16 +121,24 @@ def trace(
         typer.echo("No runtime sessions recorded.")
         return
     for session in sessions:
-        typer.echo(f"{session.get('session_id', '')}\t{len(session.get('events', []))} events")
+        typer.echo(
+            f"{session.get('session_id', '')}\t{len(session.get('events', []))} events"
+        )
 
 
 @runtime_app.command("explain")
-def explain(trace_id: str, as_json: bool = typer.Option(False, "--json", help="Emit JSON")):
+def explain(
+    trace_id: str, as_json: bool = typer.Option(False, "--json", help="Emit JSON")
+):
     store = RuntimeSessionStore()
     for session in store.list():
         for event in session.get("events", []):
             if event.get("trace_id") == trace_id:
-                data = {"trace_id": trace_id, "session_id": session.get("session_id", ""), "event": event}
+                data = {
+                    "trace_id": trace_id,
+                    "session_id": session.get("session_id", ""),
+                    "event": event,
+                }
                 if as_json:
                     _echo_json(data)
                 else:
@@ -140,11 +160,15 @@ def list_sessions(as_json: bool = typer.Option(False, "--json", help="Emit JSON"
         _echo_json(sessions)
     else:
         for session in sessions:
-            typer.echo(f"{session.get('session_id', '')}\t{len(session.get('events', []))} events")
+            typer.echo(
+                f"{session.get('session_id', '')}\t{len(session.get('events', []))} events"
+            )
 
 
 @session_app.command("resume")
-def resume(session_id: str, as_json: bool = typer.Option(False, "--json", help="Emit JSON")):
+def resume(
+    session_id: str, as_json: bool = typer.Option(False, "--json", help="Emit JSON")
+):
     data = RuntimeSessionStore().explain(session_id)
     if as_json:
         _echo_json(data)
@@ -153,10 +177,14 @@ def resume(session_id: str, as_json: bool = typer.Option(False, "--json", help="
 
 
 @session_app.command("explain")
-def explain_session(session_id: str, as_json: bool = typer.Option(False, "--json", help="Emit JSON")):
+def explain_session(
+    session_id: str, as_json: bool = typer.Option(False, "--json", help="Emit JSON")
+):
     resume(session_id, as_json=as_json)
 
 
-def register_runtime_commands(app: typer.Typer, inspect_app: typer.Typer | None = None) -> None:
+def register_runtime_commands(
+    app: typer.Typer, inspect_app: typer.Typer | None = None
+) -> None:
     app.add_typer(runtime_app, name="runtime")
     app.add_typer(session_app, name="session")

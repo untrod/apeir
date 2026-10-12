@@ -175,6 +175,17 @@ Loading a Skill does not execute its scripts and does not grant its requested
 capabilities. Installed packages retain Extension provenance and a pinned
 Artifact Runtime source-bundle reference.
 
+Runtime Context delivery uses the same resolved workspace and current live
+identity as the request. ContextGuard admits source access before collection;
+serialized actor metadata is not authentication. Whole selected items retain
+source/permission/version provenance through the Gateway input manifest. Required
+context that exceeds its admitted bound blocks dispatch rather than silently
+clipping constraints. Before a later Chat model invocation, the original
+snapshot checksum, identity, workspace, purpose and current item permissions
+are revalidated. An access change pauses the existing Agent checkpoint. Neither
+a context snapshot nor an incremental update grants authority, proves source
+freshness or certifies a Provider received the input.
+
 Web execution uses the existing governed network boundary:
 
 ```text

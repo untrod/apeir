@@ -260,6 +260,41 @@ a new inference call. Live/response Chat inspection retains separate Run and
 Trace identities. Missing manifests/usage, denied reads and truncated replay
 cannot display invented access or success.
 
+The October 12 Context delivery audit classifies the existing ContextGuard,
+Builder, snapshots, default readers, Runtime/Chat entries and input inspector as
+**REUSE / EXTEND**; actor-claim fallback, silent Gateway clipping and default
+state-path/record-shape mismatches are **FIX**. The normal reader declaration,
+live identity forwarding, whole-item budget selection, source/owner/version
+checksums and continuation admission extend those owners. Real Provider cost
+comparison, cross-task cache qualification and installed Desktop remain
+**DEFER / BLOCKED**, not claimed performance improvements.
+
+Normal-source probes first retained **2 failed**: initialization omitted the
+reader, so an owned source never reached the product handler. After declaration,
+the actual JSONL memory API exposed a second defect: its mappings were treated
+as attribute objects and active facts were dropped. The existing MemoryProvider
+now reads both canonical mappings and legacy objects. A real memory writer and
+project configuration reach the real Runtime handler with live local-owner
+attestation; source permissions still deny by default when configured, disabled
+capabilities stay disabled, and no attestation is serialized. CLI additionally
+binds its configured host root and current local attestation. A negative probe
+also proved source text was copied into general Context telemetry; those events
+and Trace entries now carry only snapshot IDs, counts, checksum and admission
+references. Actual source text remains in the admitted live input. The Context,
+reader, CLI and product focused subset has **72 passed**. Long-item, item-budget,
+secret-filtering, checksum, identity and between-call revocation cases retain
+fail-closed evidence. This is a software input boundary, not authenticated live
+model, native Desktop or physical qualification. The expanded Context/Runtime/
+Governance/model/Agent/Work/Control Plane/Chat/proposal regressions have **1015
+passed**. The final local repository contracts have **276 passed**. Ruff, changed-file format,
+compile, 235 Markdown links, document/comment/identity/git hygiene, eight version
+manifests and security (**0 HIGH / 3 unchanged MEDIUM**) pass locally. Required
+PR and resulting main checks remain separate integration evidence.
+An installed editable `apeir runtime run status --json` in a fresh temporary
+workspace exits zero and records the actual project context and private Context
+audit location. It makes no model call and does not qualify Kernel/native health
+or a physical effect.
+
 Local candidate validation: **19 focused / 819 affected / 262 repository tests
 passed**, **110 Desktop tests in 29 files passed**, lint/typecheck/build,
 Ruff/changed-file format/compile and all 235 Markdown link checks passed.

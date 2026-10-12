@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 from nous_runtime.context.models import ContextItem
@@ -31,12 +32,11 @@ class MemoryProvider:
         # Try to find workspace
         try:
             from nous_runtime.project.workspace import find_workspace
+
             ws = find_workspace()
             return ws
         except Exception:
             return None
-
-
 
     def collect(self, request_hint: str = "", limit: int = 100) -> list[ContextItem]:
         """Collect memory context items."""
@@ -46,63 +46,81 @@ class MemoryProvider:
             return items
 
         try:
-            from nous_runtime.project.memory import active_facts, read_recent, search_memory
+            from nous_runtime.project.memory import (
+                active_facts,
+                read_recent,
+                search_memory,
+            )
 
             # 1. Active facts (most important)
             facts = active_facts(workspace=ws)
             for fact in facts[: max(limit // 4, 10)]:
-                items.append(ContextItem(
-                    content=f"{fact.key}: {fact.value}",
-                    source_type=ContextSource.MEMORY.value,
-                    source_id=getattr(fact, "memory_id", ""),
-                    created_at=getattr(fact, "created_at", ""),
-                    importance=0.8,
-                    confidence=getattr(fact, "confidence", 0.8),
-                    permission="read",
-                    tags=("fact",),
-                ))
+                items.append(
+                    ContextItem(
+                        content=f"{_value(fact, 'key', '')}: {_value(fact, 'value', '')}",
+                        source_type=ContextSource.MEMORY.value,
+                        source_id=_value(fact, "memory_id", _value(fact, "id", "")),
+                        created_at=_value(
+                            fact, "created_at", _value(fact, "timestamp", "")
+                        ),
+                        importance=0.8,
+                        confidence=_value(fact, "confidence", 0.8),
+                        permission="read",
+                        tags=("fact",),
+                    )
+                )
 
             # 2. Recent records
             recent = read_recent(limit=max(limit // 2, 20), workspace=ws)
             for rec in recent:
-                items.append(ContextItem(
-                    content=self._summarise_record(rec),
-                    source_type=ContextSource.MEMORY.value,
-                    source_id=getattr(rec, "memory_id", ""),
-                    created_at=getattr(rec, "created_at", ""),
-                    importance=0.5,
-                    confidence=getattr(rec, "confidence", 0.7),
-                    permission="read",
-                    tags=(getattr(rec, "record_type", "memory"),),
-                ))
+                items.append(
+                    ContextItem(
+                        content=self._summarise_record(rec),
+                        source_type=ContextSource.MEMORY.value,
+                        source_id=_value(rec, "memory_id", _value(rec, "id", "")),
+                        created_at=_value(
+                            rec, "created_at", _value(rec, "timestamp", "")
+                        ),
+                        importance=0.5,
+                        confidence=_value(rec, "confidence", 0.7),
+                        permission="read",
+                        tags=(
+                            _value(rec, "record_type", _value(rec, "type", "memory")),
+                        ),
+                    )
+                )
 
             # 3. Search if hint provided
             if request_hint:
                 results = search_memory(ws, request_hint, limit=max(limit // 4, 5))
                 for rec in results:
-                    items.append(ContextItem(
-                        content=self._summarise_record(rec),
-                        source_type=ContextSource.MEMORY.value,
-                        source_id=getattr(rec, "memory_id", ""),
-                        created_at=getattr(rec, "created_at", ""),
-                        importance=0.6,
-                        confidence=0.6,
-                        permission="read",
-                        tags=("search_result",),
-                    ))
+                    items.append(
+                        ContextItem(
+                            content=self._summarise_record(rec),
+                            source_type=ContextSource.MEMORY.value,
+                            source_id=_value(rec, "memory_id", _value(rec, "id", "")),
+                            created_at=_value(
+                                rec, "created_at", _value(rec, "timestamp", "")
+                            ),
+                            importance=0.6,
+                            confidence=0.6,
+                            permission="read",
+                            tags=("search_result",),
+                        )
+                    )
 
         except Exception as exc:
-            _log.warning("MemoryProvider.collect failed: %s", exc)
+            _log.warning("MemoryProvider.collect failed: %s", type(exc).__name__)
 
         return items[:limit]
-
-
 
     def explain(self, item_ids: list[str]) -> dict[str, str]:
         """Explain memory context items."""
         explanations: dict[str, str] = {}
         for iid in item_ids:
-            explanations[iid] = f"Memory record {iid} -sourced from project memory store."
+            explanations[iid] = (
+                f"Memory record {iid} -sourced from project memory store."
+            )
         return explanations
 
     def health(self) -> ProviderHealth:
@@ -116,12 +134,15 @@ class MemoryProvider:
         if available:
             try:
                 from nous_runtime.project.memory import read_recent
+
                 recent = read_recent(limit=100, workspace=ws)
                 item_count = len(recent)
                 if recent:
-                    last = getattr(recent[0], "created_at", "")
+                    last = _value(
+                        recent[0], "created_at", _value(recent[0], "timestamp", "")
+                    )
             except Exception as exc:
-                error = str(exc)
+                error = type(exc).__name__
                 available = False
 
         return ProviderHealth(
@@ -132,20 +153,31 @@ class MemoryProvider:
             error=error,
         )
 
-
-
     @staticmethod
     def _summarise_record(rec: Any) -> str:
         """Produce a short summary of a memory record."""
-        rt = getattr(rec, "record_type", "?")
+        rt = _value(rec, "record_type", _value(rec, "type", "?"))
         if rt == "event":
-            return f"[Event] {getattr(rec, 'event_type', '')}: {getattr(rec, 'detail', '')}"
+            return (
+                f"[Event] {_value(rec, 'event_type', '')}: {_value(rec, 'detail', '')}"
+            )
         elif rt == "fact":
-            return f"[Fact] {getattr(rec, 'key', '')} = {getattr(rec, 'value', '')}"
+            return f"[Fact] {_value(rec, 'key', '')} = {_value(rec, 'value', '')}"
         elif rt == "decision":
-            return f"[Decision] {getattr(rec, 'question', '')} 鈫?{getattr(rec, 'answer', '')}"
+            return (
+                f"[Decision] {_value(rec, 'question', '')} →{_value(rec, 'answer', '')}"
+            )
         elif rt == "summary":
-            return f"[Summary] {getattr(rec, 'title', '')}: {getattr(rec, 'content', '')}"
+            return f"[Summary] {_value(rec, 'title', '')}: {_value(rec, 'content', '')}"
         elif rt == "experience":
-            return f"[Experience] {getattr(rec, 'capability_id', '')} outcome={getattr(rec, 'outcome', '')}"
-        return f"[{rt}] {getattr(rec, 'memory_id', '?')}"
+            return f"[Experience] {_value(rec, 'capability_id', '')} outcome={_value(rec, 'outcome', '')}"
+        return f"[{rt}] {_value(rec, 'memory_id', '?')}"
+
+
+def _value(record: Any, name: str, default: Any = None) -> Any:
+    """Read canonical JSONL mappings and legacy record objects alike."""
+    return (
+        record.get(name, default)
+        if isinstance(record, Mapping)
+        else getattr(record, name, default)
+    )

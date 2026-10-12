@@ -36,7 +36,7 @@ def test_context_class_budgets_dedup_profile_truncation_and_citations():
         providers=[
             StaticProvider(
                 "memory",
-                [duplicate_memory, long_memory],
+                [duplicate_memory, duplicate_memory, long_memory],
             ),
             StaticProvider("project", [duplicate_project]),
             StaticProvider("retrieval", [retrieval]),
@@ -57,6 +57,7 @@ def test_context_class_budgets_dedup_profile_truncation_and_citations():
     )
 
     assert snapshot.metadata["duplicate_suppressed"] == 1
+    assert any(item.source_type == "project" for item in snapshot.items)
     assert snapshot.metadata["truncation_explanation"]
     assert snapshot.metadata["citation_coverage"] == 1.0
     profile = snapshot.metadata["context_build_profile"]
@@ -95,9 +96,7 @@ def test_context_snapshot_incremental_patch_and_precise_invalidation():
         upsert=(added,),
         invalidate_source_ids=("source-a",),
     )
-    invalidated = patched.apply_patch(
-        invalidate_source_types=("decision",)
-    )
+    invalidated = patched.apply_patch(invalidate_source_types=("decision",))
 
     assert {item.item_id for item in base.items} == {
         "first",
