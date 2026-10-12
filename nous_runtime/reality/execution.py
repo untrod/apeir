@@ -41,7 +41,7 @@ from nous_runtime.reality.provider import (
 )
 from nous_runtime.reality.registry import DeviceRegistry
 from nous_runtime.reality.verification import EffectVerifier
-from nous_runtime.workflow.models import StepType, WorkflowStep
+from nous_runtime.workflow.models import StepType, WorkflowHandlerPolicy, WorkflowStep
 
 
 class SimulatedDeviceOperationHandler:
@@ -233,6 +233,8 @@ class SimulatedDeviceOperationHandler:
 
 class RealityOperationWorkflowHandler:
     """Translate one Reality Plan step into the authoritative distributed path."""
+
+    workflow_handler_policy = WorkflowHandlerPolicy(reconcile_started=True)
 
     def __init__(
         self,

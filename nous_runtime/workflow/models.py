@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from nous_runtime.capability.contract import CapabilityContract
+
 
 class TriggerType(str, Enum):
     MANUAL = "manual"
@@ -32,6 +34,7 @@ class WorkflowState(str, Enum):
     WAITING_APPROVAL = "waiting_approval"
     COMPLETED = "completed"
     FAILED = "failed"
+    UNKNOWN = "unknown"
     CANCELLED = "cancelled"
     COMPENSATION_FAILED = "compensation_failed"
 
@@ -61,6 +64,18 @@ class WorkflowDefinition:
     audit_metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class WorkflowHandlerPolicy:
+    """Trusted host declaration; Workflow inputs cannot establish retry safety.
+
+    A reconciliation handler consults its existing Work/effect journal before
+    doing anything else. This flag does not authorize another effect.
+    """
+
+    contract: CapabilityContract | None = None
+    reconcile_started: bool = False
+
+
 @dataclass
 class WorkflowRun:
     workflow_id: str
@@ -73,3 +88,6 @@ class WorkflowRun:
     error: str = ""
     idempotency_key: str = ""
     cancellation_requested: bool = False
+    definition_digest: str = ""
+    inputs_digest: str = ""
+    revision: int = 0

@@ -69,6 +69,21 @@ Work policy and bound evidence; it cannot manufacture a different scope's proof.
 
 ## Failure and recovery
 
+Workflow recovery reads the original run's bound checkpoints. Definition/version,
+inputs, dependencies, handler policy, attempt count and output digest are checked
+before admitting another step. A completed-state label without matching checkpoint
+evidence cannot unlock a dependent effect. Definitions and idempotency bindings
+are immutable; cancellation and parallel completions use current store revisions.
+
+Generic handlers have no implicit retry safety. Only a trusted host-supplied
+Capability contract can establish bounded idempotent retries. Model parameters,
+an approval or a requested retry count cannot establish that contract. A started
+effect with no definite outcome becomes UNKNOWN and pauses Agent coordination;
+it cannot enter automatic replanning. Existing journal-backed Work/Reality/agent
+adapters may resume only to reconcile their original operation. Legacy unfinished
+runs with incomplete evidence remain fenced instead of being silently certified.
+Cancellation stops later admission; it does not prove an active effect stopped.
+
 A bounded Workflow wait returning WAITING does not guarantee Controller Work is
 terminal. Node journal state, signed terminal delivery and Controller projection
 are separate points: Node can have persisted FAILED while Controller Work is

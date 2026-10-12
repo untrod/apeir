@@ -133,6 +133,15 @@ grant access to workspace files or establish Provider receipt of a context.
 
 ## Current boundary
 
+Trusted Workflow handler registration can supply `WorkflowHandlerPolicy` from
+the existing `nous_runtime.workflow` package, or a typed policy on the registered
+host callable. A matching Capability contract declares retry safety and a bounded
+retry budget. `reconcile_started=True` is reserved for handlers that consult the
+original durable Work/effect journal; it is not permission for another effect.
+Task inputs and model output cannot supply either declaration. On uncertain
+failure, inspect the original run and checkpoints instead of submitting a new
+operation. See [failure semantics](../architecture/STATE_OWNERSHIP.md#failure-and-recovery).
+
 This release does not include model training, weight merging, dataset hosting,
 or a visual workflow graph editor. Those systems may integrate through stable
 Runtime contracts, but they must not bypass the Gateway, EventStream,

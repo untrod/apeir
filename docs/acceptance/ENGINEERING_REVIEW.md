@@ -81,6 +81,30 @@ focused child case took **0.26 s**. These are individual test observations, not
 a claim about total CI savings, model cost or Windows qualification. Corrected
 PR and main CI remain required.
 
+Workflow recovery hardening reuses `WorkflowRuntime`, `WorkflowStore`, the
+existing TaskGraph, AgentSession coordinator, and journal-backed distributed,
+Reality and external-agent handlers (**REUSE / FIX / EXTEND**). Pre-change
+recovery diagnostics retained repeated effects; the initial affected regression
+also exposed an unclassified pure dictionary fixture (**1 failed, 457 passed,
+25 skipped**). That fixture now declares its actual host-owned pure Capability
+contract. The new negative Agent case separately proves an uncertain effect
+cannot enter replanning or execute again after restart.
+
+Definition, input, checkpoint, output and handler-policy bindings are checked;
+parallel completion, cancellation, durable attempt limits, process restart,
+missing completion evidence, copied policy and model-supplied retry flags are
+covered. Started generic effects become UNKNOWN; only existing journal-backed
+handlers can reconcile their original Work. An approval never establishes retry
+safety. Legacy unfinished completion evidence with missing bindings is fenced,
+not silently promoted to success. Focused contracts have **50 passed**; affected
+Agent/Workflow/intelligence/Reality/Node/interoperability/Control Plane regressions
+have **672 passed, 25 skipped**; repository contracts have **265 passed**.
+Ruff, changed-file format, compile, docs/235 link targets, hygiene, eight version
+manifests and security (**0 HIGH / 3 unchanged MEDIUM**) pass locally. Required
+PR and main CI remain separate prerequisites. Automation configuration consumption,
+installed Desktop, native hashes, real identity and physical hardware are not
+qualified by this correction. Kernel and the component lock remain unchanged.
+
 The multi-file editing slice reuses the existing Workbench endpoints and keeps
 draft state within the existing component; it adds no filesystem, proposal store,
 permission or execution authority. Seven new frontend cases cover independent
