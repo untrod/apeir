@@ -63,13 +63,18 @@ def test_runtime_request_cannot_spoof_authenticated_user(monkeypatch):
             return {"request_id": "request-a", "trace_id": "trace-a"}
 
     class FakeOrchestrator:
+        def __init__(self, *, workspace_root):
+            captured["workspace_root"] = workspace_root
+
         def run(self, request):
             captured["request"] = request
             return FakeResponse()
 
     monkeypatch.setenv("NOUS_API_TOKEN", "server-secret")
     monkeypatch.setenv("NOUS_API_SUBJECT", "service-account-a")
-    monkeypatch.setattr("nous_runtime.runtime.orchestrator.RuntimeOrchestrator", FakeOrchestrator)
+    monkeypatch.setattr(
+        "nous_runtime.runtime.orchestrator.RuntimeOrchestrator", FakeOrchestrator
+    )
 
     response = route_server(
         "POST",

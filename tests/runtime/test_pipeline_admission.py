@@ -98,3 +98,27 @@ def test_model_tool_workspace_is_bound_to_resolver_not_request_metadata(tmp_path
         )
     )
     assert response.result["execution"]["result"]["content"] == "owned workspace"
+
+
+def test_public_runtime_api_uses_configured_host_root(tmp_path, monkeypatch):
+    from nous_runtime.api.routes import handle_runtime_run
+
+    selected = tmp_path / "selected"
+    selected.mkdir()
+    monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(selected))
+    roots = []
+
+    class Orchestrator:
+        def __init__(self, *, workspace_root=""):
+            roots.append(workspace_root)
+
+        def run(self, request):
+            assert request.workspace == "default"
+            return SimpleNamespace(to_dict=lambda: {"request_id": request.request_id})
+
+    monkeypatch.setattr(
+        "nous_runtime.runtime.orchestrator.RuntimeOrchestrator", Orchestrator
+    )
+    response = handle_runtime_run({"text": "Explain", "workspace": "default"})
+    assert response["ok"]
+    assert roots == [str(selected.resolve())]

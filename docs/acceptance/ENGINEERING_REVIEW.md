@@ -217,7 +217,10 @@ Exceptions fail closed on every surface and report only their type. A further
 controlled file-read case read outside the resolved workspace through request
 metadata `workspace_path`. Runtime now binds tool scope to its existing resolver;
 metadata cannot retarget it. No new permission or execution system is added.
-The final local affected regression has **897 passed**; the byte-version and
+The public Runtime API also now passes its configured host root to the same
+Orchestrator; another pre-change fixture confirmed that entry left the root
+empty. Existing caller identity/spoofing checks remain intact.
+The final local affected regression has **898 passed**; the byte-version and
 proposal/Workbench subset has **67 passed**. Required CI remains a separate Gate.
 
 The multi-file editing slice reuses the existing Workbench endpoints and keeps
