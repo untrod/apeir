@@ -29,8 +29,10 @@ class GatewayChatHandler:
         *,
         agent_runtime: Any = None,
         checkpoint_root: str = "",
+        proposal_service: Any = None,
     ) -> None:
         self.facade = facade
+        self.proposal_service = proposal_service
         if agent_runtime is None:
             from nous_runtime.agent.runtime import AgentExecutionRuntime
 
@@ -225,6 +227,10 @@ class GatewayChatHandler:
 
             tool_runtime = WorkspaceToolRuntime(
                 workspace_path,
+                proposal_service=self.proposal_service,
+                operation_gate=context.get("_governance_gate"),
+                subject_id="agent.nous.workspace",
+                source_request_id=request_id,
                 allow_mutations=bool(
                     constraints.get("mutation_authorized") and agent_mode == "agent"
                 ),
@@ -243,6 +249,7 @@ class GatewayChatHandler:
         steps: list[dict[str, Any]] = []
         response: GatewayResponse | None = None
         limit_reached = False
+        pending_approval: dict[str, Any] = {}
         mutation_tool_names = (
             set(tool_runtime.mutation_tool_names) if tool_runtime is not None else set()
         )
@@ -506,6 +513,10 @@ class GatewayChatHandler:
                         "tool": name,
                         "ok": bool(result.get("ok")),
                         "receipt_id": str(result.get("receipt_id") or ""),
+                        "proposal_id": str(result.get("proposal_id") or ""),
+                        "approval_request_id": str(
+                            result.get("approval_request_id") or ""
+                        ),
                         "error": str(result.get("error") or "")[:500],
                         "agent_invocation_id": str(
                             tool_invocation.get("invocation_id") or ""
@@ -541,6 +552,22 @@ class GatewayChatHandler:
                         "agent_invocation": tool_invocation,
                     }
                 )
+                if result.get("error_code") == "NOUS_APPROVAL_REQUIRED" and result.get(
+                    "approval_request_id"
+                ):
+                    pending_approval = dict(result)
+                    emit(
+                        "approval.required",
+                        {
+                            "proposal_id": str(result.get("proposal_id") or ""),
+                            "approval_request_id": str(result["approval_request_id"]),
+                            "authorization_id": str(
+                                result.get("authorization_id") or ""
+                            ),
+                            "automatic_replay": False,
+                        },
+                    )
+                    break
                 encoded_result = json.dumps(
                     result,
                     ensure_ascii=False,
@@ -576,6 +603,9 @@ class GatewayChatHandler:
                         }
                     )
 
+            if pending_approval:
+                break
+
         if response is None:
             lifecycle = agent_execution.finish(
                 ok=False,
@@ -595,6 +625,24 @@ class GatewayChatHandler:
         result["agent_steps"] = steps
         result["workspace_path"] = workspace_path
         result["agent_mode"] = agent_mode
+        if pending_approval:
+            result.update(
+                ok=False,
+                status="waiting_approval",
+                approval_required=True,
+                proposal_id=str(pending_approval.get("proposal_id") or ""),
+                approval_request_id=str(pending_approval["approval_request_id"]),
+                manifest_ref=str(pending_approval.get("manifest_ref") or ""),
+                authorization_id=str(pending_approval.get("authorization_id") or ""),
+                execution_scope="runtime-service",
+                kernel_traversed=False,
+                content="Review the original change proposal in Workspace. Approval resumes that Workflow; no file effect has been claimed.",
+                reason="Original governed operation is waiting for approval",
+            )
+            result["agent_execution"] = agent_execution.finish(
+                ok=False, paused=True, message=result["reason"]
+            )
+            return result
         result["collaboration"] = (
             collaboration.summary() if collaboration is not None else {"enabled": False}
         )

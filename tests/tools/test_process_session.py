@@ -254,24 +254,34 @@ def test_unknown_start_outcome_requires_recovery(tmp_path: Path) -> None:
     assert recovered["automatic_replay"] is False
 
 
-def test_tool_runtime_reuses_governed_command_allowlist(tmp_path: Path) -> None:
+def test_tool_runtime_reuses_governed_command_allowlist(
+    tmp_path: Path, monkeypatch
+) -> None:
     workspace = WorkspaceToolRuntime(str(tmp_path), allow_mutations=True)
     runtime = ProcessSessionToolRuntime(workspace)
+    monkeypatch.setattr(
+        runtime.store,
+        "start",
+        lambda *args, **kwargs: pytest.fail(
+            "Model cannot start a process without durable authority"
+        ),
+    )
     denied = runtime.execute("shell_start", {"command": [sys.executable, "-c", "pass"]})
     assert denied["ok"] is False
-    assert "python -m pytest/compileall" in denied["error"]
-    assert "python -c" in denied["error"]
-    assert "bounded pytest reproduction" in denied["error"]
-    assert "allowlist" in denied["error"]
+    assert denied["error_code"] == "NOUS_UNSUPPORTED_GOVERNED_OPERATION"
     names = {item["function"]["name"] for item in runtime.specifications()}
-    assert {
-        "shell_start",
-        "shell_status",
-        "shell_stdout",
-        "shell_stderr",
-        "shell_stdin",
-        "shell_interrupt",
-        "shell_terminate",
-        "shell_kill",
-        "shell_recover",
-    } <= names
+    assert {"shell_status", "shell_stdout", "shell_stderr", "shell_recover"} <= names
+    assert not names.intersection(
+        {
+            "shell_start",
+            "shell_stdin",
+            "shell_close_stdin",
+            "shell_interrupt",
+            "shell_terminate",
+            "shell_kill",
+        }
+    )
+    assert not runtime.execute(
+        "_unqualified_legacy_shell_start", {"command": [sys.executable, "-c", "pass"]}
+    )["ok"]
+    assert not list((tmp_path / ".nous" / "process-sessions").glob("*.json"))

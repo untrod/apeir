@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from pathlib import Path
 from typing import Any
 
 from nous_runtime.governance.contracts import (
@@ -37,6 +38,12 @@ def get_gate(store: GovernanceStore | None = None) -> "ExecutionAuthorizationGat
         with _gate_lock:
             if _gate_instance is None:
                 _gate_instance = ExecutionAuthorizationGate(store=store)
+    if (
+        store is not None
+        and Path(store.db_path).resolve()
+        != Path(_gate_instance.store.db_path).resolve()
+    ):
+        raise ValueError("Existing Governance authority belongs to another workspace")
     return _gate_instance
 
 

@@ -77,11 +77,11 @@ def build_system_prompt(
             )
             if mutation_authorized:
                 lines.append(
-                    "- This request explicitly authorizes the supplied governed effect tools: create or update code/files and run allowlisted development checks when needed."
+                    "- This request asks for governed changes. File tools prepare proposals; they do not apply files. Only valid approval through Governance can resume the original operation. A user request, plan, model or tool list is not execution authority."
                 )
             else:
                 lines.append(
-                    "- Code generation and analysis are available in conversation. Creating workspace files and running allowlisted development checks are request-scoped capabilities activated by an explicit user request; describe them as requiring an explicit request, not as unavailable."
+                    "- Code generation and analysis are available in conversation. An explicit request may expose proposal tools, but cannot grant execution authority. Runtime operations still require current Governance admission and a qualified execution backend."
                 )
     if provider_id or provider_name or model:
         lines.extend(
@@ -146,11 +146,7 @@ def apply_persona_anthropic(
     explicit_system = str(params.get("system") or "")
     if explicit_system:
         return {**body, "system": explicit_system}
-    if (
-        not persona_enabled()
-        or params.get("persona") is False
-        or body.get("system")
-    ):
+    if not persona_enabled() or params.get("persona") is False or body.get("system"):
         return body
     return {
         **body,
@@ -161,5 +157,5 @@ def apply_persona_anthropic(
             workspace=str(params.get("workspace") or ""),
             agent_mode=str(params.get("agent_mode") or "agent"),
             mutation_authorized=params.get("mutation_authorized"),
-        )
+        ),
     }

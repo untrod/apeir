@@ -274,6 +274,7 @@ def _runtime_metadata(tool_id: str) -> dict[str, Any]:
         "find_workspace": ("files", "filesystem.read", "read"),
         "write_file": ("files", "filesystem.write", "write"),
         "write_files": ("files", "filesystem.write", "write"),
+        "propose_files": ("files", "filesystem.write", "write"),
         "patch_file": ("files", "filesystem.write", "write"),
         "make_directory": ("files", "filesystem.write", "write"),
         "move_path": ("files", "filesystem.write", "write"),

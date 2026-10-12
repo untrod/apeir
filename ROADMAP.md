@@ -95,13 +95,18 @@ The [dated engineering review](docs/acceptance/ENGINEERING_REVIEW.md) records
 reproduced remote admission defects, configuration gaps, performance measurement
 priorities and external research. It does not replace this status table or
 qualify hardware, production Providers or release integrity.
+Reviewed workspace proposals extend the existing Workflow/Governance/CAS/Work
+owners, with exact human review and fresh file evidence. This scoped software
+slice does not qualify installed Desktop, live-model engineering, persistent PTY,
+strong-sandbox scientific execution, physical hardware or overall product PASS.
+
 Its October 11 product-wiring audit also distinguishes connected Runtime paths,
 corrected evidence views, configuration-only Automation endpoints and unfinished
 Workspace/Terminal/context experiences. These corrections do not promote overall
 product delivery beyond PARTIAL or qualify an installed native Desktop.
 The [actual-input inspector](docs/development/DEVELOPER_PLATFORM.md#inspecting-actual-model-input)
 now connects admitted Chat Gateway iterations to persisted message/tool manifests,
-file-read provenance and recorded usage. It does not complete multi-file model
+file-read provenance and recorded usage. It does not qualify live-model multi-file
 proposals, persistent Terminal, Workflow Recorder, native release or real hardware
 qualification; those product limits remain unchanged.
 

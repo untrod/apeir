@@ -1919,11 +1919,14 @@ except ImportError:
 
 # Developer Platform routes - projects, runs, experiments, and Model Lab
 try:
-    from nous_runtime.api.developer_routes import DEVELOPER_ROUTES
+    from nous_runtime.api.developer_routes import (
+        DEVELOPER_AUTHENTICATED_ROUTES,
+        DEVELOPER_ROUTES,
+    )
 
     ROUTES.update(DEVELOPER_ROUTES)
 except ImportError:
-    pass
+    DEVELOPER_AUTHENTICATED_ROUTES = set()
 
 # Research routes - governed network, Source, Snapshot, and Evidence
 try:
@@ -2375,7 +2378,9 @@ def route(
         return err_response("NOUS_INVALID_REQUEST", f"No route: {method} {path}")
 
     if surface in {"server", "api", "control_plane"} and (
-        handler in OPERATIONS_ROUTES.values() or handler is handle_approval_action
+        handler in OPERATIONS_ROUTES.values()
+        or handler in DEVELOPER_AUTHENTICATED_ROUTES
+        or handler is handle_approval_action
     ):
         from nous_runtime.control_plane.auth import add_cors_headers
 
@@ -2441,13 +2446,19 @@ def route(
         )
         if governance_error:
             return governance_error
-        if handler in OPERATIONS_ROUTES.values():
+        if (
+            handler in OPERATIONS_ROUTES.values()
+            or handler in DEVELOPER_AUTHENTICATED_ROUTES
+        ):
             parameters = inspect.signature(handler).parameters
             arguments = {}
             if "body" in parameters:
                 arguments["body"] = body or {}
             if "params" in parameters:
                 arguments["params"] = request_params
+            for name in path_params:
+                if name in parameters:
+                    arguments[name] = path_params[name]
             if "authorization_context" in parameters:
                 arguments["authorization_context"] = authorization_context
             try:

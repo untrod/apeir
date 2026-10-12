@@ -10,7 +10,9 @@ from nous_runtime.api.responses import err_response, ok_response
 
 
 def _workspace() -> Path:
-    return Path(os.environ.get("NOUS_WORKSPACE_ROOT") or Path.cwd()).expanduser().resolve()
+    return (
+        Path(os.environ.get("NOUS_WORKSPACE_ROOT") or Path.cwd()).expanduser().resolve()
+    )
 
 
 def _project_view(project: dict[str, Any]) -> dict[str, Any]:
@@ -31,13 +33,24 @@ def handle_developer_overview() -> dict[str, Any]:
     runs = EventStream(str(root)).list_runs(limit=200)
     experiments = ExperimentService(root).snapshot()
     models = ModelCenterService(root).snapshot()
-    return ok_response({
-        "workspace": str(root),
-        "projects": {"total": len(projects), "active": sum(item.get("status") == "active" for item in projects)},
-        "runs": {"total": len(runs), "active": sum(item.state.value in {"RUNNING", "PLANNING", "RECOVERING"} for item in runs)},
-        "experiments": experiments["summary"],
-        "models": models["summary"],
-    })
+    return ok_response(
+        {
+            "workspace": str(root),
+            "projects": {
+                "total": len(projects),
+                "active": sum(item.get("status") == "active" for item in projects),
+            },
+            "runs": {
+                "total": len(runs),
+                "active": sum(
+                    item.state.value in {"RUNNING", "PLANNING", "RECOVERING"}
+                    for item in runs
+                ),
+            },
+            "experiments": experiments["summary"],
+            "models": models["summary"],
+        }
+    )
 
 
 def handle_developer_projects(params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -46,8 +59,12 @@ def handle_developer_projects(params: dict[str, Any] | None = None) -> dict[str,
     state = str((params or {}).get("state") or "").strip().lower()
     projects = ProjectStore().list_projects()
     if state:
-        projects = [item for item in projects if str(item.get("status") or "").lower() == state]
-    return ok_response({"projects": [_project_view(item) for item in projects], "total": len(projects)})
+        projects = [
+            item for item in projects if str(item.get("status") or "").lower() == state
+        ]
+    return ok_response(
+        {"projects": [_project_view(item) for item in projects], "total": len(projects)}
+    )
 
 
 def handle_developer_project(project_id: str) -> dict[str, Any]:
@@ -57,13 +74,15 @@ def handle_developer_project(project_id: str) -> dict[str, Any]:
     project = store.get_project(project_id)
     if project is None:
         return err_response("NOUS_NOT_FOUND", f"Project not found: {project_id}")
-    return ok_response({
-        **_project_view(project),
-        "plan": store.get_plan(project_id),
-        "work_items": store.list_work_items(project_id),
-        "checkpoints": store.list_checkpoints(project_id),
-        "events": store.list_events(project_id),
-    })
+    return ok_response(
+        {
+            **_project_view(project),
+            "plan": store.get_plan(project_id),
+            "work_items": store.list_work_items(project_id),
+            "checkpoints": store.list_checkpoints(project_id),
+            "events": store.list_events(project_id),
+        }
+    )
 
 
 def handle_developer_project_create(body: dict[str, Any]) -> dict[str, Any]:
@@ -82,7 +101,9 @@ def handle_developer_project_create(body: dict[str, Any]) -> dict[str, Any]:
     return ok_response(result)
 
 
-def handle_developer_project_action(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
+def handle_developer_project_action(
+    project_id: str, body: dict[str, Any]
+) -> dict[str, Any]:
     from nous_runtime.connectivity.project.coordinator import ProjectCoordinator
     from nous_runtime.connectivity.project.store import ProjectStore
 
@@ -93,18 +114,27 @@ def handle_developer_project_action(project_id: str, body: dict[str, Any]) -> di
     if action == "start":
         changed: Any = coordinator.activate(project_id)
     elif action == "pause":
-        changed = coordinator.pause(project_id, str(body.get("reason") or "Desktop request"))
+        changed = coordinator.pause(
+            project_id, str(body.get("reason") or "Desktop request")
+        )
     elif action == "resume":
         changed = coordinator.resume(project_id)
     elif action == "cancel":
         changed = coordinator.cancel_project(project_id)
     elif action == "continue":
         decision = coordinator.continue_project(project_id)
-        return ok_response({"project_id": project_id, "action": action, "decision": decision.to_dict()})
+        return ok_response(
+            {"project_id": project_id, "action": action, "decision": decision.to_dict()}
+        )
     else:
-        return err_response("NOUS_INVALID_REQUEST", "action must be start, pause, resume, continue, or cancel")
+        return err_response(
+            "NOUS_INVALID_REQUEST",
+            "action must be start, pause, resume, continue, or cancel",
+        )
     if not changed:
-        return err_response("PROJECT_STATE_ERROR", f"Cannot {action} project in its current state")
+        return err_response(
+            "PROJECT_STATE_ERROR", f"Cannot {action} project in its current state"
+        )
     project = ProjectStore().get_project(project_id)
     return ok_response(_project_view(project or {"project_id": project_id}))
 
@@ -141,7 +171,9 @@ def handle_developer_experiment_create(body: dict[str, Any]) -> dict[str, Any]:
         return err_response("NOUS_INVALID_REQUEST", str(exc))
 
 
-def handle_developer_experiment_evaluate(experiment_id: str, body: dict[str, Any]) -> dict[str, Any]:
+def handle_developer_experiment_evaluate(
+    experiment_id: str, body: dict[str, Any]
+) -> dict[str, Any]:
     from nous_runtime.experiments import ExperimentService
 
     try:
@@ -166,17 +198,27 @@ def _workbench():
 def _workbench_error(exc: Exception) -> dict[str, Any]:
     from nous_runtime.workspace.workbench import WorkbenchConflict
 
-    code = "NOUS_WORKSPACE_CONFLICT" if isinstance(exc, WorkbenchConflict) else "NOUS_INVALID_REQUEST"
+    code = (
+        "NOUS_FORBIDDEN"
+        if isinstance(exc, PermissionError)
+        else "NOUS_WORKSPACE_CONFLICT"
+        if isinstance(exc, WorkbenchConflict)
+        else "NOUS_INVALID_REQUEST"
+    )
     return err_response(code, str(exc))
 
 
-def handle_developer_workspace_files(params: dict[str, Any] | None = None) -> dict[str, Any]:
+def handle_developer_workspace_files(
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     values = params or {}
     try:
-        return ok_response(_workbench().list_files(
-            path=str(values.get("path") or "."),
-            limit=int(values.get("limit") or 500),
-        ))
+        return ok_response(
+            _workbench().list_files(
+                path=str(values.get("path") or "."),
+                limit=int(values.get("limit") or 500),
+            )
+        )
     except (OSError, TypeError, ValueError) as exc:
         return _workbench_error(exc)
 
@@ -190,44 +232,52 @@ def handle_developer_workspace_file(params: dict[str, Any]) -> dict[str, Any]:
 
 def handle_developer_workspace_search(params: dict[str, Any]) -> dict[str, Any]:
     try:
-        return ok_response(_workbench().search(
-            str(params.get("q") or ""),
-            path=str(params.get("path") or "."),
-            limit=int(params.get("limit") or 200),
-        ))
+        return ok_response(
+            _workbench().search(
+                str(params.get("q") or ""),
+                path=str(params.get("path") or "."),
+                limit=int(params.get("limit") or 200),
+            )
+        )
     except (OSError, TypeError, ValueError) as exc:
         return _workbench_error(exc)
 
 
 def handle_developer_workspace_preview(body: dict[str, Any]) -> dict[str, Any]:
     try:
-        return ok_response(_workbench().preview_write(
-            str(body.get("path") or ""),
-            str(body.get("content") or ""),
-            expected_sha256=str(body.get("expected_sha256") or ""),
-        ))
+        return ok_response(
+            _workbench().preview_write(
+                str(body.get("path") or ""),
+                str(body.get("content") or ""),
+                expected_sha256=str(body.get("expected_sha256") or ""),
+            )
+        )
     except (OSError, TypeError, ValueError) as exc:
         return _workbench_error(exc)
 
 
 def handle_developer_workspace_write(body: dict[str, Any]) -> dict[str, Any]:
     try:
-        return ok_response(_workbench().write_file(
-            str(body.get("path") or ""),
-            str(body.get("content") or ""),
-            expected_sha256=str(body.get("expected_sha256") or ""),
-        ))
+        return ok_response(
+            _workbench().write_file(
+                str(body.get("path") or ""),
+                str(body.get("content") or ""),
+                expected_sha256=str(body.get("expected_sha256") or ""),
+            )
+        )
     except (OSError, TypeError, ValueError) as exc:
         return _workbench_error(exc)
 
 
 def handle_developer_workspace_run(body: dict[str, Any]) -> dict[str, Any]:
     try:
-        return ok_response(_workbench().run_profile(
-            str(body.get("profile") or ""),
-            target=str(body.get("target") or ""),
-            timeout_seconds=int(body.get("timeout_seconds") or 60),
-        ))
+        return ok_response(
+            _workbench().run_profile(
+                str(body.get("profile") or ""),
+                target=str(body.get("target") or ""),
+                timeout_seconds=int(body.get("timeout_seconds") or 60),
+            )
+        )
     except (OSError, TypeError, ValueError) as exc:
         return _workbench_error(exc)
 
@@ -236,6 +286,109 @@ def handle_developer_capabilities() -> dict[str, Any]:
     from nous_runtime.capability.availability import check_availability
 
     return ok_response(check_availability())
+
+
+def _proposals():
+    from nous_runtime.workspace.proposals import WorkspaceProposalService
+
+    return WorkspaceProposalService(_workspace())
+
+
+def _proposal_read_admission(authorization_context, *, proposal_id: str = ""):
+    from nous_runtime.governance import ActionProposal, get_gate
+    from nous_runtime.governance.contracts import AuthorizationContext
+
+    if not isinstance(authorization_context, AuthorizationContext):
+        raise PermissionError("Authenticated workspace identity is required")
+    service = _proposals()
+    decision = get_gate().evaluate(
+        ActionProposal(
+            capability_id="project.read_file",
+            action_type="workspace.proposal.inspect",
+            target_workspace=str(_workspace()),
+            affected_resources=(service.resource_id,),
+            required_permissions=("workspace.read",),
+            side_effect_class="read_only",
+            reversibility="reversible",
+            retry_behavior="idempotent",
+            locality=authorization_context.session_locality,
+            params={"proposal_id": proposal_id},
+        ),
+        authorization_context,
+    )
+    if decision.action_mode != "EXECUTE" or decision.allowed is not True:
+        raise PermissionError("Workspace proposal inspection was not admitted")
+    return service
+
+
+def handle_developer_proposals(params=None, *, authorization_context=None):
+    try:
+        service = _proposal_read_admission(authorization_context)
+        return ok_response(service.list(limit=int((params or {}).get("limit", 100))))
+    except (OSError, TypeError, ValueError) as exc:
+        return _workbench_error(exc)
+
+
+def handle_developer_proposal(proposal_id: str, *, authorization_context=None):
+    try:
+        service = _proposal_read_admission(
+            authorization_context, proposal_id=proposal_id
+        )
+        return ok_response(service.read(proposal_id))
+    except KeyError:
+        return err_response("NOUS_NOT_FOUND", "Workspace proposal not found")
+    except (OSError, TypeError, ValueError) as exc:
+        return _workbench_error(exc)
+
+
+def handle_developer_proposal_prepare(body: dict, *, authorization_context=None):
+    try:
+        if not isinstance(body, dict) or set(body) - {"files", "title"}:
+            return err_response(
+                "NOUS_INVALID_REQUEST", "Only files and title may be proposed"
+            )
+        service = _proposal_read_admission(authorization_context)
+        return ok_response(
+            service.prepare(
+                body.get("files"),
+                subject_id="runtime:workspace-proposals",
+                requested_by=authorization_context.subject_id,
+                title=body.get("title", "Workspace changes"),
+            )
+        )
+    except (OSError, TypeError, ValueError) as exc:
+        return _workbench_error(exc)
+
+
+def handle_developer_proposal_action(
+    proposal_id: str, body: dict, *, authorization_context=None
+):
+    try:
+        if not isinstance(body, dict) or set(body) != {"action"}:
+            return err_response(
+                "NOUS_INVALID_REQUEST", "An exact proposal action is required"
+            )
+        action = body["action"]
+        if action not in {"apply", "reconcile"}:
+            return err_response(
+                "NOUS_INVALID_REQUEST", "action must be apply or reconcile"
+            )
+        service = _proposal_read_admission(
+            authorization_context, proposal_id=proposal_id
+        )
+        # The original Operation, manifest and one-use grant own execution
+        # admission. A route retry cannot create another proposal or authority.
+        result = (
+            service.apply(proposal_id)
+            if action == "apply"
+            else service.reconcile(proposal_id)
+        )
+        return ok_response(result)
+    except KeyError:
+        return err_response("NOUS_NOT_FOUND", "Workspace proposal not found")
+    except (OSError, TypeError, ValueError) as exc:
+        return _workbench_error(exc)
+
 
 def handle_developer_model_lab(params: dict[str, Any] | None = None) -> dict[str, Any]:
     from nous_runtime.model_runtime.center import ModelCenterService
@@ -250,13 +403,15 @@ def handle_developer_model_lab(params: dict[str, Any] | None = None) -> dict[str
         costs = observations.get_cost_summary()
     finally:
         observations.shutdown()
-    return ok_response({
-        **center,
-        "rankings": rankings,
-        "recent_observations": recent,
-        "costs": costs,
-        "evidence_status": "measured" if recent else "awaiting_observations",
-    })
+    return ok_response(
+        {
+            **center,
+            "rankings": rankings,
+            "recent_observations": recent,
+            "costs": costs,
+            "evidence_status": "measured" if recent else "awaiting_observations",
+        }
+    )
 
 
 DEVELOPER_ROUTES = {
@@ -264,11 +419,17 @@ DEVELOPER_ROUTES = {
     ("GET", "/api/v1/developer/projects"): handle_developer_projects,
     ("GET", "/api/v1/developer/projects/{project_id}"): handle_developer_project,
     ("POST", "/api/v1/developer/projects"): handle_developer_project_create,
-    ("POST", "/api/v1/developer/projects/{project_id}/action"): handle_developer_project_action,
+    (
+        "POST",
+        "/api/v1/developer/projects/{project_id}/action",
+    ): handle_developer_project_action,
     ("GET", "/api/v1/developer/runs"): handle_developer_runs,
     ("GET", "/api/v1/developer/experiments"): handle_developer_experiments,
     ("POST", "/api/v1/developer/experiments"): handle_developer_experiment_create,
-    ("POST", "/api/v1/developer/experiments/{experiment_id}/evaluate"): handle_developer_experiment_evaluate,
+    (
+        "POST",
+        "/api/v1/developer/experiments/{experiment_id}/evaluate",
+    ): handle_developer_experiment_evaluate,
     ("GET", "/api/v1/developer/model-lab"): handle_developer_model_lab,
     ("GET", "/api/v1/developer/capabilities"): handle_developer_capabilities,
     ("GET", "/api/v1/developer/workspace/files"): handle_developer_workspace_files,
@@ -277,16 +438,60 @@ DEVELOPER_ROUTES = {
     ("POST", "/api/v1/developer/workspace/preview"): handle_developer_workspace_preview,
     ("POST", "/api/v1/developer/workspace/write"): handle_developer_workspace_write,
     ("POST", "/api/v1/developer/workspace/run"): handle_developer_workspace_run,
+    ("GET", "/api/v1/developer/workspace/proposals"): handle_developer_proposals,
+    (
+        "POST",
+        "/api/v1/developer/workspace/proposals",
+    ): handle_developer_proposal_prepare,
+    (
+        "GET",
+        "/api/v1/developer/workspace/proposals/{proposal_id}",
+    ): handle_developer_proposal,
+    (
+        "POST",
+        "/api/v1/developer/workspace/proposals/{proposal_id}/action",
+    ): handle_developer_proposal_action,
+}
+
+DEVELOPER_AUTHENTICATED_ROUTES = {
+    handle_developer_proposals,
+    handle_developer_proposal,
+    handle_developer_proposal_prepare,
+    handle_developer_proposal_action,
 }
 
 
 DEVELOPER_GOVERNANCE = {
-    ("POST", "/api/v1/developer/projects"): ("project.create", "local_write", "reversible"),
-    ("POST", "/api/v1/developer/projects/{project_id}/action"): ("project.control", "local_write", "partially_reversible"),
-    ("POST", "/api/v1/developer/experiments"): ("experiment.create", "local_write", "reversible"),
-    ("POST", "/api/v1/developer/experiments/{experiment_id}/evaluate"): ("experiment.evaluate", "local_write", "reversible"),
-    ("POST", "/api/v1/developer/workspace/write"): ("project.write_file", "local_write", "reversible"),
-    ("POST", "/api/v1/developer/workspace/run"): ("project.run_tests", "local_write", "partially_reversible"),
+    ("POST", "/api/v1/developer/projects"): (
+        "project.create",
+        "local_write",
+        "reversible",
+    ),
+    ("POST", "/api/v1/developer/projects/{project_id}/action"): (
+        "project.control",
+        "local_write",
+        "partially_reversible",
+    ),
+    ("POST", "/api/v1/developer/experiments"): (
+        "experiment.create",
+        "local_write",
+        "reversible",
+    ),
+    ("POST", "/api/v1/developer/experiments/{experiment_id}/evaluate"): (
+        "experiment.evaluate",
+        "local_write",
+        "reversible",
+    ),
+    ("POST", "/api/v1/developer/workspace/write"): (
+        "project.write_file",
+        "local_write",
+        "reversible",
+    ),
+    ("POST", "/api/v1/developer/workspace/run"): (
+        "project.run_tests",
+        "local_write",
+        "partially_reversible",
+    ),
 }
 
 

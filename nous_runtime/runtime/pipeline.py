@@ -232,6 +232,22 @@ class RuntimePipeline:
             reason=execution["reason"],
             data=execution,
         )
+        if execution.get("status") == "waiting_approval":
+            product = dict(execution.get("result") or {})
+            return self._response(
+                request,
+                trace,
+                "waiting_approval",
+                str(product.get("content") or execution["reason"]),
+                decision,
+                result={
+                    "execution": execution,
+                    "proposal_id": product.get("proposal_id", ""),
+                    "approval_request_id": product.get("approval_request_id", ""),
+                    "verification": {"ok": False, "status": "not_executed"},
+                    "trace": trace.to_dict(),
+                },
+            )
         self._emit(
             request.request_id,
             "step.completed" if execution["ok"] else "step.failed",
@@ -516,6 +532,7 @@ class RuntimePipeline:
                                 "runtime_plan": dict(plan or {}),
                                 "context_snapshot": dict(context_snapshot or {}),
                                 "event_stream": self.events,
+                                "_governance_gate": self.gate,
                             },
                         )
                         or {}
@@ -747,7 +764,9 @@ class RuntimePipeline:
             trace_id=trace.trace_id,
             requires_confirmation=getattr(decision, "requires_confirmation", False),
             result=payload,
-            errors=() if status in {"ok", "confirmation_required"} else (message,),
+            errors=()
+            if status in {"ok", "confirmation_required", "waiting_approval"}
+            else (message,),
         )
         self._emit(
             request.request_id,
@@ -759,19 +778,27 @@ class RuntimePipeline:
             },
         )
         terminal_event = (
-            "run.completed"
-            if status
-            in {
-                "ok",
-                "confirmation_required",
-            }
-            else "run.failed"
+            "run.waiting_approval"
+            if status == "waiting_approval"
+            else (
+                "run.completed"
+                if status
+                in {
+                    "ok",
+                    "confirmation_required",
+                }
+                else "run.failed"
+            )
         )
         self._emit(
             request.request_id,
             terminal_event,
             {
-                "state": "COMPLETED" if terminal_event == "run.completed" else "FAILED",
+                "state": "WAITING_FOR_APPROVAL"
+                if status == "waiting_approval"
+                else "COMPLETED"
+                if terminal_event == "run.completed"
+                else "FAILED",
                 "status": status,
             },
         )

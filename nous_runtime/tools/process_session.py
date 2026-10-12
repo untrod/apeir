@@ -630,7 +630,7 @@ class ProcessSessionToolRuntime:
     def specifications(self) -> tuple[dict[str, Any], ...]:
         identifier = {"type": "string", "minLength": 1}
         cursor = {"type": "integer", "minimum": 0}
-        return (
+        specs = (
             self._tool(
                 "shell_start",
                 (
@@ -740,56 +740,27 @@ class ProcessSessionToolRuntime:
             ),
         )
 
+        blocked = {
+            "shell_start",
+            "shell_stdin",
+            "shell_close_stdin",
+            "shell_interrupt",
+            "shell_terminate",
+            "shell_kill",
+        }
+        return tuple(item for item in specs if item["function"]["name"] not in blocked)
+
     def execute(self, name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
         args = dict(arguments)
-        if name == "shell_start":
-            if not self.workspace_runtime.allow_mutations:
-                return {
-                    "ok": False,
-                    "error": "Shell execution requires explicit user authorization.",
-                }
-            try:
-                command = self.workspace_runtime.prepare_development_command(
-                    args.get("command")
-                )
-                cwd = self.workspace_runtime.prepare_process_cwd(args.get("cwd") or ".")
-            except (OSError, UnicodeError, ValueError) as exc:
-                return {
-                    "ok": False,
-                    "error": str(exc),
-                    "error_code": type(exc).__name__,
-                }
-            action, _decision = self.workspace_runtime.gate.propose_action(
-                "shell_session_start",
-                command[0],
-                {
-                    "arguments": command[1:],
-                    "cwd": str(cwd),
-                    "command_digest": _digest(command),
-                    "attempt": self.workspace_runtime.next_effect_attempt(),
-                },
-            )
-            approval = self.workspace_runtime.gate.request_approval(
-                action, approver="explicit_workspace_request"
-            )
-
-            def effect(_parameters: dict[str, Any]) -> dict[str, Any]:
-                return self.store.start(
-                    command,
-                    cwd=cwd,
-                    environment=self.workspace_runtime.safe_process_environment(),
-                    work_id=str(args.get("_work_id") or ""),
-                    tool_call_id=str(args.get("_tool_call_id") or ""),
-                    action_sequence=int(args.get("_action_sequence") or 0),
-                )
-
-            receipt = self.workspace_runtime.gate.execute(action, approval, effect)
-            result = dict(receipt.result or {})
-            return {
-                **result,
-                "ok": receipt.success and bool(result.get("ok")),
-                "receipt_id": receipt.receipt_id,
-            }
+        if name in {
+            "shell_start",
+            "shell_stdin",
+            "shell_close_stdin",
+            "shell_interrupt",
+            "shell_terminate",
+            "shell_kill",
+        }:
+            return self.workspace_runtime._unsupported_effect()
         session_id = str(args.get("session_id") or "")
         handlers = {
             "shell_status": lambda: self.store.status(session_id),

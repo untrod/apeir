@@ -130,6 +130,71 @@ PR and main CI remain separate prerequisites. Automation configuration consumpti
 installed Desktop, native hashes, real identity and physical hardware are not
 qualified by this correction. Kernel and the component lock remain unchanged.
 
+Reviewed multi-file changes (**REUSE / EXTEND / FIX**) now compose existing
+Workflow/Store, Governance/Broker, Work Harness/Agent execution, Artifact CAS,
+Workbench, EventStream and deterministic verification. The Desktop exposes draft
+review plus Ask/Edit collaboration. Model file tools prepare immutable proposals;
+they cannot apply files or issue approvals. Original Work resumes the exact
+paused operation after valid human approval. Partial writes remain UNKNOWN;
+complete lost responses are reconciled with fresh byte evidence, without
+another write. Deny, conflicting versions, wrong Work/Plan/authority, expiry,
+revocation, cancellation, tampered CAS and registered fake-secret leakage are
+covered. Unsafe model-facing host effect shortcuts remain blocked; this is not
+persistent Terminal qualification or a replacement executor.
+
+Focused proposal/Work/API contracts: **45 passed**, including **9 API contracts**
+and the protected real HTTP round trip. Affected model/Work/Workflow/Governance/
+Control Plane/Reality/Node regressions: **930 passed**; repository contracts:
+**267 passed**. Desktop: **135 passed in 31 files**, lint/typecheck/build pass.
+The initial implementation integration retained **10 failed, 111 passed,
+2 skipped**: eight legacy assumptions about implicit model authority and two
+unchanged bare-host orphan failures. Authority assertions now require original
+human approval or prove no launch/mutation; original process identity assertions
+remain intact. Later model integration retained **2 failed, 134 passed** before
+its fixtures were updated to review original operations rather than assume a
+model response authorized writes. The passing model/Work/file subset has
+**136 passed**. Real HTTP qualification uses a fake service token and the
+existing trusted local-human test context; it does not authenticate a remote IdP.
+
+A measured list microbenchmark used 20 pending proposals, five reads before and
+five after, and zero model calls/effects. CAS resolutions per list changed
+**100 → 60** by deferring diffs until detail inspection. These local source API
+observations are not general latency, token, billing or remote-scale claims.
+Ruff/changed-file format/compile/docs/hygiene/security/version and required CI
+remain the integration gate. Known native, strong-sandbox, account-backed model,
+physical and production blockers remain unchanged; Kernel and component lock
+are frozen. Chat project completion still requires its actual remaining checks,
+not merely file MATCH; Source-browser/HTTP checks do not certify installed EXE.
+
+The review correction retained three failing cancellation/Plan cases and one
+additional cancellation-during-preparation race. A late tool checkpoint could
+otherwise revive a cancelled Work. The existing Work checkpoint owner now
+serializes updates with the existing file lock and keeps cancellation monotonic;
+new evidence can be retained without reauthorizing execution. Cancellation of
+the source Work also fences its original proposal Workflow. Each file admission
+rechecks the original Work, pause/cancel state, pending manifest and current
+Plan. Tools obtain the Plan binding from persisted Work at preparation time.
+Already recorded effects remain observable and cannot be blindly replayed.
+
+Two first-use defects were also reproduced: cwd could initialize Governance
+outside the selected workspace, and ordinary capability seeding omitted the
+existing `project.read_file` declaration used by proposal inspection. Default
+Governance now honors the configured host root, an explicit workspace can
+initialize the one process Gate, and an existing different Gate is rejected
+rather than replaced. Normal seeding declares read semantics; it grants no
+permission. The API tests now use that seeding instead of manually registering
+the missing capability. Focused proposal contracts have **53 passed**; the
+proposal, original Work and collaboration subset has **83 passed**. A paused
+source Work is blocked before execution admission; explicit resume retains the
+original approval and file operation. Expanded affected regressions have
+**955 passed**; lifecycle-seeding/API/repository checks have **282 passed**.
+The initial
+PR full regression retained **1 failed, 4303 passed, 47 skipped, 4 warnings**
+([CI evidence](https://github.com/untrod/apeir/actions/runs/38250757991)).
+Its legacy batch-write test now proves no mutation before original human
+approval and verifies real admission, file observation and CAS evidence after
+approval. No deadline, isolation or process-identity assertion is relaxed.
+
 The multi-file editing slice reuses the existing Workbench endpoints and keeps
 draft state within the existing component; it adds no filesystem, proposal store,
 permission or execution authority. Seven new frontend cases cover independent

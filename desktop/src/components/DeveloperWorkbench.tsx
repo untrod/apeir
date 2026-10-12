@@ -22,6 +22,8 @@ import { errorMessage } from "../lib/format";
 import { ChatView } from "./ChatView";
 import { ContextInspector } from "./ContextInspector";
 import { DetailDrawer } from "./DetailDrawer";
+import { WorkspaceProposals } from "./WorkspaceProposals";
+import type { WorkspaceProposal } from "../lib/api";
 import type { RuntimeEventEnvelope } from "../store";
 import "./DeveloperWorkbench.css";
 
@@ -77,7 +79,11 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
   const [runTarget, setRunTarget] = useState("tests");
   const [runResult, setRunResult] = useState<WorkbenchRunResult | null>(null);
   const [writeResult, setWriteResult] = useState<WorkbenchWriteResult | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [operationBusy, setBusy] = useState(false);
+  const [proposalBusy, setProposalBusy] = useState(false);
+  const [collaborationMode, setCollaborationMode] = useState<"ask" | "edit">("ask");
+  const [focusProposalId, setFocusProposalId] = useState("");
+  const busy = operationBusy || proposalBusy;
   const [error, setError] = useState("");
   const [layout, setLayout] = useState(preferences);
   const [runs, setRuns] = useState<DeveloperRun[]>([]);
@@ -119,12 +125,12 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
 
   const dirty = content !== loadedContent || filePath !== loadedPath;
   const protectedDraft = dirty || tabs.some(tab => tab.id !== activeTab && tabIsDirty(tab));
-  useEffect(() => { onDraftChange?.(protectedDraft || !!pending); }, [protectedDraft, pending, onDraftChange]);
+  useEffect(() => { onDraftChange?.(protectedDraft || !!pending || proposalBusy); }, [protectedDraft, pending, proposalBusy, onDraftChange]);
   useEffect(() => {
-    const warn = (event: BeforeUnloadEvent) => { if (protectedDraft || pending) { event.preventDefault(); event.returnValue = ""; } };
+    const warn = (event: BeforeUnloadEvent) => { if (protectedDraft || pending || proposalBusy) { event.preventDefault(); event.returnValue = ""; } };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [protectedDraft, pending]);
+  }, [protectedDraft, pending, proposalBusy]);
   const availableProfiles = useMemo(
     () => (listing?.profiles || []).filter((item) => item.available),
     [listing],
@@ -321,6 +327,36 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
     else if (filePath) setRunTarget(filePath);
   };
 
+  const proposalDrafts = activeTab === null ? [] : [currentTab(), ...tabs.filter(tab => tab.id !== activeTab)]
+    .filter(tab => tab.controller === getConfig().url && tabIsDirty(tab))
+    .map(tab => ({ path: tab.path, content: tab.content, expected_sha256: tab.sha256,
+      expected_exists: !!tab.loadedPath }));
+
+  const refreshAppliedFiles = async (proposal: WorkspaceProposal) => {
+    const controller = getConfig().url;
+    setBusy(true);
+    try {
+      const files = await Promise.all(proposal.files.map(file => fetchWorkbenchFile(file.path)));
+      if (controller !== getConfig().url) throw new Error("Controller changed; inspect the original file evidence.");
+      if (files.some(file => proposal.files.find(item => item.path === file.path)?.after_sha256 !== file.sha256)) {
+        throw new Error("Files changed after the verified proposal; reload and review current versions.");
+      }
+      const original = activeTab === null ? null : currentTab();
+      const refreshed = tabs.map(tab => {
+        const cached = tab.id === original?.id ? original : tab;
+        const file = files.find(item => item.path === cached.path);
+        if (!file || cached.controller !== controller || (tabIsDirty(cached) && cached.content !== file.content)) return cached;
+        return { ...cached, content: file.content, loadedContent: file.content,
+          loadedPath: file.path, sha256: file.sha256, preview: null, writeResult: null };
+      });
+      setTabs(refreshed);
+      const active = refreshed.find(tab => tab.id === activeTab);
+      if (active) restoreTab(active);
+      await refresh(); await showEvents(proposal.proposal_id);
+    } catch (cause) { setError(errorMessage(cause, "Applied files could not be reloaded. Original evidence remains inspectable.")); }
+    finally { setBusy(false); }
+  };
+
   return <div className="developer-panel" style={{ display: "grid", gap: space.md }}>
     <details style={panel}><summary style={{ padding: space.md, cursor: "pointer" }}>Panel settings / 面板设置</summary><div className="developer-settings">
       <label>Editor size <select aria-label="Editor font size" value={layout.fontSize} onChange={event => setLayout(value => ({ ...value, fontSize: Number(event.target.value) }))}>{[12, 14, 16, 18].map(size => <option key={size}>{size}</option>)}</select></label>
@@ -408,6 +444,10 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
           {writeResult && <p style={{ overflowWrap: "anywhere", fontSize: typo.xs }}>Saved {writeResult.path} · Write run {writeResult.run_id}{writeResult.backup_path && ` · Backup: ${writeResult.backup_path}`}. This file-write record is not a process receipt or effect verification.</p>}
         </section>}
 
+        <section style={{ ...panel, padding: space.md }}><WorkspaceProposals drafts={proposalDrafts}
+          disabled={operationBusy || !!pending} onBusyChange={setProposalBusy}
+          focusProposalId={focusProposalId} onApplied={refreshAppliedFiles} /></section>
+
         <section style={{ ...panel, padding: space.md }}>
           <div style={{ color: colors.text, fontWeight: typo.semibold, marginBottom: space.sm }}>Strict execution</div>
           <div style={{ display: "flex", gap: space.sm, flexWrap: "wrap" }}>
@@ -421,7 +461,7 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
           {runResult && <pre style={{ margin: `${space.md} 0 0`, maxHeight: 300, overflow: "auto", padding: space.md, borderRadius: radius.md, background: colors.bg, color: runResult.ok ? colors.text : colors.danger, fontFamily: typo.mono, fontSize: typo.xs, whiteSpace: "pre-wrap" }}>{`run ${runResult.run_id}\nexit ${runResult.exit_code}\n${runResult.stdout}${runResult.stderr ? `\n${runResult.stderr}` : ""}`}</pre>}
         </section>
       </main>
-      <aside hidden={!layout.conversation} className="developer-collaboration" aria-label="Workspace collaboration"><ChatView conversationId={conversationId} onConversationCreated={setConversationId} workspaceFile={reference} onClearWorkspaceFile={() => setReference(undefined)} readOnly onCardClick={event => { const runId = String(event.payload?.run_id || event.metadata?.run_id || ""); if (runId) void showEvents(runId); }} onTraceClick={showTrace} /></aside>
+      <aside hidden={!layout.conversation} className="developer-collaboration" aria-label="Workspace collaboration"><div className="developer-activity"><button style={btnSecondary} aria-pressed={collaborationMode === "ask"} disabled={busy} onClick={() => setCollaborationMode("ask")}>Ask / 只读分析</button><button style={btnSecondary} aria-pressed={collaborationMode === "edit"} disabled={busy} onClick={() => setCollaborationMode("edit")}>Edit / 审查提案</button></div><p>File references grant no authority. Edit prepares proposals for human review; execution and tests still require their own admission and backend.</p><ChatView conversationId={conversationId} onConversationCreated={setConversationId} workspaceFile={reference} onClearWorkspaceFile={() => setReference(undefined)} readOnly={collaborationMode === "ask"} onProposalCreated={setFocusProposalId} onCardClick={event => { const runId = String(event.payload?.run_id || event.metadata?.run_id || ""); if (runId) void showEvents(runId); }} onTraceClick={showTrace} /></aside>
     </div>
     {closeTarget !== null && <section role="alert" style={{ ...panel, padding: space.md }}><p>Unsaved changes in {closeTarget === activeTab ? filePath : tabs.find(tab => tab.id === closeTarget)?.path}. Keep editing or explicitly discard this draft before closing.</p><button style={btnSecondary} onClick={() => setCloseTarget(null)}>Keep editing</button><button style={btnSecondary} onClick={() => closeTab(closeTarget, true)}>Discard draft and close</button></section>}
     {pending && <section aria-label="Workbench approval" style={{ ...panel, padding: space.md }}><h3>Explicit approval required</h3><p>Review the original {pending.kind} request: {pending.kind === "save" ? pending.path : `${pending.profile} ${pending.target}`}. Installation, model output and layout settings grant no authority.</p><p>Request {pending.approvalId}</p><button disabled={busy} style={btnPrimary} onClick={() => void decide("approve")}>Approve once and {pending.kind}</button><button disabled={busy} style={btnSecondary} onClick={() => void decide("deny")}>Deny original request</button></section>}

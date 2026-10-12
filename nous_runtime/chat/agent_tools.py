@@ -6,13 +6,11 @@ import hashlib
 import json
 import os
 import shlex
-import tempfile
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Mapping
 
 from nous_runtime.agents.adapters.workspace_guard import WorkspaceGuard
-from nous_runtime.capability.sandbox import ExecutionSandbox, SandboxConfig
 from nous_runtime.governance.effect_gate import EffectGate
 from nous_runtime.execution.executables import resolve_executable
 
@@ -230,6 +228,13 @@ class WorkspaceToolRuntime:
         gate: EffectGate | None = None,
         authorization_context: Mapping[str, Any] | None = None,
         governance_surface: str = "server",
+        subject_id: str = "",
+        source_work_id: str = "",
+        agent_session_id: str = "",
+        plan_id: str = "",
+        source_request_id: str = "",
+        proposal_service: Any = None,
+        operation_gate: Any = None,
     ) -> None:
         self.guard = WorkspaceGuard(workspace, protect_runtime_state=True)
         self.root = Path(self.guard.root)
@@ -237,6 +242,14 @@ class WorkspaceToolRuntime:
         self.gate = gate or EffectGate()
         self.authorization_context = dict(authorization_context or {})
         self.governance_surface = str(governance_surface or "server")
+        self.subject_id = subject_id or "agent.nous.workspace"
+        self.source_work_id = str(source_work_id)
+        self.agent_session_id = str(agent_session_id)
+        self.plan_id = str(plan_id)
+        self.source_request_id = str(source_request_id)
+        self._proposal_service = proposal_service
+        self._operation_gate = operation_gate
+        self._read_versions: dict[str, str] = {}
         self._effect_sequence = 0
 
     def specifications(self) -> tuple[dict[str, Any], ...]:
@@ -292,16 +305,18 @@ class WorkspaceToolRuntime:
                 [
                     _tool(
                         "write_file",
-                        "Create or replace a UTF-8 file inside the active workspace.",
+                        "Prepare a durable UTF-8 file proposal for human review; this does not change workspace files.",
                         {
                             "path": {"type": "string"},
                             "content": {"type": "string"},
+                            "expected_sha256": {"type": "string"},
+                            "expected_exists": {"type": "boolean"},
                         },
                         required=("path", "content"),
                     ),
                     _tool(
                         "write_files",
-                        "Create or replace several UTF-8 project files inside the active workspace; each file write is atomic and audited.",
+                        "Prepare one immutable multi-file proposal for human review; only exact human approval can enable its original Workflow.",
                         {
                             "files": {
                                 "type": "array",
@@ -311,6 +326,8 @@ class WorkspaceToolRuntime:
                                     "properties": {
                                         "path": {"type": "string"},
                                         "content": {"type": "string"},
+                                        "expected_sha256": {"type": "string"},
+                                        "expected_exists": {"type": "boolean"},
                                     },
                                     "required": ["path", "content"],
                                 },
@@ -320,7 +337,7 @@ class WorkspaceToolRuntime:
                     ),
                     _tool(
                         "patch_file",
-                        "Atomically replace one exact context block in an existing UTF-8 file; fails if context is stale or ambiguous.",
+                        "Prepare a reviewed patch proposal from one exact UTF-8 context block; does not apply it and fails on stale or ambiguous context.",
                         {
                             "path": {"type": "string"},
                             "expected": {"type": "string", "minLength": 1},
@@ -370,6 +387,18 @@ class WorkspaceToolRuntime:
                     ),
                 ]
             )
+            batch = next(
+                item for item in specs if item["function"]["name"] == "write_files"
+            )
+            specs.append(
+                {**batch, "function": {**batch["function"], "name": "propose_files"}}
+            )
+            specs = [
+                item
+                for item in specs
+                if item["function"]["name"]
+                not in {"make_directory", "move_path", "remove_path", "run_command"}
+            ]
             specs.extend(_runtime_tool_specifications())
         return tuple(specs)
 
@@ -379,6 +408,7 @@ class WorkspaceToolRuntime:
             {
                 "write_file",
                 "write_files",
+                "propose_files",
                 "patch_file",
                 "make_directory",
                 "move_path",
@@ -396,6 +426,7 @@ class WorkspaceToolRuntime:
             "find_workspace": self._find_workspace,
             "write_file": self._write_file,
             "write_files": self._write_files,
+            "propose_files": self._write_files,
             "patch_file": self._patch_file,
             "make_directory": self._make_directory,
             "move_path": self._move_path,
@@ -417,6 +448,7 @@ class WorkspaceToolRuntime:
             in {
                 "write_file",
                 "write_files",
+                "propose_files",
                 "patch_file",
                 "make_directory",
                 "move_path",
@@ -524,6 +556,8 @@ class WorkspaceToolRuntime:
         }
 
     def _read_file(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from nous_runtime.core.redaction import redact_sensitive_text
+
         path = self._path(arguments.get("path"))
         if not path.is_file():
             raise ValueError("The requested workspace path is not a file.")
@@ -533,7 +567,10 @@ class WorkspaceToolRuntime:
             data = stream.read(_MAX_READ_BYTES + 1)
         if len(data) > _MAX_READ_BYTES:
             raise ValueError("The file exceeds the 256 KiB agent read limit.")
-        text = data.decode("utf-8")
+        text = redact_sensitive_text(data.decode("utf-8"))
+        relative = path.relative_to(self.root).as_posix()
+        version = hashlib.sha256(data).hexdigest()
+        self._read_versions[relative] = version
         lines = text.splitlines()
         start = max(1, int(arguments.get("start_line") or 1))
         end = min(
@@ -542,14 +579,16 @@ class WorkspaceToolRuntime:
         selected = lines[start - 1 : end]
         return {
             "ok": True,
-            "path": path.relative_to(self.root).as_posix(),
+            "path": relative,
             "start_line": start,
             "end_line": end,
             "content": "\n".join(selected),
-            "sha256": hashlib.sha256(data).hexdigest(),
+            "sha256": version,
         }
 
     def _search_workspace(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from nous_runtime.core.redaction import redact_sensitive_text
+
         query = str(arguments.get("query") or "")
         if not query:
             raise ValueError("Search query is required.")
@@ -578,7 +617,7 @@ class WorkspaceToolRuntime:
                             {
                                 "path": relative.as_posix(),
                                 "line": line_number,
-                                "text": line[:500],
+                                "text": redact_sensitive_text(line)[:500],
                             }
                         )
                         if len(matches) >= 100:
@@ -623,158 +662,159 @@ class WorkspaceToolRuntime:
                 return {"ok": True, "matches": matches, "truncated": True}
         return {"ok": True, "matches": matches, "truncated": False}
 
+    def _proposal_runtime(self):
+        if self._proposal_service is None:
+            from nous_runtime.workspace.proposals import WorkspaceProposalService
+
+            self._proposal_service = WorkspaceProposalService(
+                self.root, gate=self._operation_gate
+            )
+        if Path(self._proposal_service.root).resolve() != self.root:
+            raise ValueError("Proposal service and tool workspace differ")
+        return self._proposal_service
+
     def _write_file(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        path = self._path(arguments.get("path"), allow_nonexistent=True)
-        relative = path.relative_to(self.root)
-        if relative.parts and relative.parts[0] in {".git", ".nous"}:
-            raise ValueError("Nous internal and Git metadata are protected.")
-        if relative.as_posix() == "workspace.json":
-            raise ValueError("workspace.json is managed by Nous.")
-        content = str(arguments.get("content") or "")
-        encoded = content.encode("utf-8")
-        if len(encoded) > _MAX_WRITE_BYTES:
-            raise ValueError("The write exceeds the 1 MiB agent limit.")
-        before_bytes = path.read_bytes() if path.is_file() else b""
-        before = hashlib.sha256(before_bytes).hexdigest() if path.is_file() else ""
-        action, _decision = self.gate.propose_action(
-            "file_write",
-            relative.as_posix(),
-            {"size_bytes": len(encoded), "before_sha256": before},
-        )
-        approval = self.gate.request_approval(
-            action, approver="explicit_workspace_request"
-        )
-
-        def effect(_params: dict[str, Any]) -> dict[str, Any]:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            descriptor, temporary = tempfile.mkstemp(
-                prefix=".nous-write-", dir=path.parent
-            )
-            try:
-                with os.fdopen(descriptor, "wb") as stream:
-                    stream.write(encoded)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-                os.replace(temporary, path)
-            finally:
-                if os.path.exists(temporary):
-                    os.unlink(temporary)
-            return {"path": relative.as_posix(), "size_bytes": len(encoded)}
-
-        receipt = self.gate.execute(action, approval, effect)
-        artifact_id = ""
-        if receipt.success:
-            from nous_runtime.artifact import ArtifactManager, ArtifactType, registry
-
-            artifact_type = (
-                ArtifactType.CODE
-                if path.suffix.casefold()
-                in {".py", ".js", ".ts", ".tsx", ".rs", ".c", ".h", ".cpp"}
-                else ArtifactType.REPORT
-                if path.suffix.casefold() in {".md", ".rst"}
-                else ArtifactType.FILE
-            )
-            artifact = ArtifactManager(registry).create(
-                artifact_type,
-                path.name,
-                location=relative.as_posix(),
-                creator="nous.workspace-agent",
-                metadata={"receipt_id": receipt.receipt_id},
-            )
-            artifact_id = artifact.id
-        from nous_runtime.workspace.workbench import DeveloperWorkbench
-
-        after_bytes = path.read_bytes() if receipt.success else before_bytes
-        change = DeveloperWorkbench.change_record(
-            path=relative.as_posix(),
-            operation="write",
-            before=before_bytes,
-            after=after_bytes,
-        )
-        return {
-            "ok": receipt.success,
-            "path": relative.as_posix(),
-            "size_bytes": len(encoded),
-            "before_sha256": before,
-            "after_sha256": hashlib.sha256(path.read_bytes()).hexdigest()
-            if receipt.success
-            else "",
-            "receipt_id": receipt.receipt_id,
-            "artifact_id": artifact_id,
-            "change": change,
-        }
+        return self._prepare_files([arguments])
 
     def _write_files(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        raw_files = arguments.get("files")
-        if not isinstance(raw_files, list) or not raw_files:
-            raise ValueError("files must be a non-empty array.")
-        if len(raw_files) > _MAX_BATCH_FILES:
-            raise ValueError(f"A batch may contain at most {_MAX_BATCH_FILES} files.")
-        prepared: list[tuple[str, str]] = []
-        total = 0
-        seen: set[str] = set()
-        for item in raw_files:
-            if not isinstance(item, Mapping):
-                raise ValueError("Each batch item must contain path and content.")
-            path = self._path(item.get("path"), allow_nonexistent=True)
-            relative = path.relative_to(self.root).as_posix()
-            if relative in {"", ".", "./"} or relative in seen:
-                raise ValueError("Batch file paths must be non-empty and unique.")
-            if relative == "workspace.json" or relative.split("/", 1)[0] in {
-                ".git",
-                ".nous",
-            }:
-                raise ValueError(
-                    "Nous internal, workspace, and Git metadata are protected."
-                )
-            content = str(item.get("content") or "")
-            size = len(content.encode("utf-8"))
-            if size > _MAX_WRITE_BYTES:
-                raise ValueError(f"{relative} exceeds the 1 MiB file limit.")
-            total += size
-            seen.add(relative)
-            prepared.append((relative, content))
-        if total > _MAX_BATCH_WRITE_BYTES:
-            raise ValueError("The batch exceeds the 2 MiB project write limit.")
+        return self._prepare_files(arguments.get("files"))
 
-        results = []
-        for relative, content in prepared:
-            result = self._write_file({"path": relative, "content": content})
-            results.append(result)
-            if not result.get("ok"):
-                return {
-                    "ok": False,
-                    "files": results,
-                    "file_count": len(results),
-                    "error": f"Failed while writing {relative}.",
+    def _prepare_files(self, files: Any) -> dict[str, Any]:
+        from nous_runtime.core.errors import ArtifactError
+        from nous_runtime.workspace.workbench import (
+            DeveloperWorkbench,
+            WorkbenchConflict,
+        )
+
+        if not isinstance(files, list) or not files:
+            raise ValueError("files must be a non-empty array.")
+        if len(files) > _MAX_BATCH_FILES:
+            raise ValueError(f"A batch may contain at most {_MAX_BATCH_FILES} files.")
+        workbench = DeveloperWorkbench(self.root)
+        prepared = []
+        with workbench.mutation_lock():
+            for item in files:
+                if not isinstance(item, Mapping):
+                    raise ValueError("Each proposed file requires path and content.")
+                target = workbench._write_target(str(item.get("path") or ""))
+                candidate = {
+                    key: item[key]
+                    for key in ("path", "content", "expected_exists", "expected_sha256")
+                    if key in item
                 }
+                candidate["path"] = target.relative_to(self.root).as_posix()
+                if "expected_sha256" not in candidate and target.is_file():
+                    version = self._read_versions.get(candidate["path"])
+                    if not version:
+                        raise WorkbenchConflict(
+                            "Read the existing file before proposing a change and bind its original SHA-256."
+                        )
+                    candidate["expected_sha256"] = version
+                prepared.append(candidate)
+        try:
+            plan_id = self.plan_id
+            if self.source_work_id:
+                from nous_runtime.work import WorkHarness
+
+                source = WorkHarness(self.root).require(self.source_work_id)
+                if (
+                    Path(source.workspace_root).resolve() != self.root
+                    or source.terminal
+                ):
+                    raise WorkbenchConflict(
+                        "Original source Work is not active in this workspace."
+                    )
+                plan_id = source.plan.plan_id if source.plan else ""
+            proposal = self._proposal_runtime().prepare(
+                prepared,
+                subject_id=self.subject_id,
+                source_work_id=self.source_work_id,
+                agent_session_id=self.agent_session_id,
+                plan_id=plan_id,
+                requested_by=str(self.authorization_context.get("subject_id") or ""),
+                source_request_id=self.source_request_id,
+            )
+        except ArtifactError:
+            return {
+                "ok": False,
+                "error": "Proposal Artifact integrity or persistence is unavailable.",
+                "error_code": "NOUS_PROPOSAL_UNAVAILABLE",
+                "execution_scope": "runtime-service",
+                "kernel_traversed": False,
+            }
         return {
-            "ok": True,
-            "files": results,
-            "changes": [dict(item.get("change") or {}) for item in results],
-            "file_count": len(results),
-            "total_size_bytes": total,
+            "ok": False,
+            "error": "Review and approve the original workspace proposal before applying it.",
+            "error_code": "NOUS_APPROVAL_REQUIRED"
+            if proposal["approval_required"]
+            else "NOUS_UNAUTHORIZED",
+            "approval_required": proposal["approval_required"],
+            "approval_request_id": proposal["approval_request_id"],
+            "proposal_id": proposal["proposal_id"],
+            "manifest_ref": proposal["manifest_ref"],
+            "artifact_ref": proposal["manifest_ref"],
+            "authorization_id": proposal["authorization_id"],
+            "proposal_hash": proposal["authorization_id"],
+            "source_work_id": proposal["source_work_id"],
+            "subject_id": proposal["subject_id"],
+            "file_count": proposal["file_count"],
+            "files": [
+                {
+                    key: item[key]
+                    for key in ("path", "before_sha256", "after_sha256", "changed")
+                }
+                for item in proposal["files"]
+            ],
+            "execution_scope": "runtime-service",
+            "kernel_traversed": False,
         }
 
     def _patch_file(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from nous_runtime.workspace import DeveloperWorkbench
+        from nous_runtime.workspace.workbench import (
+            DeveloperWorkbench,
+            WorkbenchConflict,
+        )
 
-        path = str(arguments.get("path") or "")
-        return self._workbench_effect(
-            "file_patch",
-            path,
-            {
-                "expected_sha256": str(arguments.get("expected_sha256") or ""),
-                "context_sha256": hashlib.sha256(
-                    str(arguments.get("expected") or "").encode("utf-8")
-                ).hexdigest(),
-            },
-            lambda: DeveloperWorkbench(self.root).patch_file(
-                path,
-                str(arguments.get("expected") or ""),
-                str(arguments.get("replacement") or ""),
-                expected_sha256=str(arguments.get("expected_sha256") or ""),
-            ),
+        current = DeveloperWorkbench(self.root).read_file(
+            str(arguments.get("path") or "")
+        )
+        expected_hash = arguments.get("expected_sha256") or self._read_versions.get(
+            current["path"]
+        )
+        if not expected_hash:
+            raise WorkbenchConflict(
+                "Read the existing file before proposing a patch and bind its original SHA-256."
+            )
+        if expected_hash != current["sha256"]:
+            raise WorkbenchConflict(
+                "The file changed after it was read; reload it before proposing a patch."
+            )
+        needle = str(arguments.get("expected") or "")
+        if not needle:
+            raise ValueError("Patch expected context cannot be empty.")
+        text = current["content"]
+        newline = "\r\n" if "\r\n" in text else "\n"
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        normalized_needle = needle.replace("\r\n", "\n").replace("\r", "\n")
+        replacement = (
+            str(arguments.get("replacement") or "")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+        )
+        if normalized.count(normalized_needle) != 1:
+            raise WorkbenchConflict("Patch context must match exactly once.")
+        updated = normalized.replace(normalized_needle, replacement, 1)
+        if newline == "\r\n":
+            updated = updated.replace("\n", "\r\n")
+        return self._prepare_files(
+            [
+                {
+                    "path": current["path"],
+                    "content": updated,
+                    "expected_sha256": current["sha256"],
+                    "expected_exists": True,
+                }
+            ]
         )
 
     def _make_directory(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -818,67 +858,20 @@ class WorkspaceToolRuntime:
         params: dict[str, Any],
         effect,
     ) -> dict[str, Any]:
-        action, _decision = self.gate.propose_action(
-            action_type,
-            target,
-            {**params, "attempt": self._next_effect_attempt()},
-        )
-        approval = self.gate.request_approval(
-            action, approver="explicit_workspace_request"
-        )
-        receipt = self.gate.execute(action, approval, lambda _params: effect())
-        result = dict(receipt.result or {})
+        return self._unsupported_effect()
+
+    @staticmethod
+    def _unsupported_effect() -> dict[str, Any]:
         return {
-            "ok": receipt.success and result.get("ok", True),
-            **result,
-            "receipt_id": receipt.receipt_id,
+            "ok": False,
+            "error": "This model effect has no qualified durable approval path.",
+            "error_code": "NOUS_UNSUPPORTED_GOVERNED_OPERATION",
+            "execution_scope": "runtime-service",
+            "kernel_traversed": False,
         }
 
     def _run_command(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        command = self.prepare_development_command(arguments.get("command"))
-        timeout = max(1, min(int(arguments.get("timeout_seconds") or 60), 120))
-        action, _decision = self.gate.propose_action(
-            "shell_exec",
-            command[0],
-            {
-                "arguments": command[1:],
-                "timeout_seconds": timeout,
-                "attempt": self._next_effect_attempt(),
-            },
-        )
-        approval = self.gate.request_approval(
-            action, approver="explicit_workspace_request"
-        )
-
-        def effect(_params: dict[str, Any]) -> dict[str, Any]:
-            sandbox = ExecutionSandbox(
-                SandboxConfig(
-                    workspace_root=str(self.root),
-                    allowed_commands=[Path(command[0]).name],
-                    max_runtime_seconds=timeout,
-                    max_output_bytes=_MAX_COMMAND_OUTPUT,
-                    allow_network=False,
-                    isolation_level="strict",
-                )
-            )
-            completed = sandbox.run(
-                shlex.join(command),
-                cwd=str(self.root),
-                env=self.safe_process_environment(),
-            )
-            return {
-                "exit_code": completed.returncode,
-                "stdout": completed.stdout[-_MAX_COMMAND_OUTPUT:],
-                "stderr": completed.stderr[-_MAX_COMMAND_OUTPUT:],
-            }
-
-        receipt = self.gate.execute(action, approval, effect)
-        result = dict(receipt.result or {})
-        return {
-            "ok": receipt.success and result.get("exit_code") == 0,
-            **result,
-            "receipt_id": receipt.receipt_id,
-        }
+        return self._unsupported_effect()
 
     def prepare_development_command(self, raw: Any) -> list[str]:
         """Validate and resolve one command for either shell execution path."""
@@ -1051,10 +1044,12 @@ def tool_protocol_prompt(specifications: tuple[Mapping[str, Any], ...]) -> str:
         '{"name":"tool_name","arguments":{...}} and no other text. '
         "For an existing source file, prefer patch_file with exact context from a "
         "fresh read. Use write_file primarily for new files. For a project with "
-        "several new substantial files, use one write_file call per file so each "
-        "tool request remains complete and verifiable. "
-        "After Nous returns a tool result, continue the task and use another "
-        "tool when necessary."
+        "several changed files, use propose_files to bind one reviewed group. "
+        "Read results supply the original SHA-256; never substitute a newer "
+        "file version to bypass a conflict. File tools only create proposals. "
+        "A user request and model output grant no execution authority. "
+        "When approval is required, pause and identify the original proposal; "
+        "never create another proposal to retry an uncertain effect."
     )
 
 

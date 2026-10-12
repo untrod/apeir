@@ -5,6 +5,7 @@ import {
   ApiError, approvalAction, fetchCapabilityAvailability, fetchDeveloperRuns,
   fetchRunEvents, fetchWorkbenchFile, fetchWorkbenchFiles, previewWorkbenchWrite,
   runWorkbenchProfile, setConfig, writeWorkbenchFile, fetchTrace, fetchTraceTimeline,
+  fetchWorkspaceProposals,
 } from "../lib/api";
 
 vi.mock("../lib/api", async importOriginal => ({
@@ -13,6 +14,7 @@ vi.mock("../lib/api", async importOriginal => ({
   fetchRunEvents: vi.fn(), fetchWorkbenchFile: vi.fn(), fetchWorkbenchFiles: vi.fn(),
   previewWorkbenchWrite: vi.fn(), runWorkbenchProfile: vi.fn(), writeWorkbenchFile: vi.fn(),
   fetchTrace: vi.fn(), fetchTraceTimeline: vi.fn(),
+  fetchWorkspaceProposals: vi.fn(),
 }));
 vi.mock("../components/ChatView", () => ({ ChatView: ({ workspaceFile, readOnly, onTraceClick }: { workspaceFile?: { path: string; sha256: string }; readOnly: boolean; onTraceClick: (traceId: string) => void }) =>
   <div aria-label="Collaboration contract">{readOnly ? "read_only" : "agent"}{workspaceFile && <output>{JSON.stringify(workspaceFile)}</output>}<button onClick={() => onTraceClick("trace-original")}>View recorded Trace</button></div> }));
@@ -29,6 +31,7 @@ beforeEach(() => {
   vi.mocked(fetchCapabilityAvailability).mockResolvedValue({ available: [], unavailable: [], summary: { available: 0, unavailable: 0, registered: 0 } });
   vi.mocked(fetchWorkbenchFile).mockImplementation(async path => ({ path, content: "old", sha256: before, size_bytes: 3, language: "python" }));
   vi.mocked(fetchDeveloperRuns).mockResolvedValue({ runs: [], total: 0 });
+  vi.mocked(fetchWorkspaceProposals).mockResolvedValue({ proposals: [], total: 0 });
   vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: "workbench-write-1", events: [], next_after_sequence: 0 });
   vi.mocked(previewWorkbenchWrite).mockResolvedValue(change);
   vi.mocked(writeWorkbenchFile).mockResolvedValue({ ...change, ok: true, run_id: "workbench-write-1", backup_path: "backup/a.py" });

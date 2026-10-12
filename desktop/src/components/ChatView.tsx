@@ -186,7 +186,7 @@ function RuntimeActivity({ runId, events }: { runId: string; events: RuntimeEven
 
 export function ChatView({
   conversationId, onConversationCreated, onCardClick, onTraceClick,
-  workspaceFile, readOnly = false, onClearWorkspaceFile,
+  workspaceFile, readOnly = false, onClearWorkspaceFile, onProposalCreated,
 }: {
   conversationId?: string;
   onConversationCreated?: (conversationId: string) => void;
@@ -194,6 +194,7 @@ export function ChatView({
   onTraceClick: (traceId: string) => void;
   workspaceFile?: { path: string; sha256: string; controller?: string };
   readOnly?: boolean;
+  onProposalCreated?: (proposalId: string) => void;
   onClearWorkspaceFile?: () => void;
 }) {
   // All state from EntityStore
@@ -293,6 +294,7 @@ export function ChatView({
     setStreaming(true);
     setLiveEvents([]);
     const requestId = crypto.randomUUID();
+    const originalController = getConfig().url;
     setActiveRunId(requestId);
 
     const controller = new AbortController();
@@ -318,9 +320,11 @@ export function ChatView({
         controller.signal,
         requestId,
       );
+      if (getConfig().url !== originalController) throw new Error("Controller changed; inspect the original request before continuing.");
       if (result.status === "failed") {
         throw new Error(describeRuntimeFailure(result.message || ""));
       }
+      if (result.status === "waiting_approval" && result.result?.proposal_id) onProposalCreated?.(result.result.proposal_id);
       if (result.conversation_id && result.conversation_id !== conversationId) {
         onConversationCreated?.(result.conversation_id);
       }
@@ -361,7 +365,7 @@ export function ChatView({
       setActiveRunId("");
       abortRef.current = null;
     }
-  }, [conversationId, onConversationCreated, workspaceFile, readOnly]);
+  }, [conversationId, onConversationCreated, workspaceFile, readOnly, onProposalCreated]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
