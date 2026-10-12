@@ -99,6 +99,10 @@ Reviewed workspace proposals extend the existing Workflow/Governance/CAS/Work
 owners, with exact human review and fresh file evidence. This scoped software
 slice does not qualify installed Desktop, live-model engineering, persistent PTY,
 strong-sandbox scientific execution, physical hardware or overall product PASS.
+Main `d19a22e` subsequently failed Windows Core/Multi-Arch checks. Byte-fixture
+corrections and execution-scope/admission hardening are under review; the response
+loss deadline evidence remains unresolved. See the existing engineering review
+for exact runs. Passing Linux checks alone do not make this main Gate PASS.
 
 Its October 11 product-wiring audit also distinguishes connected Runtime paths,
 corrected evidence views, configuration-only Automation endpoints and unfinished

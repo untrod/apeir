@@ -14,6 +14,7 @@ class _ExecuteGate:
     def evaluate(self, proposal, context):
         return SimpleNamespace(
             action_mode="EXECUTE",
+            allowed=True,
             reason_message="allowed",
             reason_code="TEST",
             decision_id="decision-p6",

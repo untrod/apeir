@@ -153,6 +153,13 @@ class RuntimePipeline:
             )
 
         decision = replace(decision, workspace=workspace.workspace_id)
+        # The resolver owns execution scope. Request metadata cannot retarget
+        # file tools, even when context collection is unavailable or empty.
+        request = replace(
+            request,
+            workspace=workspace.workspace_id,
+            constraints={**request.constraints, "workspace_path": workspace.path},
+        )
 
         context_snapshot = self._build_context(request, decision.intent, workspace.path)
         trace.add("context", "loaded", data=context_snapshot)
@@ -200,7 +207,7 @@ class RuntimePipeline:
                 "decision_id": governance.get("decision_id", ""),
             },
         )
-        if governance["status"] in {"DENY", "ASK_APPROVAL", "ESCALATE"}:
+        if governance["status"] != "EXECUTE":
             return self._response(
                 request,
                 trace,
@@ -478,23 +485,28 @@ class RuntimePipeline:
                 )
             )
             decision = (self.gate or get_gate()).evaluate(proposal, context)
+            mode = str(decision.action_mode)
+            if mode not in {
+                "EXECUTE",
+                "RECOMMEND",
+                "ASK_APPROVAL",
+                "ESCALATE",
+                "DENY",
+            } or (mode == "EXECUTE" and getattr(decision, "allowed", None) is not True):
+                return {
+                    "status": "DENY",
+                    "reason": "Governance did not return explicit execution admission",
+                    "decision_id": str(getattr(decision, "decision_id", "")),
+                }
             return {
-                "status": str(decision.action_mode),
+                "status": mode,
                 "reason": str(decision.reason_message or decision.reason_code),
                 "decision_id": str(decision.decision_id),
             }
         except Exception as exc:
-            from nous_runtime.governance.runtime_mode import should_fail_closed
-
-            if should_fail_closed(surface=request.governance_surface):
-                return {
-                    "status": "DENY",
-                    "reason": f"governance unavailable: {exc}",
-                    "decision_id": "",
-                }
             return {
-                "status": "EXECUTE",
-                "reason": f"governance unavailable in compatibility path: {exc}",
+                "status": "DENY",
+                "reason": f"governance unavailable: {type(exc).__name__}",
                 "decision_id": "",
             }
 

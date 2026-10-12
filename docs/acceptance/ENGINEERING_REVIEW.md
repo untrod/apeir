@@ -195,6 +195,31 @@ Its legacy batch-write test now proves no mutation before original human
 approval and verifies real admission, file observation and CAS evidence after
 approval. No deadline, isolation or process-identity assertion is relaxed.
 
+The resulting main `d19a22e876eeba66517b13f9e3e7ac06d2e1465c` retained
+Windows failures: Core **3 failed, 4304 passed, 51 skipped, 4 warnings**
+([run](https://github.com/untrod/apeir/actions/runs/38273450895)); Multi-Arch
+Windows **2 failed, 4012 passed, 51 skipped, 272 deselected, 4 warnings**
+([run](https://github.com/untrod/apeir/actions/runs/38273451016)). Two failures
+came from new fixtures using translated text writes while expecting an LF byte
+hash. Runtime correctly refused the mismatched original bytes. The correction
+uses explicit bytes and covers LF, CRLF, unchanged original CAS/backup bytes and
+rejection of a normalized digest. It does not change hashing or conflict checks.
+The remaining Core failure first timed out awaiting the lost response result;
+its final short freshness-lease assertion masked that earlier timeout. This is
+unresolved Relay timing evidence, not grounds to extend deadlines or close
+Issues #4/#8. The full main Gate is not green at this commit.
+
+A separate execution-boundary review (**REUSE / FIX**) reproduced six failures
+and one passing server-denial case: compatibility surfaces could dispatch after
+a Governance exception, and UNKNOWN, a missing/false allow flag or RECOMMEND
+could continue. Only explicit `allowed=True` plus EXECUTE now admits dispatch.
+Exceptions fail closed on every surface and report only their type. A further
+controlled file-read case read outside the resolved workspace through request
+metadata `workspace_path`. Runtime now binds tool scope to its existing resolver;
+metadata cannot retarget it. No new permission or execution system is added.
+The final local affected regression has **897 passed**; the byte-version and
+proposal/Workbench subset has **67 passed**. Required CI remains a separate Gate.
+
 The multi-file editing slice reuses the existing Workbench endpoints and keeps
 draft state within the existing component; it adds no filesystem, proposal store,
 permission or execution authority. Seven new frontend cases cover independent
