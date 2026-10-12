@@ -535,8 +535,16 @@ def test_chat_handler_retries_prose_when_governed_effect_is_required(tmp_path) -
             self.requests.append(gateway_request)
             return self.responses.pop(0)
 
+    from nous_runtime.governance import ExecutionAuthorizationGate, GovernanceStore
+    from nous_runtime.governance.cli import _build_context
+    from nous_runtime.workspace.proposals import WorkspaceProposalService
+
+    service = WorkspaceProposalService(
+        tmp_path,
+        gate=ExecutionAuthorizationGate(store=GovernanceStore(tmp_path / ".nous")),
+    )
     facade = ProseThenToolFacade()
-    result = GatewayChatHandler(facade)(
+    result = GatewayChatHandler(facade, proposal_service=service)(
         SimpleNamespace(
             request_id="effect-task",
             user_input="Create result.txt.",
@@ -549,10 +557,20 @@ def test_chat_handler_retries_prose_when_governed_effect_is_required(tmp_path) -
         {"request_id": "effect-task", "workspace": "default"},
     )
 
-    assert result["ok"] is True
-    assert (tmp_path / "result.txt").read_text(encoding="utf-8") == "done"
+    assert not result["ok"] and result["status"] == "waiting_approval"
+    assert not (tmp_path / "result.txt").exists()
+    original = service.read(result["proposal_id"])
+    assert original["subject_id"] == "agent.nous.workspace"
+    assert original["source_request_id"] == "effect-task"
+    service.broker.respond_operation(
+        result["approval_request_id"], "approve", _build_context(), gate=service.gate
+    )
+    applied = service.apply(result["proposal_id"])
+    assert applied["applied"] and applied["verification"]["verdict"] == "MATCH"
+    assert (tmp_path / "result.txt").read_text() == "done"
     assert result["agent_steps"][0]["tool"] == "write_file"
-    assert len(facade.requests) == 3
+    assert len(facade.requests) == 2
+    assert len(facade.responses) == 1
     assert (
         "rejected the prose-only response" in facade.requests[1].messages[-1]["content"]
     )

@@ -959,6 +959,41 @@ class AgentLoop:
             effect_class=effect_class,
         )
         if (
+            not ok
+            and str(normalized.get("error_code") or "") == "NOUS_APPROVAL_REQUIRED"
+            and str(normalized.get("proposal_id") or "")
+            and str(normalized.get("approval_request_id") or "")
+        ):
+            reason = (
+                "Review the original workspace proposal before its files can be applied"
+            )
+            snapshot.pending_action.update(
+                {
+                    "proposal_id": normalized["proposal_id"],
+                    "manifest_ref": normalized.get("manifest_ref", ""),
+                    "authorization_id": normalized.get("authorization_id", ""),
+                    "approval_request_id": normalized["approval_request_id"],
+                    "recovery_policy": "workspace_proposal",
+                }
+            )
+            snapshot.goal.wait_for_user(reason)
+            snapshot.state = RunState.WAITING_FOR_APPROVAL
+            snapshot.error = ""
+            snapshot.reanalysis_reason = reason
+            self.harness.checkpoint_agent(snapshot, resume=False)
+            self.harness.persist_progress(
+                snapshot,
+                "work.waiting_approval",
+                {
+                    "summary": reason,
+                    "tool": decision.tool_name,
+                    "proposal_id": normalized["proposal_id"],
+                    "approval_request_id": normalized["approval_request_id"],
+                    "automatic_replay": False,
+                },
+            )
+            return
+        if (
             decision.tool_name in {"web_search", "web_fetch"}
             and not ok
             and str(normalized.get("error_code") or "") == "NOUS_APPROVAL_REQUIRED"

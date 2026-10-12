@@ -37,7 +37,11 @@ def test_work_components_load_workspace_providers_before_gateway(tmp_path, monke
     assert components.deliberator.max_output_tokens == 1536
     tool_ids = {item["tool_id"] for item in components.tools.discover()}
     assert "run_command" not in tool_ids
-    assert "shell_start" in tool_ids
+    assert "shell_start" not in tool_ids
+    assert "propose_files" in tool_ids
+    assert not components.tools.execute(
+        "shell_start", {"command": ["python", "-m", "pytest"]}
+    )["ok"]
 
 
 def test_work_components_fall_back_to_runtime_provider_workspace(tmp_path, monkeypatch):

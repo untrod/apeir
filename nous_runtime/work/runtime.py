@@ -210,6 +210,14 @@ class WorkHarness:
             ):
                 return snapshot
             snapshot = self.require_runtime_recovery(snapshot, reason=snapshot.error)
+        if snapshot.pending_action.get("recovery_policy") == "workspace_proposal":
+            return self._resume_workspace_proposal(
+                snapshot,
+                deliberator=deliberator,
+                tools=tools,
+                verifier=verifier,
+                max_iterations=max_iterations,
+            )
         if (
             snapshot.pending_action
             and str(snapshot.pending_action.get("recovery_policy") or "")
@@ -477,6 +485,151 @@ class WorkHarness:
                 "summary": snapshot.reanalysis_reason,
                 "plan_revision": snapshot.plan.revision if snapshot.plan else 0,
             },
+        )
+
+    def _resume_workspace_proposal(
+        self, snapshot, *, deliberator, tools, verifier, max_iterations
+    ):
+        from nous_runtime.workspace.proposals import WorkspaceProposalService
+        from nous_runtime.work.loop import AgentLoop
+
+        pending = dict(snapshot.pending_action)
+        try:
+            service = WorkspaceProposalService(self.root)
+            original = service.read(str(pending.get("proposal_id") or ""))
+            if original["cancellation_requested"]:
+                snapshot.state = RunState.BLOCKED
+                snapshot.error = "Original workspace proposal was cancelled; further admission is blocked"
+                return self._persist(
+                    snapshot,
+                    "work.blocked",
+                    {"proposal_id": original["proposal_id"], "automatic_replay": False},
+                )
+            if (
+                original["source_work_id"] != snapshot.run_id
+                or original["subject_id"] != "agent.apeir.work"
+                or original["manifest_ref"] != pending.get("manifest_ref")
+                or original["authorization_id"] != pending.get("authorization_id")
+                or original["approval_request_id"] != pending.get("approval_request_id")
+                or original["plan_id"]
+                != (snapshot.plan.plan_id if snapshot.plan else "")
+            ):
+                raise ValueError("Original workspace proposal provenance differs")
+            if original["approval_status"] == "PENDING":
+                snapshot.state = RunState.WAITING_FOR_APPROVAL
+                return self._persist(
+                    snapshot,
+                    "work.waiting_approval",
+                    {"proposal_id": original["proposal_id"]},
+                )
+            # This consults the original Workflow, approval and effect journal.
+            # It never calls the model tool again to prepare a replacement.
+            result = service.apply(original["proposal_id"])
+        except Exception:
+            snapshot.state = RunState.RECOVERY_REQUIRED
+            snapshot.error = (
+                "Original workspace proposal cannot be reconciled; replay blocked"
+            )
+            return self._persist(
+                snapshot,
+                "work.recovery.required",
+                {
+                    "proposal_id": pending.get("proposal_id", ""),
+                    "automatic_replay": False,
+                },
+            )
+        verification = result.get("verification") or {}
+        if not result.get("applied") or verification.get("verdict") != "MATCH":
+            snapshot.state = (
+                RunState.RECOVERY_REQUIRED
+                if result.get("recovery_required")
+                else RunState.BLOCKED
+            )
+            snapshot.error = str(
+                result.get("error")
+                or "Original workspace proposal was not admitted or verified"
+            )
+            snapshot.reanalysis_reason = snapshot.error
+            return self._persist(
+                snapshot,
+                "work.recovery.required"
+                if snapshot.state is RunState.RECOVERY_REQUIRED
+                else "work.blocked",
+                {
+                    "proposal_id": result["proposal_id"],
+                    "authorization_id": result["authorization_id"],
+                    "verification": verification,
+                    "automatic_replay": False,
+                },
+            )
+        result["changes"] = [
+            {
+                "path": item["path"],
+                "operation": "proposal.reconciled",
+                "before_digest": "sha256:" + item["before_sha256"]
+                if item["expected_exists"]
+                else "",
+                "after_digest": "sha256:" + item["after_sha256"],
+                "changed": item["changed"],
+                "work_id": snapshot.run_id,
+                "authorization_id": result["authorization_id"],
+            }
+            for item in result["files"]
+        ]
+        snapshot.observations.append(
+            {
+                "kind": "tool",
+                "tool": pending["tool"],
+                "step_id": pending.get("step_id", ""),
+                "ok": True,
+                "action_sequence": snapshot.action_sequence,
+                "plan_revision": snapshot.plan.revision if snapshot.plan else 0,
+                "result": result,
+                "observed_at": work_timestamp(),
+                "recovered": True,
+            }
+        )
+        snapshot.observations[:] = snapshot.observations[-50:]
+        for reference in (
+            result["manifest_ref"],
+            verification.get("observation_ref"),
+            verification.get("verification_ref"),
+        ):
+            if reference and reference not in snapshot.artifacts:
+                snapshot.artifacts.append(reference)
+        AgentLoop(self)._record_task_result(
+            snapshot,
+            str(pending.get("step_id") or ""),
+            True,
+            result,
+            effect_class=str(pending.get("effect_class") or "unknown"),
+        )
+        snapshot.pending_action.clear()
+        if snapshot.goal.status.value in {"paused", "blocked", "waiting_user"}:
+            snapshot.goal.resume()
+        else:
+            snapshot.goal.start_understanding()
+        snapshot.state = RunState.RECOVERING
+        snapshot.error = ""
+        snapshot.reanalysis_reason = (
+            "Original workspace effect independently matched; continue remaining tasks"
+        )
+        self._persist(
+            snapshot,
+            "work.proposal.reconciled",
+            {
+                "proposal_id": result["proposal_id"],
+                "authorization_id": result["authorization_id"],
+                "verification": verification,
+                "automatic_replay": False,
+            },
+        )
+        return self.run(
+            snapshot.run_id,
+            deliberator=deliberator,
+            tools=tools,
+            verifier=verifier,
+            max_iterations=max_iterations,
         )
 
     def pause(self, run_id: str, *, reason: str = "") -> WorkSnapshot:

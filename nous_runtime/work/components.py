@@ -47,13 +47,18 @@ def build_work_components(
 
     tools = ToolCatalog()
     workspace_tools = WorkspaceToolRuntime(
-        str(workspace), allow_mutations=allow_mutations
+        str(workspace),
+        allow_mutations=allow_mutations,
+        subject_id="agent.apeir.work",
+        source_work_id=snapshot.run_id,
+        plan_id=snapshot.plan.plan_id if snapshot.plan else "",
     )
     tools.register_runtime(workspace_tools, excluded_tool_ids={"run_command"})
     if allow_mutations:
         tools.register_runtime(
             ProcessSessionToolRuntime(workspace_tools),
             provider_id="process-session",
+            excluded_tool_ids={"shell_start", "shell_stdin", "shell_close_stdin"},
         )
     tools.register_runtime(GitToolRuntime(workspace), provider_id="git-sandbox")
     tools.register_runtime(

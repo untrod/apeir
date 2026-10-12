@@ -289,6 +289,7 @@ export const runPrompt = (
     trace_id?: string;
     run_id?: string;
     task_promoted?: boolean;
+    result?: { proposal_id?: string; approval_request_id?: string };
   }>(
     "/api/v1/chat",
     {
@@ -664,6 +665,66 @@ export const runWorkbenchProfile = (profile: string, target: string, timeoutSeco
 
 export const fetchCapabilityAvailability = () =>
   api<CapabilityAvailability>("/api/v1/developer/capabilities");
+
+export interface WorkspaceProposalFile {
+  current_exists: boolean | null;
+  current_sha256: string;
+  path: string;
+  diff: string;
+  expected_exists: boolean;
+  before_sha256: string;
+  after_sha256: string;
+  before_ref: string;
+  after_ref: string;
+  size_bytes: number;
+  changed: boolean;
+}
+
+export interface WorkspaceProposal {
+  file_count: number;
+  total_size_bytes: number;
+  proposal_id: string;
+  title?: string;
+  state: string;
+  workflow_state: string;
+  resource_id: string;
+  work_id: string;
+  manifest_ref: string;
+  authorization_id: string;
+  approval_request_id: string;
+  approval_status: string;
+  approval_required: boolean;
+  files: WorkspaceProposalFile[];
+  verification: { verdict?: string; observation_ref?: string; verification_ref?: string };
+  execution_scope: string;
+  kernel_traversed: boolean;
+  applied: boolean;
+  recovery_required: boolean;
+  error?: string;
+}
+
+export interface WorkspaceProposalInput {
+  path: string;
+  content: string;
+  expected_sha256: string;
+  expected_exists?: boolean;
+}
+
+export const fetchWorkspaceProposals = () =>
+  api<{ proposals: WorkspaceProposal[]; total: number }>("/api/v1/developer/workspace/proposals");
+
+export const fetchWorkspaceProposal = (proposalId: string) =>
+  api<WorkspaceProposal>(`/api/v1/developer/workspace/proposals/${encodeURIComponent(proposalId)}`);
+
+export const prepareWorkspaceProposal = (files: WorkspaceProposalInput[], title: string) =>
+  api<WorkspaceProposal>("/api/v1/developer/workspace/proposals", {
+    credentials: "omit", method: "POST", body: JSON.stringify({ files, title }),
+  });
+
+export const workspaceProposalAction = (proposalId: string, action: "apply" | "reconcile") =>
+  api<WorkspaceProposal>(`/api/v1/developer/workspace/proposals/${encodeURIComponent(proposalId)}/action`, {
+    credentials: "omit", method: "POST", body: JSON.stringify({ action }),
+  });
 export interface GlobalSearchResult {
   kind: "conversation" | "file" | "artifact" | "run" | string;
   id: string;

@@ -55,9 +55,7 @@ def _pipeline(tmp_path, monkeypatch) -> RuntimePipeline:
     monkeypatch.setattr(
         pipeline,
         "_evaluate",
-        lambda request, workspace, trace, execution: {
-            "status": "evaluated"
-        },
+        lambda request, workspace, trace, execution: {"status": "evaluated"},
     )
     monkeypatch.setattr(
         pipeline,
@@ -129,14 +127,8 @@ def test_pipeline_preserves_stable_ids_and_redacts_replay_evidence(
     assert secret not in serialized
     input_entry = response.result["trace"]["entries"][0]
     assert input_entry["data"]["constraints"]["api_key"] == REDACTED
-    assert (
-        input_entry["data"]["constraints"]["credential_ref"]
-        == "env:OPENAI_API_KEY"
-    )
-    assert (
-        input_entry["data"]["authorization_context"]["access_token"]
-        == REDACTED
-    )
+    assert input_entry["data"]["constraints"]["credential_ref"] == "env:OPENAI_API_KEY"
+    assert input_entry["data"]["authorization_context"]["access_token"] == REDACTED
 
 
 class _RecoveryFacade:
@@ -182,7 +174,7 @@ class _RecoveryFacade:
         )
 
 
-def _chat_runtime(root, facade):
+def _chat_runtime(root, facade, proposal_service=None):
     from nous_runtime.chat import ChatRuntime
     from nous_runtime.connectivity.project import ProjectExecutionService
     from nous_runtime.model_runtime.bridges import GatewayChatHandler
@@ -190,7 +182,9 @@ def _chat_runtime(root, facade):
 
     orchestrator = RuntimeOrchestrator(
         workspace_root=str(root),
-        product_handlers={"chat": GatewayChatHandler(facade)},
+        product_handlers={
+            "chat": GatewayChatHandler(facade, proposal_service=proposal_service)
+        },
         gate=_ExecuteGate(),
         bootstrap=False,
     )
@@ -207,9 +201,18 @@ def test_product_chain_recovers_project_checkpoint_after_runtime_restart(
     from nous_runtime.chat import ChatRequest
 
     monkeypatch.setenv("NOUS_DATA_DIR", str(tmp_path / "data"))
+    from nous_runtime.governance import ExecutionAuthorizationGate, GovernanceStore
+    from nous_runtime.governance.cli import _build_context
+    from nous_runtime.workspace.proposals import WorkspaceProposalService
+
+    service = WorkspaceProposalService(
+        tmp_path,
+        gate=ExecutionAuthorizationGate(store=GovernanceStore(tmp_path / ".nous")),
+    )
     first_runtime = _chat_runtime(
         tmp_path,
         _RecoveryFacade(complete=False),
+        proposal_service=service,
     )
     first = first_runtime.send(
         ChatRequest(
@@ -232,6 +235,7 @@ def test_product_chain_recovers_project_checkpoint_after_runtime_restart(
     restarted_runtime = _chat_runtime(
         tmp_path,
         _RecoveryFacade(complete=True),
+        proposal_service=service,
     )
     resumed = restarted_runtime.send(
         ChatRequest(
@@ -244,17 +248,24 @@ def test_product_chain_recovers_project_checkpoint_after_runtime_restart(
     )
 
     resumed_link = resumed.data["project_execution"]
-    assistant = restarted_runtime.conversations.history(
-        first.conversation_id
-    )[-1]
+    assistant = restarted_runtime.conversations.history(first.conversation_id)[-1]
     events = EventStream(str(tmp_path)).load_events("p6-run-after-restart")
 
-    assert resumed.status == "ok"
+    assert resumed.status == "waiting_approval"
+    assert not (tmp_path / "result.txt").exists()
     assert resumed_link["resumed"] is True
-    assert resumed_link["status"] == "succeeded"
+    assert resumed_link["status"] != "succeeded"
     assert resumed_link["project_id"] == first_link["project_id"]
     assert resumed_link["work_item_id"] == first_link["work_item_id"]
     assert resumed_link["checkpoint_id"] != first_link["checkpoint_id"]
+    original = service.read(resumed.data["result"]["proposal_id"])
+    assert original["source_request_id"] == "p6-run-after-restart"
+    service.broker.respond_operation(
+        original["approval_request_id"], "approve", _build_context(), gate=service.gate
+    )
+    applied = service.apply(original["proposal_id"])
+    assert applied["applied"] and applied["verification"]["verdict"] == "MATCH"
+    assert service.artifacts.verify(applied["verification"]["observation_ref"])
     assert (tmp_path / "result.txt").read_text(encoding="utf-8") == (
         "P6 recovery completed."
     )
@@ -270,7 +281,6 @@ def test_product_chain_recovers_project_checkpoint_after_runtime_restart(
         "model.invocation.completed",
         "tool.started",
         "tool.completed",
-        "artifact.created",
-        "verification.completed",
-        "run.completed",
+        "approval.required",
+        "run.waiting_approval",
     } <= event_types

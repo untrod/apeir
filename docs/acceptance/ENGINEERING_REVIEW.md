@@ -130,6 +130,42 @@ PR and main CI remain separate prerequisites. Automation configuration consumpti
 installed Desktop, native hashes, real identity and physical hardware are not
 qualified by this correction. Kernel and the component lock remain unchanged.
 
+Reviewed multi-file changes (**REUSE / EXTEND / FIX**) now compose existing
+Workflow/Store, Governance/Broker, Work Harness/Agent execution, Artifact CAS,
+Workbench, EventStream and deterministic verification. The Desktop exposes draft
+review plus Ask/Edit collaboration. Model file tools prepare immutable proposals;
+they cannot apply files or issue approvals. Original Work resumes the exact
+paused operation after valid human approval. Partial writes remain UNKNOWN;
+complete lost responses are reconciled with fresh byte evidence, without
+another write. Deny, conflicting versions, wrong Work/Plan/authority, expiry,
+revocation, cancellation, tampered CAS and registered fake-secret leakage are
+covered. Unsafe model-facing host effect shortcuts remain blocked; this is not
+persistent Terminal qualification or a replacement executor.
+
+Focused proposal/Work/API contracts: **45 passed**, including **9 API contracts**
+and the protected real HTTP round trip. Affected model/Work/Workflow/Governance/
+Control Plane/Reality/Node regressions: **930 passed**; repository contracts:
+**267 passed**. Desktop: **135 passed in 31 files**, lint/typecheck/build pass.
+The initial implementation integration retained **10 failed, 111 passed,
+2 skipped**: eight legacy assumptions about implicit model authority and two
+unchanged bare-host orphan failures. Authority assertions now require original
+human approval or prove no launch/mutation; original process identity assertions
+remain intact. Later model integration retained **2 failed, 134 passed** before
+its fixtures were updated to review original operations rather than assume a
+model response authorized writes. The passing model/Work/file subset has
+**136 passed**. Real HTTP qualification uses a fake service token and the
+existing trusted local-human test context; it does not authenticate a remote IdP.
+
+A measured list microbenchmark used 20 pending proposals, five reads before and
+five after, and zero model calls/effects. CAS resolutions per list changed
+**100 → 60** by deferring diffs until detail inspection. These local source API
+observations are not general latency, token, billing or remote-scale claims.
+Ruff/changed-file format/compile/docs/hygiene/security/version and required CI
+remain the integration gate. Known native, strong-sandbox, account-backed model,
+physical and production blockers remain unchanged; Kernel and component lock
+are frozen. Chat project completion still requires its actual remaining checks,
+not merely file MATCH; Source-browser/HTTP checks do not certify installed EXE.
+
 The multi-file editing slice reuses the existing Workbench endpoints and keeps
 draft state within the existing component; it adds no filesystem, proposal store,
 permission or execution authority. Seven new frontend cases cover independent

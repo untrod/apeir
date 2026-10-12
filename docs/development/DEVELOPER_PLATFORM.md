@@ -114,6 +114,43 @@ only skipped tests, or missing passing-test evidence, remains unverified. Its
 own reporting contracts use a small actual child pytest suite; the full Runtime
 and security suites still run through the normal CI matrix.
 
+## Reviewing workspace changes
+
+Open **Operations → Workspace**, edit saved files, and choose **Review draft
+files**. The review uses the existing Workflow, Governance/Broker, Artifact CAS,
+Workbench and deterministic verifier. Inspect exact paths, original/replacement
+hashes and diffs. **Approve Once** uses the existing trusted human boundary;
+**Deny** changes no files. A valid approval resumes that original Workflow.
+A service permission policy may additionally be required; the feature never
+creates permission rules or grants for itself. Installation and model output
+are not execution authority.
+
+**Ask** keeps collaboration read-only. **Edit** exposes proposal tools to a
+configured, admitted model. It does not send unsaved editor contents automatically.
+The model stops at approval and records the original proposal/approval/Artifact
+IDs. Existing Work Harness checkpoints resume the original file operation after
+approval, retain Work/Plan provenance, and record fresh file observation and
+verification refs. An uncertain or partially applied write cannot re-enter the
+model's write tool. An unavailable Kernel/model remains an explicit blocker.
+
+Original bytes and replacement bytes live in CAS; Workflow inputs hold refs.
+All existing files require their original SHA-256. Protected paths, secret
+material, changed versions, expired/revoked authority and mismatched bindings
+fail closed. Lists omit diffs; opening a detail computes the full reviewed diff
+and checks its immutable artifacts. Both retain current file observations.
+
+File MATCH is a checksum result in **runtime-service** scope. It is not a test
+result, physical observation or Kernel execution. Multi-file edits are not a
+universal atomic rollback: per-file intentions precede changes, and recovery
+observes the original attempt without writing again. Cancellation fences later
+admission and remains recorded even if an earlier effect is independently found.
+A Chat project's remaining checks are not silently completed by a file MATCH.
+
+Model-facing directory/move/remove/command/process-start/control shortcuts with
+no qualified durable admission are unavailable. Existing trusted process
+lifecycle helpers and governed Workbench fixed profiles remain distinct paths;
+they do not certify a persistent PTY or an available strong sandbox.
+
 ## Model evidence
 
 Model Lab distinguishes declared capability metadata from measured execution

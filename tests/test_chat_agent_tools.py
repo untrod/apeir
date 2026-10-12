@@ -13,13 +13,30 @@ from nous_runtime.chat.agent_tools import (
     tool_protocol_prompt,
 )
 from nous_runtime.persona import nous_system_prompt
-from nous_runtime.kernel.windows_sandbox import executable_path
+from nous_runtime.governance import ExecutionAuthorizationGate, GovernanceStore
+from nous_runtime.governance.cli import _build_context
+from nous_runtime.workspace.proposals import WorkspaceProposalService
 
 
-requires_strong_sandbox = pytest.mark.skipif(
-    executable_path() is None,
-    reason="Windows Sandbox requires the post-feature-enable reboot",
-)
+@pytest.fixture
+def governed_tools(tmp_path):
+    gate = ExecutionAuthorizationGate(store=GovernanceStore(tmp_path / ".nous"))
+    service = WorkspaceProposalService(tmp_path, gate=gate)
+    runtime = WorkspaceToolRuntime(
+        str(tmp_path),
+        allow_mutations=True,
+        subject_id="agent.test.workspace",
+        proposal_service=service,
+    )
+    return runtime, service
+
+
+def apply_reviewed(service, result):
+    assert result["error_code"] == "NOUS_APPROVAL_REQUIRED"
+    service.broker.respond_operation(
+        result["approval_request_id"], "approve", _build_context(), gate=service.gate
+    )
+    return service.apply(result["proposal_id"])
 
 
 @pytest.mark.parametrize("reserved", [".nous", ".git", "nested/.NOUS"])
@@ -68,8 +85,8 @@ def test_nous_persona_hides_provider_identity(tmp_path: Path) -> None:
     assert "You are Nous" in prompt
     assert "never identify yourself as DeepSeek" in prompt
     assert str(tmp_path) in prompt
-    assert "request-scoped capabilities activated by an explicit user request" in prompt
-    assert "not as unavailable" in prompt
+    assert "cannot grant execution authority" in prompt
+    assert "current Governance admission" in prompt
 
 
 def test_nous_persona_reports_explicit_workspace_effect_authorization(
@@ -81,8 +98,8 @@ def test_nous_persona_reports_explicit_workspace_effect_authorization(
         mutation_authorized=True,
     )
 
-    assert "explicitly authorizes the supplied governed effect tools" in prompt
-    assert "create or update code/files" in prompt
+    assert "File tools prepare proposals" in prompt
+    assert "Only valid approval through Governance" in prompt
 
 
 def test_mutation_requires_an_explicit_request() -> None:
@@ -107,9 +124,11 @@ def test_mutation_requires_an_explicit_request() -> None:
     assert not mutation_is_explicit("现在不能联网吗？")
 
 
-def test_workspace_tools_list_read_search_and_write(tmp_path: Path) -> None:
+def test_workspace_tools_list_read_search_and_write(
+    tmp_path: Path, governed_tools
+) -> None:
     (tmp_path / "source.txt").write_text("alpha\nbeta\n", encoding="utf-8")
-    runtime = WorkspaceToolRuntime(str(tmp_path), allow_mutations=True)
+    runtime, service = governed_tools
 
     listed = runtime.execute("list_workspace", {"path": ".", "max_depth": 1})
     read = runtime.execute("read_file", {"path": "source.txt"})
@@ -125,18 +144,18 @@ def test_workspace_tools_list_read_search_and_write(tmp_path: Path) -> None:
     assert read["ok"] and read["content"] == "alpha\nbeta"
     assert searched["ok"] and searched["matches"][0]["line"] == 2
     assert found["ok"] and found["matches"][0]["path"] == "source.txt"
-    assert (
-        written["ok"]
-        and (tmp_path / "artifacts" / "result.txt").read_text(encoding="utf-8")
-        == "done"
-    )
-    assert written["receipt_id"].startswith("receipt-")
-    assert written["change"]["operation"] == "write"
-    assert written["change"]["after_digest"].startswith("sha256:")
+    assert not written["ok"] and not (tmp_path / "artifacts" / "result.txt").exists()
+    applied = apply_reviewed(service, written)
+    assert applied["applied"] and applied["verification"]["verdict"] == "MATCH"
+    assert (tmp_path / "artifacts" / "result.txt").read_text() == "done"
+    assert applied["authorization_id"] == written["authorization_id"]
+    assert applied["kernel_traversed"] is False
 
 
-def test_workspace_tools_batch_write_project_files(tmp_path: Path) -> None:
-    runtime = WorkspaceToolRuntime(str(tmp_path), allow_mutations=True)
+def test_workspace_tools_batch_write_project_files(
+    tmp_path: Path, governed_tools
+) -> None:
+    runtime, service = governed_tools
     written = runtime.execute(
         "write_files",
         {
@@ -147,17 +166,22 @@ def test_workspace_tools_batch_write_project_files(tmp_path: Path) -> None:
         },
     )
 
-    assert written["ok"]
+    assert not written["ok"]
+    assert not (tmp_path / "sample" / "main.py").exists()
+    applied = apply_reviewed(service, written)
+    assert applied["applied"] and applied["verification"]["verdict"] == "MATCH"
     assert written["file_count"] == 2
     assert (tmp_path / "sample" / "main.py").is_file()
 
 
 def test_workspace_tools_patch_mkdir_move_and_remove_with_change_records(
     tmp_path: Path,
+    governed_tools,
 ) -> None:
     target = tmp_path / "source.txt"
     target.write_text("before\n", encoding="utf-8")
-    runtime = WorkspaceToolRuntime(str(tmp_path), allow_mutations=True)
+    runtime, service = governed_tools
+    runtime.execute("read_file", {"path": "source.txt"})
 
     patched = runtime.execute(
         "patch_file",
@@ -170,14 +194,15 @@ def test_workspace_tools_patch_mkdir_move_and_remove_with_change_records(
     )
     removed = runtime.execute("remove_path", {"path": "archive/source.txt"})
 
-    assert patched["ok"] is True
-    assert patched["change"]["operation"] == "patch"
-    assert patched["receipt_id"].startswith("receipt-")
-    assert made["ok"] is True
-    assert moved["ok"] is True
-    assert removed["ok"] is True
-    assert not (tmp_path / "archive" / "source.txt").exists()
-    assert (tmp_path / removed["backup_path"]).is_file()
+    assert not patched["ok"] and target.read_text() == "before\n"
+    assert all(
+        not result["ok"]
+        and result["error_code"] == "NOUS_UNSUPPORTED_GOVERNED_OPERATION"
+        for result in (made, moved, removed)
+    )
+    assert not (tmp_path / "archive").exists()
+    assert apply_reviewed(service, patched)["applied"]
+    assert target.read_text() == "after\n"
 
 
 def test_workspace_patch_fails_closed_on_stale_or_ambiguous_context(
@@ -230,7 +255,6 @@ def test_workspace_command_rejects_shell_operators_and_absolute_paths(
     assert not escaped["ok"]
 
 
-@requires_strong_sandbox
 def test_workspace_command_resolves_executable_before_strict_sandbox(
     tmp_path: Path,
     monkeypatch,
@@ -245,11 +269,11 @@ def test_workspace_command_resolves_executable_before_strict_sandbox(
         {"command": ["python", "-m", "compileall", "-q", "sample.py"]},
     )
 
-    assert result["ok"] is True
-    assert result["exit_code"] == 0
+    assert result["ok"] is False
+    assert result["error_code"] == "NOUS_UNSUPPORTED_GOVERNED_OPERATION"
+    assert not (tmp_path / "__pycache__").exists()
 
 
-@requires_strong_sandbox
 def test_workspace_command_can_be_rerun_after_a_workspace_repair(
     tmp_path: Path,
     monkeypatch,
@@ -263,9 +287,13 @@ def test_workspace_command_can_be_rerun_after_a_workspace_repair(
     first = runtime.execute("run_command", command)
     second = runtime.execute("run_command", command)
 
-    assert first["ok"] is True
-    assert second["ok"] is True
-    assert first["receipt_id"] != second["receipt_id"]
+    assert first["ok"] is False and second["ok"] is False
+    assert (
+        first["error_code"]
+        == second["error_code"]
+        == "NOUS_UNSUPPORTED_GOVERNED_OPERATION"
+    )
+    assert not (tmp_path / "__pycache__").exists()
 
 
 def test_batch_write_rejects_workspace_root_as_a_file(tmp_path: Path) -> None:
@@ -277,7 +305,9 @@ def test_batch_write_rejects_workspace_root_as_a_file(tmp_path: Path) -> None:
     )
 
     assert result["ok"] is False
-    assert "unique" in result["error"].lower()
+    assert "cannot be written" in result["error"].lower()
+    assert tmp_path.is_dir()
+    assert not any(path.is_file() for path in tmp_path.iterdir())
 
 
 def test_text_tool_protocol_is_bounded_to_declared_tools(tmp_path: Path) -> None:

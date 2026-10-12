@@ -8,14 +8,17 @@ import os
 import shutil
 import sys
 import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
+from functools import wraps
 from typing import Any, Iterable
 from uuid import uuid4
 
 from nous_runtime.capability.sandbox import run_process_strict
 from nous_runtime.events import EventStream, RunEvent, RunState
+from nous_runtime.locking import file_lock, runtime_locks
 from nous_runtime.workspace.isolation import normalize_workspace_path
 
 _MAX_READ_BYTES = 512 * 1024
@@ -78,6 +81,15 @@ class WorkbenchConflict(WorkbenchError):
     """The file changed after the caller read or previewed it."""
 
 
+def _mutation_locked(method):
+    @wraps(method)
+    def locked(self, *args, **kwargs):
+        with self.mutation_lock():
+            return method(self, *args, **kwargs)
+
+    return locked
+
+
 @dataclass(frozen=True)
 class FileChange:
     """Stable projection of one governed workspace mutation."""
@@ -122,6 +134,20 @@ class DeveloperWorkbench:
                 "The active workspace does not exist or is not a directory."
             )
         self.events = EventStream(str(self.root))
+
+    @contextmanager
+    def mutation_lock(self):
+        """Serialize cooperating Runtime mutations; external editors do not lock."""
+        lock_path = self.root / ".nous" / "locks" / "workbench.lock"
+        if not lock_path.resolve().is_relative_to(self.root):
+            raise WorkbenchError("Runtime lock directory escapes the workspace.")
+        with (
+            runtime_locks.acquire(
+                "workspace:" + str(self.root), owner="developer.workbench", timeout=5
+            ),
+            file_lock(lock_path),
+        ):
+            yield
 
     @staticmethod
     def profiles() -> list[dict[str, Any]]:
@@ -266,13 +292,14 @@ class DeveloperWorkbench:
         return {
             "path": relative,
             "exists": target.is_file(),
-            "changed": before != encoded,
+            "changed": not target.is_file() or before != encoded,
             "before_sha256": before_hash,
             "after_sha256": hashlib.sha256(encoded).hexdigest(),
             "size_bytes": len(encoded),
             "diff": diff,
         }
 
+    @_mutation_locked
     def write_file(
         self, path: str, content: str, *, expected_sha256: str = ""
     ) -> dict[str, Any]:
@@ -283,6 +310,7 @@ class DeveloperWorkbench:
             operation="write",
         )
 
+    @_mutation_locked
     def patch_file(
         self,
         path: str,
@@ -322,6 +350,7 @@ class DeveloperWorkbench:
             operation="patch",
         )
 
+    @_mutation_locked
     def make_directory(self, path: str) -> dict[str, Any]:
         target = self._mutation_target(path, allow_root=False)
         run_id = self._new_run_id("mkdir")
@@ -353,6 +382,7 @@ class DeveloperWorkbench:
             )
             raise
 
+    @_mutation_locked
     def move_path(self, source: str, destination: str) -> dict[str, Any]:
         origin = self._mutation_target(source, require_exists=True, allow_root=False)
         target = self._mutation_target(destination, allow_root=False)
@@ -388,6 +418,7 @@ class DeveloperWorkbench:
             )
             raise
 
+    @_mutation_locked
     def remove_path(self, path: str) -> dict[str, Any]:
         target = self._mutation_target(path, require_exists=True, allow_root=False)
         relative = self._relative(target)
@@ -529,6 +560,7 @@ class DeveloperWorkbench:
             )
             raise
 
+    @_mutation_locked
     def run_profile(
         self, profile: str, *, target: str = "", timeout_seconds: int = 60
     ) -> dict[str, Any]:
