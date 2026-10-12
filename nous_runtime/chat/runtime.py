@@ -80,8 +80,7 @@ class ChatRuntime:
             )
             if conversation is None:
                 raise PermissionError(
-                    "conversation is unavailable in this workspace "
-                    "and owner scope"
+                    "conversation is unavailable in this workspace and owner scope"
                 )
         else:
             conversation = self.conversations.create(
@@ -101,8 +100,7 @@ class ChatRuntime:
         )
         if intent == ChatIntent.APPROVAL_RESPONSE:
             message = (
-                "Approval responses require an authenticated approval "
-                "control path."
+                "Approval responses require an authenticated approval control path."
             )
             self.conversations.append(
                 ConversationMessage(
@@ -123,11 +121,16 @@ class ChatRuntime:
                 requires_trusted_approval=True,
             )
         context = self.conversations.context_window(conversation_id)
-        agent_mode = request.agent_mode if request.agent_mode in {
-            "agent",
-            "read_only",
-            "chat",
-        } else "agent"
+        agent_mode = (
+            request.agent_mode
+            if request.agent_mode
+            in {
+                "agent",
+                "read_only",
+                "chat",
+            }
+            else "agent"
+        )
         promoted = intent in {
             ChatIntent.CODE_TASK,
             ChatIntent.WORKFLOW_REQUEST,
@@ -139,11 +142,14 @@ class ChatRuntime:
         )
         runtime_request = RuntimeRequest(
             request.text,
-            workspace=request.workspace_id,
+            # Conversation namespaces are not filesystem workspace selectors.
+            # The trusted ChatRuntime/Orchestrator root owns execution scope.
+            workspace="",
             session=conversation_id,
             user_id=request.owner_id,
             constraints={
                 "product_capability": "chat",
+                "conversation_workspace_id": request.workspace_id,
                 "chat_intent": intent.value,
                 "conversation_summary": context["summary"],
                 "conversation_message_ids": [
@@ -160,8 +166,7 @@ class ChatRuntime:
                 "workspace_path": self.root,
                 "agent_mode": agent_mode,
                 "mutation_authorized": (
-                    agent_mode == "agent"
-                    and mutation_is_explicit(request.text)
+                    agent_mode == "agent" and mutation_is_explicit(request.text)
                 ),
                 "workload_profile": workload_profile,
             },
@@ -264,9 +269,7 @@ class ChatRuntime:
 
         target_node = str(authorization_context.get("target_node") or "")
         default_lanes = (
-            4
-            if intent in {ChatIntent.CODE_TASK, ChatIntent.WORKFLOW_REQUEST}
-            else 1
+            4 if intent in {ChatIntent.CODE_TASK, ChatIntent.WORKFLOW_REQUEST} else 1
         )
         raw_lanes = authorization_context.get(
             "max_parallel_lanes",
