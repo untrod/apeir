@@ -61,6 +61,26 @@ and component lock are unchanged. These results cover the guard contract; they
 do not establish complete context-pipeline wiring, real IdP qualification or
 native binary integrity. Required PR/main CI is a separate integration gate.
 
+PR #47 passed Core, Desktop and Security CI; its full Linux regression had
+**4194 passed, 49 skipped, 4 warnings**. Merge
+`999c36f51afcaadba4065aafa1e3de39d2a1f905` subsequently exposed a Windows
+timeout in the pre-existing `TestValidator` reporting test, which launched the
+entire Context directory under the outer test's unchanged 60-second deadline.
+The [failed main run](https://github.com/untrod/apeir/actions/runs/38204677255)
+is retained. That log identifies the waiting child, not its exact internal slow
+test; the main Gate must not be represented as green.
+
+The corrective reporting test uses a real bounded pytest fixture with passing,
+skipped, failing and collection-error cases, and strengthens evidence assertions.
+All Context/security tests remain in the ordinary full CI suite. No timeout or
+assertion is relaxed. The existing validator now counts outcome fields instead
+of duration digits, and an all-skipped result cannot claim test success. Local
+Context/evaluation/repository regressions have **590 passed**. The original
+reporting case took **3.87 s** locally with the full Context directory; the
+focused child case took **0.26 s**. These are individual test observations, not
+a claim about total CI savings, model cost or Windows qualification. Corrected
+PR and main CI remain required.
+
 The multi-file editing slice reuses the existing Workbench endpoints and keeps
 draft state within the existing component; it adds no filesystem, proposal store,
 permission or execution authority. Seven new frontend cases cover independent

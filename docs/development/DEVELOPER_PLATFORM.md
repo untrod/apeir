@@ -108,6 +108,12 @@ missing. Result summaries are stored under the active workspace at:
 
 Raw credentials and provider secrets are not part of an experiment record.
 
+The existing `TestValidator` reports counts from pytest outcome fields. Runtime
+duration and warning counts are not executed test counts. A zero exit code with
+only skipped tests, or missing passing-test evidence, remains unverified. Its
+own reporting contracts use a small actual child pytest suite; the full Runtime
+and security suites still run through the normal CI matrix.
+
 ## Model evidence
 
 Model Lab distinguishes declared capability metadata from measured execution
