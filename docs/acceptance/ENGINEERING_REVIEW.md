@@ -286,10 +286,14 @@ secret-filtering, checksum, identity and between-call revocation cases retain
 fail-closed evidence. This is a software input boundary, not authenticated live
 model, native Desktop or physical qualification. The expanded Context/Runtime/
 Governance/model/Agent/Work/Control Plane/Chat/proposal regressions have **1015
-passed**. Repository contracts have **274 passed**. Ruff, changed-file format,
+passed**. The final local repository contracts have **276 passed**. Ruff, changed-file format,
 compile, 235 Markdown links, document/comment/identity/git hygiene, eight version
 manifests and security (**0 HIGH / 3 unchanged MEDIUM**) pass locally. Required
 PR and resulting main checks remain separate integration evidence.
+An installed editable `apeir runtime run status --json` in a fresh temporary
+workspace exits zero and records the actual project context and private Context
+audit location. It makes no model call and does not qualify Kernel/native health
+or a physical effect.
 
 Local candidate validation: **19 focused / 819 affected / 262 repository tests
 passed**, **110 Desktop tests in 29 files passed**, lint/typecheck/build,
