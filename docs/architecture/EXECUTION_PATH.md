@@ -101,6 +101,15 @@ executed again merely because an approval/grant remains valid. See
 
 ## Product execution projection
 
+RuntimePipeline dispatch requires the existing Gate to return both EXECUTE and
+`allowed=True`. RECOMMEND, UNKNOWN, invalid decisions and unavailable Governance
+cannot invoke a product handler, including on preview/CLI surfaces. The existing
+workspace resolver binds file-tool scope before dispatch; request metadata
+`workspace_path` cannot replace the resolved resource. Handler registration and
+an admitted model call still grant no authority for downstream effects.
+The Runtime HTTP entry initializes that Orchestrator with the configured host
+root; a public selector remains subject to the same resolver boundary.
+
 The Python product Runtime currently projects complex interactive requests
 into the durable ProjectStore while the request itself follows the canonical
 Runtime Pipeline and Model Gateway. The projection owns conversation-to-project

@@ -1326,7 +1326,12 @@ def handle_runtime_run(
         text = str(body.get("user_input") or body.get("text") or "")
         if not text.strip():
             return err_response("NOUS_INVALID_REQUEST", "user_input is required")
-        response = RuntimeOrchestrator().run(
+        root = (
+            Path(os.environ.get("NOUS_WORKSPACE_ROOT") or Path.cwd())
+            .expanduser()
+            .resolve()
+        )
+        response = RuntimeOrchestrator(workspace_root=str(root)).run(
             RuntimeRequest(
                 text,
                 workspace=str(body.get("workspace") or ""),

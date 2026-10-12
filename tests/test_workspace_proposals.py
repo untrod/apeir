@@ -122,15 +122,18 @@ def test_registered_secret_never_enters_proposal_content_artifacts(service):
             assert fake_material.encode() not in path.read_bytes()
 
 
-def test_listing_defers_diffs_but_still_verifies_artifact_bytes(service, monkeypatch):
-    (service.root / "first.txt").write_text("original\n")
+@pytest.mark.parametrize("before", [b"original\n", b"original\r\n"])
+def test_listing_defers_diffs_but_still_verifies_artifact_bytes(
+    service, monkeypatch, before
+):
+    (service.root / "first.txt").write_bytes(before)
     proposal = prepare(
         service,
         files=[
             {
                 "path": "first.txt",
                 "content": "after\n",
-                "expected_sha256": hashlib.sha256(b"original\n").hexdigest(),
+                "expected_sha256": hashlib.sha256(before).hexdigest(),
             }
         ],
     )
@@ -152,23 +155,23 @@ def test_listing_defers_diffs_but_still_verifies_artifact_bytes(service, monkeyp
         service.list()
 
 
-def test_review_original_bytes_and_restart_use_existing_durable_owners(service):
-    before = "original\n"
-    (service.root / "first.txt").write_text(before)
+@pytest.mark.parametrize("before", [b"original\n", b"original\r\n"])
+def test_review_original_bytes_and_restart_use_existing_durable_owners(service, before):
+    (service.root / "first.txt").write_bytes(before)
     proposal = prepare(
         service,
         files=[
             {
                 "path": "first.txt",
                 "content": " first replacement\n ",
-                "expected_sha256": hashlib.sha256(before.encode()).hexdigest(),
+                "expected_sha256": hashlib.sha256(before).hexdigest(),
             },
             {"path": "empty.txt", "content": "", "expected_exists": False},
         ],
     )
     assert proposal["workflow_state"] == "waiting_approval"
     assert proposal["state"] == "PROPOSED" and proposal["approval_required"]
-    assert (service.root / "first.txt").read_text() == before
+    assert (service.root / "first.txt").read_bytes() == before
     assert not (service.root / "empty.txt").exists()
     assert proposal["files"][0]["before_ref"].startswith("sha256:")
     assert "-original" in proposal["files"][0]["diff"]
@@ -183,7 +186,7 @@ def test_review_original_bytes_and_restart_use_existing_durable_owners(service):
     assert applied["workflow_state"] == "completed"
     assert (service.root / "first.txt").read_bytes() == b" first replacement\n "
     assert (service.root / "empty.txt").is_file()
-    assert (service.root / applied["files"][0]["backup_path"]).read_text() == before
+    assert (service.root / applied["files"][0]["backup_path"]).read_bytes() == before
     verification = applied["verification"]
     assert verification["verdict"] == "MATCH"
     assert verification["deterministic"]["checks_run"] == 1
@@ -237,6 +240,26 @@ def test_stale_later_file_preflight_prevents_every_replacement(service):
     assert result["state"] == "CONFLICT" and not result["ok"]
     assert not (service.root / "first.txt").exists()
     assert (service.root / "second.txt").read_text() == "outside editor"
+    assert consumed(service) == 0
+
+
+def test_normalized_line_endings_cannot_substitute_for_original_byte_version(service):
+    before = b"original\r\n"
+    target = service.root / "first.txt"
+    target.write_bytes(before)
+    with pytest.raises(WorkbenchConflict):
+        prepare(
+            service,
+            files=[
+                {
+                    "path": "first.txt",
+                    "content": "after\n",
+                    "expected_sha256": hashlib.sha256(b"original\n").hexdigest(),
+                }
+            ],
+        )
+    assert target.read_bytes() == before
+    assert service.list()["total"] == 0
     assert consumed(service) == 0
 
 
