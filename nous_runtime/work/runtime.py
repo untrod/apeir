@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -23,6 +24,7 @@ from nous_runtime.events import EventStream, RunEvent, RunState
 from nous_runtime.execution import ExecutionContext
 from nous_runtime.intelligence.planning import TaskPlanner
 from nous_runtime.intelligence.task import TaskAnalysis, TaskAnalyzer
+from nous_runtime.locking import file_lock
 from nous_runtime.planner import Goal, Plan
 from nous_runtime.planner.plan import PlanStatus, Task
 from nous_runtime.task import Task as RuntimeTask
@@ -524,6 +526,11 @@ class WorkHarness:
                 )
             # This consults the original Workflow, approval and effect journal.
             # It never calls the model tool again to prepare a replacement.
+            if snapshot.state is RunState.PAUSED:
+                snapshot.state = RunState.WAITING_FOR_APPROVAL
+                self._persist(
+                    snapshot, "work.resumed", {"proposal_id": original["proposal_id"]}
+                )
             result = service.apply(original["proposal_id"])
         except Exception:
             snapshot.state = RunState.RECOVERY_REQUIRED
@@ -652,11 +659,21 @@ class WorkHarness:
         snapshot.goal.cancel()
         snapshot.state = RunState.CANCELLED
         snapshot.error = str(reason or "cancelled by user")
-        return self._persist(
+        cancelled = self._persist(
             snapshot,
             "run.cancelled",
             {"reason": snapshot.error},
         )
+        if snapshot.pending_action.get("recovery_policy") == "workspace_proposal":
+            from nous_runtime.workflow import WorkflowRuntime
+
+            proposal_id = str(snapshot.pending_action.get("proposal_id") or "")
+            if proposal_id:
+                # Existing Workflow cancellation remains independently writable
+                # while an apply handler holds its execution lock. Effects that
+                # already happened remain evidence, not an automatic rollback.
+                WorkflowRuntime(str(self.root)).cancel(proposal_id)
+        return cancelled
 
     def fail(self, run_id: str, *, reason: str) -> WorkSnapshot:
         snapshot = self.require(run_id)
@@ -967,6 +984,26 @@ class WorkHarness:
         return snapshot
 
     def _save_snapshot(self, snapshot: WorkSnapshot) -> WorkSnapshot:
+        key = hashlib.sha256(snapshot.run_id.encode("utf-8")).hexdigest()
+        with file_lock(self.root / ".nous" / f"work-checkpoint-{key}.lock"):
+            try:
+                latest = self.require(snapshot.run_id)
+            except KeyError:
+                latest = None
+            if latest is not None:
+                snapshot.checkpoint_sequence = max(
+                    snapshot.checkpoint_sequence, latest.checkpoint_sequence
+                )
+                if latest.state is RunState.CANCELLED:
+                    # A late tool/checkpoint result cannot revive a cancelled
+                    # Work. Preserve new evidence, but fence future admission.
+                    snapshot.state = RunState.CANCELLED
+                    snapshot.goal = latest.goal
+                    snapshot.error = latest.error
+                    snapshot.reanalysis_reason = latest.reanalysis_reason
+            return self._save_snapshot_locked(snapshot)
+
+    def _save_snapshot_locked(self, snapshot: WorkSnapshot) -> WorkSnapshot:
         snapshot.updated_at = work_timestamp()
         snapshot.checkpoint_sequence += 1
         provisional = Checkpoint(

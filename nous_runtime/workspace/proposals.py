@@ -15,7 +15,12 @@ from uuid import uuid4
 from nous_runtime.artifact import ArtifactType
 from nous_runtime.artifact.content_store import ContentAddressedArtifactStore
 from nous_runtime.core.redaction import redact_sensitive_data, redact_sensitive_text
-from nous_runtime.governance import GovernanceDecision, GovernanceRequest, get_gate
+from nous_runtime.governance import (
+    GovernanceDecision,
+    GovernanceRequest,
+    GovernanceStore,
+    get_gate,
+)
 from nous_runtime.governance.broker import ApprovalBroker
 from nous_runtime.governance.operation_contracts import GovernanceApprovalRequired
 from nous_runtime.verification.deterministic import DeterministicVerifier
@@ -72,7 +77,11 @@ class WorkspaceProposalService:
         self.workbench = DeveloperWorkbench(workspace_root)
         self.root = self.workbench.root
         self.resource_id = "workspace:" + _digest(str(self.root).encode("utf-8"))
-        self.gate = gate if gate is not None else get_gate()
+        self.gate = (
+            gate
+            if gate is not None
+            else get_gate(store=GovernanceStore(self.root / ".nous"))
+        )
         if (
             Path(self.gate.store.db_path).resolve()
             != (self.root / ".nous" / "governance.db").resolve()
@@ -351,6 +360,13 @@ class WorkspaceProposalService:
                         "approval_request_id": pending.request_id,
                     }
                 )
+            if not self._source_work_admitted(manifest, run.run_id):
+                journal.update(
+                    state="blocked",
+                    error="Original source Work is not admitted; resume it explicitly before file execution.",
+                )
+                self._save(run.run_id, journal)
+                raise WorkbenchError(journal["error"])
             try:
                 self._preflight(manifest)
             except (WorkbenchError, OSError) as exc:
@@ -365,6 +381,8 @@ class WorkspaceProposalService:
                 try:
                     current_run = self.store.get_run(run.run_id)
                     if current_run is None or current_run.cancellation_requested:
+                        return False
+                    if not self._source_work_admitted(manifest, run.run_id):
                         return False
                     for index, item in enumerate(manifest["files"]):
                         observed = self._observe(item["path"])
@@ -442,6 +460,34 @@ class WorkspaceProposalService:
         if run.inputs.get("workspace_resource") != self.resource_id:
             raise WorkbenchError("Proposal belongs to a different workspace.")
         return run
+
+    def _source_work_admitted(self, manifest, proposal_id):
+        """Recheck the original Work checkpoint at every file admission.
+
+        A valid approval does not undo cancellation, pause or a changed original
+        Work binding. Dispatched attempts bypass this check only to observe and
+        reconcile already recorded effects, never to write again.
+        """
+        if not manifest["source_work_id"]:
+            return True
+        from nous_runtime.events import RunState
+        from nous_runtime.work import WorkHarness
+
+        try:
+            if not (self.root / ".nous" / "checkpoints.db").is_file():
+                return False
+            source = WorkHarness(self.root).require(manifest["source_work_id"])
+            return (
+                source.state is RunState.WAITING_FOR_APPROVAL
+                and Path(source.workspace_root).resolve() == self.root
+                and (source.plan.plan_id if source.plan else "") == manifest["plan_id"]
+                and source.pending_action.get("recovery_policy") == "workspace_proposal"
+                and source.pending_action.get("proposal_id") == proposal_id
+                and source.pending_action.get("manifest_ref")
+                == self._run(proposal_id).inputs["manifest_ref"]
+            )
+        except (KeyError, OSError, TypeError, ValueError):
+            return False
 
     def _manifest(self, run):
         ref = run.inputs.get("manifest_ref")

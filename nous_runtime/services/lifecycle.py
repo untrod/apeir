@@ -25,12 +25,33 @@ def enable_demo_mode() -> None:
 
 def seed_capabilities() -> int:
     from nous_runtime.compat.capability import (
+        get_capability,
+        register_capability,
         seed_composed_capabilities,
         seed_default_capabilities,
     )
 
     seed_default_capabilities()
     seed_composed_capabilities()
+    # Declare this existing Runtime reader in the same registry. A capability
+    # declaration is not a workspace permission or an execution grant, and an
+    # existing deployment's capability metadata must not be overwritten here.
+    if get_capability("project.read_file") is None:
+        register_capability(
+            "project.read_file",
+            category="software",
+            provider="nous",
+            description="Inspect admitted workspace files and proposal evidence",
+            risk="low",
+            max_retries=0,
+            requires_auth=False,
+            side_effect_class="read_only",
+            reversibility="reversible",
+            model_uncertainty=0.0,
+            idempotent=True,
+            locality="local",
+            metadata={"service": "nous_runtime.workspace.workbench:DeveloperWorkbench"},
+        )
     return count_capabilities()
 
 
@@ -118,7 +139,9 @@ def count_automation_rules() -> int:
         return 0
 
 
-def _seed_automation(register_handler: Callable[[str, Callable[..., Any], str], Any]) -> None:
+def _seed_automation(
+    register_handler: Callable[[str, Callable[..., Any], str], Any],
+) -> None:
     from nous_runtime.compat.automation import evaluate_event, seed_default_rules
 
     seed_default_rules()

@@ -52,7 +52,12 @@ class GovernanceStore:
         if workspace_path:
             self.db_path = str(Path(workspace_path) / "governance.db")
         else:
-            self.db_path = str(Path(os.getcwd()) / ".nous" / "governance.db")
+            root = (
+                Path(os.environ.get("NOUS_WORKSPACE_ROOT") or os.getcwd())
+                .expanduser()
+                .resolve()
+            )
+            self.db_path = str(root / ".nous" / "governance.db")
         self._lock = threading.RLock()
         self._ensure_tables()
 

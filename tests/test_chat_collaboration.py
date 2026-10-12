@@ -88,7 +88,10 @@ def test_collaboration_uses_manager_parallel_workers_and_reviewer() -> None:
         "deepseek/deepseek-chat"
     }
     assert review["approved"] is True
-    assert sum(call.execution.agent_id.startswith("nous.worker") for call in facade.calls) == 4
+    assert (
+        sum(call.execution.agent_id.startswith("nous.worker") for call in facade.calls)
+        == 4
+    )
     assert any(kind == "collaboration.prepared" for kind, _ in events)
     assert any(kind == "review.completed" for kind, _ in events)
 
@@ -148,7 +151,17 @@ def test_reviewer_accepts_a_failed_test_superseded_by_a_passing_test() -> None:
 
 
 def test_batch_project_write_is_guarded_and_audited(tmp_path: Path) -> None:
-    runtime = WorkspaceToolRuntime(str(tmp_path), allow_mutations=True)
+    from nous_runtime.governance import ExecutionAuthorizationGate, GovernanceStore
+    from nous_runtime.governance.cli import _build_context
+    from nous_runtime.workspace.proposals import WorkspaceProposalService
+
+    service = WorkspaceProposalService(
+        tmp_path,
+        gate=ExecutionAuthorizationGate(store=GovernanceStore(tmp_path / ".nous")),
+    )
+    runtime = WorkspaceToolRuntime(
+        str(tmp_path), allow_mutations=True, proposal_service=service
+    )
     result = runtime.execute(
         "write_files",
         {
@@ -160,9 +173,21 @@ def test_batch_project_write_is_guarded_and_audited(tmp_path: Path) -> None:
         },
     )
 
-    assert result["ok"] is True
+    assert result["ok"] is False
+    assert result["error_code"] == "NOUS_APPROVAL_REQUIRED"
     assert result["file_count"] == 3
-    assert all(item["receipt_id"].startswith("receipt-") for item in result["files"])
+    assert not (tmp_path / "project" / "app.py").exists()
+    original = service.read(result["proposal_id"])
+    assert original["manifest_ref"] == result["manifest_ref"]
+    service.broker.respond_operation(
+        original["approval_request_id"], "approve", _build_context(), gate=service.gate
+    )
+    applied = service.apply(original["proposal_id"])
+    assert applied["applied"] and applied["verification"]["verdict"] == "MATCH"
+    assert applied["authorization_id"] == result["authorization_id"]
+    assert applied["verification"]["admission_recorded"] is True
+    assert applied["verification"]["observation_ref"]
+    assert applied["verification"]["verification_ref"]
     assert (tmp_path / "project" / "app.py").is_file()
 
 

@@ -15,19 +15,11 @@ from nous_runtime.workspace.proposals import WorkspaceProposalService
 
 @pytest.fixture
 def api(tmp_path, monkeypatch):
-    from nous_runtime.compat.capability import register_capability
+    from nous_runtime.services.lifecycle import seed_capabilities
 
     monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("NOUS_DATA_DIR", str(tmp_path / "capability-data"))
-    assert register_capability(
-        "project.read_file",
-        category="software",
-        executor_type="runtime",
-        side_effect_class="read_only",
-        reversibility="reversible",
-        idempotent=True,
-        model_uncertainty=0.0,
-    )
+    assert seed_capabilities() > 0
     gate = ExecutionAuthorizationGate(
         store=GovernanceStore(tmp_path / ".nous"),
         permission_engine=PermissionEngine(

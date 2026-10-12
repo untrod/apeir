@@ -41,7 +41,6 @@ def prepare(service, *, files=None):
             {"path": "second.txt", "content": "second replacement\n"},
         ],
         subject_id="workspace-test-agent",
-        source_work_id="work-original-model-request",
     )
 
 
@@ -56,6 +55,53 @@ def consumed(service):
         return db.execute(
             "SELECT COUNT(*) FROM governance_lease_consumption"
         ).fetchone()[0]
+
+
+def test_explicit_workspace_initializes_one_authority_outside_cwd(
+    tmp_path, monkeypatch
+):
+    from nous_runtime.governance import get_gate
+
+    outside = tmp_path / "outside"
+    selected = tmp_path / "selected"
+    outside.mkdir()
+    selected.mkdir()
+    monkeypatch.chdir(outside)
+    monkeypatch.delenv("NOUS_WORKSPACE_ROOT", raising=False)
+    monkeypatch.setattr("nous_runtime.governance.gate._gate_instance", None)
+    original = WorkspaceProposalService(selected)
+    assert (
+        Path(get_gate().store.db_path).resolve() == selected / ".nous" / "governance.db"
+    )
+    assert original.gate is get_gate()
+    proposal = prepare(original)
+    approve(original, proposal)
+    assert original.apply(proposal["proposal_id"])["applied"]
+    assert not (outside / ".nous" / "governance.db").exists()
+
+
+def test_existing_authority_cannot_be_silently_retargeted(
+    service, tmp_path, monkeypatch
+):
+    monkeypatch.setattr("nous_runtime.governance.gate._gate_instance", service.gate)
+    other = tmp_path / "other"
+    other.mkdir()
+    with pytest.raises(ValueError, match="another workspace"):
+        WorkspaceProposalService(other)
+    assert (
+        service.gate
+        is __import__("nous_runtime.governance", fromlist=["get_gate"]).get_gate()
+    )
+
+
+def test_default_governance_store_matches_host_selected_workspace(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(tmp_path / "selected"))
+    assert (
+        Path(GovernanceStore().db_path).resolve()
+        == tmp_path / "selected" / ".nous" / "governance.db"
+    )
 
 
 def test_registered_secret_never_enters_proposal_content_artifacts(service):

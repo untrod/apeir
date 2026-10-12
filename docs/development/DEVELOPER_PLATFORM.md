@@ -145,6 +145,17 @@ universal atomic rollback: per-file intentions precede changes, and recovery
 observes the original attempt without writing again. Cancellation fences later
 admission and remains recorded even if an earlier effect is independently found.
 A Chat project's remaining checks are not silently completed by a file MATCH.
+Cancelling the source Work also cancels its original proposal Workflow, and late
+tool results cannot revive the cancelled Work. A paused Work cannot admit edits
+until explicitly resumed. Every file admission rereads the original Work and
+manifest/Plan binding. A newly created Plan is bound from persisted Work when
+the proposal is prepared, not from an earlier tool-construction snapshot.
+
+The Runtime process has one Governance Gate. Configure `NOUS_WORKSPACE_ROOT`
+before startup; an explicit proposal workspace can initialize that same Gate.
+Once initialized, a different workspace cannot silently retarget its authority.
+Normal capability seeding includes `project.read_file`; this declaration does
+not grant `workspace.read` or approve a write.
 
 Model-facing directory/move/remove/command/process-start/control shortcuts with
 no qualified durable admission are unavailable. Existing trusted process
@@ -206,8 +217,8 @@ Dirty inactive tabs participate in exit, Environment navigation and execution
 guards. Closing a dirty tab requires explicit discard; pending approval locks
 navigation and retains the exact original write. Cached tabs cannot be reopened
 under another Controller. File contents and drafts are not layout preferences or
-browser-persisted state. This is multi-file editing, not an atomic multi-file
-transaction or model-generated multi-file proposal/approval contract.
+browser-persisted state. Editor drafts are separate from the reviewed proposal
+flow above; neither claims a universal atomic multi-file transaction.
 
 The Workbench is a real execution surface, not a capability mock. Its Runtime
 endpoints are:

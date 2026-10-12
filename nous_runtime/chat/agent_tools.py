@@ -712,12 +712,25 @@ class WorkspaceToolRuntime:
                     candidate["expected_sha256"] = version
                 prepared.append(candidate)
         try:
+            plan_id = self.plan_id
+            if self.source_work_id:
+                from nous_runtime.work import WorkHarness
+
+                source = WorkHarness(self.root).require(self.source_work_id)
+                if (
+                    Path(source.workspace_root).resolve() != self.root
+                    or source.terminal
+                ):
+                    raise WorkbenchConflict(
+                        "Original source Work is not active in this workspace."
+                    )
+                plan_id = source.plan.plan_id if source.plan else ""
             proposal = self._proposal_runtime().prepare(
                 prepared,
                 subject_id=self.subject_id,
                 source_work_id=self.source_work_id,
                 agent_session_id=self.agent_session_id,
-                plan_id=self.plan_id,
+                plan_id=plan_id,
                 requested_by=str(self.authorization_context.get("subject_id") or ""),
                 source_request_id=self.source_request_id,
             )

@@ -166,6 +166,35 @@ physical and production blockers remain unchanged; Kernel and component lock
 are frozen. Chat project completion still requires its actual remaining checks,
 not merely file MATCH; Source-browser/HTTP checks do not certify installed EXE.
 
+The review correction retained three failing cancellation/Plan cases and one
+additional cancellation-during-preparation race. A late tool checkpoint could
+otherwise revive a cancelled Work. The existing Work checkpoint owner now
+serializes updates with the existing file lock and keeps cancellation monotonic;
+new evidence can be retained without reauthorizing execution. Cancellation of
+the source Work also fences its original proposal Workflow. Each file admission
+rechecks the original Work, pause/cancel state, pending manifest and current
+Plan. Tools obtain the Plan binding from persisted Work at preparation time.
+Already recorded effects remain observable and cannot be blindly replayed.
+
+Two first-use defects were also reproduced: cwd could initialize Governance
+outside the selected workspace, and ordinary capability seeding omitted the
+existing `project.read_file` declaration used by proposal inspection. Default
+Governance now honors the configured host root, an explicit workspace can
+initialize the one process Gate, and an existing different Gate is rejected
+rather than replaced. Normal seeding declares read semantics; it grants no
+permission. The API tests now use that seeding instead of manually registering
+the missing capability. Focused proposal contracts have **53 passed**; the
+proposal, original Work and collaboration subset has **83 passed**. A paused
+source Work is blocked before execution admission; explicit resume retains the
+original approval and file operation. Expanded affected regressions have
+**955 passed**; lifecycle-seeding/API/repository checks have **282 passed**.
+The initial
+PR full regression retained **1 failed, 4303 passed, 47 skipped, 4 warnings**
+([CI evidence](https://github.com/untrod/apeir/actions/runs/38250757991)).
+Its legacy batch-write test now proves no mutation before original human
+approval and verifies real admission, file observation and CAS evidence after
+approval. No deadline, isolation or process-identity assertion is relaxed.
+
 The multi-file editing slice reuses the existing Workbench endpoints and keeps
 draft state within the existing component; it adds no filesystem, proposal store,
 permission or execution authority. Seven new frontend cases cover independent
