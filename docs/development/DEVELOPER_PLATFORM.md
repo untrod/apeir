@@ -114,6 +114,17 @@ Model Lab distinguishes declared capability metadata from measured execution
 observations. A model without observations is shown as awaiting evidence; a
 zero sample count must not be interpreted as a zero quality score.
 
+Context reads through `ContextGuard` require a caller-supplied authenticated
+`AuthorizationContext`, a matching actor and a stated purpose. The guard uses
+the existing Governance Gate and verifies the persisted decision binds the
+current proposal and identity. Only `EXECUTE` admits a read; missing authority,
+pending approval, unknown decisions and unavailable audit storage deny delivery.
+Private items additionally require their explicit owner and a current trusted
+local-human or authenticated human-session context. A copied identity claim is
+insufficient. Agent policies come from the registry in the selected workspace.
+This contract check does not itself wire every context producer into the guard,
+grant access to workspace files or establish Provider receipt of a context.
+
 ## Current boundary
 
 This release does not include model training, weight merging, dataset hosting,
