@@ -6,12 +6,14 @@ from pathlib import Path
 
 from nous_runtime.agent import AgentSessionCoordinator, AgentSessionState
 from nous_runtime.artifact import ContentAddressedArtifactStore
+from nous_runtime.capability.contract import CapabilityContract, Idempotency
 from nous_runtime.events.bus import RuntimeEventBus
 from nous_runtime.intelligence.planning.models import PlanStep, TaskPlan
 from nous_runtime.node_runtime.distributed_work import DistributedWorkState
 from nous_runtime.node_runtime.distributed_workflow import DistributedWorkflowAdapter
 from nous_runtime.node_runtime.relay import NodeRelayClient, NodeRelayServer
 from nous_runtime.node_runtime.service import NodeRuntimeConfig, NodeRuntimeService
+from nous_runtime.workflow import WorkflowHandlerPolicy, WorkflowState, WorkflowStore
 
 
 def test_event_subscription_wakes_waiting_session_after_restart(tmp_path: Path):
@@ -90,6 +92,17 @@ def test_failed_workflow_becomes_evidence_and_can_be_replanned(tmp_path: Path):
                 }
             )
         },
+        # This fixture computes a dictionary; it performs no external effect.
+        # The trusted host contract makes this definite failure replannable.
+        handler_policies={
+            "artifact.build": WorkflowHandlerPolicy(
+                contract=CapabilityContract(
+                    capability_id="artifact.build",
+                    side_effect_class="none",
+                    idempotency=Idempotency.IDEMPOTENT,
+                )
+            )
+        },
         replanner=lambda current: observed_states.append(current.state) or second_plan,
         max_replans=1,
     )
@@ -99,6 +112,50 @@ def test_failed_workflow_becomes_evidence_and_can_be_replanned(tmp_path: Path):
     assert len(completed.plan_history) == 2
     assert completed.result["workflow_outputs"]["retry"]["verified"] is True
     coordinator.close()
+
+
+def test_uncertain_effect_never_replans_or_replays_after_restart(tmp_path: Path):
+    effects, replans = [], []
+
+    def lost_response(step, context):
+        effects.append(context["run_id"])
+        raise RuntimeError("effect completed but response was lost")
+
+    coordinator = AgentSessionCoordinator(tmp_path)
+    session = coordinator.create(
+        agent_id="engineering-agent", model="test-model", objective="Apply an effect"
+    )
+    plan = TaskPlan(
+        task_id=session.session_id,
+        steps=(PlanStep("apply", "Apply once", "external.apply"),),
+    )
+    waiting = coordinator.coordinate(
+        session.session_id,
+        lambda current: plan,
+        handlers={"external.apply": lost_response},
+        replanner=lambda current: replans.append(current) or plan,
+        max_replans=1,
+    )
+    assert waiting.state is AgentSessionState.WAITING
+    assert "response was lost" in waiting.error
+    assert len(waiting.plan_history) == 1
+    assert replans == []
+    assert (
+        WorkflowStore(tmp_path).get_run(waiting.workflow_run_id).state
+        is WorkflowState.UNKNOWN
+    )
+    coordinator.close()
+
+    restarted = AgentSessionCoordinator(tmp_path)
+    restored = restarted.resume_plan(
+        session.session_id, handlers={"external.apply": lost_response}
+    )
+    assert restored.state is AgentSessionState.WAITING
+    assert restored.workflow_run_id == waiting.workflow_run_id
+    assert "reconciliation" in restored.error
+    assert effects == [waiting.workflow_run_id]
+    assert restored.result == {}
+    restarted.close()
 
 
 def test_approval_gate_resumes_same_durable_workflow(tmp_path: Path):

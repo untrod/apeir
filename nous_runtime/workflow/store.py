@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
 from typing import Any
 
 from nous_runtime.core.redaction import redact_sensitive_data
+from nous_runtime.locking import file_lock
 from nous_runtime.workflow.models import (
     StepType,
     TriggerType,
@@ -22,6 +24,25 @@ from nous_runtime.workflow.models import (
 
 def _safe_json(value, **kwargs):
     return json.dumps(redact_sensitive_data(value), **kwargs)
+
+
+class WorkflowBindingError(ValueError):
+    """An immutable Workflow or admitted step binding changed."""
+
+
+class WorkflowConflictError(ValueError):
+    """A Workflow update used a stale revision."""
+
+
+def binding_digest(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 class WorkflowStore:
@@ -66,13 +87,24 @@ class WorkflowStore:
         return connection
 
     def put_definition(self, definition: WorkflowDefinition) -> None:
+        value = self._definition_dict(definition)
+        self._require_unredacted(value)
         with self._db() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            previous = connection.execute(
+                "SELECT definition_json FROM workflow_definitions WHERE workflow_id=? AND version=?",
+                (definition.workflow_id, definition.version),
+            ).fetchone()
+            if previous:
+                if binding_digest(json.loads(previous[0])) != binding_digest(value):
+                    raise WorkflowBindingError("immutable Workflow definition changed")
+                return
             connection.execute(
-                "INSERT OR REPLACE INTO workflow_definitions VALUES (?, ?, ?)",
+                "INSERT INTO workflow_definitions VALUES (?, ?, ?)",
                 (
                     definition.workflow_id,
                     definition.version,
-                    _safe_json(self._definition_dict(definition), sort_keys=True),
+                    _safe_json(value, sort_keys=True),
                 ),
             )
 
@@ -101,15 +133,33 @@ class WorkflowStore:
         return self._definition(json.loads(row[0])) if row else None
 
     def create_run(self, run: WorkflowRun) -> WorkflowRun:
+        self._require_unredacted(run.inputs)
         with self._db() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            definition = self._definition_for_run(connection, run)
+            run.definition_digest = self.definition_digest(definition)
+            run.inputs_digest = self.inputs_digest(run.inputs)
             if run.idempotency_key:
                 row = connection.execute(
                     "SELECT run_json FROM workflow_runs WHERE workflow_id = ? AND idempotency_key = ?",
                     (run.workflow_id, run.idempotency_key),
                 ).fetchone()
                 if row:
-                    return self._run(json.loads(row[0]))
+                    previous = self._run(json.loads(row[0]))
+                    self._validate_run(
+                        previous,
+                        definition=self._definition_for_run(connection, previous),
+                    )
+                    if (
+                        previous.workflow_version != run.workflow_version
+                        or self.inputs_digest(previous.inputs) != run.inputs_digest
+                        or previous.definition_digest
+                        and previous.definition_digest != run.definition_digest
+                    ):
+                        raise WorkflowBindingError(
+                            "Workflow idempotency binding changed"
+                        )
+                    return previous
             connection.execute(
                 "INSERT INTO workflow_runs VALUES (?, ?, ?, ?, ?, NULLIF(?, ''))",
                 (
@@ -125,21 +175,139 @@ class WorkflowStore:
 
     def save_run(self, run: WorkflowRun) -> None:
         with self._db() as connection:
-            connection.execute(
-                "UPDATE workflow_runs SET state = ?, run_json = ? WHERE run_id = ?",
-                (
-                    run.state.value,
-                    _safe_json(self._run_dict(run), sort_keys=True),
-                    run.run_id,
-                ),
+            connection.execute("BEGIN IMMEDIATE")
+            previous = self._require_run(connection, run.run_id)
+            if previous.revision != run.revision:
+                raise WorkflowConflictError("Workflow revision changed")
+            if (
+                previous.workflow_id != run.workflow_id
+                or previous.workflow_version != run.workflow_version
+                or previous.idempotency_key != run.idempotency_key
+                or self.inputs_digest(previous.inputs) != self.inputs_digest(run.inputs)
+                or previous.definition_digest != run.definition_digest
+                or previous.inputs_digest != run.inputs_digest
+            ):
+                raise WorkflowBindingError("Workflow run binding changed")
+            self._validate_run(
+                run, definition=self._definition_for_run(connection, run)
             )
+            self._preserve_cancellation(connection, previous, run)
+            self._write_run(connection, run)
+
+    @contextmanager
+    def execution_lock(self, run_id: str):
+        """Exclude concurrent local executors while cancellation remains writable."""
+        key = hashlib.sha256(run_id.encode("utf-8")).hexdigest()
+        with file_lock(self.path.with_name(f"workflow-run-{key}.lock")):
+            yield
+
+    def bind_run(self, run_id: str, definition: WorkflowDefinition) -> WorkflowRun:
+        with self._db() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            run = self._require_run(connection, run_id)
+            self._validate_run(run, definition=definition)
+            run.definition_digest = self.definition_digest(definition)
+            run.inputs_digest = self.inputs_digest(run.inputs)
+            self._write_run(connection, run)
+        return run
+
+    def update_run(
+        self,
+        run_id: str,
+        *,
+        state: WorkflowState | None = None,
+        error: str | None = None,
+        approved_steps: tuple[str, ...] = (),
+        cancel: bool = False,
+    ) -> WorkflowRun:
+        """Mutate current state without overwriting parallel step evidence."""
+        with self._db() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            run = self._require_run(connection, run_id)
+            self._validate_run(
+                run, definition=self._definition_for_run(connection, run)
+            )
+            if state is not None:
+                run.state = state
+            if error is not None:
+                run.error = error
+            if approved_steps:
+                run.inputs["_approved_steps"] = sorted(
+                    set(run.inputs.get("_approved_steps") or ()) | set(approved_steps)
+                )
+            if cancel:
+                run.cancellation_requested = True
+            self._preserve_cancellation(connection, run, run)
+            self._write_run(connection, run)
+        return run
+
+    def mark_unknown(self, run_id: str, error: str) -> WorkflowRun:
+        """Fence execution without repairing an invalid original binding."""
+        with self._db() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            run = self._require_run(connection, run_id)
+            run.state = WorkflowState.UNKNOWN
+            run.error = error
+            self._write_run(connection, run)
+        return run
+
+    def admit_step(
+        self,
+        run_id: str,
+        step_id: str,
+        checkpoint: dict[str, Any],
+        *,
+        expected_attempts: int,
+    ) -> bool:
+        """Commit the bound started marker before invoking a host handler."""
+        with self._db() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            run = self._require_run(connection, run_id)
+            self._validate_run(
+                run, definition=self._definition_for_run(connection, run)
+            )
+            if run.cancellation_requested:
+                return False
+            previous = self._checkpoint(connection, run_id, step_id)
+            self._validate_checkpoint(previous, checkpoint["binding_digest"])
+            if int(previous.get("attempts") or 0) != expected_attempts:
+                raise WorkflowConflictError("Workflow step attempts changed")
+            if previous.get("status") in {"completed", "skipped"}:
+                return False
+            self._put_checkpoint(connection, run_id, step_id, checkpoint)
+            run.step_states[step_id] = "started"
+            self._write_run(connection, run)
+        return True
+
+    def finish_step(
+        self,
+        run_id: str,
+        step_id: str,
+        checkpoint: dict[str, Any],
+    ) -> WorkflowRun:
+        with self._db() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            run = self._require_run(connection, run_id)
+            self._validate_run(
+                run, definition=self._definition_for_run(connection, run)
+            )
+            previous = self._checkpoint(connection, run_id, step_id)
+            self._validate_checkpoint(previous, checkpoint["binding_digest"])
+            self._put_checkpoint(connection, run_id, step_id, checkpoint)
+            run.step_states[step_id] = str(checkpoint["status"])
+            output = checkpoint.get("output")
+            if output:
+                run.outputs[step_id] = output
+            self._preserve_cancellation(connection, run, run)
+            self._write_run(connection, run)
+        return run
 
     def get_run(self, run_id: str) -> WorkflowRun | None:
         with self._db() as connection:
             row = connection.execute(
-                "SELECT run_json FROM workflow_runs WHERE run_id = ?", (run_id,)
+                "SELECT run_id FROM workflow_runs WHERE run_id = ?", (run_id,)
             ).fetchone()
-        return self._run(json.loads(row[0])) if row else None
+            return self._require_run(connection, run_id) if row else None
 
     def history(self, workflow_id: str, *, limit: int = 50) -> list[WorkflowRun]:
         with self._db() as connection:
@@ -160,10 +328,7 @@ class WorkflowStore:
 
     def checkpoint(self, run_id: str, step_id: str, data: dict[str, Any]) -> None:
         with self._db() as connection:
-            connection.execute(
-                "INSERT OR REPLACE INTO workflow_checkpoints VALUES (?, ?, ?)",
-                (run_id, step_id, _safe_json(data, sort_keys=True)),
-            )
+            self._put_checkpoint(connection, run_id, step_id, data)
 
     def checkpoints(self, run_id: str) -> dict[str, dict[str, Any]]:
         with self._db() as connection:
@@ -172,6 +337,120 @@ class WorkflowStore:
                 (run_id,),
             ).fetchall()
         return {row["step_id"]: json.loads(row["checkpoint_json"]) for row in rows}
+
+    @staticmethod
+    def _require_unredacted(value: Any) -> None:
+        if redact_sensitive_data(value) != value:
+            raise WorkflowBindingError(
+                "Credential material cannot enter Workflow bindings"
+            )
+        binding_digest(value)
+
+    @classmethod
+    def definition_digest(cls, definition: WorkflowDefinition) -> str:
+        return binding_digest(cls._definition_dict(definition))
+
+    @staticmethod
+    def inputs_digest(inputs: dict[str, Any]) -> str:
+        return binding_digest(
+            {key: value for key, value in inputs.items() if key != "_approved_steps"}
+        )
+
+    @classmethod
+    def _validate_run(cls, run: WorkflowRun, *, definition: WorkflowDefinition) -> None:
+        if (
+            run.workflow_id != definition.workflow_id
+            or run.workflow_version != definition.version
+            or run.definition_digest
+            and run.definition_digest != cls.definition_digest(definition)
+            or run.inputs_digest
+            and run.inputs_digest != cls.inputs_digest(run.inputs)
+        ):
+            raise WorkflowBindingError("Workflow run binding changed")
+
+    @classmethod
+    def _definition_for_run(cls, connection, run: WorkflowRun) -> WorkflowDefinition:
+        row = connection.execute(
+            "SELECT definition_json FROM workflow_definitions WHERE workflow_id=? AND version=?",
+            (run.workflow_id, run.workflow_version),
+        ).fetchone()
+        if row is None:
+            raise WorkflowBindingError("Workflow run definition is unavailable")
+        return cls._definition(json.loads(row[0]))
+
+    @classmethod
+    def _require_run(cls, connection, run_id: str) -> WorkflowRun:
+        row = connection.execute(
+            "SELECT * FROM workflow_runs WHERE run_id=?", (run_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(run_id)
+        run = cls._run(json.loads(row["run_json"]))
+        if (
+            run.run_id != row["run_id"]
+            or run.workflow_id != row["workflow_id"]
+            or run.workflow_version != row["workflow_version"]
+            or run.state.value != row["state"]
+        ):
+            raise WorkflowBindingError("Workflow persisted identity changed")
+        return run
+
+    @classmethod
+    def _write_run(cls, connection, run: WorkflowRun) -> None:
+        run.revision += 1
+        connection.execute(
+            "UPDATE workflow_runs SET state=?, run_json=? WHERE run_id=?",
+            (
+                run.state.value,
+                _safe_json(cls._run_dict(run), sort_keys=True),
+                run.run_id,
+            ),
+        )
+
+    @staticmethod
+    def _checkpoint(connection, run_id: str, step_id: str) -> dict[str, Any]:
+        row = connection.execute(
+            "SELECT checkpoint_json FROM workflow_checkpoints WHERE run_id=? AND step_id=?",
+            (run_id, step_id),
+        ).fetchone()
+        return json.loads(row[0]) if row else {}
+
+    @staticmethod
+    def _validate_checkpoint(checkpoint: dict[str, Any], digest: str) -> None:
+        if checkpoint.get("binding_digest") and checkpoint["binding_digest"] != digest:
+            raise WorkflowBindingError("Workflow step binding changed")
+
+    @staticmethod
+    def _put_checkpoint(
+        connection, run_id: str, step_id: str, data: dict[str, Any]
+    ) -> None:
+        connection.execute(
+            "INSERT OR REPLACE INTO workflow_checkpoints VALUES (?, ?, ?)",
+            (run_id, step_id, _safe_json(data, sort_keys=True)),
+        )
+
+    @staticmethod
+    def _preserve_cancellation(
+        connection, previous: WorkflowRun, run: WorkflowRun
+    ) -> None:
+        if not previous.cancellation_requested:
+            return
+        run.cancellation_requested = True
+        rows = connection.execute(
+            "SELECT checkpoint_json FROM workflow_checkpoints WHERE run_id=?",
+            (run.run_id,),
+        ).fetchall()
+        uncertain = any(
+            json.loads(row[0]).get("status") in {"started", "unknown"} for row in rows
+        )
+        if uncertain:
+            run.state = WorkflowState.UNKNOWN
+            run.error = (
+                run.error
+                or "Cancelled admission; started effects require reconciliation"
+            )
+        else:
+            run.state = WorkflowState.CANCELLED
 
     @staticmethod
     def _definition_dict(definition: WorkflowDefinition) -> dict[str, Any]:
@@ -238,6 +517,9 @@ class WorkflowStore:
             "error": run.error,
             "idempotency_key": run.idempotency_key,
             "cancellation_requested": run.cancellation_requested,
+            "definition_digest": run.definition_digest,
+            "inputs_digest": run.inputs_digest,
+            "revision": run.revision,
         }
 
     @staticmethod
@@ -253,4 +535,7 @@ class WorkflowStore:
             str(data.get("error") or ""),
             str(data.get("idempotency_key") or ""),
             bool(data.get("cancellation_requested", False)),
+            str(data.get("definition_digest") or ""),
+            str(data.get("inputs_digest") or ""),
+            int(data.get("revision") or 0),
         )

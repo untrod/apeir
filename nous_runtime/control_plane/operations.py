@@ -49,6 +49,7 @@ class OperationsPlane:
         controller=None,
         health_loader=None,
         workflow_handlers=None,
+        workflow_handler_policies=None,
     ):
         self.root = Path(root).resolve()
         self.gate = gate or get_gate()
@@ -61,6 +62,7 @@ class OperationsPlane:
         self.live_controller = controller
         self.health_loader = health_loader
         self.workflow_handlers = dict(workflow_handlers or {})
+        self.workflow_handler_policies = dict(workflow_handler_policies or {})
 
     def skills(self):
         """Read the one existing workspace registry, without background egress."""
@@ -551,7 +553,9 @@ class OperationsPlane:
                 try:
                     return {
                         "agent_session": coordinator.resume_plan(
-                            request.agent_session_id, handlers=self.workflow_handlers
+                            request.agent_session_id,
+                            handlers=self.workflow_handlers,
+                            handler_policies=self.workflow_handler_policies,
                         ).to_dict(),
                         "replanned": False,
                     }

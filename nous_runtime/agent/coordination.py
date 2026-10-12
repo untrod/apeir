@@ -12,7 +12,11 @@ from nous_runtime.core.events import EventEnvelope
 from nous_runtime.events.bus import RuntimeEventBus
 from nous_runtime.intelligence.planning.models import TaskPlan
 from nous_runtime.intelligence.planning.workflow import PlanWorkflowBridge
-from nous_runtime.workflow.models import WorkflowRun, WorkflowState
+from nous_runtime.workflow.models import (
+    WorkflowHandlerPolicy,
+    WorkflowRun,
+    WorkflowState,
+)
 from nous_runtime.workflow.runtime import StepHandler, WorkflowRuntime
 
 from .session import (
@@ -97,6 +101,7 @@ class AgentSessionCoordinator:
         replanner: SessionReplanner | None = None,
         max_replans: int = 0,
         max_parallel: int = 4,
+        handler_policies: Mapping[str, WorkflowHandlerPolicy] | None = None,
     ) -> AgentSession:
         """Run one bounded goal-to-Workflow coordination cycle.
 
@@ -119,6 +124,7 @@ class AgentSessionCoordinator:
                 handlers=handlers,
                 inputs=inputs,
                 max_parallel=max_parallel,
+                handler_policies=handler_policies,
             )
             revisions = 0
             while (
@@ -141,6 +147,7 @@ class AgentSessionCoordinator:
                     handlers=handlers,
                     inputs=inputs,
                     max_parallel=max_parallel,
+                    handler_policies=handler_policies,
                     replan=True,
                 )
             if session.state is AgentSessionState.OBSERVING and session.error:
@@ -162,6 +169,7 @@ class AgentSessionCoordinator:
         inputs: Mapping[str, Any] | None = None,
         max_parallel: int = 4,
         replan: bool = False,
+        handler_policies: Mapping[str, WorkflowHandlerPolicy] | None = None,
     ) -> AgentSession:
         session = self.require(session_id)
         if session.terminal:
@@ -185,6 +193,7 @@ class AgentSessionCoordinator:
         runtime = WorkflowRuntime(
             str(self.root),
             handlers=dict(handlers or {}),
+            handler_policies=dict(handler_policies or {}),
             max_parallel=max_parallel,
             event_bus=self.events,
             event_metadata={"agent_session_id": session.session_id},
@@ -226,6 +235,7 @@ class AgentSessionCoordinator:
         approved_steps: tuple[str, ...] = (),
         handlers: Mapping[str, StepHandler] | None = None,
         max_parallel: int = 4,
+        handler_policies: Mapping[str, WorkflowHandlerPolicy] | None = None,
     ) -> AgentSession:
         session = self.require(session_id)
         if not session.workflow_run_id:
@@ -235,6 +245,7 @@ class AgentSessionCoordinator:
         runtime = WorkflowRuntime(
             str(self.root),
             handlers=dict(handlers or {}),
+            handler_policies=dict(handler_policies or {}),
             max_parallel=max_parallel,
             event_bus=self.events,
             event_metadata={"agent_session_id": session.session_id},
@@ -373,6 +384,12 @@ class AgentSessionCoordinator:
         elif run.state is WorkflowState.CANCELLED:
             session = transition_session(
                 session, AgentSessionState.CANCELLED, error=run.error
+            )
+        elif run.state is WorkflowState.UNKNOWN:
+            # Uncertain effects require reconciliation of this original run.
+            # They must never enter the automatic failure/replan path.
+            session = transition_session(
+                session, AgentSessionState.WAITING, error=run.error
             )
         else:
             session = transition_session(session, AgentSessionState.WAITING)

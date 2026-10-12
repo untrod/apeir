@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from nous_runtime.artifact.content_store import ContentAddressedArtifactStore
-from nous_runtime.workflow.models import WorkflowStep
+from nous_runtime.workflow.models import WorkflowHandlerPolicy, WorkflowStep
 
 from .distributed_work import (
     DistributedWork,
@@ -23,6 +23,8 @@ from .relay import NodeRelayServer
 
 class DistributedWorkflowAdapter:
     """Map one existing Workflow step to one durable Compute Mesh Work."""
+
+    workflow_handler_policy = WorkflowHandlerPolicy(reconcile_started=True)
 
     def __init__(
         self,

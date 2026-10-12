@@ -409,6 +409,12 @@ class ExternalAgentWorkflowHandler:
     input and authorization, including all available Workflow provenance.
     """
 
+    @property
+    def workflow_handler_policy(self):
+        from nous_runtime.workflow.models import WorkflowHandlerPolicy
+
+        return WorkflowHandlerPolicy(reconcile_started=True)
+
     def __init__(
         self, state_dir, descriptor: AgentDescriptor, node_id: str, *, governance
     ):

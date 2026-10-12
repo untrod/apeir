@@ -10,6 +10,7 @@ from nous_runtime.workflow.models import (
     StepType,
     TriggerType,
     WorkflowDefinition,
+    WorkflowHandlerPolicy,
     WorkflowRun,
     WorkflowStep,
 )
@@ -25,22 +26,16 @@ class PlanWorkflowBridge:
                 step_id=step.step_id,
                 step_type=self._step_type(step.capability),
                 action=step.capability,
-                depends_on=tuple(
-                    plan.dependencies.get(step.step_id, ())
-                ),
+                depends_on=tuple(plan.dependencies.get(step.step_id, ())),
                 retries=max(
                     0,
                     min(10, int(step.metadata.get("retries") or 0)),
                 ),
                 timeout_seconds=max(
                     0.001,
-                    float(
-                        step.metadata.get("timeout_seconds") or 60
-                    ),
+                    float(step.metadata.get("timeout_seconds") or 60),
                 ),
-                approval_required=bool(
-                    step.metadata.get("approval_required", False)
-                ),
+                approval_required=bool(step.metadata.get("approval_required", False)),
                 params={
                     "name": step.name,
                     **dict(step.metadata),
@@ -69,11 +64,13 @@ class PlanWorkflowBridge:
         inputs: Mapping[str, Any] | None = None,
         idempotency_key: str = "",
         max_parallel: int = 4,
+        handler_policies: Mapping[str, WorkflowHandlerPolicy] | None = None,
     ) -> WorkflowRun:
         definition = self.compile(plan)
         runtime = WorkflowRuntime(
             root,
             handlers=dict(handlers or {}),
+            handler_policies=dict(handler_policies or {}),
             max_parallel=max_parallel,
         )
         runtime.register(definition)
