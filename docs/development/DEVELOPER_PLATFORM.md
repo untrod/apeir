@@ -133,6 +133,15 @@ grant access to workspace files or establish Provider receipt of a context.
 
 ## Current boundary
 
+An explicit Runtime workspace root takes precedence over cwd/ancestor project
+discovery. The existing registry may select an active child within that root;
+an external registered workspace requires an explicit matching ID/name. Unknown,
+ambiguous, pathless, linked or corrupt selections are unresolved, never a fallback
+to a different project. The existing reserved `default` intent selector stays
+within the configured root. Relative registry paths are anchored there. This is
+scope selection, not file permission. Agent and Decision context providers read
+the selected existing stores; an Agent profile is not a dictionary or authority.
+
 Trusted Workflow handler registration can supply `WorkflowHandlerPolicy` from
 the existing `nous_runtime.workflow` package, or a typed policy on the registered
 host callable. A matching Capability contract declares retry safety and a bounded

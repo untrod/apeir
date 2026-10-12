@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from nous_runtime.context.models import ContextItem
 from nous_runtime.context.schema import ContextSource
@@ -23,7 +24,11 @@ class AgentProvider:
     def __init__(self, workspace_path: str = ""):
         self._workspace = workspace_path
 
-
+    def _registry_path(self):
+        if not self._workspace:
+            return None
+        selected = Path(self._workspace)
+        return selected if selected.name == ".nous" else selected / ".nous"
 
     def collect(self, request_hint: str = "", limit: int = 100) -> list[ContextItem]:
         """Collect agent context items."""
@@ -31,14 +36,15 @@ class AgentProvider:
         try:
             from nous_runtime.agent.registry import AgentRegistry
 
-            registry = AgentRegistry()
+            registry = AgentRegistry(self._registry_path())
             agents = registry.list()
 
             for agent_info in agents[:limit]:
-                agent_id = agent_info.get("agent_id", agent_info.get("id", ""))
-                agent_name = agent_info.get("name", agent_id)
-                agent_state = agent_info.get("state", agent_info.get("status", "unknown"))
-                agent_role = agent_info.get("role", agent_info.get("kind", ""))
+                identity = agent_info.manifest.identity
+                agent_id = identity.agent_id
+                agent_name = identity.name
+                agent_state = agent_info.state.value
+                agent_role = str(agent_info.manifest.metadata.get("role") or "")
 
                 content_parts = [f"Agent: {agent_name}"]
                 if agent_state:
@@ -46,25 +52,28 @@ class AgentProvider:
                 if agent_role:
                     content_parts.append(f"role={agent_role}")
 
-                items.append(ContextItem(
-                    content=" ".join(content_parts),
-                    source_type=ContextSource.AGENT.value,
-                    source_id=agent_id,
-                    importance=0.6,
-                    confidence=0.9,
-                    permission="read",
-                    tags=("agent", agent_state),
-                ))
+                items.append(
+                    ContextItem(
+                        content=" ".join(content_parts),
+                        source_type=ContextSource.AGENT.value,
+                        source_id=agent_id,
+                        importance=0.6,
+                        confidence=0.9,
+                        permission="read",
+                        tags=("agent", agent_state),
+                    )
+                )
 
         except Exception as exc:
             _log.warning("AgentProvider.collect failed: %s", exc)
 
         return items[:limit]
 
-
-
     def explain(self, item_ids: list[str]) -> dict[str, str]:
-        return {iid: f"Agent context item {iid} — sourced from agent registry." for iid in item_ids}
+        return {
+            iid: f"Agent context item {iid} — sourced from agent registry."
+            for iid in item_ids
+        }
 
     def health(self) -> ProviderHealth:
         available = False
@@ -72,7 +81,8 @@ class AgentProvider:
         error = ""
         try:
             from nous_runtime.agent.registry import AgentRegistry
-            agents = AgentRegistry().list()
+
+            agents = AgentRegistry(self._registry_path()).list()
             available = True
             item_count = len(agents)
         except Exception as exc:

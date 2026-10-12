@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Callable
 
 from nous_runtime.events.models import RunEvent, RunState
@@ -20,19 +21,36 @@ from nous_runtime.workspace.resolver import resolve_workspace
 ProductHandler = Callable[[RuntimeRequest, dict[str, Any]], dict[str, Any]]
 
 PRODUCT_CAPABILITIES = frozenset(
-    {"agent", "chat", "code_assistant", "connector", "knowledge", "multi_agent", "plugin", "workflow"}
+    {
+        "agent",
+        "chat",
+        "code_assistant",
+        "connector",
+        "knowledge",
+        "multi_agent",
+        "plugin",
+        "workflow",
+    }
 )
 
 
 class RuntimePipeline:
     """Runs the stable Phase 8 loop across existing Runtime subsystems."""
 
-    def __init__(self, *, workspace_root: str = "", product_handlers: dict[str, ProductHandler] | None = None, gate: Any = None):
+    def __init__(
+        self,
+        *,
+        workspace_root: str = "",
+        product_handlers: dict[str, ProductHandler] | None = None,
+        gate: Any = None,
+    ):
         self.workspace_root = workspace_root
         self.product_handlers = dict(product_handlers or {})
         unknown = set(self.product_handlers) - PRODUCT_CAPABILITIES
         if unknown:
-            raise ValueError("unknown product capabilities: " + ", ".join(sorted(unknown)))
+            raise ValueError(
+                "unknown product capabilities: " + ", ".join(sorted(unknown))
+            )
         self.events = EventStream(workspace_root or ".")
         self.gate = gate
         self._trace_roots: dict[str, str] = {}
@@ -71,7 +89,11 @@ class RuntimePipeline:
             RECEIVED,
             data=redact_runtime_evidence(request.to_dict()),
         )
-        self._emit(request.request_id, "runtime.request.received", {"request_id": request.request_id})
+        self._emit(
+            request.request_id,
+            "runtime.request.received",
+            {"request_id": request.request_id},
+        )
 
         intent_resolution = IntentResolver().resolve(
             IntentRequest(
@@ -96,21 +118,41 @@ class RuntimePipeline:
         # Chat requests may be clarified by the selected model and every
         # workspace effect remains governed separately.  Do not dead-end the
         # conversation merely because the generic intent classifier is unsure.
-        product_capability = str(
-            request.constraints.get("product_capability") or ""
-        )
+        product_capability = str(request.constraints.get("product_capability") or "")
         if (
             decision.requires_confirmation
             and decision.confidence < 0.7
             and product_capability != "chat"
         ):
-            trace.add("governance", "ASK_CONFIRMATION", reason="Intent confidence is below execution threshold.")
-            return self._response(request, trace, "confirmation_required", "Confirmation required.", decision)
+            trace.add(
+                "governance",
+                "ASK_CONFIRMATION",
+                reason="Intent confidence is below execution threshold.",
+            )
+            return self._response(
+                request,
+                trace,
+                "confirmation_required",
+                "Confirmation required.",
+                decision,
+            )
 
-        workspace = resolve_workspace(decision.workspace or request.workspace, root=self.workspace_root)
-        trace.add("workspace", workspace.workspace_id or "ambiguous", data=workspace.__dict__)
+        # Intent metadata may have discovered a cwd workspace without this
+        # Runtime's host root. Only the request's explicit selector belongs here.
+        workspace = resolve_workspace(request.workspace, root=self.workspace_root)
+        trace.add(
+            "workspace", workspace.workspace_id or "ambiguous", data=workspace.__dict__
+        )
         if workspace.ambiguous:
-            return self._response(request, trace, "workspace_ambiguous", "Workspace selection is ambiguous.", decision)
+            return self._response(
+                request,
+                trace,
+                "workspace_ambiguous",
+                "Workspace selection is ambiguous.",
+                decision,
+            )
+
+        decision = replace(decision, workspace=workspace.workspace_id)
 
         context_snapshot = self._build_context(request, decision.intent, workspace.path)
         trace.add("context", "loaded", data=context_snapshot)
@@ -133,18 +175,39 @@ class RuntimePipeline:
             },
         )
 
-        runtime_decision = self._decide(request, workspace.workspace_id, decision.intent)
-        trace.add("decision", runtime_decision["selected"], reason=runtime_decision["reason"], data=runtime_decision)
+        runtime_decision = self._decide(
+            request, workspace.workspace_id, decision.intent
+        )
+        trace.add(
+            "decision",
+            runtime_decision["selected"],
+            reason=runtime_decision["reason"],
+            data=runtime_decision,
+        )
 
         governance = self._governance(request, decision.intent, workspace.path)
-        trace.add("governance", governance["status"], reason=governance["reason"], data=governance)
+        trace.add(
+            "governance",
+            governance["status"],
+            reason=governance["reason"],
+            data=governance,
+        )
         self._emit(
             request.request_id,
             "governance.evaluated",
-            {"status": governance["status"], "decision_id": governance.get("decision_id", "")},
+            {
+                "status": governance["status"],
+                "decision_id": governance.get("decision_id", ""),
+            },
         )
         if governance["status"] in {"DENY", "ASK_APPROVAL", "ESCALATE"}:
-            return self._response(request, trace, governance["status"].lower(), governance["reason"], decision)
+            return self._response(
+                request,
+                trace,
+                governance["status"].lower(),
+                governance["reason"],
+                decision,
+            )
 
         self._emit(
             request.request_id,
@@ -157,8 +220,18 @@ class RuntimePipeline:
             plan,
             context_snapshot,
         )
-        trace.add("agent", execution["agent"], reason="Selected built-in runtime agent.", data={"capability": execution["capability"]})
-        trace.add("capability", execution["status"], reason=execution["reason"], data=execution)
+        trace.add(
+            "agent",
+            execution["agent"],
+            reason="Selected built-in runtime agent.",
+            data={"capability": execution["capability"]},
+        )
+        trace.add(
+            "capability",
+            execution["status"],
+            reason=execution["reason"],
+            data=execution,
+        )
         self._emit(
             request.request_id,
             "step.completed" if execution["ok"] else "step.failed",
@@ -204,9 +277,7 @@ class RuntimePipeline:
 
         product_result = execution.get("result")
         product_content = (
-            product_result.get("content")
-            if isinstance(product_result, dict)
-            else None
+            product_result.get("content") if isinstance(product_result, dict) else None
         )
         verified = bool(verification.get("accepted", False))
         if execution["ok"] and verified:
@@ -223,9 +294,7 @@ class RuntimePipeline:
             "verification": verification,
         }
         if isinstance(product_result, dict):
-            response_result["citations"] = list(
-                product_result.get("citations") or ()
-            )
+            response_result["citations"] = list(product_result.get("citations") or ())
             response_result["context_snapshot_id"] = str(
                 product_result.get("context_snapshot_id")
                 or context_snapshot.get("snapshot_id")
@@ -240,7 +309,9 @@ class RuntimePipeline:
             result=response_result,
         )
 
-    def _build_context(self, request: RuntimeRequest, intent: str, workspace_path: str) -> dict[str, Any]:
+    def _build_context(
+        self, request: RuntimeRequest, intent: str, workspace_path: str
+    ) -> dict[str, Any]:
         try:
             from nous_runtime.context.builder import build_context
             from nous_runtime.context.types import BuildRequest
@@ -266,24 +337,18 @@ class RuntimePipeline:
                     {
                         "item_id": str(getattr(item, "item_id", "") or ""),
                         "source_id": str(getattr(item, "source_id", "") or ""),
-                        "source_type": str(
-                            getattr(item, "source_type", "") or ""
-                        ),
+                        "source_type": str(getattr(item, "source_type", "") or ""),
                         "content": content,
-                        "confidence": float(
-                            getattr(item, "confidence", 0.0) or 0.0
-                        ),
+                        "confidence": float(getattr(item, "confidence", 0.0) or 0.0),
                     }
                 )
             return {
                 "snapshot_id": str(
-                    getattr(snapshot, "snapshot_id", "")
-                    or getattr(snapshot, "id", "")
+                    getattr(snapshot, "snapshot_id", "") or getattr(snapshot, "id", "")
                 ),
                 "item_count": len(getattr(snapshot, "items", ()) or ()),
                 "items": items,
-                "truncated": len(items)
-                < len(getattr(snapshot, "items", ()) or ()),
+                "truncated": len(items) < len(getattr(snapshot, "items", ()) or ()),
             }
         except Exception as exc:
             return {"snapshot_id": "", "item_count": 0, "error": str(exc)}
@@ -295,9 +360,7 @@ class RuntimePipeline:
         workspace_id: str,
         analysis: Any = None,
     ) -> dict[str, Any]:
-        analysis = analysis or getattr(
-            self, "_active_intent_analysis", None
-        )
+        analysis = analysis or getattr(self, "_active_intent_analysis", None)
         from nous_runtime.intelligence.planning.parallel import (
             ParallelTaskPlanner,
         )
@@ -329,15 +392,19 @@ class RuntimePipeline:
             "workflow_id": workflow.workflow_id,
             "execution_mode": execution_mode,
             "workload_profile": workload_profile,
-            "max_parallel_lanes": int(
-                workload_profile.get("max_parallel_lanes") or 1
-            ),
+            "max_parallel_lanes": int(workload_profile.get("max_parallel_lanes") or 1),
         }
 
-    def _decide(self, request: RuntimeRequest, workspace_id: str, intent: str) -> dict[str, Any]:
+    def _decide(
+        self, request: RuntimeRequest, workspace_id: str, intent: str
+    ) -> dict[str, Any]:
         try:
             from nous_runtime.intelligence.engine import default_engine
-            from nous_runtime.intelligence.models import DecisionContext, DecisionRequest, DecisionType
+            from nous_runtime.intelligence.models import (
+                DecisionContext,
+                DecisionRequest,
+                DecisionType,
+            )
 
             decision = default_engine().decide(
                 DecisionRequest(
@@ -357,11 +424,22 @@ class RuntimePipeline:
                 "reason": decision.reasons[0].message if decision.reasons else "",
             }
         except Exception as exc:
-            return {"decision_id": "", "selected": "default", "confidence": 0.0, "reason": str(exc)}
+            return {
+                "decision_id": "",
+                "selected": "default",
+                "confidence": 0.0,
+                "reason": str(exc),
+            }
 
-    def _governance(self, request: RuntimeRequest, intent: str, workspace_path: str) -> dict[str, str]:
+    def _governance(
+        self, request: RuntimeRequest, intent: str, workspace_path: str
+    ) -> dict[str, str]:
         try:
-            from nous_runtime.governance import ActionProposal, AuthorizationContext, get_gate
+            from nous_runtime.governance import (
+                ActionProposal,
+                AuthorizationContext,
+                get_gate,
+            )
 
             self._ensure_builtin_capability()
             proposal = ActionProposal(
@@ -372,12 +450,16 @@ class RuntimePipeline:
                 reversibility="reversible",
                 parameter_summary=intent,
             )
-            context = AuthorizationContext.from_dict(request.authorization_context) if request.authorization_context else AuthorizationContext(
-                subject_type="user",
-                subject_id=request.user_id,
-                authn_method="runtime_session",
-                authn_confidence=0.8,
-                session_locality="local",
+            context = (
+                AuthorizationContext.from_dict(request.authorization_context)
+                if request.authorization_context
+                else AuthorizationContext(
+                    subject_type="user",
+                    subject_id=request.user_id,
+                    authn_method="runtime_session",
+                    authn_confidence=0.8,
+                    session_locality="local",
+                )
             )
             decision = (self.gate or get_gate()).evaluate(proposal, context)
             return {
@@ -389,8 +471,16 @@ class RuntimePipeline:
             from nous_runtime.governance.runtime_mode import should_fail_closed
 
             if should_fail_closed(surface=request.governance_surface):
-                return {"status": "DENY", "reason": f"governance unavailable: {exc}", "decision_id": ""}
-            return {"status": "EXECUTE", "reason": f"governance unavailable in compatibility path: {exc}", "decision_id": ""}
+                return {
+                    "status": "DENY",
+                    "reason": f"governance unavailable: {exc}",
+                    "decision_id": "",
+                }
+            return {
+                "status": "EXECUTE",
+                "reason": f"governance unavailable in compatibility path: {exc}",
+                "decision_id": "",
+            }
 
     def _execute_capability(
         self,
@@ -424,9 +514,7 @@ class RuntimePipeline:
                                 "session": request.session,
                                 "intent": intent,
                                 "runtime_plan": dict(plan or {}),
-                                "context_snapshot": dict(
-                                    context_snapshot or {}
-                                ),
+                                "context_snapshot": dict(context_snapshot or {}),
                                 "event_stream": self.events,
                             },
                         )
@@ -445,10 +533,14 @@ class RuntimePipeline:
                 ok = bool(result.get("ok", True))
                 return {
                     "ok": ok,
-                    "status": str(result.get("status") or ("success" if ok else "failed")),
+                    "status": str(
+                        result.get("status") or ("success" if ok else "failed")
+                    ),
                     "agent": str(result.get("agent") or "runtime.product"),
                     "capability": product,
-                    "reason": str(result.get("reason") or "Product capability executed."),
+                    "reason": str(
+                        result.get("reason") or "Product capability executed."
+                    ),
                     "observation_id": str(result.get("observation_id") or ""),
                     "builtin_fallback": False,
                     "result": result,
@@ -461,7 +553,9 @@ class RuntimePipeline:
             if request.authorization_context:
                 from nous_runtime.governance.contracts import AuthorizationContext
 
-                authorization_context = AuthorizationContext.from_dict(request.authorization_context)
+                authorization_context = AuthorizationContext.from_dict(
+                    request.authorization_context
+                )
             from nous_runtime.agent.pipeline import RuntimeAgentExecutor
 
             agent_result = RuntimeAgentExecutor().execute(
@@ -480,12 +574,9 @@ class RuntimePipeline:
             )
             observation = agent_result.output
             ok = bool(
-                agent_result.ok
-                and getattr(observation, "status", "") == "success"
+                agent_result.ok and getattr(observation, "status", "") == "success"
             )
-            errors = list(
-                getattr(observation, "errors", ()) or ()
-            )
+            errors = list(getattr(observation, "errors", ()) or ())
             if not ok:
                 reason = "; ".join(errors) or agent_result.error
                 return self._builtin_echo(
@@ -501,9 +592,7 @@ class RuntimePipeline:
                 "agent_run_id": agent_result.run_id,
                 "agent_state": agent_result.state,
                 "agent_budget": dict(agent_result.budget),
-                "agent_events": [
-                    dict(item) for item in agent_result.events
-                ],
+                "agent_events": [dict(item) for item in agent_result.events],
                 "capability": capability_id,
                 "reason": "Capability executed through Agent Runtime.",
                 "observation_id": getattr(
@@ -539,9 +628,7 @@ class RuntimePipeline:
         return {
             "ok": True,
             "status": "success",
-            "agent": str(
-                (agent or {}).get("agent_id") or "runtime.builtin"
-            ),
+            "agent": str((agent or {}).get("agent_id") or "runtime.builtin"),
             "agent_execution": dict(agent or {}),
             "capability": capability_id,
             "reason": reason or "Executed built-in read-only echo capability.",
@@ -586,15 +673,19 @@ class RuntimePipeline:
             "score": report.score if report is not None else 0.0,
             "issues": [
                 issue.to_dict()
-                for issue in (
-                    report.issues if report is not None else ()
-                )
+                for issue in (report.issues if report is not None else ())
             ],
             "repair_count": len(run.repairs),
             "error": run.error,
         }
 
-    def _evaluate(self, request: RuntimeRequest, workspace_path: str, trace_id: str, execution: dict[str, Any]) -> dict[str, Any]:
+    def _evaluate(
+        self,
+        request: RuntimeRequest,
+        workspace_path: str,
+        trace_id: str,
+        execution: dict[str, Any],
+    ) -> dict[str, Any]:
         try:
             from nous_runtime.evaluation.evaluator import EvaluationEngine
 
@@ -614,7 +705,9 @@ class RuntimePipeline:
         except Exception as exc:
             return {"status": "skipped", "error": str(exc)}
 
-    def _collect_experience(self, workspace_path: str, execution: dict[str, Any], evaluation: dict[str, Any]) -> dict[str, Any]:
+    def _collect_experience(
+        self, workspace_path: str, execution: dict[str, Any], evaluation: dict[str, Any]
+    ) -> dict[str, Any]:
         try:
             from nous_runtime.experience.collector import ExperienceCollector
 
@@ -624,7 +717,11 @@ class RuntimePipeline:
                 execution["ok"],
                 error="" if execution["ok"] else execution["reason"],
             )
-            return {"status": "collected", "count": len(experiences), "evaluation_status": evaluation.get("status", "")}
+            return {
+                "status": "collected",
+                "count": len(experiences),
+                "evaluation_status": evaluation.get("status", ""),
+            }
         except Exception as exc:
             return {"status": "skipped", "error": str(exc)}
 
@@ -655,16 +752,28 @@ class RuntimePipeline:
         self._emit(
             request.request_id,
             "runtime.response.ready",
-            {"request_id": request.request_id, "trace_id": trace.trace_id, "status": status},
+            {
+                "request_id": request.request_id,
+                "trace_id": trace.trace_id,
+                "status": status,
+            },
         )
-        terminal_event = "run.completed" if status in {
-            "ok",
-            "confirmation_required",
-        } else "run.failed"
+        terminal_event = (
+            "run.completed"
+            if status
+            in {
+                "ok",
+                "confirmation_required",
+            }
+            else "run.failed"
+        )
         self._emit(
             request.request_id,
             terminal_event,
-            {"state": "COMPLETED" if terminal_event == "run.completed" else "FAILED", "status": status},
+            {
+                "state": "COMPLETED" if terminal_event == "run.completed" else "FAILED",
+                "status": status,
+            },
         )
         root_span_id = self._trace_roots.pop(request.request_id, "")
         if root_span_id:
@@ -680,7 +789,9 @@ class RuntimePipeline:
                     ),
                     result_summary=message[:500],
                     error_message=(
-                        "" if status in {"ok", "confirmation_required"} else message[:500]
+                        ""
+                        if status in {"ok", "confirmation_required"}
+                        else message[:500]
                     ),
                 )
             except Exception:
@@ -701,7 +812,10 @@ class RuntimePipeline:
         gate treats mock.echo as unknown/high risk and blocks the pipeline.
         """
         try:
-            from nous_runtime.compat.capability import get_capability, register_capability
+            from nous_runtime.compat.capability import (
+                get_capability,
+                register_capability,
+            )
 
             if not get_capability("mock.echo"):
                 register_capability(

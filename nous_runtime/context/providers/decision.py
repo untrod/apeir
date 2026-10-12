@@ -23,8 +23,6 @@ class DecisionProvider:
     def __init__(self, workspace_path: str = ""):
         self._workspace = workspace_path
 
-
-
     def collect(self, request_hint: str = "", limit: int = 100) -> list[ContextItem]:
         """Collect decision context items."""
         items: list[ContextItem] = []
@@ -46,45 +44,52 @@ class DecisionProvider:
                 status = getattr(dec, "status", getattr(dec, "decision_status", ""))
                 confidence = getattr(dec, "confidence", 0.5)
 
-                content_parts = [f"Decision: {goal}"] if goal else [f"Decision {dec_id}"]
+                content_parts = (
+                    [f"Decision: {goal}"] if goal else [f"Decision {dec_id}"]
+                )
                 if status:
                     content_parts.append(f"[{status}]")
 
-                items.append(ContextItem(
-                    content=" ".join(content_parts),
-                    source_type=ContextSource.DECISION.value,
-                    source_id=dec_id,
-                    created_at=getattr(dec, "created_at", ""),
-                    importance=0.7,
-                    confidence=float(confidence) if confidence else 0.5,
-                    permission="read",
-                    tags=("decision", status),
-                ))
+                items.append(
+                    ContextItem(
+                        content=" ".join(content_parts),
+                        source_type=ContextSource.DECISION.value,
+                        source_id=dec_id,
+                        created_at=getattr(dec, "created_at", ""),
+                        importance=0.7,
+                        confidence=float(confidence) if confidence else 0.5,
+                        permission="read",
+                        tags=("decision", status),
+                    )
+                )
 
             # Incomplete decisions are particularly relevant
             incomplete = store.find_incomplete_decisions()
             for dec in incomplete:
                 dec_id = getattr(dec, "decision_id", "")
                 goal = getattr(dec, "goal_summary", getattr(dec, "goal", ""))
-                items.append(ContextItem(
-                    content=f"Incomplete decision: {goal}",
-                    source_type=ContextSource.DECISION.value,
-                    source_id=dec_id,
-                    importance=0.85,
-                    confidence=0.9,
-                    permission="read",
-                    tags=("decision", "incomplete", "action_needed"),
-                ))
+                items.append(
+                    ContextItem(
+                        content=f"Incomplete decision: {goal}",
+                        source_type=ContextSource.DECISION.value,
+                        source_id=dec_id,
+                        importance=0.85,
+                        confidence=0.9,
+                        permission="read",
+                        tags=("decision", "incomplete", "action_needed"),
+                    )
+                )
 
         except Exception as exc:
             _log.warning("DecisionProvider.collect failed: %s", exc)
 
         return items[:limit]
 
-
-
     def explain(self, item_ids: list[str]) -> dict[str, str]:
-        return {iid: f"Decision context item {iid} — sourced from decision store." for iid in item_ids}
+        return {
+            iid: f"Decision context item {iid} — sourced from decision store."
+            for iid in item_ids
+        }
 
     def health(self) -> ProviderHealth:
         available = False
@@ -94,7 +99,8 @@ class DecisionProvider:
         try:
             from nous_runtime.intelligence.store import JsonlDecisionStore
             from nous_runtime.project.workspace import find_workspace
-            ws = find_workspace()
+
+            ws = self._workspace or find_workspace()
             if ws:
                 store = JsonlDecisionStore(ws)
                 decisions = store.list_decisions(limit=100)

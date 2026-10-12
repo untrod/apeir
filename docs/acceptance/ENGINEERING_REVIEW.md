@@ -81,6 +81,21 @@ focused child case took **0.26 s**. These are individual test observations, not
 a claim about total CI savings, model cost or Windows qualification. Corrected
 PR and main CI remain required.
 
+Workspace scope correction (**REUSE / FIX**) keeps the existing Registry,
+resolver and Context providers. Nine pre-change cases fail and three pass:
+a configured host root can be displaced by cwd discovery, external active
+registrations and unresolved selectors; linked/corrupt records are not fenced.
+Final workspace/Runtime/Context regressions have **245 passed**. They preserve
+legacy discovery without an explicit root and the existing reserved `default`
+selector while refusing unknown/pathless/ambiguous selections, relative-path
+misbinding, prefix siblings, symlink escapes and corrupt authority files.
+Actual registered Agent profiles now produce context in the selected store;
+Decision health and collection consult the same selected store. A second integration check exposed four cases where Intent resolution had
+filled a cwd-derived workspace ID before the host root was available. Runtime
+now uses the explicit request selector and records its actual resolved scope.
+Selection alone never grants file access or proves model delivery. Kernel and lock are unchanged;
+required CI remains an integration prerequisite.
+
 Workflow recovery hardening reuses `WorkflowRuntime`, `WorkflowStore`, the
 existing TaskGraph, AgentSession coordinator, and journal-backed distributed,
 Reality and external-agent handlers (**REUSE / FIX / EXTEND**). Pre-change
