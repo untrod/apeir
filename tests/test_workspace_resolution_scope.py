@@ -255,3 +255,30 @@ def test_runtime_unknown_explicit_workspace_never_calls_product_handler(tmp_path
     )
     assert result.status == "workspace_ambiguous"
     assert calls == []
+
+
+def test_chat_namespace_cannot_select_an_external_filesystem_workspace(tmp_path):
+    from nous_runtime.chat import ChatRequest, ChatRuntime
+    from tests.test_chat_runtime import FakeOrchestrator
+
+    outside = tmp_path.parent / "external-project"
+    WorkspaceRegistry(str(tmp_path)).create("External", path=str(outside))
+    orchestrator = FakeOrchestrator()
+    chat = ChatRuntime(str(tmp_path), orchestrator=orchestrator)
+    reply = chat.send(ChatRequest("hello", "external", "actor"))
+    request = orchestrator.requests[0]
+    assert request.workspace == ""
+    assert request.constraints["workspace_path"] == str(tmp_path)
+    assert request.constraints["conversation_workspace_id"] == "external"
+    assert (
+        chat.conversations.get(
+            reply.conversation_id, workspace_id="external", owner_id="actor"
+        )
+        is not None
+    )
+    assert (
+        chat.conversations.get(
+            reply.conversation_id, workspace_id="different", owner_id="actor"
+        )
+        is None
+    )

@@ -139,7 +139,9 @@ an external registered workspace requires an explicit matching ID/name. Unknown,
 ambiguous, pathless, linked or corrupt selections are unresolved, never a fallback
 to a different project. The existing reserved `default` intent selector stays
 within the configured root. Relative registry paths are anchored there. This is
-scope selection, not file permission. Agent and Decision context providers read
+scope selection, not file permission. A Chat conversation namespace remains an
+ownership key in ConversationStore; it cannot choose a filesystem root.
+Agent and Decision context providers read
 the selected existing stores; an Agent profile is not a dictionary or authority.
 
 Trusted Workflow handler registration can supply `WorkflowHandlerPolicy` from

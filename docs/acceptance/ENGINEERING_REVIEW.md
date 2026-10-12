@@ -96,6 +96,16 @@ now uses the explicit request selector and records its actual resolved scope.
 Selection alone never grants file access or proves model delivery. Kernel and lock are unchanged;
 required CI remains an integration prerequisite.
 
+The first scope PR full run retained **1 failed, 4254 passed, 49 skipped,
+4 warnings** ([CI evidence](https://github.com/untrod/apeir/actions/runs/38239019364)).
+The failed project-restart flow exposed another existing conflation: Chat used
+its conversation namespace as a filesystem workspace selector. Chat now keeps
+that namespace for conversation ownership and uses its trusted Runtime root for
+execution. The original restart/evidence assertions are unchanged, and a new
+case proves an external-looking namespace cannot select another filesystem.
+Expanded scope/Context/Chat/conversation/project-restart regressions have
+**271 passed**. Corrective PR and resulting main CI remain required.
+
 Workflow recovery hardening reuses `WorkflowRuntime`, `WorkflowStore`, the
 existing TaskGraph, AgentSession coordinator, and journal-backed distributed,
 Reality and external-agent handlers (**REUSE / FIX / EXTEND**). Pre-change
