@@ -46,7 +46,7 @@ def test_manifest_bounds_details_but_hashes_the_entire_input():
     )
 
 
-def test_context_manifest_reports_actual_truncation_and_no_raw_source_ids(tmp_path):
+def test_context_manifest_delivers_whole_admitted_sources_without_raw_ids(tmp_path):
     class Facade:
         def try_invoke_sync(self, request):
             self.request = request
@@ -60,7 +60,11 @@ def test_context_manifest_reports_actual_truncation_and_no_raw_source_ids(tmp_pa
             "source_id": "FAKE-PRIVATE-SOURCE",
             "content": "a" * 30_000,
         },
-        {"source_type": "device", "source_id": "omitted-device", "content": "not-sent"},
+        {
+            "source_type": "device",
+            "source_id": "tail-device",
+            "content": "important-tail",
+        },
     ]
     GatewayChatHandler(facade)(
         SimpleNamespace(
@@ -87,13 +91,16 @@ def test_context_manifest_reports_actual_truncation_and_no_raw_source_ids(tmp_pa
     assert (
         context["content_characters"]
         == len(facade.request.messages[1]["content"])
-        == 28_000
+        > 30_000
     )
     sources = context["source"]["items"]
-    assert sources[0]["status"] == "partial" and sources[1]["status"] == "omitted"
-    assert sources[1]["included_characters"] == 0
+    assert sources[0]["status"] == "included" and sources[1]["status"] == "included"
+    assert sources[0]["included_characters"] == sources[0]["total_characters"]
+    assert sources[1]["included_characters"] == sources[1]["total_characters"]
+    assert items[0]["content"] in facade.request.messages[1]["content"]
+    assert "important-tail" in facade.request.messages[1]["content"]
     persisted = (tmp_path / ".nous" / "events" / "truncated-input.jsonl").read_text()
-    assert "FAKE-PRIVATE-SOURCE" not in persisted and "not-sent" not in persisted
+    assert "FAKE-PRIVATE-SOURCE" not in persisted and "important-tail" not in persisted
 
 
 def test_input_event_is_emitted_only_after_agent_model_admission(tmp_path, monkeypatch):

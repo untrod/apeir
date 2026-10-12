@@ -31,8 +31,10 @@ not call a model, build a new ContextSnapshot or grant authority.
 
 Each admitted Chat Gateway iteration records a content-free input manifest:
 message roles, character counts, estimated tokens and SHA-256; declared tools;
-selected context chunks marked included, partial or omitted by the actual
-28,000-character rendering bound; and preceding tool results. A successful
+selected context chunks marked included or omitted by the Context Builder's
+admitted input and item bounds; and preceding tool results. Selected chunks
+reach the Gateway whole, without a second character clipping pass. Historical
+manifests with partial chunks remain readable. A successful
 `read_file` result identifies the relative file, selected lines and original
 file digest computed from the same bounded bytes as its selected content.
 This does not prevent later edits or prove an atomic filesystem snapshot.
@@ -56,6 +58,33 @@ The UI replays up to 1,600 events with cursor pagination and explicitly labels
 truncation. Old events remain readable without fabricated manifests. A selected
 workspace reference is still metadata only: selecting it does not automatically
 upload its contents or establish that a model read the file.
+
+Runtime source collection requires the trusted entry point's live authenticated
+context. Serialized actor claims cannot supply that proof. Normal initialization
+declares `context.read` in the existing Capability Registry; it creates no
+permission or grant and preserves a disabled reader. Current ContextGuard
+admission precedes collection and binds the request, actor, workspace and purpose.
+Memory, project, Agent and decision readers use the selected workspace's existing
+`.nous` state; no source registry or cache store is added. Context audit records
+also stay under `.nous`. An older explicitly placed Context database is retained,
+not deleted or copied into source context.
+The CLI uses the same configured host root and its trusted local-owner
+attestation. API/Chat pass the already validated context; a generic SDK request
+does not automatically become a human. Context-loaded Run events and Trace
+entries contain only snapshot IDs, counts, checksum and admission references;
+they do not copy source text or identity attestations.
+
+Snapshots retain source identity/version, owner, permission, content digests,
+source positions and omission reasons. Required objective, plan and governance
+items remain whole; if they cannot fit, dispatch stops with
+`context_budget_exceeded`. Estimates are not Provider token measurements.
+Retained Runtime context is rechecked before each Chat model invocation and
+collaboration entry. Revoked access pauses the existing Agent execution before
+the next Provider call; it cannot retract bytes already sent. Snapshot integrity
+and permission revalidation do not establish current filesystem freshness.
+Incremental snapshot updates require the same binding and supplied current
+source versions; they remain read data, not execution authority or a qualified
+cross-task cache.
 
 The current Chat handler supports text, model choice and execution mode. File
 attachments and Node/privacy/per-request-budget controls are disabled because

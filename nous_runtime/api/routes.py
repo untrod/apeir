@@ -1343,6 +1343,7 @@ def handle_runtime_run(
                 authorization_context=authorization_context.to_dict()
                 if authorization_context
                 else {},
+                authenticated_context=authorization_context,
                 governance_surface=governance_surface,
             )
         )
@@ -1719,6 +1720,7 @@ def handle_chat_runtime(
             authorization_context=authorization_context.to_dict()
             if authorization_context
             else {},
+            authenticated_context=authorization_context,
             governance_surface=governance_surface,
         )
         return ok_response(

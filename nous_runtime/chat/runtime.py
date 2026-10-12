@@ -67,6 +67,7 @@ class ChatRuntime:
         request: ChatRequest,
         *,
         authorization_context: dict[str, Any] | None = None,
+        authenticated_context: Any = None,
         governance_surface: str = "local_cli",
     ) -> ChatResponse:
         if not request.text.strip():
@@ -171,6 +172,7 @@ class ChatRuntime:
                 "workload_profile": workload_profile,
             },
             authorization_context=dict(authorization_context or {}),
+            authenticated_context=authenticated_context,
             governance_surface=governance_surface,
             request_id=request.request_id,
         )

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
+import hashlib
+from nous_runtime.context.builder import ContextBudgetError
 from typing import Any, Callable
 
 from nous_runtime.events.models import RunEvent, RunState
@@ -162,8 +165,32 @@ class RuntimePipeline:
         )
 
         context_snapshot = self._build_context(request, decision.intent, workspace.path)
-        trace.add("context", "loaded", data=context_snapshot)
-        self._emit(request.request_id, "context.loaded", context_snapshot)
+        context_status = str(context_snapshot.get("status") or "loaded")
+        context_evidence = {
+            "snapshot_id": context_snapshot.get("snapshot_id", ""),
+            "status": context_status,
+            "delivery_status": context_snapshot.get("delivery_status", context_status),
+            "item_count": context_snapshot.get("item_count", 0),
+            "checksum": context_snapshot.get("checksum", ""),
+            "truncated": context_snapshot.get("truncated", False),
+            "admission_decision_id": context_snapshot.get("admission_decision_id")
+            or (context_snapshot.get("metadata", {}).get("context_binding") or {}).get(
+                "admission_decision_id", ""
+            ),
+        }
+        # Source content belongs to the live admitted input, not general Run
+        # telemetry. The Gateway records a content-free input manifest later.
+        trace.add("context", context_status, data=context_evidence)
+        self._emit(request.request_id, "context.loaded", context_evidence)
+        if context_status == "budget_exceeded":
+            return self._response(
+                request,
+                trace,
+                "context_budget_exceeded",
+                "Required context exceeds the admitted input bound; revise the task or budget.",
+                decision,
+                result={"context_snapshot": context_snapshot},
+            )
 
         self._active_intent_analysis = intent_resolution.analysis
         plan = self._plan(
@@ -335,46 +362,112 @@ class RuntimePipeline:
     def _build_context(
         self, request: RuntimeRequest, intent: str, workspace_path: str
     ) -> dict[str, Any]:
+        empty = {"snapshot_id": "", "item_count": 0, "items": [], "truncated": False}
         try:
             from nous_runtime.context.builder import build_context
+            from nous_runtime.context.schema import ContextSource
+            from nous_runtime.context.security import ContextAccessRequest, ContextGuard
             from nous_runtime.context.types import BuildRequest
+            from nous_runtime.governance.contracts import AuthorizationContext
+
+            context = getattr(request, "authenticated_context", None)
+            if not isinstance(context, AuthorizationContext):
+                return {**empty, "status": "no_source_access"}
+            actor_type = {
+                "user": "user",
+                "agent": "agent",
+                "service": "system",
+                "automation": "system",
+            }.get(context.subject_type, "")
+            guard = ContextGuard(workspace_path, gate=self.gate)
+            purpose = (
+                f"Provide context for runtime request {request.request_id} ({intent})"
+            )
+            admission = guard.authorize(
+                ContextAccessRequest(
+                    actor=context.subject_id,
+                    actor_type=actor_type,
+                    context_id=f"runtime-context:{request.request_id}",
+                    purpose=purpose,
+                    requested_sources=tuple(source.value for source in ContextSource),
+                    authorization_context=context,
+                )
+            )
+            if not admission.allowed:
+                return {
+                    **empty,
+                    "status": "no_source_access",
+                    "admission_decision_id": admission.decision_id,
+                }
+            binding = {
+                "subject_type": context.subject_type,
+                "subject_id": context.subject_id,
+                "context_id": context.context_id,
+                "workspace": str(Path(workspace_path).resolve()),
+                "purpose_sha256": hashlib.sha256(purpose.encode("utf-8")).hexdigest(),
+                # A changed admission requires fresh source selection. This
+                # conservative permission version does not itself grant access.
+                "admission_decision_id": admission.decision_id,
+                "granted_sources": list(admission.granted_sources),
+            }
+            build_metadata = {
+                "runtime_request_id": request.request_id,
+                "context_guard": guard,
+                "authorization_context": context,
+                "actor_type": actor_type,
+                "purpose": purpose,
+                "context_binding": binding,
+            }
+            if "context_max_input_tokens" in request.constraints:
+                build_metadata["max_input_tokens"] = request.constraints[
+                    "context_max_input_tokens"
+                ]
+            if "context_token_budgets" in request.constraints:
+                build_metadata["token_budgets"] = request.constraints[
+                    "context_token_budgets"
+                ]
 
             snapshot = build_context(
                 BuildRequest(
                     intent=intent,
                     user_id=request.user_id,
                     context_hint=request.user_input,
-                    metadata={"runtime_request_id": request.request_id},
+                    sources=admission.granted_sources,
+                    max_items=request.constraints.get("context_max_items", 100),
+                    metadata=build_metadata,
                 ),
                 workspace=workspace_path,
             )
-            items: list[dict[str, Any]] = []
-            remaining = 24_000
-            for item in tuple(getattr(snapshot, "items", ()) or ())[:32]:
-                content = str(getattr(item, "content", "") or "").strip()
-                if not content or remaining <= 0:
-                    continue
-                content = content[:remaining]
-                remaining -= len(content)
-                items.append(
-                    {
-                        "item_id": str(getattr(item, "item_id", "") or ""),
-                        "source_id": str(getattr(item, "source_id", "") or ""),
-                        "source_type": str(getattr(item, "source_type", "") or ""),
-                        "content": content,
-                        "confidence": float(getattr(item, "confidence", 0.0) or 0.0),
-                    }
-                )
+            snapshot = replace(
+                snapshot,
+                metadata={
+                    **snapshot.metadata,
+                    "context_binding": binding,
+                    "source_versions": {
+                        item.source_version_key: item.source_version
+                        for item in snapshot.items
+                    },
+                },
+            )
+            payload = snapshot.to_dict()
             return {
-                "snapshot_id": str(
-                    getattr(snapshot, "snapshot_id", "") or getattr(snapshot, "id", "")
-                ),
-                "item_count": len(getattr(snapshot, "items", ()) or ()),
-                "items": items,
-                "truncated": len(items) < len(getattr(snapshot, "items", ()) or ()),
+                **payload,
+                "snapshot_id": snapshot.id,
+                "delivery_status": "loaded",
+                "truncated": bool(snapshot.metadata.get("truncation_explanation")),
             }
-        except Exception as exc:
-            return {"snapshot_id": "", "item_count": 0, "error": str(exc)}
+        except ContextBudgetError:
+            return {
+                **empty,
+                "status": "budget_exceeded",
+                "error": "Required objective or governance context exceeds the admitted input bound.",
+            }
+        except Exception:
+            return {
+                **empty,
+                "status": "context_error",
+                "error": "Context could not be prepared.",
+            }
 
     def _plan(
         self,
@@ -474,14 +567,18 @@ class RuntimePipeline:
                 parameter_summary=intent,
             )
             context = (
-                AuthorizationContext.from_dict(request.authorization_context)
-                if request.authorization_context
-                else AuthorizationContext(
-                    subject_type="user",
-                    subject_id=request.user_id,
-                    authn_method="runtime_session",
-                    authn_confidence=0.8,
-                    session_locality="local",
+                request.authenticated_context
+                if isinstance(request.authenticated_context, AuthorizationContext)
+                else (
+                    AuthorizationContext.from_dict(request.authorization_context)
+                    if request.authorization_context
+                    else AuthorizationContext(
+                        subject_type="user",
+                        subject_id=request.user_id,
+                        authn_method="runtime_session",
+                        authn_confidence=0.8,
+                        session_locality="local",
+                    )
                 )
             )
             decision = (self.gate or get_gate()).evaluate(proposal, context)

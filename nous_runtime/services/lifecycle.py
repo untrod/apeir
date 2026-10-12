@@ -52,6 +52,24 @@ def seed_capabilities() -> int:
             locality="local",
             metadata={"service": "nous_runtime.workspace.workbench:DeveloperWorkbench"},
         )
+    if get_capability("context.read") is None:
+        register_capability(
+            "context.read",
+            category="software",
+            provider="nous",
+            description="Read admitted source context for the current Runtime request",
+            risk="low",
+            max_retries=0,
+            # This legacy flag means per-action approval. ContextGuard still
+            # requires current authenticated identity and source permission.
+            requires_auth=False,
+            side_effect_class="read_only",
+            reversibility="reversible",
+            model_uncertainty=0.0,
+            idempotent=True,
+            locality="local",
+            metadata={"service": "nous_runtime.context.security:ContextGuard"},
+        )
     return count_capabilities()
 
 
