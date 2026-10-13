@@ -247,15 +247,22 @@ class ContentAddressedArtifactStore:
         return "sha256:" + hasher.hexdigest() == digest
 
     def pin(self, digest: str, reason: str = "user") -> dict[str, Any]:
-        self.resolve(digest)
         with self._lock, file_lock(str(self.index_path) + ".lock"):
-            self._pins[digest] = {"reason": reason, "pinned_at": _utc_now()}
+            self._index = self._load_index()
+            self._pins = self._load_pins()
+            self.resolve(digest)
+            self._pins[digest] = {
+                "reason": redact_sensitive_text(reason),
+                "pinned_at": _utc_now(),
+            }
             _atomic_write_json(self.pins_path, self._pins)
             return self._receipt("artifact.pin", digest, "COMPLETED")
 
     def unpin(self, digest: str) -> dict[str, Any]:
         _digest_hex(digest)
         with self._lock, file_lock(str(self.index_path) + ".lock"):
+            self._index = self._load_index()
+            self._pins = self._load_pins()
             existed = self._pins.pop(digest, None) is not None
             _atomic_write_json(self.pins_path, self._pins)
             return self._receipt(
@@ -264,6 +271,8 @@ class ContentAddressedArtifactStore:
 
     def garbage_collect(self, *, dry_run: bool = True) -> dict[str, Any]:
         with self._lock, file_lock(str(self.index_path) + ".lock"):
+            self._index = self._load_index()
+            self._pins = self._load_pins()
             protected = self._transitive_pin_closure()
             candidates = sorted(set(self._index) - protected)
             if dry_run:

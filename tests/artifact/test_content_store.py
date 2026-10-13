@@ -70,6 +70,81 @@ def test_stale_writer_does_not_replace_a_corrupt_persisted_index(tmp_path):
     assert not list(store.objects.rglob("*"))
 
 
+def test_stale_pin_and_gc_preserve_other_instances_protected_evidence(tmp_path):
+    writer = ContentAddressedArtifactStore(tmp_path)
+    dependency = writer.store_bytes(b"input", artifact_type="evidence", name="input")
+    dependent = writer.store_bytes(
+        b"result",
+        artifact_type="evidence",
+        name="result",
+        depends_on=(dependency["artifact"]["digest"],),
+    )
+    separate = writer.store_bytes(b"other", artifact_type="evidence", name="other")
+    first = ContentAddressedArtifactStore(tmp_path)
+    second = ContentAddressedArtifactStore(tmp_path)
+    collector = ContentAddressedArtifactStore(tmp_path)
+    first.pin(dependent["artifact"]["digest"], "original result")
+    second.pin(separate["artifact"]["digest"], "other result")
+    result = collector.garbage_collect(dry_run=False)
+    assert result["removed"] == []
+    assert set(result["protected"]) == {
+        item["artifact"]["digest"] for item in (dependency, dependent, separate)
+    }
+    reloaded = ContentAddressedArtifactStore(tmp_path)
+    assert all(
+        reloaded.verify(item["artifact"]["digest"])
+        for item in (dependency, dependent, separate)
+    )
+
+
+def test_stale_pin_and_unpin_use_current_artifact_and_pin_state(tmp_path):
+    stale = ContentAddressedArtifactStore(tmp_path)
+    writer = ContentAddressedArtifactStore(tmp_path)
+    keep = writer.store_bytes(b"keep", artifact_type="evidence", name="keep")
+    remove = writer.store_bytes(b"remove", artifact_type="evidence", name="remove")
+    writer.pin(keep["artifact"]["digest"], "must survive")
+    stale.pin(remove["artifact"]["digest"], "temporary")
+    writer.unpin(remove["artifact"]["digest"])
+    result = stale.garbage_collect(dry_run=False)
+    assert result["removed"] == [remove["artifact"]["digest"]]
+    assert result["protected"] == [keep["artifact"]["digest"]]
+    assert ContentAddressedArtifactStore(tmp_path).verify(keep["artifact"]["digest"])
+
+
+@pytest.mark.parametrize("operation", ("pin", "unpin", "garbage_collect"))
+def test_corrupt_pins_block_stale_mutations_without_replacing_evidence(
+    tmp_path, operation
+):
+    store = ContentAddressedArtifactStore(tmp_path)
+    record = store.store_bytes(b"preserve", artifact_type="evidence", name="preserve")
+    digest = record["artifact"]["digest"]
+    before = store.index_path.read_bytes()
+    corrupt = '{"not-a-digest": {}}'
+    store.pins_path.write_text(corrupt, encoding="utf-8")
+    with pytest.raises(ArtifactError):
+        if operation == "garbage_collect":
+            store.garbage_collect(dry_run=False)
+        else:
+            getattr(store, operation)(digest)
+    assert store.pins_path.read_text(encoding="utf-8") == corrupt
+    assert store.index_path.read_bytes() == before
+    assert store.resolve(digest).read_bytes() == b"preserve"
+
+
+def test_pin_reason_uses_the_existing_sensitive_data_redactor(tmp_path):
+    from nous_runtime.core.redaction import register_sensitive_value
+
+    fake_value = "test-cas-pin-sensitive-value"
+    register_sensitive_value(fake_value)
+    store = ContentAddressedArtifactStore(tmp_path)
+    record = store.store_bytes(b"safe", artifact_type="evidence", name="safe")
+    store.pin(record["artifact"]["digest"], f"description {fake_value}")
+    persisted = store.pins_path.read_text(encoding="utf-8")
+    assert fake_value not in persisted
+    assert "description" in persisted
+    assert "description <REDACTED>" in persisted
+
+
 def test_store_resolve_deduplicate_and_verify(tmp_path: Path):
     store = ContentAddressedArtifactStore(tmp_path / "store")
     first = store.store_bytes(

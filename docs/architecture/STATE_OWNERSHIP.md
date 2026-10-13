@@ -46,7 +46,10 @@ CAS writers reload the current index under its existing shared file lock before
 checking graph references or adding an object. Separate Workflow, Node and API
 store instances must retain each other's evidence and original immutable
 provenance; a corrupt persisted index blocks a write instead of being replaced by
-an older in-memory snapshot. Object bytes still require digest verification.
+an older in-memory snapshot. Pin, unpin and garbage collection also reload current
+index and pin state under that same lock, preserving another instance's protected
+objects and transitive evidence dependencies. Corrupt pin state blocks these
+mutations. Object bytes still require digest verification.
 
 ## Admission, durability and commitment
 
