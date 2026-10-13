@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from nous_runtime.node_runtime.reliability import (
+    NodeConnectivityProjection,
     NodeConnectivityState,
     project_node_connectivity,
 )
@@ -28,6 +29,8 @@ def test_connectivity_projection_expires_without_claiming_live_transport() -> No
         connected=False,
         connection_phase="",
         last_observed_at=_timestamp(now - timedelta(seconds=10)),
+        resource_observed_at=_timestamp(now - timedelta(seconds=10)),
+        resource_report_current=True,
         heartbeat_seconds=5,
         now=now,
     )
@@ -35,6 +38,8 @@ def test_connectivity_projection_expires_without_claiming_live_transport() -> No
         connected=False,
         connection_phase="",
         last_observed_at=_timestamp(now - timedelta(seconds=20)),
+        resource_observed_at=_timestamp(now - timedelta(seconds=20)),
+        resource_report_current=True,
         heartbeat_seconds=5,
         now=now,
     )
@@ -42,6 +47,8 @@ def test_connectivity_projection_expires_without_claiming_live_transport() -> No
         connected=False,
         connection_phase="",
         last_observed_at=_timestamp(now - timedelta(seconds=31)),
+        resource_observed_at=_timestamp(now - timedelta(seconds=31)),
+        resource_report_current=True,
         heartbeat_seconds=5,
         now=now,
     )
@@ -62,6 +69,8 @@ def test_connected_node_requires_reconciliation_before_online() -> None:
         connected=True,
         connection_phase="RECONNECTING",
         last_observed_at="",
+        resource_observed_at="",
+        resource_report_current=False,
         heartbeat_seconds=5,
         now=now,
     )
@@ -69,6 +78,8 @@ def test_connected_node_requires_reconciliation_before_online() -> None:
         connected=True,
         connection_phase="RECONCILING",
         last_observed_at=_timestamp(now),
+        resource_observed_at=_timestamp(now),
+        resource_report_current=True,
         heartbeat_seconds=5,
         now=now,
     )
@@ -76,6 +87,8 @@ def test_connected_node_requires_reconciliation_before_online() -> None:
         connected=True,
         connection_phase="ONLINE",
         last_observed_at=_timestamp(now),
+        resource_observed_at=_timestamp(now),
+        resource_report_current=True,
         heartbeat_seconds=5,
         now=now,
     )
@@ -86,6 +99,64 @@ def test_connected_node_requires_reconciliation_before_online() -> None:
     assert reconciling.schedulable is False
     assert online.state is NodeConnectivityState.ONLINE
     assert online.schedulable is True
+
+
+@pytest.mark.parametrize("connected", [True, False])
+@pytest.mark.parametrize(
+    "resource_observed_at,resource_report_current,resource_report_fresh",
+    [
+        ("", True, False),
+        ("not-a-time", True, False),
+        ("2026-10-01T23:59:44Z", True, False),
+        ("2026-10-02T00:00:01Z", True, False),
+        ("2026-10-02T00:00:00Z", False, True),
+        ("2026-10-02T00:00:00Z", "true", True),
+        ("2026-10-02T00:00:00Z", 1, True),
+    ],
+)
+def test_current_connectivity_does_not_replace_missing_or_stale_resources(
+    connected, resource_observed_at, resource_report_current, resource_report_fresh
+):
+    now = datetime(2026, 10, 2, tzinfo=timezone.utc)
+    projection = project_node_connectivity(
+        connected=connected,
+        connection_phase="ONLINE",
+        last_observed_at=_timestamp(now),
+        resource_observed_at=resource_observed_at,
+        resource_report_current=resource_report_current,
+        heartbeat_seconds=5,
+        now=now,
+    )
+    assert projection.lease_valid is True
+    assert projection.resource_report_fresh is resource_report_fresh
+    assert projection.schedulable is False
+
+
+@pytest.mark.parametrize("connected", [True, False])
+def test_legacy_projection_call_without_resource_facts_fails_closed(connected):
+    now = datetime(2026, 10, 2, tzinfo=timezone.utc)
+    projection = project_node_connectivity(
+        connected=connected,
+        connection_phase="ONLINE",
+        last_observed_at=_timestamp(now),
+        heartbeat_seconds=5,
+        now=now,
+    )
+    assert projection.state is (
+        NodeConnectivityState.ONLINE if connected else NodeConnectivityState.DEGRADED
+    )
+    assert projection.lease_valid is True
+    assert projection.resource_report_fresh is False
+    assert projection.schedulable is False
+
+
+def test_connectivity_projection_preserves_original_positional_fields():
+    projection = NodeConnectivityProjection(
+        NodeConnectivityState.DEGRADED, "expires", True, True, 0.0
+    )
+    assert projection.schedulable is True
+    assert projection.observation_age_seconds == 0.0
+    assert projection.resource_report_fresh is False
 
 
 def test_completed_work_is_delivered_after_transport_loss_without_reexecution(

@@ -661,12 +661,27 @@ class NodeRelayServer:
             identity = registration.get("identity", {})
             platform = identity.get("platform", {})
             last_observed_at = str(observation.get("observed_at", ""))
+            resource_observed_at = str(observation.get("resource_observed_at", ""))
+            signed = observation.get("signed_envelopes", {})
+            registration_sequence = _non_negative_int(
+                signed.get("REGISTER", {}).get("sequence")
+            )
+            resource_sequence = _non_negative_int(
+                signed.get("RESOURCE_REPORT", {}).get("sequence")
+            )
+            # A resumed session ID can span connections. Only a report accepted
+            # after this REGISTER supplies resources for its connection.
+            resource_report_current = bool(
+                registration_sequence and resource_sequence > registration_sequence
+            )
             revoked = node_id in self._trust_document.get("revoked", {})
             connected = node_id in self.connections and not revoked
             projection = project_node_connectivity(
                 connected=connected,
                 connection_phase=self.connection_states.get(node_id, ""),
                 last_observed_at=last_observed_at,
+                resource_observed_at=resource_observed_at,
+                resource_report_current=resource_report_current,
                 heartbeat_seconds=self.heartbeat_seconds,
             )
             observation_age = projection.observation_age_seconds
@@ -707,6 +722,9 @@ class NodeRelayServer:
                     },
                     "capabilities": list(identity.get("capabilities", [])),
                     "has_resource_report": "RESOURCE_REPORT" in observation,
+                    "resource_observed_at": resource_observed_at,
+                    "resource_report_current": resource_report_current,
+                    "resource_report_fresh": projection.resource_report_fresh,
                     "has_device_report": "DEVICE_REPORT" in observation,
                 }
             )
@@ -761,6 +779,12 @@ class NodeRelayServer:
             )
             if not node["schedulable"]:
                 reasons.append(f"node connectivity is {node['connectivity_state']}")
+                if not node["resource_report_current"]:
+                    reasons.append(
+                        "resource report is missing for the current registration"
+                    )
+                elif not node["resource_report_fresh"]:
+                    reasons.append("resource report is stale or has no observed time")
             if architecture and observed_architecture != architecture:
                 reasons.append(
                     "architecture mismatch: "
@@ -823,6 +847,12 @@ class NodeRelayServer:
                 reasons.append("node is not in the Work target node set")
             if not node["schedulable"]:
                 reasons.append(f"node connectivity is {node['connectivity_state']}")
+                if not node["resource_report_current"]:
+                    reasons.append(
+                        "resource report is missing for the current registration"
+                    )
+                elif not node["resource_report_fresh"]:
+                    reasons.append("resource report is stale or has no observed time")
             if (
                 requirements.architectures
                 and architecture not in requirements.architectures
@@ -1647,8 +1677,10 @@ class NodeRelayServer:
             envelope.to_dict()
         )
         observation["observed_at"] = _utc_now()
-        if node_id in self.connections and "RESOURCE_REPORT" in observation:
-            self.connection_states[node_id] = NodeConnectivityState.ONLINE.value
+        if envelope.message_type == "RESOURCE_REPORT":
+            observation["resource_observed_at"] = observation["observed_at"]
+            if node_id in self.connections:
+                self.connection_states[node_id] = NodeConnectivityState.ONLINE.value
         self._save_observations()
 
     def _mark_work_running(self, work_id: str, node_id: str) -> None:
@@ -2041,7 +2073,6 @@ class NodeRelayClient:
                         "report_delivery_confirmed": False,
                     },
                 )
-            resource_digest = _payload_digest(status["resources"]) if status else ""
             device_digest = _payload_digest(status["devices"]) if status else ""
             loop = asyncio.get_running_loop()
             next_heartbeat = loop.time() + self.heartbeat_seconds
@@ -2084,10 +2115,9 @@ class NodeRelayClient:
                         "heartbeat_sequence": status["heartbeat_sequence"],
                     },
                 )
-                next_resource_digest = _payload_digest(status["resources"])
-                if next_resource_digest != resource_digest:
-                    await self._send(websocket, "RESOURCE_REPORT", status["resources"])
-                    resource_digest = next_resource_digest
+                # A successful probe renews resource freshness even when its
+                # payload is unchanged; a heartbeat cannot renew old resources.
+                await self._send(websocket, "RESOURCE_REPORT", status["resources"])
                 next_device_digest = _payload_digest(status["devices"])
                 if next_device_digest != device_digest:
                     await self._send(

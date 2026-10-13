@@ -27,6 +27,7 @@ class NodeConnectivityProjection:
     lease_valid: bool
     schedulable: bool
     observation_age_seconds: float | None
+    resource_report_fresh: bool = False
 
 
 def project_node_connectivity(
@@ -35,12 +36,16 @@ def project_node_connectivity(
     connection_phase: str,
     last_observed_at: str,
     heartbeat_seconds: float,
+    resource_observed_at: str = "",
+    resource_report_current: bool = False,
     now: datetime | None = None,
 ) -> NodeConnectivityProjection:
     """Project a Node state from live transport and durable signed evidence.
 
-    A connectivity lease is only a freshness window for placement.  It is not a
-    Kernel Permit, a resource Lease, or proof that a remote effect completed.
+    Placement requires both current connectivity and a resource report accepted
+    after the latest registration, each within the existing freshness window.
+    Neither freshness window is a Kernel Permit, a resource Lease, or proof
+    that a remote effect completed.
     """
 
     if heartbeat_seconds <= 0:
@@ -52,6 +57,13 @@ def project_node_connectivity(
     age = max((reference - observed).total_seconds(), 0.0) if observed else None
     lease_seconds = heartbeat_seconds * 3
     lease_valid = age is not None and age <= lease_seconds
+    resource_observed = _parse_timestamp(resource_observed_at)
+    resource_age = (
+        (reference - resource_observed).total_seconds() if resource_observed else None
+    )
+    resource_report_fresh = (
+        resource_age is not None and 0 <= resource_age <= lease_seconds
+    )
     lease_expires_at = (
         _format_timestamp(observed + timedelta(seconds=lease_seconds))
         if observed
@@ -82,9 +94,12 @@ def project_node_connectivity(
         state=state,
         lease_expires_at=lease_expires_at,
         lease_valid=lease_valid,
+        resource_report_fresh=resource_report_fresh,
         schedulable=(
-            state is NodeConnectivityState.ONLINE
-            or (state is NodeConnectivityState.DEGRADED and lease_valid)
+            lease_valid
+            and resource_report_current is True
+            and resource_report_fresh
+            and state in {NodeConnectivityState.ONLINE, NodeConnectivityState.DEGRADED}
         ),
         observation_age_seconds=age,
     )
