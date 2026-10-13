@@ -20,8 +20,9 @@ const modelLab = (): ModelLabSnapshot => ({
   usage_accounting: usageFixture(), usage_accounting_status: "available",
 });
 const envelope = (data: unknown) => ({ ok: true, json: async () => ({ ok: true, data }) });
+const serviceToken = "test-console-usage-service";
 
-beforeEach(() => setConfig({ url: "http://localhost:8770", token: "fake.console.usage.service" }));
+beforeEach(() => setConfig({ url: "http://localhost:8770", token: serviceToken }));
 afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear(); });
 
 describe("public Operations Console model usage entry", () => {
@@ -35,7 +36,7 @@ describe("public Operations Console model usage entry", () => {
     expect(screen.queryByRole("button", { name: /Create project|Create experiment|Save atomically|Run in sandbox/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Search records" })).not.toBeInTheDocument();
     expect(fetcher).toHaveBeenCalledWith("http://localhost:8770/api/v1/developer/model-lab", expect.objectContaining({
-      credentials: "include", headers: expect.objectContaining({ Authorization: "Bearer fake.console.usage.service" }),
+      credentials: "include", headers: expect.objectContaining({ Authorization: `Bearer ${serviceToken}` }),
     }));
     expect(fetcher.mock.calls.every(([, options]) => !options.method || options.method === "GET")).toBe(true);
     expect(fetcher.mock.calls.some(([url]) => /developer\/(projects|runs|experiments|overview)|\/chat/.test(url))).toBe(false);

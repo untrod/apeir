@@ -323,7 +323,7 @@ def test_priced_failed_call_keeps_enforced_usd_exposure(tmp_path):
 
 
 def test_fake_backend_exception_cannot_leak_registered_secret_into_accounting(tmp_path):
-    secret = "m35.fake.accounting.secret." + uuid.uuid4().hex
+    secret = "test-m35.fake.accounting.secret." + uuid.uuid4().hex
     register_sensitive_value(secret)
     value = controller(tmp_path)
     reservation = authorize(value)
@@ -341,7 +341,7 @@ def test_fake_backend_exception_cannot_leak_registered_secret_into_accounting(tm
 
 
 def test_known_secret_cannot_be_a_persisted_accounting_identifier(tmp_path):
-    secret = "m35.fake.accounting.identifier." + uuid.uuid4().hex
+    secret = "test-m35.fake.accounting.identifier." + uuid.uuid4().hex
     register_sensitive_value(secret)
     value = controller(tmp_path)
     with pytest.raises(CostLimitExceeded, match="sensitive material"):
@@ -352,7 +352,7 @@ def test_known_secret_cannot_be_a_persisted_accounting_identifier(tmp_path):
 
 
 def test_successful_backend_metadata_is_redacted_before_return(tmp_path):
-    secret = "m35.fake.accounting.metadata." + uuid.uuid4().hex
+    secret = "test-m35.fake.accounting.metadata." + uuid.uuid4().hex
     register_sensitive_value(secret)
     value = controller(tmp_path)
     reservation = authorize(value)

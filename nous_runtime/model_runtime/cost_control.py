@@ -533,7 +533,9 @@ class CostController:
             (credential_ref or f"provider:{provider_id}").encode("utf-8")
         ).hexdigest()
         execution_key = (
-            f"nki:{request.request_id}" if kernel_binding is not None else ""
+            f"nki:{request.request_id}"
+            if kernel_binding is not None
+            else f"direct:{request.request_id}"
         )
         binding_sha256 = ""
         if execution_key:
@@ -545,7 +547,9 @@ class CostController:
                             "provider_id": provider_id,
                             "model_id": model_id,
                             "credential_ref_hash": credential_hash,
-                            "kernel_binding": dict(kernel_binding),
+                            "kernel_binding": dict(kernel_binding)
+                            if kernel_binding is not None
+                            else None,
                         },
                         sort_keys=True,
                         separators=(",", ":"),
@@ -777,6 +781,13 @@ class CostController:
                     "original model attempt has no execution binding"
                 )
             return None
+        if execution_key.startswith("direct:"):
+            # The ledger proves that the original may have executed, including
+            # a crash while still reserved. Direct adapters have no canonical
+            # original-result query; a new admission cannot replay that effect.
+            raise CostLimitExceeded(
+                "original direct model attempt requires original usage reconciliation"
+            )
         if evidence["request_binding_sha256"] != binding_sha256:
             raise CostLimitExceeded("original model execution bindings cannot change")
         estimate = evidence["estimated_usage"]
@@ -800,7 +811,7 @@ class CostController:
         )
 
     def mark_dispatched(self, reservation: Reservation) -> None:
-        """Fence the first Kernel submission before an acknowledgement can be lost."""
+        """Fence first submission before an acknowledgement can be lost."""
         if not reservation.execution_key or reservation.replayed:
             raise CostLimitExceeded("only a new bound model attempt can dispatch")
         with self._lock, self._session(immediate=True) as connection:
@@ -1237,7 +1248,7 @@ class CostController:
             ).hexdigest()
             receipt["dispatch_uncertain"] = dispatched
             if not dispatched:
-                # No effect can own this Kernel key; a newly admitted attempt
+                # No effect can own this execution key; a newly admitted attempt
                 # may claim it while the zero-effect failure stays auditable.
                 receipt["execution_key"] = ""
             self._write_receipt(connection, reservation, receipt)

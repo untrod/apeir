@@ -349,7 +349,7 @@ def test_unknown_pricing_stream_is_rejected_before_provider(tmp_path):
     asyncio.run(scenario())
 
 
-def test_retry_keeps_each_dispatched_attempts_uncertain_budget(tmp_path):
+def test_dispatched_failure_retains_one_original_uncertain_budget(tmp_path):
     async def scenario():
         class FailingAdapter(RecordingAdapter):
             async def invoke(self, value, descriptor, instance):
@@ -367,12 +367,12 @@ def test_retry_keeps_each_dispatched_attempts_uncertain_budget(tmp_path):
             len(adapter.requests)
             == summary["requests"]
             == summary["uncertain_calls"]
-            == 2
+            == 1
         )
-        assert summary["reserved_tokens"] == 216
-        assert {receipt["attempt"] for receipt in summary["receipts"]} == {1, 2}
+        assert summary["reserved_tokens"] == 108
+        assert {receipt["attempt"] for receipt in summary["receipts"]} == {1}
         assert len({receipt["request_id"] for receipt in summary["receipts"]}) == 1
-        assert len({receipt["reservation_id"] for receipt in summary["receipts"]}) == 2
+        assert len({receipt["reservation_id"] for receipt in summary["receipts"]}) == 1
 
     asyncio.run(scenario())
 
@@ -902,5 +902,212 @@ def test_kernel_without_accounting_cannot_blindly_retry_uncertain_dispatch(tmp_p
             await gateway.invoke(request())
         assert journal.effects == len(journal.operations) == 1
         assert journal.queries == []
+
+    asyncio.run(scenario())
+
+
+class BillableEffectAdapter(RecordingAdapter):
+    """A call incurs a known fake charge before any response can be lost."""
+
+    def __init__(self, *, lost_response=False, hold=None):
+        super().__init__()
+        self.effects = 0
+        self.lost_response = lost_response
+        self.hold = hold
+        self.entered = asyncio.Event()
+
+    async def invoke(self, value, descriptor, instance):
+        self.effects += 1
+        self.entered.set()
+        if self.hold is not None and self.effects == 1:
+            await self.hold.wait()
+        if self.lost_response:
+            if self.lost_response == "timeout":
+                raise asyncio.TimeoutError
+            raise ConnectionError("FAKE-PRIVATE-BILLABLE-RESPONSE-LOST")
+        return await super().invoke(value, descriptor, instance)
+
+
+@pytest.mark.parametrize("accounting", [True, False])
+@pytest.mark.parametrize("loss", ["connection", "timeout"])
+def test_lost_direct_response_never_automatically_repeats_billable_effect(
+    tmp_path, accounting, loss
+):
+    async def scenario():
+        adapter = BillableEffectAdapter(lost_response=loss)
+        gateway, _, controller = build_gateway(tmp_path, adapter=adapter, retries=1)
+        if not accounting:
+            gateway._cost_controller = None
+        with pytest.raises(ModelInvocationError) as caught:
+            await gateway.invoke(request())
+        assert "FAKE-PRIVATE-BILLABLE-RESPONSE-LOST" not in str(caught.value)
+        assert adapter.effects == 1
+        if accounting:
+            summary = controller.summary()
+            assert summary["requests"] == summary["uncertain_calls"] == 1
+            assert summary["reserved_tokens"] == 108
+            assert summary["reserved_cost_usd"] == pytest.approx(0.000116)
+            assert summary["total_cost_usd"] is None
+            assert summary["receipts"][0]["attempt"] == 1
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("lost_response", [True, False])
+def test_original_direct_request_is_fenced_across_repeated_calls_and_restart(
+    tmp_path, lost_response
+):
+    async def scenario():
+        value = request()
+        adapter = BillableEffectAdapter(lost_response=lost_response)
+        gateway, _, controller = build_gateway(tmp_path, adapter=adapter)
+        if lost_response:
+            with pytest.raises(ModelInvocationError):
+                await gateway.invoke(value)
+        else:
+            await gateway.invoke(value)
+        original = controller.summary()
+        for restarted in (False, True):
+            if restarted:
+                gateway, _, controller = build_gateway(tmp_path, adapter=adapter)
+            with pytest.raises(CostLimitExceeded, match="original.*reconciliation"):
+                await gateway.invoke(value)
+            assert adapter.effects == 1
+            summary = controller.summary()
+            assert summary["receipts"] == original["receipts"]
+            assert summary["reserved_tokens"] == original["reserved_tokens"]
+            assert summary["reserved_cost_usd"] == original["reserved_cost_usd"]
+        adapter.lost_response = False
+        await gateway.invoke(replace(value, request_id="new-explicit-user-intent"))
+        assert adapter.effects == 2
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("during_setup", [False, True])
+@pytest.mark.parametrize("same_gateway", [False, True])
+def test_concurrent_original_direct_request_cannot_dispatch_or_release_first(
+    tmp_path, during_setup, same_gateway
+):
+    async def scenario():
+        value = request()
+        hold = asyncio.Event()
+        adapter = BillableEffectAdapter(hold=None if during_setup else hold)
+        gateway, _, controller = build_gateway(tmp_path, adapter=adapter)
+        entered = adapter.entered
+        if during_setup:
+            entered = asyncio.Event()
+
+            async def setup(instance, selected):
+                entered.set()
+                await hold.wait()
+
+            gateway._ensure_loaded = setup
+        task = asyncio.create_task(gateway.invoke(value))
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        if same_gateway:
+            second, reopened = gateway, controller
+        else:
+            second, _, reopened = build_gateway(tmp_path, adapter=adapter)
+        try:
+            with pytest.raises(CostLimitExceeded, match="original.*reconciliation"):
+                await second.invoke(value)
+            assert adapter.effects == (0 if during_setup else 1)
+            assert gateway.active_request_ids() == (
+                () if during_setup else (value.request_id,)
+            )
+            assert reopened.summary()["reserved_tokens"] == 108
+            assert reopened.summary()["reserved_cost_usd"] == pytest.approx(0.000116)
+        finally:
+            hold.set()
+            await task
+        assert adapter.effects == controller.summary()["requests"] == 1
+        assert controller.summary()["reserved_tokens"] == 0
+
+    asyncio.run(scenario())
+
+
+def test_direct_setup_failure_retries_without_a_second_billable_effect(tmp_path):
+    async def scenario():
+        adapter = BillableEffectAdapter()
+        gateway, _, controller = build_gateway(tmp_path, adapter=adapter, retries=1)
+        setup_calls = 0
+
+        async def setup(instance, selected):
+            nonlocal setup_calls
+            setup_calls += 1
+            if setup_calls == 1:
+                raise ConnectionError("fake setup failed before provider dispatch")
+
+        gateway._ensure_loaded = setup
+        await gateway.invoke(request())
+        assert setup_calls == 2 and adapter.effects == 1
+        summary = controller.summary()
+        assert summary["reserved_tokens"] == summary["uncertain_calls"] == 0
+        assert {item["status"] for item in summary["receipts"]} == {
+            "not_dispatched",
+            "completed",
+        }
+
+    asyncio.run(scenario())
+
+
+def test_direct_stream_original_request_cannot_be_reopened(tmp_path):
+    async def scenario():
+        value = request()
+        gateway, adapter, controller = build_gateway(tmp_path)
+        assert [item async for item in gateway.stream(value)] == ["one", "two"]
+        reopened, _, _ = build_gateway(tmp_path, adapter=adapter)
+        with pytest.raises(CostLimitExceeded, match="original.*reconciliation"):
+            await anext(reopened.stream(value))
+        assert len(adapter.requests) == 1
+        assert controller.summary()["reserved_tokens"] == 108
+
+    asyncio.run(scenario())
+
+
+def test_direct_stream_factory_response_loss_retains_original_charge(tmp_path):
+    async def scenario():
+        class BillableStreamFactory(RecordingAdapter):
+            def stream(self, value, descriptor, instance):
+                self.requests.append(value)
+                raise ConnectionError("fake response lost during stream setup")
+
+        gateway, adapter, controller = build_gateway(
+            tmp_path, adapter=BillableStreamFactory()
+        )
+        value = request()
+        with pytest.raises(ModelInvocationError, match="usage remains uncertain"):
+            await anext(gateway.stream(value))
+        with pytest.raises(CostLimitExceeded, match="original.*reconciliation"):
+            await anext(gateway.stream(value))
+        summary = controller.summary()
+        assert len(adapter.requests) == summary["uncertain_calls"] == 1
+        assert summary["reserved_tokens"] == 108
+        assert summary["reserved_cost_usd"] == pytest.approx(0.000116)
+        assert summary["total_cost_usd"] is None
+
+    asyncio.run(scenario())
+
+
+def test_legacy_unbound_direct_original_requires_evidence_after_upgrade(tmp_path):
+    async def scenario():
+        adapter = BillableEffectAdapter(lost_response=True)
+        gateway, _, controller = build_gateway(tmp_path, adapter=adapter)
+        value = request()
+        with pytest.raises(ModelInvocationError):
+            await gateway.invoke(value)
+        # Model the pre-fence ledger schema: an exposure and receipt exist,
+        # but neither records the additive original execution binding.
+        with controller._session() as connection:
+            connection.execute(
+                "UPDATE usage_reservations SET execution_key='', reservation_json=''"
+            )
+            connection.execute("UPDATE usage_receipts SET execution_key=''")
+        reopened, _, _ = build_gateway(tmp_path, adapter=adapter)
+        with pytest.raises(CostLimitExceeded, match="no execution binding"):
+            await reopened.invoke(value)
+        assert adapter.effects == 1
+        assert controller.summary()["reserved_tokens"] == 108
 
     asyncio.run(scenario())

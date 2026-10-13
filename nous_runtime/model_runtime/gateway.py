@@ -305,8 +305,8 @@ class ModelGateway:
                         priority=int(request.metadata.get("priority", 50)),
                     )
                     async with lease:
+                        before_dispatch()
                         self._active[request.request_id] = adapter
-                        dispatched = True
                         response = await asyncio.wait_for(
                             adapter.invoke(guarded_request, descriptor, instance),
                             timeout=max(
@@ -366,7 +366,9 @@ class ModelGateway:
                     self._cost_controller.fail(
                         reservation, reason="timeout", dispatched=dispatched
                     )
-                adapter = self._active.pop(request.request_id, None)
+                adapter = (
+                    self._active.pop(request.request_id, None) if dispatched else None
+                )
                 if adapter is not None:
                     await adapter.cancel(request.request_id)
                 message = f"{model_id}: invocation timed out"
@@ -380,14 +382,16 @@ class ModelGateway:
                         "attempt": attempt_number,
                     },
                 )
-                if use_kernel and dispatched and self._cost_controller is None:
+                if dispatched and (not use_kernel or self._cost_controller is None):
                     break
             except asyncio.CancelledError:
                 if reservation is not None and self._cost_controller is not None:
                     self._cost_controller.fail(
                         reservation, reason="cancelled", dispatched=dispatched
                     )
-                adapter = self._active.pop(request.request_id, None)
+                adapter = (
+                    self._active.pop(request.request_id, None) if dispatched else None
+                )
                 if adapter is not None:
                     await adapter.cancel(request.request_id)
                 await self._emit(
@@ -400,7 +404,8 @@ class ModelGateway:
                 )
                 raise
             except CostLimitExceeded:
-                self._active.pop(request.request_id, None)
+                if dispatched:
+                    self._active.pop(request.request_id, None)
                 if reservation is not None and self._cost_controller is not None:
                     self._cost_controller.fail(
                         reservation,
@@ -410,7 +415,8 @@ class ModelGateway:
                 self._add_metrics(failed_requests=1)
                 raise
             except Exception as exc:
-                self._active.pop(request.request_id, None)
+                if dispatched:
+                    self._active.pop(request.request_id, None)
                 failure = self._classify_provider_failure(
                     exc,
                     provider_id=candidate_provider_id,
@@ -454,7 +460,7 @@ class ModelGateway:
                         "attempt": attempt_number,
                     },
                 )
-                if use_kernel and dispatched and self._cost_controller is None:
+                if dispatched and (not use_kernel or self._cost_controller is None):
                     break
 
         self._add_metrics(failed_requests=1)
@@ -653,6 +659,9 @@ class ModelGateway:
                 "model.stream.started", request, {"decision": decision.to_dict()}
             )
             async with lease:
+                if reservation is not None and self._cost_controller is not None:
+                    self._cost_controller.mark_dispatched(reservation)
+                dispatched = True
                 self._active[request.request_id] = adapter
                 iterator = adapter.stream(guarded_request, descriptor, instance)
                 while True:
@@ -660,7 +669,6 @@ class ModelGateway:
                     if remaining <= 0:
                         raise asyncio.TimeoutError
                     try:
-                        dispatched = True
                         item = await asyncio.wait_for(
                             anext(iterator),
                             timeout=remaining,

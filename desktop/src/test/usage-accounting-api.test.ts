@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchModelLab, fetchUsageSummary, setConfig } from "../lib/api";
 import { usageFixture } from "./usage-fixture";
 
-beforeEach(() => setConfig({ url: "http://localhost:8770", token: "fake.usage.service" }));
+const serviceToken = "test-usage-service";
+beforeEach(() => setConfig({ url: "http://localhost:8770", token: serviceToken }));
 afterEach(() => { vi.unstubAllGlobals(); sessionStorage.clear(); });
 
 describe("canonical usage accounting API", () => {
@@ -12,7 +13,7 @@ describe("canonical usage accounting API", () => {
     vi.stubGlobal("fetch", fetchMock);
     expect(await fetchUsageSummary("2026-10-12")).toEqual(summary);
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:8770/api/v1/usage?day=2026-10-12", expect.objectContaining({
-      credentials: "include", headers: expect.objectContaining({ Authorization: "Bearer fake.usage.service" }),
+      credentials: "include", headers: expect.objectContaining({ Authorization: `Bearer ${serviceToken}` }),
     }));
   });
 
@@ -36,7 +37,7 @@ describe("canonical usage accounting API", () => {
   it.each([fetchUsageSummary, fetchModelLab])("rejects responses from an earlier Controller connection", async (read) => {
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => {
       setConfig({ url: "http://other-controller:8770", token: "fake.other.service" });
-      setConfig({ url: "http://localhost:8770", token: "fake.usage.service" });
+      setConfig({ url: "http://localhost:8770", token: serviceToken });
       return { ok: true, json: async () => ({ ok: true, data: usageFixture() }) };
     }));
     await expect(read()).rejects.toThrow("Controller connection changed");

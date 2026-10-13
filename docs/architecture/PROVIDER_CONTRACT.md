@@ -105,6 +105,18 @@ pre-dispatch failure releases its reservation; timeout, response loss,
 cancellation or a stream without terminal usage retain the original attempt's
 uncertain exposure. Reconciliation updates that original reservation/receipt
 without another Provider call, and completed bindings cannot be rewritten.
+Direct compatibility requests use the same durable ledger and first-dispatch
+fence. An original request ID with a reserved, dispatched, uncertain or completed
+attempt requires original evidence; it cannot authorize another billable call,
+including after a caller restart or from a concurrent caller. A reserved attempt
+without dispatch evidence is UNKNOWN, since its owner may still be preparing it
+or may have crashed. Only a confirmed pre-dispatch failure permits a new attempt
+for that request ID. A genuinely new user intent uses a new request ID. Direct
+adapters do not expose a canonical original-result query, so the Gateway blocks
+replay instead of inventing a cached response. Automatic retries stop after an
+uncertain dispatched direct outcome even in the no-controller compatibility
+mode; durable replay protection in that mode is unavailable without the
+canonical cost owner.
 Observed nonzero usage in a billable class with no configured rate invalidates
 the original quote's monetary bound. Remaining USD becomes unknown and further
 USD admission blocks until original billing evidence restores a known bound;
@@ -122,10 +134,23 @@ operation, workload, input, snapshot and output digests, and settle the original
 charge. Missing, unsupported or mismatched receipt evidence retains the original
 exposure and blocks another submission. Provider, model, endpoint, credential
 reference, input and budget changes cannot rebind an original attempt; distinct
-direct compatibility attempts retain their separate accounting.
+direct compatibility user intents retain their separate accounting. Cached
+Kernel result retrieval still sends the original bound input to Kernel; reading
+an existing receipt does not mean that retrieval transmits no input bytes.
 Provider error details are discarded from events, health, exceptions and ledger
 receipts; classification retains bounded HTTP status and known error codes.
 These fake-provider contracts do not qualify real vendor billing or native bytes.
+
+A source-built Linux reference of frozen Kernel `87fd1b2` also exercised the
+production Gateway/NKI client against an owned OpenAI-compatible HTTP fixture.
+Actual input/snapshot/output digests and the original StepCommit match; a fresh
+Gateway and restarted Kernel retrieve the committed result without another
+Provider call. A consumer acknowledgement lost after commit likewise reconciles
+the original ledger, while missing/unsupported original receipt queries block
+submission. The harness must configure the Kernel's existing
+`NOUS_ALLOWED_CREDENTIALS` for its fake credential reference; an environment
+value alone is not authorized. This narrow native Linux reference does not
+qualify real vendor usage, Windows component-lock bytes, hardware or a release.
 
 ## Environment resource admission
 

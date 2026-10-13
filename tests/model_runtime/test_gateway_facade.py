@@ -207,13 +207,22 @@ def test_facade_normalizes_provider_usage_and_finish_reason() -> None:
 
 
 def test_facade_reports_retry_and_rejects_secret_metadata() -> None:
-    facade, _adapter = build_facade(
-        "recovered",
-        failures_before_success=1,
-    )
+    facade, adapter = build_facade("recovered")
+    prepare = facade.gateway._ensure_loaded
+    preparation_calls = 0
+
+    async def fail_first_preparation(instance, selected):
+        nonlocal preparation_calls
+        preparation_calls += 1
+        if preparation_calls == 1:
+            raise ConnectionError("fake setup failed before dispatch")
+        await prepare(instance, selected)
+
+    facade.gateway._ensure_loaded = fail_first_preparation
     response = facade.invoke_sync(request(GatewayOperation.REASONING))
     assert response.retry_count == 1
     assert response.fallback_history == ("local/unified",)
+    assert preparation_calls == 2 and len(adapter.invocations) == 1
 
     with pytest.raises(Exception, match="credential reference"):
         request(

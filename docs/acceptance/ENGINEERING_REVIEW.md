@@ -398,6 +398,18 @@ this correction claims no unmeasured latency/Token improvement and changes no
 fsync, grant fence, sandbox profile or retry semantics. Production installation,
 physical/network qualification and research experiments remain separate Gates.
 
+CAS writer review reuses the existing index, pin file and cross-process lock:
+reload persisted state under that lock before graph extension, pin/unpin or GC.
+Duplicate content retains its original metadata and corrupt pin records fail
+closed. A further credential review reproduced two typed-metadata publication
+failures: protected material could enter MIME or deployment target fields.
+These fields now reject protected values before publication instead of masking
+them into different semantic identities. Free-form pin descriptions retain
+central redaction. Current recovery-main Artifact/Node/Reality/workspace/
+credential regression has **438 passed** (106.34 s); this does not qualify native
+bytes, real hardware, production scale or unmeasured performance. Source and
+resulting-main CI remain separate checks.
+
 Final local correction evidence: **66 focused passed**, **1030 affected passed /
 4 skipped**, **262 repository passed**, and **98 Desktop tests in 28 files**;
 Desktop lint/typecheck/build also pass. Full bare-host regression is **4119 passed /
@@ -513,7 +525,7 @@ improvements. Preserve fail-closed and persistence semantics in every comparison
 | --- | --- | --- |
 | P1 | Relay `_run_provider_spool` sorts and ingests all pending JSON requests every 50 ms | Measure pending count, per-pass reads, event-loop lag and p50/p95/p99 queue-to-admission latency under reconnect/backpressure. Terminal requests are already removed by `_publish_provider_result`; this is not an ever-growing scan of all completed history. Consider bounded scheduling/indexing only with restart and duplicate-delivery contracts preserved. |
 | P1 | GovernanceStore opens a connection per operation; `operation_transaction` uses BEGIN IMMEDIATE | Measure connection/checkpoint and writer-lock wait, including concurrent revocation. WAL still has one writer. Do not release the effect's authorization fence or cache grants across revocation to improve benchmark numbers. |
-| P1 | Node Relay/state publication performs synchronous file IO and fsync | Correlate Node journal, signed delivery, Controller projection and Workflow wake timestamps for #4/#8. A timeout is an unknown outcome, not permission to repeat the effect. Move IO only after ordered persistence/cancellation tests demonstrate equivalent semantics. |
+| P1 | Node/Controller sequence publication and client session/probes now use guarded thread offload; other Relay state publication remains synchronous | Controlled ordering/cancellation cases exercise the correction below. Continue correlating Node journal, signed delivery, Controller projection and Workflow wake timestamps for #4/#8. A timeout is an unknown outcome, not permission to repeat the effect; Windows timing and fleet behavior remain unqualified. |
 | P2 | Bounded Ray startup and process topology | Prior qualification observed peak 213 PID-accounted tasks at diagnostic bound 216, with owned cleanup. This narrow margin is not a production minimum. Measure cold/warm execution and useful-work cost before choosing Ray over Native/OCI for small tasks. Default PID64 remains unchanged; an explicit governed provider profile is required. |
 | P2 | CI repeats broad platform matrices on source and main | Preserve required checks and broad main/release coverage; assess branch/PR overlap and setup caches using actual durations. Do not hide failures, weaken security checks or skip native hash qualification. |
 | P2 | OPA policy evaluation | Benchmark the actual policy/input and separate evaluation, HTTP, audit and persistence costs. A policy-only microbenchmark cannot establish end-to-end admission latency. |
@@ -635,3 +647,109 @@ complete connectivity passed** (30.42 s), and **3954 full passed / 60 skipped /
 4 existing warnings** (261.40 s) in the initialized supported container. The
 runtime repair's42/891/274 checks above retain their scope; counts overlap.
 Final source/PR/main CI must exercise the new test HEAD before acceptance.
+
+## Ordered Relay persistence correction — 2026-10-13
+
+Resulting main `a428dcec08a0987bca26903fb5c5fbd7e1f4ce4f` passed all four Core
+jobs, but Windows Multi-Arch job `115146568093` retained **1 failed, 4103 passed,
+51 skipped, 272 deselected, 4 warnings** (1376.47 s, Python 3.11.9). The unchanged
+`test_recorded_result_reconciles_after_hostname_probe_failure[idempotent]`
+timed out on its original five-second result wait, before its healthy-report
+wait. The log records failed hostname probes and repeated receive-phase
+`ConnectionClosedError`; it does not identify the blocking call. This main Gate
+is not green and Issues #4/#8 stay open.
+
+Audit classification: **REUSE** existing sequence/session files, atomic
+publication, Node journal, signatures, replay guard, trust and pending Work;
+**FIX** sequence and client session/probe I/O blocking the network loop;
+**DEFER** unrelated Controller writes, deployed Windows/WAN/fleet and physical
+qualification. Two causal pre-change writer tests fail for the Node and durable
+Controller: the loop cannot execute a queued callback before the held writer
+finishes. A 0.15-second delayed-write variant of the unchanged recovery contract
+instead passed **2 cases** locally. These are distinct evidence sets; the Windows
+failure's exact ordering is not claimed as reproduced.
+
+The correction retains one owner guard through allocation, durable write and
+wire publication, using the existing default executor. Cancellation drains the
+original executor Future before releasing that guard, including a second cancel
+and shutdown's Task sweep. Writer failure publishes no frame. Payload snapshots,
+contextvars, key loading, signatures and restart sequence monotonicity remain
+intact. Current Node trust and connection are rechecked after persistence;
+pairing/error ACK exemptions remain. Client session writes share the owner guard;
+session/probe calls remain serial, and overlapping live-loop use is rejected.
+No Work/effect replay, authority system, Node journal, Kernel or lock change is
+introduced. Controlled safety contracts have **24 passed**. The broad affected
+Node/recovery/Governance/Reality/Control Plane/Agent/Workflow/SDK run has **921
+passed** before the final session-publication guard and its three extra contracts;
+the final targeted checks qualify that guard separately. Required
+source/PR/resulting-main CI remains a separate prerequisite.
+
+Root integration on the final guarded tree passed **844** Node, Governance,
+Reality, Control Plane, Agent, Workflow and Developer Platform regressions
+(110.35 s). This independently checks the final session guard; its selected
+suite differs from and overlaps the preceding 921-case audit.
+
+Final local targeted I/O/recovery/protocol/shutdown/reliability checks have
+**84 passed**; SDK checks **23 passed** and repository/architecture checks
+**281 passed**. Counts overlap. Ruff, changed-file formatting, compile and
+standard documentation/link/comment/identity/Git/version checks pass. Security
+retains **0 HIGH / 3 unchanged MEDIUM** findings. Three component-lock contracts
+pass; actual native hash verification remains BLOCKED by the missing pinned
+Windows binary. Full CI and native/physical qualification are not inferred.
+
+The global Controller send guard can delay other Nodes behind socket backpressure;
+stuck storage or a saturated default executor can extend cancellation drain.
+These tests claim local software contracts, not performance improvement,
+Windows timing closure, native binary integrity or physical qualification.
+
+PR #58 source `e6e1b0530ef8b537b8b557302015d2d08b506f98` passed Core,
+Desktop, Security and the additional Multi-Arch run `38371097444`. Windows
+reported **4128 passed, 51 skipped, 272 deselected**, including both original
+hostname-probe recovery cases. Resulting main `eaae0e9c35c48303cd70a98c851763b73b10d5b0`
+passed Multi-Arch, Windows/macOS/Python 3.12 Core, Desktop and Security, but Core
+Python 3.10 job `115220330294` retained **4 failed, 4410 passed, 58 skipped**.
+Those four new repeated-cancellation contracts expected exception arguments
+after the Python Task boundary. Python 3.10 locally reproduced **4 failed,
+20 passed**; a minimal independent coroutine likewise retained the original
+arguments inside the coroutine and discarded them on retrieving its Task outcome.
+
+The test now observes the original Relay exception before that boundary and
+asserts its exact first-cancellation arguments, while separately asserting the
+Task is cancelled. Writer drain, repeated cancellation, wire order, failure,
+cleanup and timeout assertions remain unchanged. No production code or timeout
+changes. I/O, original reconciliation and shutdown selections pass **47 tests**
+on Python 3.10 (5.75 s) and **47 tests** on Python 3.12 (5.98 s). These overlapping
+local runs do not substitute for the corrected source and resulting-main CI.
+
+The additional four-platform source run `38385375101` passed Python 3.10
+**4415/58**, Linux Python 3.12 **4426/47** and macOS **4415/58** (passed/skipped),
+but Windows job `115255734904` retained **1 failed, 4421 passed, 51 skipped**
+(929.12 s). The existing process-session test failed at its first startup result,
+before Runtime recreation. Its log does not identify whether host startup or
+identity observation failed; this is not evidence that Relay reconciliation
+failed, nor grounds to close the historical Windows issues.
+
+Review of the existing ProcessSession owner found that the first live-identity
+query miss immediately ended startup observation. Two controlled target/helper
+query misses reproduce that result locally. Startup now reobserves only its
+original, already bound host within the unchanged ten-second deadline. Invalid
+binding or failed host state still stops immediately; permanently unprovable
+identity remains RECOVERY_REQUIRED with stdin/control denied. Timeout reloads
+the original persisted identities and retains their diagnostic instead of
+overwriting them with stale pre-spawn metadata. Neither spawn nor side effects
+are retried. The existing failed assertion now includes its original result for
+future diagnosis. This does not identify the original Windows failure's cause.
+
+The four new contracts pass locally. The complete ProcessSession plus Relay
+I/O/reconciliation/shutdown selection retains **2 failed, 60 passed** under bare
+PID 1 (`tail`): the two previously documented orphan-identity assertions see
+exited zombies. In the supported initialized environment the unchanged
+assertions pass: **62 passed** on Python 3.12 (25.43 s), and **62 passed** on
+Python 3.10 (21.39 s). Both runs reuse the pinned Python image, `--init`, PID64,
+no external network, read-only source/rootfs, dropped capabilities and no new
+privileges; no Docker socket or credentials are supplied to the workload.
+Those bounds describe the test harness, not a new production Provider profile.
+Containers were removed after exit. Final Node/Governance/Reality/Control Plane/
+Agent/Workflow/workspace regression has **858 passed** (134.73 s). Counts overlap.
+Required new-source and resulting-main CI remain pending; native hashes and
+physical/remote-network acceptance retain their separate blockers.
