@@ -124,6 +124,14 @@ use actual private state paths and JSONL record shapes. This scoped correction
 does not qualify cross-task context caching, measured Token/cost savings or a
 live-model comparison. Product remains PARTIAL.
 
+The existing Model Gateway/CostController now retain nullable usage measurements,
+original attempt reservations and receipt-bound reconciliation. Model Lab / Usage
+and the Desktop status bar read that same ledger; missing counters or billing are
+UNKNOWN rather than free execution. Installed-source/browser and fake-provider
+contracts do not qualify vendor invoices, measured Token/cost savings, native
+Kernel bytes or the live-model benchmark. See the existing
+[usage view](docs/development/DEVELOPER_PLATFORM.md#model-usage-and-cost).
+
 ## Ordered software qualification and interoperability Gates
 
 Proceed in the order below. External credentials or deployed infrastructure may

@@ -233,8 +233,12 @@ def handle_usage_summary(params: dict[str, Any] | None = None) -> dict[str, Any]
 
         selected_day = str((params or {}).get("day") or "").strip() or None
         return ok_response(CostController.from_environment().summary(day=selected_day))
-    except Exception as exc:
-        return err_response("NOUS_INTERNAL_ERROR", str(exc))
+    except Exception:
+        # Configuration, database and provider errors can contain private paths
+        # or credentials. A failed read cannot establish zero usage or spend.
+        return err_response(
+            "NOUS_INTERNAL_ERROR", "Model usage accounting is unavailable."
+        )
 
 
 # Capabilities

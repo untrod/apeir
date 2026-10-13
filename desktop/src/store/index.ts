@@ -20,6 +20,7 @@ export {
   useModels, useModel,
   useEvidence,
   useUsage, useCostSummary,
+  useRuntimeConfigVersion,
   useWorkspace,
   useStoreHydrated, useEventCursor,
 } from "./hooks";
@@ -35,6 +36,7 @@ export type {
   Model, ModelProviderKind, ModelProbe, ModelCalibration,
   Evidence,
   UsageRecord, CostSummary,
+  UsageAccountingSummary, UsageReceipt, UsageReservation, UsageMeasurement, UsageCounterName,
   WorkspaceEntry, WorkspaceFile,
   RuntimeEventEnvelope,
   EntityStoreState,

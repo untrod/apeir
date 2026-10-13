@@ -293,12 +293,117 @@ export interface UsageRecord extends EntityBase {
   period_end: Timestamp;
 }
 
+export type UsageCounterName = "input_tokens" | "output_tokens" | "cached_input_tokens"
+  | "cache_miss_input_tokens" | "reasoning_tokens" | "total_tokens" | "cache_creation_input_tokens";
+export type UsageMeasurement = "reported" | "derived" | "estimated" | "unknown";
+export type UsageCounters = Record<UsageCounterName, number | null>;
+export type UsageMeasurements = Record<UsageCounterName, UsageMeasurement>;
+export type UsageCounterTotals = Record<UsageCounterName, number>;
+
+export interface UsageReceipt {
+  schema_version?: number;
+  receipt_id: string;
+  created_at?: Timestamp;
+  request_id?: string;
+  reservation_id?: string;
+  task_id?: string;
+  provider_id?: string;
+  model_id?: string;
+  attempt?: number;
+  usage: UsageCounters & { counter_measurements: UsageMeasurements };
+  cost_usd: number | null;
+  cost_measurement: UsageMeasurement | "legacy_unknown";
+  estimated_tokens?: number;
+  estimated_cost_usd?: number | null;
+  status: string;
+}
+
+export interface UsageReservation {
+  reservation_id: string;
+  request_id: string;
+  task_id: string;
+  provider_id: string;
+  model_id: string;
+  attempt: number;
+  status: string;
+  receipt_recorded: boolean;
+  estimated_tokens: number;
+  estimated_cost_usd: number | null;
+}
+
+export interface UsageAccountingItem extends UsageCounters {
+  provider_id: string;
+  model_id: string;
+  task_id: string;
+  credential_ref_hash: string;
+  requests: number;
+  known_totals: UsageCounterTotals;
+  estimated_totals: UsageCounterTotals;
+  unknown_counters: UsageCounterTotals;
+  known_cost_usd: number;
+  unknown_cost_requests: number;
+  cost_usd: number | null;
+}
+
+export interface UsageCostPolicy {
+  max_input_tokens: number;
+  max_output_tokens: number;
+  max_request_tokens: number;
+  max_daily_tokens: number;
+  max_daily_cost_usd: number | null;
+  max_attempts: number;
+  max_retry_tokens: number;
+  max_retry_cost_usd: number | null;
+  budget_mode?: "usd" | "token_only";
+  pricing?: {
+    configured: boolean;
+    loaded: boolean;
+    status: "unconfigured" | "missing" | "unpriced" | "configured";
+    model_entries: number;
+    priced_models: number;
+    source: "host" | "file" | "unconfigured";
+    environment_variable: string;
+  };
+  daily_usd_environment_variable?: string;
+  retry_usd_environment_variable?: string;
+}
+
+/** Read projection of CostController; the Desktop never reconstructs this ledger. */
+export interface UsageAccountingSummary extends UsageCounters {
+  schema_version: 1;
+  day: string;
+  requests: number;
+  known_totals: UsageCounterTotals;
+  estimated_totals: UsageCounterTotals;
+  unknown_counters: UsageCounterTotals;
+  total_cost_usd: number | null;
+  reported_cost_usd: number;
+  estimated_cost_usd: number;
+  derived_cost_usd: number;
+  reported_cost_requests: number;
+  estimated_cost_requests: number;
+  derived_cost_requests: number;
+  unknown_cost_requests: number;
+  cost_measurement: UsageMeasurement | "no_receipts";
+  uncertain_calls: number;
+  pending_requests: number;
+  reserved_tokens: number | null;
+  reserved_cost_usd: number | null;
+  reservations: UsageReservation[];
+  remaining: { tokens: number | null; cost_usd: number | null };
+  policy: UsageCostPolicy;
+  items: UsageAccountingItem[];
+  receipts: UsageReceipt[];
+  receipts_truncated: boolean;
+}
+
+/** Transient read state; cached legacy usage cannot establish current billing. */
 export interface CostSummary {
-  total_cost_usd: number;
-  by_model: Record<string, number>;
-  by_task: Record<string, number>;
-  period_start: Timestamp;
-  period_end: Timestamp;
+  status: "idle" | "loading" | "ready" | "unavailable";
+  controller: string;
+  configuration_version: number;
+  summary: UsageAccountingSummary | null;
+  error: string | null;
 }
 
 
@@ -358,6 +463,7 @@ export interface EntityStoreState {
   models: Record<EntityId, Model>;
   evidence: Record<EntityId, Evidence>;
   usage: Record<EntityId, UsageRecord>;
+  usage_accounting: CostSummary;
   workspace: Record<EntityId, WorkspaceEntry>;
   /** Last seen event sequence for each domain (used for reconnect backfill) */
   cursors: Record<string, SequenceNumber>;

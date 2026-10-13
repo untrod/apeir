@@ -27,12 +27,25 @@ Version: `0.1.0-rc1`
   service target. It is not an arbitrary remote endpoint or device runtime.
 - Model-backed tasks require a configured Provider account or a local model.
   APEIR cannot correct an exhausted third-party balance.
-- Token limits are enforced before dispatch. If a Provider returns more usage
+- Token admission uses an estimate of the complete messages, attachments, tools
+  and structured input. A caller cannot lower that estimate; it is not a
+  Provider tokenizer measurement. Known configured context/output windows bound
+  the forwarded output limit; absent model windows are not invented. If a Provider returns more usage
   than authorized, APEIR records the overrun, rejects the result, and blocks that
   credential reference for the remainder of the UTC day; charges already made by
   the Provider cannot be reversed.
-- Cost limits require a reviewed local pricing catalog. Unknown model prices still
-  receive Token limits, but preflight monetary estimates are unavailable.
+- Cost limits require a reviewed local pricing catalog. Unknown pricing blocks
+  enforced USD budgets; explicitly configured token-only policy retains token
+  limits and reports unknown billing. Missing usage, legacy receipts and a lost
+  response remain UNKNOWN. An uncertain dispatched attempt retains its original
+  reservation until original usage reconciliation, including after restart.
+  Kernel recovery requires a matching original committed receipt before cached
+  output retrieval; an absent or unsupported receipt query blocks automatic
+  resubmission and retains the exposure. These are frozen contract and fake
+  transport checks, not live native or vendor billing qualification.
+- The current Kernel stream uses the existing complete-response NKI operation
+  and yields one content chunk. Direct compatibility streams carry no terminal
+  usage contract and retain uncertain accounting after exhaustion or close.
 - Untrusted code requires an available Windows Sandbox backend. Trusted in-process
   extension handlers are not an isolation boundary.
 - Local file, document, environment, network, simulation, and scientific services

@@ -7,7 +7,8 @@ import type { ComposerAttachment, ComposerConstraints } from "../components/Comp
 vi.mock("../lib/api", async importOriginal => ({ ...await importOriginal<typeof import("../lib/api")>(),
   runPrompt: vi.fn(), fetchRunEvents: vi.fn(), subscribeRunEvents: vi.fn(),
 }));
-vi.mock("../store", () => ({
+vi.mock("../store", async importOriginal => ({
+  ...await importOriginal<typeof import("../store")>(),
   entityStore: { upsertConversations: vi.fn(), upsertMessages: vi.fn() },
   useMessages: () => [], useActiveTasks: () => [], useModels: () => [], useNodes: () => [], useStoreHydrated: () => false,
 }));

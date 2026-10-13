@@ -21,7 +21,7 @@ import type {
   EntityStoreState,
   Conversation, Session, Message,
   Task, Plan, Approval, Artifact, Verification,
-  Node, Model, Evidence, UsageRecord,
+  Node, Model, Evidence, UsageRecord, UsageAccountingSummary,
   WorkspaceEntry,
   RuntimeEventEnvelope,
 } from "./types";
@@ -64,7 +64,8 @@ async function saveCache(state: EntityStoreState): Promise<void> {
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.objectStore(STORE_NAME).put(state, "entity_state");
+    // A persisted UI snapshot cannot certify current spend or budget readiness.
+    tx.objectStore(STORE_NAME).put({ ...state, usage_accounting: EMPTY_STATE.usage_accounting }, "entity_state");
     tx.oncomplete = () => db.close();
   } catch {
     // Offline — silent fail, data lives in memory
@@ -89,6 +90,7 @@ const EMPTY_STATE: EntityStoreState = {
   models: {},
   evidence: {},
   usage: {},
+  usage_accounting: { status: "idle", controller: "", configuration_version: -1, summary: null, error: null },
   workspace: {},
   cursors: {},
   hydrated: false,
@@ -113,6 +115,7 @@ class EntityStoreImpl {
   private state: EntityStoreState = { ...EMPTY_STATE };
   private listeners = new Set<Listener>();
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private usageReadSequence = 0;
 
   /** Debounced persistence to IndexedDB */
   private scheduleSave(): void {
@@ -132,7 +135,7 @@ class EntityStoreImpl {
 
   async hydrate(): Promise<void> {
     const cached = await loadCache();
-    if (cached) this.state = { ...EMPTY_STATE, ...cached };
+    if (cached) this.state = { ...EMPTY_STATE, ...cached, usage_accounting: EMPTY_STATE.usage_accounting };
     this.state.hydrated = true;
     this.notify();
   }
@@ -151,7 +154,7 @@ class EntityStoreImpl {
   /** Replace all state with server snapshot (call on reconnect) */
   reconcile(serverState: Partial<EntityStoreState>): void {
     for (const [key, records] of Object.entries(serverState)) {
-      if (key === "schema_version" || key === "cursors" || key === "hydrated") continue;
+      if (key === "schema_version" || key === "cursors" || key === "hydrated" || key === "usage_accounting") continue;
       if (typeof records === "object" && records !== null) {
         const existing = (this.state as any)[key] || {};
         for (const [id, record] of Object.entries(records as Record<string, any>)) {
@@ -363,6 +366,30 @@ class EntityStoreImpl {
 
   // REST API data loading
 
+  beginUsageRead(controller: string, configurationVersion: number): number {
+    const sequence = ++this.usageReadSequence;
+    this.state.usage_accounting = {
+      status: "loading", controller, configuration_version: configurationVersion, summary: null, error: null,
+    };
+    this.notify();
+    return sequence;
+  }
+
+  finishUsageRead(sequence: number, summary: UsageAccountingSummary): void {
+    if (sequence !== this.usageReadSequence) return;
+    this.state.usage_accounting = { ...this.state.usage_accounting, status: "ready", summary, error: null };
+    this.notify();
+  }
+
+  failUsageRead(sequence: number): void {
+    if (sequence !== this.usageReadSequence) return;
+    this.state.usage_accounting = {
+      ...this.state.usage_accounting, status: "unavailable", summary: null,
+      error: "Usage accounting could not be loaded. Spend remains UNKNOWN.",
+    };
+    this.notify();
+  }
+
   upsertTasks(tasks: Task[]): void {
     for (const t of tasks) {
       const existing = this.state.tasks[t.id];
@@ -477,6 +504,7 @@ class EntityStoreImpl {
   }
 
   clearStore(): void {
+    this.usageReadSequence++;
     this.state = { ...EMPTY_STATE };
     this.notify();
   }

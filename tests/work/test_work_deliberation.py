@@ -293,6 +293,25 @@ def test_model_deliberator_classifies_structured_output_budget_exhaustion(
         )(harness.context_for(snapshot))
 
 
+@pytest.mark.parametrize(
+    "usage,label",
+    [
+        ({}, "unknown"),
+        ({"output_tokens": None, "reasoning_tokens": None}, "unknown"),
+        ({"output_tokens": 0, "reasoning_tokens": 0}, "0"),
+    ],
+)
+def test_output_budget_diagnostic_distinguishes_missing_and_reported_zero(
+    tmp_path, usage, label
+):
+    harness = WorkHarness(tmp_path)
+    snapshot = harness.create("Explain the result")
+    facade = StubFacade(None, finish_reason="length", usage=usage)
+    with pytest.raises(RuntimeError) as caught:
+        ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+    assert f"output_tokens={label}, reasoning_tokens={label}" in str(caught.value)
+
+
 def test_model_deliberator_bounds_event_history_and_failure_text(tmp_path):
     harness = WorkHarness(tmp_path)
     snapshot = harness.create("Fix the code in this repository")

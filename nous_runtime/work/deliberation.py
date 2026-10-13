@@ -19,6 +19,7 @@ from nous_runtime.model_runtime import (
     RoutingMode,
 )
 from nous_runtime.work.models import DecisionStatus, WorkContext, WorkDecision
+from nous_runtime.model_runtime.cost_control import Usage
 
 
 _DECISION_EVENT_LIMIT = 6
@@ -223,16 +224,16 @@ class ModelWorkDeliberator:
         value = response.structured_output
         if not isinstance(value, Mapping):
             if response.finish_reason == "length":
-                usage = dict(response.usage or {})
-                output_tokens = int(
-                    usage.get("output_tokens") or usage.get("completion_tokens") or 0
+                usage = Usage.from_mapping(response.usage)
+                output_tokens = (
+                    usage.output_tokens
+                    if usage.output_tokens is not None
+                    else "unknown"
                 )
-                reasoning_tokens = int(
-                    usage.get("reasoning_tokens")
-                    or (usage.get("completion_tokens_details") or {}).get(
-                        "reasoning_tokens"
-                    )
-                    or 0
+                reasoning_tokens = (
+                    usage.reasoning_tokens
+                    if usage.reasoning_tokens is not None
+                    else "unknown"
                 )
                 raise RuntimeError(
                     "work model exhausted the output budget before returning a "

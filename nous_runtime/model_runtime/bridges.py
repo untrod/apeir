@@ -443,6 +443,19 @@ class GatewayChatHandler:
                     "model_id": response.model_id,
                     "usage": dict(response.usage),
                     "cost_usd": response.cost_usd,
+                    "cost_measurement": response.cost_measurement,
+                    "usage_receipt_ref": str(
+                        (response.raw_metadata.get("usage_receipt") or {}).get(
+                            "receipt_id"
+                        )
+                        or ""
+                    ),
+                    "usage_request_id": (
+                        response.raw_metadata.get("usage_receipt") or {}
+                    ).get("request_id"),
+                    "usage_attempt": (
+                        response.raw_metadata.get("usage_receipt") or {}
+                    ).get("attempt"),
                     "latency_ms": response.latency_ms,
                     "retry_count": response.retry_count,
                     "fallback_history": list(response.fallback_history),
