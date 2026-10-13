@@ -222,9 +222,43 @@ behind OFFLINE versus DEGRADED. The original wait and state assertions remain.
 Separate fake-transport diagnosis shows synchronous sequence publication can
 delay the network loop: five Windows sharing-violation retries sleep for a total
 150 ms, beyond that test's existing 100 ms ping budget. Sequence persistence,
-locks and timeout policy are unchanged; this mechanism needs its own lifecycle
-qualification. Neither mechanism proves that all Windows races are resolved.
+atomic publication and timeout policy remain required. The correction below
+qualifies controlled lifecycle behavior; it does not prove the precise Windows
+failure ordering or that all Windows races are resolved.
 Issues #4 and #8 remain open.
+
+### Ordered durable Relay I/O
+
+The existing Node and durable Controller send owners now offload sequence
+publication and message encoding to the event loop's default executor. One
+owner guard spans allocation, the original fsync/atomic replacement and the
+complete socket send. Client session publication shares that guard. Queued
+payloads retain their original snapshot. A failed
+write publishes no frame; a persisted sequence with no frame remains consumed.
+No Node journal, authority, protocol identifier or deadline changes.
+
+Cancellation retains the exact executor Future and drains that writer before
+releasing the guard, including repeated cancellation and event-loop shutdown.
+A separate `to_thread` Task can itself be cancelled by shutdown before its
+thread finishes; shielding that Task alone cannot fence a late file replacement.
+The existing client session read/write and successful/failed host probe paths
+also run sequentially off the loop. Governed Controller sends reload trust and
+the current connection after persistence, while pairing ACK/ERROR responses keep
+their existing exemptions. Original pending Work remains durable when trust or
+the route changes.
+
+Two controlled pre-change contracts fail: a Node or durable Controller writer
+prevents a queued transport callback from running until persistence finishes.
+The correction's 24 controlled cases include wire ordering, signed/durable
+publication, write failure, repeated cancellation, shutdown, sequential-loop
+reuse, live-loop exclusion, context propagation, current trust/route and
+session/probe liveness. A cancelled session write cannot overwrite a successor.
+An unchanged original result-reconciliation contract with an injected 0.15-second
+sequence write passed twice locally before repair. That local result does not
+reproduce the Windows keepalive failure. Stuck storage or executor saturation
+can extend cancellation cleanup; socket backpressure can delay other Nodes
+behind the Controller guard. Other Controller state writes remain synchronous.
+No fleet-throughput, physical-device or Windows timing closure is claimed.
 
 ## Local measurement baseline
 
