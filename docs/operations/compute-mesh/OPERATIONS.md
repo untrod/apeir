@@ -185,6 +185,27 @@ requires the existing uncertain-effect reconciliation/Observation path; a missin
 response never authorizes another side effect. Thread offload does not change
 sandbox limits, grant authority or qualify physical/network acceptance.
 
+Host reporting is separate from recovery of recorded Work. A hostname/resource
+probe OSError leaves the authenticated Relay able to deliver an original cached
+result through the existing signed assignment, Node journal and receipt checks.
+During reconnection it admits no new execution, publishes no fabricated heartbeat
+or resource report, and preserves RECONCILING rather than claiming readiness.
+Changed bindings are rejected; an EXECUTING record still returns
+RECOVERY_REQUIRED. A subsequent successful probe restores fresh reports. Relay
+retry diagnostics record a fixed phase and exception type, never exception text,
+credentials, URLs or provider output.
+
+This addresses a controlled probe-failure mechanism, not the unknown cause of the
+Windows result deadline failure on main `d19a22e`. Its real log first failed the
+five-second result wait; a later freshness assertion in `finally` hid that failure
+behind OFFLINE versus DEGRADED. The original wait and state assertions remain.
+Separate fake-transport diagnosis shows synchronous sequence publication can
+delay the network loop: five Windows sharing-violation retries sleep for a total
+150 ms, beyond that test's existing 100 ms ping budget. Sequence persistence,
+locks and timeout policy are unchanged; this mechanism needs its own lifecycle
+qualification. Neither mechanism proves that all Windows races are resolved.
+Issues #4 and #8 remain open.
+
 ## Local measurement baseline
 
 The existing rotating Node telemetry now records authenticated connection spans
