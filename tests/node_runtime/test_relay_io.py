@@ -264,8 +264,20 @@ def test_repeated_cancellation_drains_original_writer_before_next_send(
             second_started.set()
             await _send(owner, websocket, target)
 
+        original_cancellation = []
+
+        async def send_first():
+            try:
+                await _send(owner, websocket, target)
+            except asyncio.CancelledError as exc:
+                # Python 3.10's Task can discard cancellation args when its
+                # outcome is retrieved. Inspect the original Relay exception
+                # before that boundary, while still requiring a cancelled Task.
+                original_cancellation.append(exc.args)
+                raise
+
         monkeypatch.setattr(relay, "_atomic_json", held_write)
-        first = asyncio.create_task(_send(owner, websocket, target))
+        first = asyncio.create_task(send_first())
         second = None
         try:
             await asyncio.wait_for(entered.wait(), timeout=3)
@@ -280,8 +292,10 @@ def test_repeated_cancellation_drains_original_writer_before_next_send(
             assert events == [("start", 1)]
             assert websocket.messages == []
             release.set()
-            with pytest.raises(asyncio.CancelledError, match="original cancellation"):
+            with pytest.raises(asyncio.CancelledError):
                 await asyncio.wait_for(first, timeout=3)
+            assert first.cancelled()
+            assert original_cancellation == [("original cancellation",)]
             await asyncio.wait_for(second, timeout=3)
             assert events == [
                 ("start", 1),
