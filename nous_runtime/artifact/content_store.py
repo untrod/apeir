@@ -63,6 +63,13 @@ class ContentArtifact:
             raise ArtifactError("artifact name is required")
         if isinstance(self.size_bytes, bool) or self.size_bytes < 0:
             raise ArtifactError("artifact size must be a non-negative integer")
+        if any(
+            isinstance(value, str) and redact_sensitive_text(value) != value
+            for value in (self.media_type, *self.deployed_to)
+        ):
+            # MIME and target references cannot be redacted into different
+            # semantic identities. Refuse protected material before publication.
+            raise ArtifactError("Secret material cannot enter typed artifact metadata")
         for linked in (*self.depends_on, *self.derived_from):
             _digest_hex(linked)
 
@@ -247,15 +254,22 @@ class ContentAddressedArtifactStore:
         return "sha256:" + hasher.hexdigest() == digest
 
     def pin(self, digest: str, reason: str = "user") -> dict[str, Any]:
-        self.resolve(digest)
         with self._lock, file_lock(str(self.index_path) + ".lock"):
-            self._pins[digest] = {"reason": reason, "pinned_at": _utc_now()}
+            self._index = self._load_index()
+            self._pins = self._load_pins()
+            self.resolve(digest)
+            self._pins[digest] = {
+                "reason": redact_sensitive_text(reason),
+                "pinned_at": _utc_now(),
+            }
             _atomic_write_json(self.pins_path, self._pins)
             return self._receipt("artifact.pin", digest, "COMPLETED")
 
     def unpin(self, digest: str) -> dict[str, Any]:
         _digest_hex(digest)
         with self._lock, file_lock(str(self.index_path) + ".lock"):
+            self._index = self._load_index()
+            self._pins = self._load_pins()
             existed = self._pins.pop(digest, None) is not None
             _atomic_write_json(self.pins_path, self._pins)
             return self._receipt(
@@ -264,6 +278,8 @@ class ContentAddressedArtifactStore:
 
     def garbage_collect(self, *, dry_run: bool = True) -> dict[str, Any]:
         with self._lock, file_lock(str(self.index_path) + ".lock"):
+            self._index = self._load_index()
+            self._pins = self._load_pins()
             protected = self._transitive_pin_closure()
             candidates = sorted(set(self._index) - protected)
             if dry_run:
@@ -327,9 +343,6 @@ class ContentAddressedArtifactStore:
             raise ArtifactError("artifact name is required")
         dependencies = tuple(sorted(set(depends_on)))
         origins = tuple(sorted(set(derived_from)))
-        for linked in (*dependencies, *origins):
-            if linked not in self._index:
-                raise ArtifactError(f"artifact graph reference not found: {linked}")
         record = ContentArtifact(
             digest=digest,
             artifact_type=normalized_type,
@@ -344,6 +357,12 @@ class ContentAddressedArtifactStore:
             metadata=redact_sensitive_data(dict(metadata or {})),
         )
         with self._lock, file_lock(str(self.index_path) + ".lock"):
+            # Workflow/Node adapters use distinct instances of this owner. Read
+            # current evidence before extending its index under the shared lock.
+            self._index = self._load_index()
+            for linked in (*dependencies, *origins):
+                if linked not in self._index:
+                    raise ArtifactError(f"artifact graph reference not found: {linked}")
             existing = self._index.get(digest)
             if existing:
                 if not self.verify(digest):
@@ -379,8 +398,15 @@ class ContentAddressedArtifactStore:
 
     def _load_pins(self) -> dict[str, dict[str, Any]]:
         value = _read_json(self.pins_path)
-        for digest in value:
+        for digest, record in value.items():
             _digest_hex(digest)
+            if (
+                not isinstance(record, dict)
+                or not isinstance(record.get("reason"), str)
+                or not isinstance(record.get("pinned_at"), str)
+                or not record["pinned_at"]
+            ):
+                raise ArtifactError("artifact pin record is invalid")
         return value
 
     def _transitive_pin_closure(self) -> set[str]:
