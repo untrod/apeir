@@ -110,9 +110,29 @@ The legacy `liveness` field remains available for compatible clients. The
 authoritative operational projection is `connectivity_state`: an interrupted
 transport becomes `DEGRADED` while its short connectivity lease remains valid,
 then `STALE`, and finally `OFFLINE`. An authenticated reconnect passes through
-`RECONNECTING` and `RECONCILING` before returning to `ONLINE`. Only `ONLINE` and
-a lease-valid `DEGRADED` Node are eligible for placement; queued work still
-requires the normal capability, policy, and Kernel authorization path.
+`RECONNECTING` and `RECONCILING` before returning to `ONLINE`. Placement requires
+`ONLINE` or a lease-valid `DEGRADED` state plus a fresh resource report accepted
+after the latest REGISTER. `resource_observed_at` is the Controller's receipt
+time, independent of the Node clock and generic `last_observed_at`.
+`resource_report_current` identifies the current registration;
+`resource_report_fresh` identifies the unchanged three-heartbeat freshness
+window. A heartbeat or Device report cannot refresh cached resources, and a
+resumed session ID cannot replace the current-connection requirement. Reports
+persisted without a resource receipt time remain historical evidence until a
+fresh report arrives; a receipt time ahead of the Controller clock blocks
+placement until current facts are established. Queued work still requires the normal capability, policy,
+and Kernel authorization path; readiness grants no authority.
+
+After every successful heartbeat probe, the existing Node client renews its
+signed resource report even when the payload is unchanged. A failed probe
+publishes no replacement health or resources; original signed Work evidence can
+still reconcile while the Node is unschedulable. This increases transport and
+Controller observation writes. A controlled static-report measurement on an
+actual authenticated loopback WebSocket, with five successful probes and a
+0.05-second heartbeat, sent one resource report before this correction and five
+afterward: **603 → 3016 serialized resource-report bytes**, an additional four
+reports and 2413 bytes. These are uncompressed signed JSON bytes excluding ACK,
+WebSocket, TCP and TLS overhead, not a performance or physical-device claim.
 
 ## Security boundary
 

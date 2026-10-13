@@ -98,6 +98,17 @@ assignment without a fresh host report. That mode rejects new execution and
 changed Work/Node/Operation input bindings; uncertain execution stays
 RECOVERY_REQUIRED. It publishes no replacement health or resource facts. A fresh
 successful probe is still required before readiness can advance to ONLINE.
+Controller placement also requires a signed resource report accepted after the
+latest REGISTER, within the unchanged three-heartbeat freshness window. The
+resource timestamp is Controller-observed and separate from generic liveness;
+REGISTER, heartbeat and Device reports cannot renew old resource facts. A
+resource timestamp ahead of the Controller clock is UNKNOWN for placement.
+Absent resource inputs on existing connectivity calls fail closed. A
+resumed session ID does not bind resources to its replacement connection.
+Recent DEGRADED placement remains eligible only while both freshness windows
+hold. Historical resource reports without their observed time remain visible
+but cannot establish readiness. Original receipt reconciliation remains available
+while placement is blocked, through the same trust and signed-result checks.
 
 The legacy connectivity adapter's TCP `is_connected()` flag is distinct from
 processing WELCOME and from readiness of the current send queue. A cached session
