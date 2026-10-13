@@ -72,7 +72,7 @@ def test_session_survives_runtime_recreation_and_streams_by_cursor(
         "time.sleep(.1)",
     )
     session_id = started["session_id"]
-    assert started["state"] == "RUNNING"
+    assert started["state"] == "RUNNING", started
 
     initial = _wait_output(first, session_id, "stdout", "ready")
     assert initial["next_cursor"] > 0
