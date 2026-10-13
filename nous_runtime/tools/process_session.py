@@ -32,6 +32,7 @@ _MAX_READ_BYTES = 64 * 1024
 _MAX_EVENT_CHUNKS = 32
 _EVENT_EXCERPT_BYTES = 4 * 1024
 _MAX_STDIN_BYTES = 64 * 1024
+_RUNNING_IDENTITY_UNVERIFIED = "running process host identity cannot be verified"
 
 
 def _utc_now() -> str:
@@ -215,10 +216,21 @@ class ProcessSessionStore:
         while time.monotonic() < deadline:
             host = self._host_state(session_id)
             if host.get("state") not in {None, "", "STARTING"}:
-                return self.status(session_id)
+                result = self.status(session_id)
+                if not (
+                    host.get("state") == ProcessSessionState.RUNNING.value
+                    and result["state"] == ProcessSessionState.RECOVERY_REQUIRED.value
+                    and result["error"] == _RUNNING_IDENTITY_UNVERIFIED
+                ):
+                    return result
+                # Reobserve only the original bound host within this deadline.
+                # A transient OS identity-query miss is not a new spawn, nor
+                # permission to attach or control an unverified process.
             time.sleep(0.025)
+        session = self.require(session_id)
         session.state = ProcessSessionState.RECOVERY_REQUIRED.value
-        session.error = "process spawn outcome is not yet provable"
+        session.error = session.error or "process spawn outcome is not yet provable"
+        session.stdin_available = False
         session.updated_at = _utc_now()
         self._save(session)
         self._emit(session, "process.recovery.required")
@@ -478,7 +490,7 @@ class ProcessSessionStore:
                 not target_matches and not terminal_control_pending
             ):
                 session.state = ProcessSessionState.RECOVERY_REQUIRED.value
-                session.error = "running process host identity cannot be verified"
+                session.error = _RUNNING_IDENTITY_UNVERIFIED
                 session.stdin_available = False
                 return
         elif host_state in _TERMINAL_STATES and (

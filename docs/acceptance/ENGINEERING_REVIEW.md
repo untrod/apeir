@@ -398,6 +398,18 @@ this correction claims no unmeasured latency/Token improvement and changes no
 fsync, grant fence, sandbox profile or retry semantics. Production installation,
 physical/network qualification and research experiments remain separate Gates.
 
+CAS writer review reuses the existing index, pin file and cross-process lock:
+reload persisted state under that lock before graph extension, pin/unpin or GC.
+Duplicate content retains its original metadata and corrupt pin records fail
+closed. A further credential review reproduced two typed-metadata publication
+failures: protected material could enter MIME or deployment target fields.
+These fields now reject protected values before publication instead of masking
+them into different semantic identities. Free-form pin descriptions retain
+central redaction. Current recovery-main Artifact/Node/Reality/workspace/
+credential regression has **438 passed** (106.34 s); this does not qualify native
+bytes, real hardware, production scale or unmeasured performance. Source and
+resulting-main CI remain separate checks.
+
 Final local correction evidence: **66 focused passed**, **1030 affected passed /
 4 skipped**, **262 repository passed**, and **98 Desktop tests in 28 files**;
 Desktop lint/typecheck/build also pass. Full bare-host regression is **4119 passed /
@@ -689,3 +701,55 @@ The global Controller send guard can delay other Nodes behind socket backpressur
 stuck storage or a saturated default executor can extend cancellation drain.
 These tests claim local software contracts, not performance improvement,
 Windows timing closure, native binary integrity or physical qualification.
+
+PR #58 source `e6e1b0530ef8b537b8b557302015d2d08b506f98` passed Core,
+Desktop, Security and the additional Multi-Arch run `38371097444`. Windows
+reported **4128 passed, 51 skipped, 272 deselected**, including both original
+hostname-probe recovery cases. Resulting main `eaae0e9c35c48303cd70a98c851763b73b10d5b0`
+passed Multi-Arch, Windows/macOS/Python 3.12 Core, Desktop and Security, but Core
+Python 3.10 job `115220330294` retained **4 failed, 4410 passed, 58 skipped**.
+Those four new repeated-cancellation contracts expected exception arguments
+after the Python Task boundary. Python 3.10 locally reproduced **4 failed,
+20 passed**; a minimal independent coroutine likewise retained the original
+arguments inside the coroutine and discarded them on retrieving its Task outcome.
+
+The test now observes the original Relay exception before that boundary and
+asserts its exact first-cancellation arguments, while separately asserting the
+Task is cancelled. Writer drain, repeated cancellation, wire order, failure,
+cleanup and timeout assertions remain unchanged. No production code or timeout
+changes. I/O, original reconciliation and shutdown selections pass **47 tests**
+on Python 3.10 (5.75 s) and **47 tests** on Python 3.12 (5.98 s). These overlapping
+local runs do not substitute for the corrected source and resulting-main CI.
+
+The additional four-platform source run `38385375101` passed Python 3.10
+**4415/58**, Linux Python 3.12 **4426/47** and macOS **4415/58** (passed/skipped),
+but Windows job `115255734904` retained **1 failed, 4421 passed, 51 skipped**
+(929.12 s). The existing process-session test failed at its first startup result,
+before Runtime recreation. Its log does not identify whether host startup or
+identity observation failed; this is not evidence that Relay reconciliation
+failed, nor grounds to close the historical Windows issues.
+
+Review of the existing ProcessSession owner found that the first live-identity
+query miss immediately ended startup observation. Two controlled target/helper
+query misses reproduce that result locally. Startup now reobserves only its
+original, already bound host within the unchanged ten-second deadline. Invalid
+binding or failed host state still stops immediately; permanently unprovable
+identity remains RECOVERY_REQUIRED with stdin/control denied. Timeout reloads
+the original persisted identities and retains their diagnostic instead of
+overwriting them with stale pre-spawn metadata. Neither spawn nor side effects
+are retried. The existing failed assertion now includes its original result for
+future diagnosis. This does not identify the original Windows failure's cause.
+
+The four new contracts pass locally. The complete ProcessSession plus Relay
+I/O/reconciliation/shutdown selection retains **2 failed, 60 passed** under bare
+PID 1 (`tail`): the two previously documented orphan-identity assertions see
+exited zombies. In the supported initialized environment the unchanged
+assertions pass: **62 passed** on Python 3.12 (25.43 s), and **62 passed** on
+Python 3.10 (21.39 s). Both runs reuse the pinned Python image, `--init`, PID64,
+no external network, read-only source/rootfs, dropped capabilities and no new
+privileges; no Docker socket or credentials are supplied to the workload.
+Those bounds describe the test harness, not a new production Provider profile.
+Containers were removed after exit. Final Node/Governance/Reality/Control Plane/
+Agent/Workflow/workspace regression has **858 passed** (134.73 s). Counts overlap.
+Required new-source and resulting-main CI remain pending; native hashes and
+physical/remote-network acceptance retain their separate blockers.

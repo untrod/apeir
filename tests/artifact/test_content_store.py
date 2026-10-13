@@ -150,6 +150,34 @@ def test_pin_reason_uses_the_existing_sensitive_data_redactor(tmp_path):
     assert "description <REDACTED>" in persisted
 
 
+@pytest.mark.parametrize("field", ["media_type", "deployed_to"])
+def test_protected_typed_metadata_is_rejected_before_artifact_publication(
+    tmp_path, field
+):
+    from nous_runtime.core.redaction import register_sensitive_value
+
+    fake_value = "test-cas-protected-metadata-value"
+    register_sensitive_value(fake_value)
+    store = ContentAddressedArtifactStore(tmp_path)
+    fields = {
+        "media_type": f"text/plain; label={fake_value}",
+        "deployed_to": (f"device/{fake_value}",),
+    }
+    with pytest.raises(ArtifactError, match="typed artifact metadata") as failure:
+        store.store_bytes(
+            b"safe content",
+            artifact_type="evidence",
+            name="safe",
+            **{field: fields[field]},
+        )
+    assert fake_value not in str(failure.value)
+    assert not store.list()
+    assert not store.index_path.exists()
+    assert not store.receipts_path.exists()
+    assert not list(store.objects.rglob("*.tmp"))
+    assert not [path for path in store.objects.rglob("*") if path.is_file()]
+
+
 def test_store_resolve_deduplicate_and_verify(tmp_path: Path):
     store = ContentAddressedArtifactStore(tmp_path / "store")
     first = store.store_bytes(

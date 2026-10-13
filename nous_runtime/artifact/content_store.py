@@ -63,6 +63,13 @@ class ContentArtifact:
             raise ArtifactError("artifact name is required")
         if isinstance(self.size_bytes, bool) or self.size_bytes < 0:
             raise ArtifactError("artifact size must be a non-negative integer")
+        if any(
+            isinstance(value, str) and redact_sensitive_text(value) != value
+            for value in (self.media_type, *self.deployed_to)
+        ):
+            # MIME and target references cannot be redacted into different
+            # semantic identities. Refuse protected material before publication.
+            raise ArtifactError("Secret material cannot enter typed artifact metadata")
         for linked in (*self.depends_on, *self.derived_from):
             _digest_hex(linked)
 
