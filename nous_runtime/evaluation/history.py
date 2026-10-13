@@ -21,8 +21,6 @@ from nous_runtime.evaluation.models import EvaluationRecord
 _log = logging.getLogger("nous.evaluation.history")
 
 
-
-
 # Internal helpers
 
 
@@ -51,7 +49,6 @@ def _db_connect(db_path: str, readonly: bool = False):
         conn.close()
 
 
-
 # EvaluationHistory
 
 
@@ -67,6 +64,12 @@ class EvaluationHistory:
     """
 
     def __init__(self, workspace_path: str | Path = ""):
+        if not workspace_path and os.environ.get("NOUS_WORKSPACE_ROOT"):
+            from nous_runtime.project.workspace import find_workspace
+
+            workspace_path = find_workspace(allow_uninitialized=True)
+            if workspace_path is None:
+                raise ValueError("Configured workspace state is unavailable")
         if workspace_path:
             self.db_path = str(Path(workspace_path) / "evaluation.db")
         else:
@@ -119,11 +122,18 @@ class EvaluationHistory:
                             evaluated_by, created_at, duration_ms, record_json)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
-                            record.id, record.target_type, record.target_id,
-                            record.status, record.input_summary,
-                            record.composite_score, record.confidence,
-                            record.recommendation, record.evaluated_by,
-                            record.created_at, record.duration_ms, record_json,
+                            record.id,
+                            record.target_type,
+                            record.target_id,
+                            record.status,
+                            record.input_summary,
+                            record.composite_score,
+                            record.confidence,
+                            record.recommendation,
+                            record.evaluated_by,
+                            record.created_at,
+                            record.duration_ms,
+                            record_json,
                         ),
                     )
             return True
@@ -173,7 +183,9 @@ class EvaluationHistory:
                 query += f" ORDER BY created_at {order} LIMIT ?"
                 params.append(limit)
                 rows = db.execute(query, params).fetchall()
-            return [EvaluationRecord.from_dict(json.loads(r["record_json"])) for r in rows]
+            return [
+                EvaluationRecord.from_dict(json.loads(r["record_json"])) for r in rows
+            ]
         except Exception as exc:
             _log.error("Failed to list evaluation records: %s", exc)
             return []
@@ -250,9 +262,12 @@ class EvaluationHistory:
                 passed = db.execute(
                     "SELECT COUNT(*) FROM evaluation_records WHERE status = 'pass'"
                 ).fetchone()[0]
-                avg_score = db.execute(
-                    "SELECT AVG(composite_score) FROM evaluation_records"
-                ).fetchone()[0] or 0.0
+                avg_score = (
+                    db.execute(
+                        "SELECT AVG(composite_score) FROM evaluation_records"
+                    ).fetchone()[0]
+                    or 0.0
+                )
                 by_type = db.execute(
                     "SELECT target_type, COUNT(*) as cnt FROM evaluation_records GROUP BY target_type"
                 ).fetchall()

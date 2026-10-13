@@ -254,6 +254,18 @@ ownership key in ConversationStore; it cannot choose a filesystem root.
 Agent and Decision context providers read
 the selected existing stores; an Agent profile is not a dictionary or authority.
 
+Context, Evaluation and Experience state APIs retain an explicitly configured
+`NOUS_WORKSPACE_ROOT` when that existing project has no `.nous` directory yet.
+Their existing stores initialize only under that selected root, including direct
+default store constructors and snapshot creation. Explicit store paths retain
+their existing meaning; unconfigured constructors retain their cwd defaults.
+Default Context collection binds its project readers through the same `project.workspace`
+resolver. An invalid or unavailable configured root, resolver error, linked
+`.nous` or non-directory state produces an error instead of reading cwd state.
+The default initialized-only `find_workspace()` contract and unconfigured
+cwd/ancestor discovery remain compatible. This extends existing store selection;
+it adds no state owner, workspace registry or permission grant.
+
 Trusted Workflow handler registration can supply `WorkflowHandlerPolicy` from
 the existing `nous_runtime.workflow` package, or a typed policy on the registered
 host callable. A matching Capability contract declares retry safety and a bounded

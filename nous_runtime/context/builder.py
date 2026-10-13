@@ -94,6 +94,10 @@ class ContextBuilder:
     def __init__(
         self, workspace: str = "", providers: list[ContextProvider] | None = None
     ):
+        if not workspace and providers is None:
+            from nous_runtime.project.workspace import find_workspace
+
+            workspace = str(find_workspace(allow_uninitialized=True) or "")
         self._workspace = workspace
         self._providers = (
             providers if providers is not None else _default_providers(workspace)
