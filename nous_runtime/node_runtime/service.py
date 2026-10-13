@@ -732,6 +732,7 @@ class NodeRuntimeService:
         *,
         delivery_semantics: str = "idempotent",
         binding: dict[str, str] | None = None,
+        reconcile_only: bool = False,
     ) -> dict[str, Any]:
         if not workload_id or any(
             part in workload_id for part in ("/", "\\", "..", "\0")
@@ -782,6 +783,27 @@ class NodeRuntimeService:
                     and existing["request_digest"] != request_digest
                 ):
                     raise ValueError("workload idempotency binding collision")
+                if reconcile_only and not existing.get("request_digest"):
+                    # Legacy idempotent records bind their original inputs in
+                    # the receipt. Failed probes cannot loosen that binding.
+                    receipt = existing.get("receipt")
+                    expected = {
+                        "operation_id": workload_id,
+                        "actor": self.identity.node_id,
+                        "target": capability,
+                        "input_digest": hashlib.sha256(canonical_arguments).hexdigest(),
+                    }
+                    if (
+                        binding
+                        or existing.get("capability") != capability
+                        or not isinstance(receipt, dict)
+                        or any(
+                            receipt.get(key) != value for key, value in expected.items()
+                        )
+                    ):
+                        raise ValueError(
+                            "recorded workload reconciliation binding changed"
+                        )
                 if existing.get("state") == "EXECUTING":
                     return {
                         **existing,
@@ -789,6 +811,10 @@ class NodeRuntimeService:
                         "error_code": "NOUS_NODE_UNCERTAIN_EFFECT",
                     }
                 return dict(existing)
+            if reconcile_only:
+                raise PermissionError(
+                    "Node host report unavailable; new execution blocked"
+                )
             started = _utc_now()
             execution_started = time.monotonic()
             handler = self._handlers.get(capability)

@@ -98,6 +98,13 @@ project it; do not manufacture a terminal state or resubmit an Operation merely
 because a wait deadline elapsed. Tests of denial must retain FAILED, zero-effect,
 unchanged-resource and audit assertions after that real projection.
 
+An unavailable Node host probe cannot discard an already recorded Work result.
+The existing authenticated Relay may reconcile the original journal and signed
+assignment without a fresh host report. That mode rejects new execution and
+changed Work/Node/Operation input bindings; uncertain execution stays
+RECOVERY_REQUIRED. It publishes no replacement health or resource facts. A fresh
+successful probe is still required before readiness can advance to ONLINE.
+
 The legacy connectivity adapter's TCP `is_connected()` flag is distinct from
 processing WELCOME and from readiness of the current send queue. A cached session
 ID after reconnect is not a new handshake. Await the actual current session and
