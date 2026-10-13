@@ -5,6 +5,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
+import contextvars
+from copy import deepcopy
+from functools import partial
 import hashlib
 import json
 import logging
@@ -13,6 +16,7 @@ import os
 import random
 import secrets
 import ssl
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -120,6 +124,9 @@ class NodeRelayServer:
             self.state_dir / "relay-sequence.json" if self.state_dir else None
         )
         self._sequence = self._load_sequence()
+        self._send_loop: asyncio.AbstractEventLoop | None = None
+        self._send_lock = asyncio.Lock()
+        self._send_state_lock = threading.Lock()
         self._server: Any = None
         self._provider_spool_task: asyncio.Task[None] | None = None
         self._trust_watch_task: asyncio.Task[None] | None = None
@@ -1890,8 +1897,32 @@ class NodeRelayServer:
         reply_to: str = "",
         idempotency_key: str = "",
     ) -> None:
-        if message_type not in {"ACK", "ERROR"}:
-            self._require_node_trust(target)
+        payload = deepcopy(payload)
+        requires_trust = message_type not in {"ACK", "ERROR"}
+        async with _relay_send_lock(self):
+            if requires_trust:
+                self._require_node_trust(target)
+            arguments = (target, message_type, payload, reply_to, idempotency_key)
+            raw = (
+                await _run_relay_io(self._encode_message, *arguments)
+                if self.sequence_path is not None
+                else self._encode_message(*arguments)
+            )
+            if requires_trust:
+                # Persistence may yield to revocation or a successor connection.
+                self._require_node_trust(target)
+                if self.connections.get(target) is not websocket:
+                    raise NodeProtocolError("node connection changed before send")
+            await websocket.send(raw)
+
+    def _encode_message(
+        self,
+        target: str,
+        message_type: str,
+        payload: dict[str, Any],
+        reply_to: str,
+        idempotency_key: str,
+    ) -> str:
         envelope = NodeProtocolEnvelope(
             message_type=message_type,
             source=CONTROL_PLANE_ID,
@@ -1901,7 +1932,7 @@ class NodeRelayServer:
             reply_to=reply_to,
             idempotency_key=idempotency_key,
         ).sign(self.private_key)
-        await websocket.send(envelope.to_json())
+        return envelope.to_json()
 
     def _next_sequence(self) -> int:
         self._sequence += 1
@@ -1944,6 +1975,9 @@ class NodeRelayClient:
         self.session_path = service.state_dir / "relay-session.json"
         self.sequence_path = service.state_dir / "relay-sequence.json"
         self._sequence = self._load_sequence()
+        self._send_loop: asyncio.AbstractEventLoop | None = None
+        self._send_lock = asyncio.Lock()
+        self._send_state_lock = threading.Lock()
         self._replay = ReplayWindow()
         self._session_phase = "idle"
 
@@ -2037,7 +2071,9 @@ class NodeRelayClient:
                     "node_id": self.service.identity.node_id,
                     "identity": self.service.identity.to_dict(),
                     "supported_versions": [NODE_PROTOCOL_VERSION],
-                    "resume_session_id": self._load_session_id(),
+                    "resume_session_id": await self._run_session_io(
+                        self._load_session_id
+                    ),
                 },
             )
             welcome = await self._receive(websocket)
@@ -2047,8 +2083,10 @@ class NodeRelayClient:
             ):
                 raise NodeProtocolError("relay did not accept node registration")
             authenticated_at = time.monotonic()
-            self._save_session_id(str(welcome.payload["session_id"]))
-            status = self._probe_status()
+            await self._run_session_io(
+                self._save_session_id, str(welcome.payload["session_id"])
+            )
+            status = await _run_relay_io(self._probe_status)
             if status is not None:
                 self._session_phase = "initial-reports"
                 await self._send(websocket, "RESOURCE_REPORT", status["resources"])
@@ -2101,7 +2139,9 @@ class NodeRelayClient:
                     )
                 if loop.time() < next_heartbeat:
                     continue
-                status = self._probe_status(tolerate_failure=status is None)
+                status = await _run_relay_io(
+                    self._probe_status, tolerate_failure=status is None
+                )
                 if status is None:
                     next_heartbeat = loop.time() + self.heartbeat_seconds
                     continue
@@ -2276,6 +2316,20 @@ class NodeRelayClient:
         reply_to: str = "",
         idempotency_key: str = "",
     ) -> None:
+        payload = deepcopy(payload)
+        async with _relay_send_lock(self):
+            raw = await _run_relay_io(
+                self._encode_message, message_type, payload, reply_to, idempotency_key
+            )
+            await websocket.send(raw)
+
+    def _encode_message(
+        self,
+        message_type: str,
+        payload: dict[str, Any],
+        reply_to: str,
+        idempotency_key: str,
+    ) -> str:
         envelope = NodeProtocolEnvelope(
             message_type=message_type,
             source=self.service.identity.node_id,
@@ -2285,7 +2339,7 @@ class NodeRelayClient:
             reply_to=reply_to,
             idempotency_key=idempotency_key,
         ).sign(self.service.load_private_key())
-        await websocket.send(envelope.to_json())
+        return envelope.to_json()
 
     async def _receive(self, websocket: Any) -> NodeProtocolEnvelope:
         raw = await asyncio.wait_for(websocket.recv(), timeout=10.0)
@@ -2314,6 +2368,51 @@ class NodeRelayClient:
 
     def _save_session_id(self, session_id: str) -> None:
         _atomic_json(self.session_path, {"session_id": session_id})
+
+    async def _run_session_io(self, operation: Callable[..., Any], *args: Any) -> Any:
+        async with _relay_send_lock(self):
+            return await _run_relay_io(operation, *args)
+
+
+def _relay_send_lock(owner: Any) -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    with owner._send_state_lock:
+        if owner._send_loop is not loop:
+            previous = owner._send_loop
+            if previous is not None and (
+                not previous.is_closed() or owner._send_lock.locked()
+            ):
+                raise RuntimeError("Relay owner is already using another event loop")
+            owner._send_loop = loop
+            owner._send_lock = asyncio.Lock()
+        return owner._send_lock
+
+
+async def _run_relay_io(
+    operation: Callable[..., Any], *args: Any, **kwargs: Any
+) -> Any:
+    """Finish the original blocking call before cancellation releases its owner."""
+    loop = asyncio.get_running_loop()
+    writer = loop.run_in_executor(
+        None, partial(contextvars.copy_context().run, operation, *args, **kwargs)
+    )
+    cancelled = None
+    while not writer.done():
+        try:
+            await asyncio.shield(writer)
+        except asyncio.CancelledError as exc:
+            cancelled = cancelled or exc
+        except Exception:
+            break
+    try:
+        result = writer.result()
+    except BaseException:
+        if cancelled is not None:
+            raise cancelled
+        raise
+    if cancelled is not None:
+        raise cancelled
+    return result
 
 
 def _read_json(path: Path) -> dict[str, Any]:
