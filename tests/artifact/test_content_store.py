@@ -1,9 +1,73 @@
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 import pytest
 
 from nous_runtime.artifact import ArtifactType, ContentAddressedArtifactStore
 from nous_runtime.core.errors import ArtifactError
+
+
+def test_existing_instances_preserve_each_others_evidence_index(tmp_path):
+    first = ContentAddressedArtifactStore(tmp_path)
+    second = ContentAddressedArtifactStore(tmp_path)
+    original = first.store_bytes(
+        b"original observation", artifact_type="evidence", name="original"
+    )
+    later = second.store_bytes(
+        b"later verification", artifact_type="verification_result", name="later"
+    )
+    reloaded = ContentAddressedArtifactStore(tmp_path)
+    assert reloaded.verify(original["artifact"]["digest"])
+    assert reloaded.verify(later["artifact"]["digest"])
+    dependent = first.store_bytes(
+        b"dependent evidence",
+        artifact_type="evidence",
+        name="dependent",
+        depends_on=(later["artifact"]["digest"],),
+    )
+    assert ContentAddressedArtifactStore(tmp_path).verify(
+        dependent["artifact"]["digest"]
+    )
+
+
+def test_concurrent_instances_preserve_original_metadata_and_all_digests(tmp_path):
+    stores = [ContentAddressedArtifactStore(tmp_path) for _ in range(8)]
+    ready = Barrier(len(stores))
+
+    def write(index):
+        ready.wait(timeout=5)
+        return stores[index].store_bytes(
+            str(index).encode(),
+            artifact_type="evidence",
+            name=f"evidence-{index}",
+            produced_by=f"original-{index}",
+        )
+
+    with ThreadPoolExecutor(max_workers=len(stores)) as executor:
+        results = list(executor.map(write, range(len(stores))))
+    reloaded = ContentAddressedArtifactStore(tmp_path)
+    assert len(reloaded.list()) == len(stores)
+    for index, result in enumerate(results):
+        digest = result["artifact"]["digest"]
+        assert reloaded.verify(digest)
+        duplicate = stores[(index + 1) % len(stores)].store_bytes(
+            str(index).encode(),
+            artifact_type="evidence",
+            name="replacement",
+            produced_by="cannot-replace-provenance",
+        )
+        assert duplicate["artifact"] == result["artifact"]
+        assert duplicate["receipt"]["result"] == "UNCHANGED"
+
+
+def test_stale_writer_does_not_replace_a_corrupt_persisted_index(tmp_path):
+    store = ContentAddressedArtifactStore(tmp_path)
+    store.index_path.write_text('{"sha256:invalid": {}}', encoding="utf-8")
+    with pytest.raises(ArtifactError):
+        store.store_bytes(b"new evidence", artifact_type="evidence", name="new")
+    assert store.index_path.read_text(encoding="utf-8") == '{"sha256:invalid": {}}'
+    assert not list(store.objects.rglob("*"))
 
 
 def test_store_resolve_deduplicate_and_verify(tmp_path: Path):

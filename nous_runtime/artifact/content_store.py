@@ -327,9 +327,6 @@ class ContentAddressedArtifactStore:
             raise ArtifactError("artifact name is required")
         dependencies = tuple(sorted(set(depends_on)))
         origins = tuple(sorted(set(derived_from)))
-        for linked in (*dependencies, *origins):
-            if linked not in self._index:
-                raise ArtifactError(f"artifact graph reference not found: {linked}")
         record = ContentArtifact(
             digest=digest,
             artifact_type=normalized_type,
@@ -344,6 +341,12 @@ class ContentAddressedArtifactStore:
             metadata=redact_sensitive_data(dict(metadata or {})),
         )
         with self._lock, file_lock(str(self.index_path) + ".lock"):
+            # Workflow/Node adapters use distinct instances of this owner. Read
+            # current evidence before extending its index under the shared lock.
+            self._index = self._load_index()
+            for linked in (*dependencies, *origins):
+                if linked not in self._index:
+                    raise ArtifactError(f"artifact graph reference not found: {linked}")
             existing = self._index.get(digest)
             if existing:
                 if not self.verify(digest):
