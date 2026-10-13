@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { btnSecondary, colors, radius, space, typo } from "../design";
-import { fetchRunEvents, getConfig } from "../lib/api";
+import { fetchRunEvents, getConfig, getRuntimeConfigVersion } from "../lib/api";
 import { errorMessage } from "../lib/format";
-import type { RuntimeEventEnvelope } from "../store";
+import { useRuntimeConfigVersion, type RuntimeEventEnvelope } from "../store";
+import { measuredUsage, usageCounters } from "../lib/usageAccounting";
 
 type RecordValue = Record<string, unknown>;
 const record = (value: unknown): RecordValue => value !== null && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {};
@@ -42,8 +43,11 @@ export function ContextInspector({ runId, controller, onClose }: {
   const [partial, setPartial] = useState(false);
   const [selected, setSelected] = useState(0);
   const [refresh, setRefresh] = useState(0);
+  const configurationVersion = useRuntimeConfigVersion();
+  const [evidenceBinding, setEvidenceBinding] = useState<{ runId: string; controller: string; version: number } | null>(null);
   useEffect(() => {
     let cancelled = false;
+    setEvidenceBinding({ runId, controller, version: configurationVersion });
     setEvents([]); setLoading(true); setError(""); setPartial(false); setSelected(0);
     void (async () => {
       try {
@@ -51,10 +55,10 @@ export function ContextInspector({ runId, controller, onClose }: {
         const loaded: Partial<RuntimeEventEnvelope>[] = [];
         let truncated = true;
         for (let page = 0; page < 8; page++) {
-          if (getConfig().url !== controller) throw new Error("Controller changed; original context cannot be queried here.");
+          if (getConfig().url !== controller || getRuntimeConfigVersion() !== configurationVersion) throw new Error("Controller changed; original context cannot be queried here.");
           const response = await fetchRunEvents(runId, cursor);
           if (cancelled) return;
-          if (getConfig().url !== controller || response.run_id !== runId) throw new Error("Context evidence does not match the requested Controller and Run.");
+          if (getConfig().url !== controller || getRuntimeConfigVersion() !== configurationVersion || response.run_id !== runId) throw new Error("Context evidence does not match the requested Controller and Run.");
           loaded.push(...response.events);
           if (response.events.length < 200) { truncated = false; break; }
           if (response.next_after_sequence <= cursor) throw new Error("Context replay cursor did not advance.");
@@ -65,9 +69,11 @@ export function ContextInspector({ runId, controller, onClose }: {
       finally { if (!cancelled) setLoading(false); }
     })();
     return () => { cancelled = true; };
-  }, [runId, controller, refresh]);
+  }, [runId, controller, refresh, configurationVersion]);
 
-  const invocations = events.filter(event => event.event_type === "model.invocation.started");
+  const currentEvidence = evidenceBinding?.runId === runId && evidenceBinding.controller === controller && evidenceBinding.version === configurationVersion;
+  const visibleEvents = currentEvidence ? events : [];
+  const invocations = visibleEvents.filter(event => event.event_type === "model.invocation.started");
   const invocation = invocations[selected];
   const payload = record(invocation?.payload);
   const manifest = record(payload.input_manifest);
@@ -76,9 +82,10 @@ export function ContextInspector({ runId, controller, onClose }: {
     && Number.isInteger(manifest.tool_count) && Number(manifest.tool_count) >= 0
     && Array.isArray(manifest.messages) && manifest.messages.length === Math.min(Number(manifest.message_count), 256)
     && Array.isArray(manifest.tools) && manifest.tools.length === Math.min(Number(manifest.tool_count), 64);
-  const completion = events.find(event => (event.event_type === "model.invocation.completed" || event.event_type === "model.invocation.failed") && record(event.payload).iteration === payload.iteration);
+  const completion = visibleEvents.find(event => (event.event_type === "model.invocation.completed" || event.event_type === "model.invocation.failed") && record(event.payload).iteration === payload.iteration);
   const completed = record(completion?.payload);
   const usage = record(completed.usage);
+  const measurements = record(usage.counter_measurements);
 
   return <section aria-label="Model Context Inspector" style={{ padding: space.md, border: `1px solid ${colors.border}`, borderRadius: radius.md, background: colors.surface, fontSize: typo.xs, overflowWrap: "anywhere", maxHeight: "50vh", overflowY: "auto" }}>
     <div style={{ display: "flex", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
@@ -87,7 +94,7 @@ export function ContextInspector({ runId, controller, onClose }: {
       <button onClick={onClose} style={btnSecondary}>Close context</button>
     </div>
     <p>Run {runId}. Recorded Gateway input; provider-specific formatting and provider receipt are not proven here. Tool declarations do not grant permission. Prompt and file contents are not copied into this manifest.</p>
-    {loading ? <p role="status">Loading persisted model input…</p> : error ? <p role="alert">Context unavailable: {error}</p> : <>
+    {loading || !currentEvidence ? <p role="status">Loading persisted model input…</p> : error ? <p role="alert">Context unavailable: {error}</p> : <>
       {partial && <p>Partial replay: the 1,600-event inspection bound was reached. Later input is UNKNOWN.</p>}
       {invocations.length === 0 ? <p>UNKNOWN — no recorded model input for this Run. This does not mean that the model saw no context.</p> : <>
         <label>Model invocation <select aria-label="Model invocation" value={selected} onChange={event => setSelected(Number(event.target.value))}>
@@ -95,9 +102,12 @@ export function ContextInspector({ runId, controller, onClose }: {
         </select></label>
         {!valid ? <p>UNKNOWN — this invocation has no supported input manifest.</p> : <>
           <p>Input SHA-256: {hash(manifest.input_sha256)}</p>
-          <p>Estimated input tokens: {number(manifest.estimated_input_tokens)} (heuristic, including tools). Recorded input tokens: {number(usage.input_tokens)}. Cached input tokens: {number(usage.cached_input_tokens)}.</p>
-          <p>Usage and cost are normalized Runtime counters; zero does not establish a reported Provider measurement.</p>
-          <p>Provider: {String(completed.provider_id || "UNKNOWN")} · model: {String(completed.model_id || "UNKNOWN")} · latency: {number(completed.latency_ms)} ms · cost: {number(completed.cost_usd)} USD</p>
+          <p>Estimated input tokens: {number(manifest.estimated_input_tokens)} (heuristic, including tools). Recorded input tokens: {measuredUsage(usage.input_tokens, measurements.input_tokens)}. Cached input tokens: {measuredUsage(usage.cached_input_tokens, measurements.cached_input_tokens)}.</p>
+          <p>Provider reported values are telemetry, not independently verified invoices. Missing measurements and unclassified legacy values remain UNKNOWN.</p>
+          <p>Provider: {String(completed.provider_id || "UNKNOWN")} · model: {String(completed.model_id || "UNKNOWN")} · latency: {number(completed.latency_ms)} ms · cost: {measuredUsage(completed.cost_usd, completed.cost_measurement, true)}</p>
+          <p>Usage receipt: {String(completed.usage_receipt_ref || "UNKNOWN")} · request: {String(completed.usage_request_id || "UNKNOWN")} · attempt: {number(completed.usage_attempt)}</p>
+          {usageCounters.filter(([key]) => key !== "input_tokens" && key !== "cached_input_tokens").map(([key, label]) =>
+            <div key={key}>{label}: {measuredUsage(usage[key], measurements[key])}</div>)}
           <p>Invocation outcome: {completion?.event_type === "model.invocation.completed" ? "response returned" : completion?.event_type === "model.invocation.failed" ? "failed" : "UNKNOWN / no terminal event"}. This is not effect verification.</p>
           <h3>Messages ({number(manifest.message_count)})</h3>
           {array(manifest.messages).slice(0, 256).map((value, index) => {

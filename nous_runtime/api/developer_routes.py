@@ -391,6 +391,7 @@ def handle_developer_proposal_action(
 
 
 def handle_developer_model_lab(params: dict[str, Any] | None = None) -> dict[str, Any]:
+    from nous_runtime.api.routes import handle_usage_summary
     from nous_runtime.model_runtime.center import ModelCenterService
     from nous_runtime.model_runtime.observation_store import ModelObservationStore
 
@@ -403,12 +404,20 @@ def handle_developer_model_lab(params: dict[str, Any] | None = None) -> dict[str
         costs = observations.get_cost_summary()
     finally:
         observations.shutdown()
+    # Billing is a read projection of the same journal used by /api/v1/usage.
+    # Legacy observations remain performance evidence, never a billing ledger.
+    usage_response = handle_usage_summary(params)
+    usage_available = usage_response.get("ok") is True
     return ok_response(
         {
             **center,
             "rankings": rankings,
             "recent_observations": recent,
             "costs": costs,
+            "usage_accounting": usage_response.get("data") if usage_available else None,
+            "usage_accounting_status": "available"
+            if usage_available
+            else "unavailable",
             "evidence_status": "measured" if recent else "awaiting_observations",
         }
     )

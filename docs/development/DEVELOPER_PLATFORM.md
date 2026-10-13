@@ -15,7 +15,8 @@ The desktop `Develop` page provides the following views:
 - **Projects** uses the durable project coordinator and project store.
 - **Runs** reads canonical records reconstructed from the Runtime event stream.
 - **Experiments** stores specifications and measured statistical summaries.
-- **Model Lab** combines the model registry with recorded execution observations.
+- **Model Lab** combines the model registry and performance observations with a
+  read-only projection of the existing model usage journal.
 
 Equivalent API endpoints are available under `/api/v1/developer/`.
 
@@ -47,8 +48,10 @@ not the provider's final HTTP envelope or proof of provider receipt. Retries,
 provider-specific formatting and collaborative worker/reviewer calls are not
 covered by this Chat manifest. Token estimates include structured calls and
 tool definitions; normalized Runtime usage, cache counters, latency and cost are
-separate recorded telemetry. Normalization may supply zero for an absent counter;
-zero alone cannot establish an original Provider measurement. Missing usage, legacy/unsupported manifests,
+separate recorded telemetry. Counter and cost measurements distinguish Provider
+reported, derived, estimated and unknown values; missing counters remain null.
+Unclassified legacy values cannot establish a Provider measurement.
+Missing usage, legacy/unsupported manifests,
 replay errors and missing terminal events remain UNKNOWN. Input inspection
 does not verify an effect or restore expired authority.
 
@@ -93,6 +96,36 @@ are refused before dispatch; the Composer preserves the draft. Existing saved
 Workspace references, protected read tools and governed model/provider
 configuration remain the supported route. Conversation attachment metadata is
 not model input, and installation or selection grants no permission.
+
+### Model usage and cost
+
+The browser Operations Console exposes **Model Lab / Usage** (模型实验室 / 用量)
+through the same read-only Model Lab pane, with UTC day selection and receipt
+details. Opening this view preserves an unsaved workspace draft and exposes no
+project or experiment mutation controls.
+
+Model Lab's usage day selector and the native Desktop status bar read the same
+`CostController.from_environment().summary()` journal exposed by
+`GET /api/v1/usage`; Model Lab attaches that read as `usage_accounting`.
+The Desktop never adds legacy observation costs into a second billing total.
+An empty journal means no recorded cost measurement, and failed or unsupported
+reads leave spend UNKNOWN. A changed Controller connection invalidates pending
+reads and clears prior billing data.
+
+The view separates reported, estimated and derived cost subtotals, unknown
+receipts, pending requests and outstanding reservations. Nullable token totals
+retain known and estimated subtotals without converting missing counters to zero.
+Receipt detail preserves request, attempt and receipt references, model identity
+and per-counter measurements without prompts or credential material. Lists show
+at most 256 recent receipts while the existing Controller owns day aggregates.
+Provider reported values are telemetry, not independently verified invoices.
+
+Budget and price readiness come from the existing Controller policy. Host-selected
+`APEIR_MODEL_PRICING_FILE` entries supply estimates; loaded entries do not prove
+that every selected model is priced. Explicit token-only operation requires both
+existing `APEIR_MAX_DAILY_COST_USD` and `APEIR_MAX_RETRY_COST_USD` to be
+`none`. This read view never changes limits, installs a price registry or
+reveals private configuration errors.
 
 ## Interactive project execution
 

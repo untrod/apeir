@@ -43,6 +43,21 @@ _SAFE_REFERENCE_KEYS = {
     "authorization_context_id",
 }
 
+# Nullable usage and these four labels carry measurement evidence, not secrets.
+# Restrict this exception to the existing normalized counters and enum contract.
+_USAGE_COUNTER_FIELDS = frozenset(
+    {
+        "input_tokens",
+        "output_tokens",
+        "cached_input_tokens",
+        "cache_miss_input_tokens",
+        "reasoning_tokens",
+        "total_tokens",
+        "cache_creation_input_tokens",
+    }
+)
+_USAGE_MEASUREMENTS = frozenset({"reported", "derived", "estimated", "unknown"})
+
 # Only this bounded metadata contract may retain the otherwise-sensitive
 # collection name. Unexpected fields or plaintext-shaped values fail closed.
 _CREDENTIAL_LEASE_METADATA_FIELDS = frozenset(
@@ -163,9 +178,30 @@ def redact_sensitive_data(value: Any) -> Any:
         for key, item in value.items():
             safe_key = redact_sensitive_text(str(key))
             normalized = safe_key.casefold()
+            if normalized == "counter_measurements":
+                valid = (
+                    isinstance(item, Mapping)
+                    and set(item).issubset(_USAGE_COUNTER_FIELDS)
+                    and all(
+                        isinstance(label, str) and label in _USAGE_MEASUREMENTS
+                        for label in item.values()
+                    )
+                )
+                redacted[safe_key] = (
+                    {
+                        counter: redact_sensitive_text(label)
+                        for counter, label in item.items()
+                    }
+                    if valid
+                    else REDACTED
+                )
+                continue
             numeric_token_counter = (
                 normalized == "tokens" or normalized.endswith("_tokens")
             ) and isinstance(item, (int, float))
+            nullable_usage_counter = (
+                normalized in _USAGE_COUNTER_FIELDS and item is None
+            )
             lease_metadata = (
                 normalized == "credential_leases"
                 and isinstance(item, list)
@@ -179,6 +215,7 @@ def redact_sensitive_data(value: Any) -> Any:
                 not lease_metadata
                 and normalized not in _SAFE_REFERENCE_KEYS
                 and not numeric_token_counter
+                and not nullable_usage_counter
                 and any(marker in normalized for marker in _SENSITIVE_MARKERS)
             ):
                 redacted[safe_key] = REDACTED

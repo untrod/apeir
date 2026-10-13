@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import { entityStore } from "./entityStore";
+import { fetchUsageSummary, getConfig, getRuntimeConfigVersion, subscribeRuntimeConfig } from "../lib/api";
 import type {
   EntityId,
   Conversation, Session, Message,
@@ -226,22 +227,37 @@ export function useUsage(): UsageRecord[] {
 }
 
 export function useCostSummary(): CostSummary {
-  const state = useStore();
-  const records = Object.values(state.usage);
-  const total = records.reduce((sum, r) => sum + r.cost_usd, 0);
-  const byModel: Record<string, number> = {};
-  const byTask: Record<string, number> = {};
-  for (const r of records) {
-    byModel[r.model_id] = (byModel[r.model_id] || 0) + r.cost_usd;
-    if (r.task_id) byTask[r.task_id] = (byTask[r.task_id] || 0) + r.cost_usd;
+  const version = useRuntimeConfigVersion();
+  const state = useSyncExternalStore(
+    (listener) => entityStore.subscribe(listener),
+    () => entityStore.getState().usage_accounting,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    const controller = getConfig().url;
+    const refresh = async () => {
+      const sequence = entityStore.beginUsageRead(controller, version);
+      try {
+        const summary = await fetchUsageSummary();
+        if (!cancelled && getRuntimeConfigVersion() === version && getConfig().url === controller) {
+          entityStore.finishUsageRead(sequence, summary);
+        }
+      } catch {
+        if (!cancelled && getRuntimeConfigVersion() === version) entityStore.failUsageRead(sequence);
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => { void refresh(); }, 5000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [version]);
+  if (state.configuration_version !== version || state.controller !== getConfig().url) {
+    return { status: "loading", controller: getConfig().url, configuration_version: version, summary: null, error: null };
   }
-  return {
-    total_cost_usd: total,
-    by_model: byModel,
-    by_task: byTask,
-    period_start: records[0]?.period_start || "",
-    period_end: records[records.length - 1]?.period_end || "",
-  };
+  return state;
+}
+
+export function useRuntimeConfigVersion(): number {
+  return useSyncExternalStore(subscribeRuntimeConfig, getRuntimeConfigVersion);
 }
 
 

@@ -3,7 +3,9 @@ import { colors, typo, shadow, space } from "../design";
 import { fixedNumber } from "../lib/format";
 import { useOnlineNodes, useModels, usePendingApprovals, useCostSummary } from "../store";
 import { useEffect } from "react";
-import { fetchStatus, type RuntimeStatus } from "../lib/api";
+import { fetchStatus, getConfig, getRuntimeConfigVersion, type RuntimeStatus } from "../lib/api";
+import { useRuntimeConfigVersion } from "../store";
+import { UsageAccounting } from "./UsageAccounting";
 
 export function StatusBar({ onSearch }: { onSearch?: () => void }) {
   const [expanded, setExpanded] = useState(false);
@@ -12,19 +14,22 @@ export function StatusBar({ onSearch }: { onSearch?: () => void }) {
   const models = useModels();
   const pendingApprovals = usePendingApprovals();
   const cost = useCostSummary();
+  const configurationVersion = useRuntimeConfigVersion();
 
   const enabledModels = models.filter((model) => model.state !== "disabled");
   const healthyModels = enabledModels.filter((model) => model.health === "healthy");
 
   useEffect(() => {
     let active = true;
+    const controller = getConfig().url;
+    setRuntimeStatus(null);
     const refresh = () => void fetchStatus()
-      .then((status) => { if (active) setRuntimeStatus(status); })
-      .catch(() => { if (active) setRuntimeStatus(null); });
+      .then((status) => { if (active && getRuntimeConfigVersion() === configurationVersion && getConfig().url === controller) setRuntimeStatus(status); })
+      .catch(() => { if (active && getRuntimeConfigVersion() === configurationVersion) setRuntimeStatus(null); });
     refresh();
     const timer = window.setInterval(refresh, 5000);
     return () => { active = false; window.clearInterval(timer); };
-  }, []);
+  }, [configurationVersion]);
 
   const kernel = runtimeStatus?.kernel;
 
@@ -147,14 +152,10 @@ export function StatusBar({ onSearch }: { onSearch?: () => void }) {
               )}
             </StatusGroup>
             <StatusGroup title="Cost Today">
-              <div style={{ fontSize: typo.lg, color: colors.text, fontWeight: typo.semibold }}>
-                ${fixedNumber(cost.total_cost_usd, 4)}
-              </div>
-              {Object.entries(cost.by_model).slice(0, 3).map(([modelId, value]) => (
-                <div key={modelId} style={{ color: colors.textTertiary, fontSize: typo.xs }}>
-                  {modelId}: ${fixedNumber(value, 4)}
-                </div>
-              ))}
+              {cost.status === "ready" && cost.summary ? <UsageAccounting summary={cost.summary} compact />
+                : <div role={cost.status === "unavailable" ? "alert" : "status"}>
+                  {cost.status === "unavailable" ? cost.error : "Loading usage accounting… Spend UNKNOWN."}
+                </div>}
             </StatusGroup>
           </div>
         </>

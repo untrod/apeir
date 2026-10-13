@@ -94,6 +94,21 @@ def test_collaboration_uses_manager_parallel_workers_and_reviewer() -> None:
     )
     assert any(kind == "collaboration.prepared" for kind, _ in events)
     assert any(kind == "review.completed" for kind, _ in events)
+    lane_events = [
+        payload for kind, payload in events if kind == "model.lane.completed"
+    ]
+    assert lane_events and all(
+        payload["cost_usd"] is None and payload["cost_measurement"] == "unknown"
+        for payload in lane_events
+    )
+    assert all(
+        item["cost_usd"] is None and item["cost_measurement"] == "unknown"
+        for item in preparation.lanes
+    )
+    assert all(
+        item["usage_request_id"] is None and item["usage_attempt"] is None
+        for item in preparation.lanes
+    )
 
 
 def test_reviewer_cannot_approve_failed_tool_receipts() -> None:

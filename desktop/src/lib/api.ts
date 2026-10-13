@@ -7,7 +7,8 @@
  * Base URL: http://localhost:8770 (configurable)
  */
 
-import type { Conversation, Message } from "../store/types";
+import type { Conversation, Message, UsageAccountingSummary } from "../store/types";
+import { isUsageAccountingSummary } from "./usageAccounting";
 
 export interface RuntimeConfig {
   url: string;
@@ -189,11 +190,24 @@ export interface DashboardData {
 // Config
 
 let config: RuntimeConfig = { url: "http://localhost:8770", token: "" };
+let configurationVersion = 0;
+const configurationListeners = new Set<() => void>();
 
 export function setConfig(value: RuntimeConfig) {
+  const previous = getConfig();
   config = value;
   sessionStorage.setItem("nous_server_url", value.url);
   sessionStorage.setItem("nous_server_token", value.token);
+  if (previous.url !== value.url || previous.token !== value.token) {
+    configurationVersion++;
+    for (const listener of configurationListeners) listener();
+  }
+}
+
+export const getRuntimeConfigVersion = () => configurationVersion;
+export function subscribeRuntimeConfig(listener: () => void): () => void {
+  configurationListeners.add(listener);
+  return () => { configurationListeners.delete(listener); };
 }
 
 export function getConfig(): RuntimeConfig {
@@ -263,6 +277,16 @@ export async function testConnection(): Promise<boolean> {
 // Dashboard
 export const fetchDashboard = () => api<DashboardData>("/api/v1/dashboard");
 export const fetchStatus = () => api<RuntimeStatus>("/api/v1/status");
+export async function fetchUsageSummary(day?: string): Promise<UsageAccountingSummary> {
+  const version = getRuntimeConfigVersion();
+  const controller = getConfig().url;
+  const result = await api<unknown>(`/api/v1/usage${day ? `?day=${encodeURIComponent(day)}` : ""}`);
+  if (getConfig().url !== controller || getRuntimeConfigVersion() !== version) {
+    throw new Error("Controller connection changed; reload usage accounting.");
+  }
+  if (!isUsageAccountingSummary(result)) throw new Error("Usage accounting has an unsupported or incomplete response.");
+  return result;
+}
 export const fetchMemory = () => api<{ used_pct: number; rss_mb: number; total_gb: number }>("/api/v1/runtime/memory");
 
 // Chat / Runtime
@@ -518,6 +542,8 @@ export interface ModelLabSnapshot {
   recent_observations: Array<Record<string, unknown>>;
   costs: Array<Record<string, unknown>>;
   evidence_status: string;
+  usage_accounting?: UsageAccountingSummary | null;
+  usage_accounting_status?: "available" | "unavailable";
 }
 
 export const fetchDeveloperOverview = () => api<DeveloperOverview>("/api/v1/developer/overview");
@@ -560,7 +586,15 @@ export const evaluateDeveloperExperiment = (
     body: JSON.stringify({ baseline_scores: baselineScores, candidate_scores: candidateScores }),
   },
 );
-export const fetchModelLab = () => api<ModelLabSnapshot>("/api/v1/developer/model-lab");
+export async function fetchModelLab(day?: string): Promise<ModelLabSnapshot> {
+  const version = getRuntimeConfigVersion();
+  const controller = getConfig().url;
+  const result = await api<ModelLabSnapshot>(`/api/v1/developer/model-lab${day ? `?day=${encodeURIComponent(day)}` : ""}`);
+  if (getConfig().url !== controller || getRuntimeConfigVersion() !== version) {
+    throw new Error("Controller connection changed; reload Model Lab.");
+  }
+  return result;
+}
 
 export interface WorkbenchFileEntry {
   path: string;

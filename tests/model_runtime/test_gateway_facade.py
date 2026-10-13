@@ -150,7 +150,12 @@ def test_facade_normalizes_structured_tools_route_usage_and_trace() -> None:
     assert response.provider_id == "mock-provider"
     assert response.route["selected_model_id"] == "local/unified"
     assert response.usage["total_tokens"] == 12
-    assert response.usage["reasoning_tokens"] == 0
+    assert response.usage["reasoning_tokens"] is None
+    assert response.usage["counter_measurements"]["reasoning_tokens"] == "unknown"
+    assert (
+        response.cost_usd is None
+        and response.to_dict()["cost_measurement"] == "unknown"
+    )
     assert response.trace_context["trace_id"] == "trace"
 
 
@@ -188,17 +193,36 @@ def test_facade_normalizes_provider_usage_and_finish_reason() -> None:
         "cache_miss_input_tokens": 1024,
         "reasoning_tokens": 1024,
         "total_tokens": 5120,
+        "cache_creation_input_tokens": None,
+        "counter_measurements": {
+            "input_tokens": "reported",
+            "output_tokens": "reported",
+            "cached_input_tokens": "reported",
+            "cache_miss_input_tokens": "reported",
+            "reasoning_tokens": "reported",
+            "total_tokens": "reported",
+            "cache_creation_input_tokens": "unknown",
+        },
     }
 
 
 def test_facade_reports_retry_and_rejects_secret_metadata() -> None:
-    facade, _adapter = build_facade(
-        "recovered",
-        failures_before_success=1,
-    )
+    facade, adapter = build_facade("recovered")
+    prepare = facade.gateway._ensure_loaded
+    preparation_calls = 0
+
+    async def fail_first_preparation(instance, selected):
+        nonlocal preparation_calls
+        preparation_calls += 1
+        if preparation_calls == 1:
+            raise ConnectionError("fake setup failed before dispatch")
+        await prepare(instance, selected)
+
+    facade.gateway._ensure_loaded = fail_first_preparation
     response = facade.invoke_sync(request(GatewayOperation.REASONING))
     assert response.retry_count == 1
     assert response.fallback_history == ("local/unified",)
+    assert preparation_calls == 2 and len(adapter.invocations) == 1
 
     with pytest.raises(Exception, match="credential reference"):
         request(
@@ -376,11 +400,21 @@ def test_input_manifest_matches_each_real_gateway_turn_and_replays(
 ):
     from nous_runtime.api.routes import route_server
     from nous_runtime.events import EventStream
+    from nous_runtime.model_runtime.cost_control import (
+        CostController,
+        Pricing,
+        PricingCatalog,
+    )
 
     (tmp_path / "workspace.txt").write_text("PRIVATE-CONTEXT-CONTENT", encoding="utf-8")
     (tmp_path / ".nous").mkdir(exist_ok=True)
     (tmp_path / ".nous" / "private.txt").write_text("NEVER-READ-PRIVATE-STATE")
     facade, adapter = build_facade(None)
+    accounting = CostController(
+        tmp_path / "usage.sqlite3",
+        pricing=PricingCatalog({"mock-provider/local/unified": Pricing(1, 2)}),
+    )
+    facade.gateway._cost_controller = accounting
     requests = []
     original = adapter.invoke
 
@@ -424,6 +458,25 @@ def test_input_manifest_matches_each_real_gateway_turn_and_replays(
         auth={"headers": {"Authorization": "Bearer fake.input.service"}},
     )
     assert page["ok"], page
+    usage_events = [
+        event["payload"]
+        for event in page["data"]["events"]
+        if event["event_type"] == "model.invocation.completed"
+    ]
+    assert len(usage_events) == 2
+    assert all(
+        event["cost_usd"] is None and event["cost_measurement"] == "unknown"
+        for event in usage_events
+    )
+    assert all(event["usage"]["reasoning_tokens"] is None for event in usage_events)
+    receipts = {
+        receipt["receipt_id"]: receipt for receipt in accounting.summary()["receipts"]
+    }
+    assert len(receipts) == 2
+    for event in usage_events:
+        receipt = receipts[event["usage_receipt_ref"]]
+        assert event["usage_request_id"] == receipt["request_id"]
+        assert event["usage_attempt"] == receipt["attempt"] == 1
     manifests = [
         event["payload"]["input_manifest"]
         for event in page["data"]["events"]

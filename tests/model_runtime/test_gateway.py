@@ -61,7 +61,12 @@ def test_gateway_falls_back_and_records_safe_observability() -> None:
         registry = ModelRuntimeRegistry()
         add_model(registry, "a", "failing")
         add_model(registry, "b", "working")
-        failing = MockModelAdapter(failures_before_success=10)
+
+        class SetupFailingAdapter(MockModelAdapter):
+            async def load(self, instance):
+                raise ConnectionError("fake setup failed before dispatch")
+
+        failing = SetupFailingAdapter()
         failing.backend_id = "failing"
         working = MockModelAdapter(content="done")
         working.backend_id = "working"
@@ -84,6 +89,8 @@ def test_gateway_falls_back_and_records_safe_observability() -> None:
         )
         assert response.model_id == "b"
         assert response.content == "done"
+        assert failing.invocations == []
+        assert len(working.invocations) == 1
         assert any(
             event.event_type == "model.invoke.failed" for event in gateway.events
         )
@@ -172,10 +179,7 @@ def test_gateway_retries_same_model_before_fallback() -> None:
     async def scenario() -> None:
         registry = ModelRuntimeRegistry()
         add_model(registry, "retry", "retry")
-        adapter = MockModelAdapter(
-            content="recovered",
-            failures_before_success=1,
-        )
+        adapter = MockModelAdapter(content="recovered")
         adapter.backend_id = "retry"
         adapters = ModelAdapterRegistry()
         adapters.register(adapter)
@@ -184,6 +188,17 @@ def test_gateway_retries_same_model_before_fallback() -> None:
             adapters,
             max_retries_per_model=1,
         )
+        prepare = gateway._ensure_loaded
+        preparation_calls = 0
+
+        async def fail_first_preparation(instance, selected):
+            nonlocal preparation_calls
+            preparation_calls += 1
+            if preparation_calls == 1:
+                raise ConnectionError("fake setup failed before dispatch")
+            await prepare(instance, selected)
+
+        gateway._ensure_loaded = fail_first_preparation
         response = await gateway.invoke(
             ModelRequest(
                 task_id="task",
@@ -191,7 +206,8 @@ def test_gateway_retries_same_model_before_fallback() -> None:
             )
         )
         assert response.content == "recovered"
-        assert len(adapter.invocations) == 2
+        assert preparation_calls == 2
+        assert len(adapter.invocations) == 1
 
     asyncio.run(scenario())
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { btnPrimary, btnSecondary, colors, radius, space, typo } from "../design";
 import {
@@ -11,6 +11,8 @@ import {
   fetchDeveloperProjects,
   fetchDeveloperRuns,
   fetchModelLab,
+  getConfig,
+  getRuntimeConfigVersion,
   type DeveloperExperiment,
   type DeveloperOverview,
   type DeveloperProject,
@@ -21,6 +23,9 @@ import {
 import { errorMessage, fixedNumber } from "../lib/format";
 import { DeveloperWorkbench } from "./DeveloperWorkbench";
 import { ResearchEvidence } from "./ResearchEvidence";
+import { UsageAccounting } from "./UsageAccounting";
+import { isUsageAccountingSummary, usageNumber } from "../lib/usageAccounting";
+import { useRuntimeConfigVersion } from "../store";
 
 type PlatformTab = "workbench" | "research" | "projects" | "runs" | "experiments" | "models";
 
@@ -72,14 +77,20 @@ function Status({ value }: { value: string }) {
   return <span style={{ color, fontSize: typo.xs, fontWeight: typo.semibold, textTransform: "uppercase" }}>{value}</span>;
 }
 
-export function DeveloperPlatform() {
-  const [tab, setTab] = useState<PlatformTab>("workbench");
+export function DeveloperPlatform({ modelsOnly = false }: { modelsOnly?: boolean } = {}) {
+  const [tab, setTab] = useState<PlatformTab>(modelsOnly ? "models" : "workbench");
   const [overview, setOverview] = useState<DeveloperOverview | null>(null);
   const [projects, setProjects] = useState<DeveloperProject[]>([]);
   const [runs, setRuns] = useState<DeveloperRun[]>([]);
   const [experiments, setExperiments] = useState<DeveloperExperiment[]>([]);
   const [results, setResults] = useState<ExperimentResultView[]>([]);
   const [modelLab, setModelLab] = useState<ModelLabSnapshot | null>(null);
+  const [modelLabLoading, setModelLabLoading] = useState(true);
+  const [snapshotVersion, setSnapshotVersion] = useState(-1);
+  const [usageDay, setUsageDay] = useState("");
+  const configurationVersion = useRuntimeConfigVersion();
+  const refreshSequence = useRef(0);
+  const invalidateReads = useCallback(() => { refreshSequence.current++; }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [projectName, setProjectName] = useState("");
@@ -92,14 +103,32 @@ export function DeveloperPlatform() {
   const [candidateScores, setCandidateScores] = useState("");
 
   const refresh = useCallback(async () => {
+    const sequence = ++refreshSequence.current;
+    const controller = getConfig().url;
+    const version = getRuntimeConfigVersion();
+    setSnapshotVersion(version);
     setError("");
+    setModelLab(null);
+    setModelLabLoading(true);
+    if (modelsOnly) {
+      try {
+        const models = await fetchModelLab(usageDay || undefined);
+        if (sequence === refreshSequence.current && getConfig().url === controller && getRuntimeConfigVersion() === version) setModelLab(models);
+      } catch {
+        if (sequence === refreshSequence.current && getRuntimeConfigVersion() === version) setError("Model evidence and usage accounting are unavailable. Spend UNKNOWN.");
+      } finally {
+        if (sequence === refreshSequence.current && getRuntimeConfigVersion() === version) setModelLabLoading(false);
+      }
+      return;
+    }
     const [overviewResult, projectsResult, runsResult, experimentsResult, modelsResult] = await Promise.allSettled([
       fetchDeveloperOverview(),
       fetchDeveloperProjects(),
       fetchDeveloperRuns(),
       fetchDeveloperExperiments(),
-      fetchModelLab(),
+      fetchModelLab(usageDay || undefined),
     ]);
+    if (sequence !== refreshSequence.current || getConfig().url !== controller || getRuntimeConfigVersion() !== version) return;
     if (overviewResult.status === "fulfilled") setOverview(overviewResult.value);
     if (projectsResult.status === "fulfilled") setProjects(projectsResult.value.projects);
     if (runsResult.status === "fulfilled") setRuns(runsResult.value.runs);
@@ -108,12 +137,17 @@ export function DeveloperPlatform() {
       setResults(experimentsResult.value.results);
     }
     if (modelsResult.status === "fulfilled") setModelLab(modelsResult.value);
+    setModelLabLoading(false);
     const failure = [overviewResult, projectsResult, runsResult, experimentsResult, modelsResult]
       .find((item) => item.status === "rejected");
     if (failure?.status === "rejected") setError(errorMessage(failure.reason, "Developer Platform data is unavailable."));
-  }, []);
+  }, [usageDay, modelsOnly]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    setOverview(null); setProjects([]); setRuns([]); setExperiments([]); setResults([]);
+    void refresh();
+    return invalidateReads;
+  }, [refresh, configurationVersion, invalidateReads]);
 
   const createProject = async () => {
     if (!projectName.trim() || busy) return;
@@ -158,22 +192,22 @@ export function DeveloperPlatform() {
     { id: "projects", label: "Projects", count: projects.length },
     { id: "runs", label: "Runs", count: runs.length },
     { id: "experiments", label: "Experiments", count: experiments.length },
-    { id: "models", label: "Model Lab", count: modelLab?.models.length || 0 },
+    { id: "models", label: "Model Lab", count: snapshotVersion === configurationVersion ? modelLab?.models.length || 0 : 0 },
   ];
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: colors.bg }}>
+    <div style={{ height: modelsOnly ? "auto" : "100%", display: "flex", flexDirection: "column", background: colors.bg }}>
       <header style={{ padding: `${space.lg} ${space.xl}`, background: colors.surface, borderBottom: `1px solid ${colors.borderLight}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: space.md, flexWrap: "wrap" }}>
           <div>
-            <h1 style={{ margin: 0, color: colors.text, fontSize: typo.lg }}>Developer Platform</h1>
+            <h1 style={{ margin: 0, color: colors.text, fontSize: typo.lg }}>{modelsOnly ? "Model Lab" : "Developer Platform"}</h1>
             <p style={{ margin: `${space.xs} 0 0`, color: colors.textSecondary, fontSize: typo.sm }}>
-              Governed editing, strict execution, real web evidence, canonical Runtime runs, experiments, and model evidence.
+              {modelsOnly ? "Recorded model performance and usage accounting from the Controller." : "Governed editing, strict execution, real web evidence, canonical Runtime runs, experiments, and model evidence."}
             </p>
           </div>
           <button onClick={() => void refresh()} disabled={busy} style={btnSecondary}>Refresh</button>
         </div>
-        <div style={{ display: "flex", gap: space.xs, marginTop: space.lg, flexWrap: "wrap" }}>
+        {!modelsOnly && <div style={{ display: "flex", gap: space.xs, marginTop: space.lg, flexWrap: "wrap" }}>
           {tabs.map((item) => (
             <button key={item.id} onClick={() => setTab(item.id)} style={{
               border: "none", borderRadius: radius.md, cursor: "pointer", fontFamily: typo.font,
@@ -181,11 +215,11 @@ export function DeveloperPlatform() {
               color: tab === item.id ? colors.accent : colors.textSecondary, fontWeight: tab === item.id ? typo.semibold : typo.normal,
             }}>{item.label} <span style={{ color: colors.textTertiary }}>{item.count}</span></button>
           ))}
-        </div>
+        </div>}
       </header>
 
       <div style={{ flex: 1, overflow: "auto", padding: space.xl }}>
-        {overview && <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(120px, 1fr))", gap: space.md, marginBottom: space.lg }}>
+        {overview && snapshotVersion === configurationVersion && <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(120px, 1fr))", gap: space.md, marginBottom: space.lg }}>
           <Metric label="Projects" value={`${overview.projects.active}/${overview.projects.total}`} />
           <Metric label="Active runs" value={overview.runs.active} />
           <Metric label="Benchmarked" value={overview.experiments.benchmarked} />
@@ -204,7 +238,14 @@ export function DeveloperPlatform() {
           onCreate={createExperiment} evaluationId={evaluationId} setEvaluationId={setEvaluationId}
           baselineScores={baselineScores} candidateScores={candidateScores}
           setBaselineScores={setBaselineScores} setCandidateScores={setCandidateScores} onEvaluate={evaluateExperiment} />}
-        {tab === "models" && <ModelLab data={modelLab} />}
+        {tab === "models" && <>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: space.sm, marginBottom: space.md }}>
+            <label style={{ color: colors.textSecondary, fontSize: typo.sm }}>Usage day (UTC) <input aria-label="Usage day (UTC)" type="date"
+              value={usageDay || (snapshotVersion === configurationVersion ? modelLab?.usage_accounting?.day : "") || ""} onChange={event => setUsageDay(event.target.value)} style={field} /></label>
+            <button onClick={() => setUsageDay("")} style={btnSecondary}>Today</button>
+          </div>
+          <ModelLab data={snapshotVersion === configurationVersion ? modelLab : null} loading={modelLabLoading || snapshotVersion !== configurationVersion} />
+        </>}
       </div>
     </div>
   );
@@ -307,11 +348,17 @@ function Experiments(props: {
   </div>;
 }
 
-function ModelLab({ data }: { data: ModelLabSnapshot | null }) {
-  if (!data) return <section style={panel}>Model evidence is unavailable.</section>;
+export function ModelLab({ data, loading = false }: { data: ModelLabSnapshot | null; loading?: boolean }) {
+  if (!data) return <section role={loading ? "status" : "alert"} style={panel}>{loading ? "Loading model evidence and usage accounting…" : "Model evidence and usage accounting are unavailable. Spend UNKNOWN."}</section>;
+  const accounting = data.usage_accounting_status === "available" && isUsageAccountingSummary(data.usage_accounting)
+    ? data.usage_accounting : null;
   return <div style={{ display: "grid", gap: space.md }}>
+    <section style={panel}>
+      <h2 style={{ marginTop: 0, fontSize: typo.md, color: colors.text }}>Model usage and cost</h2>
+      {accounting ? <UsageAccounting summary={accounting} /> : <p role="alert">Usage accounting unavailable. Spend UNKNOWN.</p>}
+    </section>
     <section style={{ ...panel, color: colors.textSecondary, fontSize: typo.sm }}>
-      Evidence status: <Status value={data.evidence_status} /> · {data.recent_observations.length} recorded observations
+      Performance evidence: <Status value={data.evidence_status} /> · {data.recent_observations.length} recorded observations
     </section>
     {data.models.length === 0 && <section style={panel}>No models configured.</section>}
     {data.models.map((model) => {
@@ -322,10 +369,10 @@ function ModelLab({ data }: { data: ModelLabSnapshot | null }) {
           <div style={{ color: colors.textSecondary, fontSize: typo.sm, marginTop: 3 }}>{model.provider_id} · {model.endpoint_type}</div>
         </div><Status value={model.health} /></div>
         <div style={{ color: colors.textTertiary, fontSize: typo.xs, marginTop: space.md }}>{model.capabilities.join(" · ") || "No declared capabilities"}</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(100px, 1fr))", gap: space.md, marginTop: space.md, color: colors.textSecondary, fontSize: typo.sm }}>
-          <span>Samples {ranking?.sample_count || 0}</span><span>Success {fixedNumber((ranking?.success_rate || 0) * 100, 1)}%</span>
-          <span>Latency {fixedNumber(ranking?.avg_latency_ms, 0)} ms</span><span>Cost ${fixedNumber(ranking?.avg_cost_usd, 6)}</span>
-        </div>
+        {ranking ? <div style={{ display: "flex", flexWrap: "wrap", gap: space.md, marginTop: space.md, color: colors.textSecondary, fontSize: typo.sm }}>
+          <span>Samples {usageNumber(ranking.sample_count)}</span><span>Success {typeof ranking.success_rate === "number" && Number.isFinite(ranking.success_rate) ? `${(ranking.success_rate * 100).toFixed(1)}%` : "UNKNOWN"}</span>
+          <span>Latency {usageNumber(ranking.avg_latency_ms)} ms</span>
+        </div> : <p style={{ color: colors.textTertiary, fontSize: typo.sm }}>No performance observations for this model.</p>}
       </section>;
     })}
   </div>;
