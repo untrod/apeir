@@ -112,14 +112,19 @@ def test_stale_pin_and_unpin_use_current_artifact_and_pin_state(tmp_path):
 
 
 @pytest.mark.parametrize("operation", ("pin", "unpin", "garbage_collect"))
+@pytest.mark.parametrize("invalid_entry", ("digest", "record"))
 def test_corrupt_pins_block_stale_mutations_without_replacing_evidence(
-    tmp_path, operation
+    tmp_path, operation, invalid_entry
 ):
     store = ContentAddressedArtifactStore(tmp_path)
     record = store.store_bytes(b"preserve", artifact_type="evidence", name="preserve")
     digest = record["artifact"]["digest"]
     before = store.index_path.read_bytes()
-    corrupt = '{"not-a-digest": {}}'
+    corrupt = (
+        '{"not-a-digest": {}}'
+        if invalid_entry == "digest"
+        else '{"' + digest + '": null}'
+    )
     store.pins_path.write_text(corrupt, encoding="utf-8")
     with pytest.raises(ArtifactError):
         if operation == "garbage_collect":

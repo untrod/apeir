@@ -391,8 +391,15 @@ class ContentAddressedArtifactStore:
 
     def _load_pins(self) -> dict[str, dict[str, Any]]:
         value = _read_json(self.pins_path)
-        for digest in value:
+        for digest, record in value.items():
             _digest_hex(digest)
+            if (
+                not isinstance(record, dict)
+                or not isinstance(record.get("reason"), str)
+                or not isinstance(record.get("pinned_at"), str)
+                or not record["pinned_at"]
+            ):
+                raise ArtifactError("artifact pin record is invalid")
         return value
 
     def _transitive_pin_closure(self) -> set[str]:
