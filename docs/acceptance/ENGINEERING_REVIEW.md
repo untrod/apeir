@@ -398,6 +398,18 @@ this correction claims no unmeasured latency/Token improvement and changes no
 fsync, grant fence, sandbox profile or retry semantics. Production installation,
 physical/network qualification and research experiments remain separate Gates.
 
+CAS writer review reuses the existing index, pin file and cross-process lock:
+reload persisted state under that lock before graph extension, pin/unpin or GC.
+Duplicate content retains its original metadata and corrupt pin records fail
+closed. A further credential review reproduced two typed-metadata publication
+failures: protected material could enter MIME or deployment target fields.
+These fields now reject protected values before publication instead of masking
+them into different semantic identities. Free-form pin descriptions retain
+central redaction. Current recovery-main Artifact/Node/Reality/workspace/
+credential regression has **438 passed** (106.34 s); this does not qualify native
+bytes, real hardware, production scale or unmeasured performance. Source and
+resulting-main CI remain separate checks.
+
 Final local correction evidence: **66 focused passed**, **1030 affected passed /
 4 skipped**, **262 repository passed**, and **98 Desktop tests in 28 files**;
 Desktop lint/typecheck/build also pass. Full bare-host regression is **4119 passed /
