@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import math
+import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
@@ -19,6 +21,48 @@ from nous_runtime.model_runtime.models import (
     ModelRequest,
     ModelResponse,
 )
+
+
+def _safe_provider_error_code(value: Any) -> str:
+    # External error codes are data and can contain credentials or prompt text.
+    code = str(value or "")
+    return (
+        code
+        if code
+        in {
+            "NOUS_PROVIDER_BALANCE_EXHAUSTED",
+            "NOUS_PROVIDER_CAPABILITY_UNAVAILABLE",
+            "NOUS_PROVIDER_CONFIG_INCOMPLETE",
+            "NOUS_PROVIDER_CREDENTIAL_UNAVAILABLE",
+            "NOUS_PROVIDER_HTTP_ERROR",
+            "NOUS_PROVIDER_CONNECTION_ERROR",
+            "PROVIDER_ERROR",
+        }
+        else ""
+    )
+
+
+def _provider_cost(payload: Mapping[str, Any]) -> tuple[float, str]:
+    metadata = payload.get("metadata") or {}
+    if not isinstance(metadata, Mapping):
+        raise ModelProviderResponseError("Provider billing metadata is malformed")
+    raw_cost = payload.get("cost_usd")
+    try:
+        cost = 0.0 if raw_cost is None else float(raw_cost)
+    except (ValueError, TypeError, OverflowError):
+        raise ModelProviderResponseError("Provider cost is malformed") from None
+    if isinstance(raw_cost, bool) or not math.isfinite(cost) or cost < 0:
+        raise ModelProviderResponseError("Provider cost is malformed")
+    marker = payload.get("cost_measurement", metadata.get("cost_measurement"))
+    if marker is None:
+        marker = "reported" if raw_cost is not None else "unknown"
+    if (
+        not isinstance(marker, str)
+        or marker not in {"reported", "estimated", "unknown"}
+        or (marker == "reported" and raw_cost is None)
+    ):
+        raise ModelProviderResponseError("Provider cost measurement is malformed")
+    return cost, marker
 
 
 @dataclass(frozen=True)
@@ -68,13 +112,9 @@ class ModelAdapterRegistry:
         if not backend_id:
             raise ModelAdapterError("adapter backend_id is required")
         if not isinstance(adapter, ModelBackendAdapter):
-            raise ModelAdapterError(
-                "adapter does not implement ModelBackendAdapter"
-            )
+            raise ModelAdapterError("adapter does not implement ModelBackendAdapter")
         if backend_id in self._adapters and not replace_existing:
-            raise ModelAdapterError(
-                f"adapter already registered: {backend_id}"
-            )
+            raise ModelAdapterError(f"adapter already registered: {backend_id}")
         self._adapters[backend_id] = adapter
         return adapter
 
@@ -84,15 +124,11 @@ class ModelAdapterRegistry:
     def require(self, backend_id: str) -> ModelBackendAdapter:
         adapter = self.get(backend_id)
         if adapter is None:
-            raise ModelAdapterError(
-                f"model backend adapter not found: {backend_id}"
-            )
+            raise ModelAdapterError(f"model backend adapter not found: {backend_id}")
         return adapter
 
     def list(self) -> tuple[ModelBackendAdapter, ...]:
-        return tuple(
-            self._adapters[key] for key in sorted(self._adapters)
-        )
+        return tuple(self._adapters[key] for key in sorted(self._adapters))
 
 
 class MockModelAdapter:
@@ -184,26 +220,23 @@ class LegacyProviderAdapter:
     ) -> None:
         self.provider = provider
         self.backend_id = str(
-            backend_id
-            or getattr(provider, "provider_id", "")
-            or "legacy-provider"
+            backend_id or getattr(provider, "provider_id", "") or "legacy-provider"
         )
 
     async def probe(self) -> AdapterProbe:
         started = time.perf_counter()
         try:
             health = await asyncio.to_thread(self.provider.health)
-        except Exception as exc:
+        except Exception:
             return AdapterProbe(
                 self.backend_id,
                 False,
                 int((time.perf_counter() - started) * 1000),
-                {"error": str(exc)},
+                {"error": "provider health check failed"},
             )
         return AdapterProbe(
             self.backend_id,
-            str(health.get("status") or "").lower()
-            in {"ok", "healthy", "ready"},
+            str(health.get("status") or "").lower() in {"ok", "healthy", "ready"},
             int((time.perf_counter() - started) * 1000),
             dict(health),
         )
@@ -220,9 +253,7 @@ class LegacyProviderAdapter:
     ) -> ModelResponse:
         started = time.perf_counter()
         capability = self._legacy_capability(request)
-        legacy_params = dict(
-            request.metadata.get("legacy_params") or {}
-        )
+        legacy_params = dict(request.metadata.get("legacy_params") or {})
         if capability.startswith("model."):
             provider_model = str(
                 descriptor.metadata.get("provider_model")
@@ -230,25 +261,17 @@ class LegacyProviderAdapter:
                 or descriptor.model_id
             )
             params = {
+                **legacy_params,
                 "model": provider_model,
                 "messages": list(request.messages),
                 "attachments": list(request.attachments),
                 "request_id": request.request_id,
                 "tools": list(request.metadata.get("tools") or ()),
                 "tool_choice": request.metadata.get("tool_choice"),
-                "response_schema": dict(
-                    request.metadata.get("response_schema") or {}
-                ),
-                "max_tokens": int(
-                    request.metadata.get("max_tokens") or 4096
-                ),
-                "workspace": str(
-                    request.metadata.get("workspace_path") or ""
-                ),
-                "agent_mode": str(
-                    request.metadata.get("agent_mode") or "agent"
-                ),
-                **legacy_params,
+                "response_schema": dict(request.metadata.get("response_schema") or {}),
+                "max_tokens": int(request.metadata.get("max_tokens") or 4096),
+                "workspace": str(request.metadata.get("workspace_path") or ""),
+                "agent_mode": str(request.metadata.get("agent_mode") or "agent"),
             }
         else:
             # Non-model legacy capabilities still traverse Gateway, but retain
@@ -260,9 +283,8 @@ class LegacyProviderAdapter:
             params["text"] = content
         if capability == "model.vision" and request.attachments:
             first = request.attachments[0]
-            params["image_url"] = (
-                first.get("url") or first.get("image_url") or ""
-            )
+            params["image_url"] = first.get("url") or first.get("image_url") or ""
+        failure = None
         try:
             payload = await asyncio.to_thread(
                 self.provider.invoke,
@@ -270,19 +292,34 @@ class LegacyProviderAdapter:
                 **params,
             )
         except Exception as exc:
-            raise ModelAdapterError(
-                f"legacy provider invocation failed: {exc}"
-            ) from exc
+            status = getattr(exc, "http_status", None)
+            if status is None:
+                match = re.search(r"\bHTTP\s+(\d{3})\b", str(exc), re.IGNORECASE)
+                status = int(match[1]) if match else None
+            failure = ModelProviderResponseError(
+                "legacy provider invocation failed",
+                provider_error_code=_safe_provider_error_code(
+                    getattr(exc, "provider_error_code", "")
+                ),
+                http_status=status
+                if type(status) is int and 100 <= status <= 599
+                else None,
+                retryable=getattr(exc, "retryable", None)
+                if isinstance(getattr(exc, "retryable", None), bool)
+                else None,
+            )
+        if failure is not None:
+            raise failure
         if not isinstance(payload, Mapping) or not payload.get("ok", False):
             message = (
-                str(payload.get("error") or "provider invocation failed")
+                "provider invocation failed"
                 if isinstance(payload, Mapping)
                 else "provider returned an invalid response"
             )
             raise ModelProviderResponseError(
                 message,
                 provider_error_code=(
-                    str(payload.get("error_code") or "")
+                    _safe_provider_error_code(payload.get("error_code"))
                     if isinstance(payload, Mapping)
                     else ""
                 ),
@@ -300,11 +337,7 @@ class LegacyProviderAdapter:
                 ),
             )
         content = payload.get("content", payload.get("result"))
-        if (
-            content is None
-            and "content" not in payload
-            and "result" not in payload
-        ):
+        if content is None and "content" not in payload and "result" not in payload:
             content = dict(payload)
         if payload.get("tool_calls"):
             content = {
@@ -318,26 +351,23 @@ class LegacyProviderAdapter:
                 "embedding": list(payload["embedding"]),
                 "embeddings": [list(payload["embedding"])],
             }
+        cost, measurement = _provider_cost(payload)
         return ModelResponse(
             request_id=request.request_id,
             model_id=descriptor.model_id,
             instance_id=instance.instance_id,
             content=content,
             usage=dict(payload.get("usage") or {}),
-            cost_usd=float(payload.get("cost_usd") or 0.0),
+            cost_usd=cost,
             latency_ms=int(
-                payload.get("latency_ms")
-                or (time.perf_counter() - started) * 1000
+                payload.get("latency_ms") or (time.perf_counter() - started) * 1000
             ),
-            finish_reason=str(
-                payload.get("finish_reason") or "completed"
-            ),
+            finish_reason=str(payload.get("finish_reason") or "completed"),
             metadata={
                 "backend": self.backend_id,
                 "legacy_provider": True,
-                "provider_model": str(
-                    payload.get("model") or descriptor.model_id
-                ),
+                "cost_measurement": measurement,
+                "provider_model": str(payload.get("model") or descriptor.model_id),
             },
         )
 
@@ -499,18 +529,17 @@ class LocalImportedModelAdapter:
         descriptor: ModelDescriptor,
         instance: ModelInstance,
     ) -> ModelResponse:
+        failure = None
         try:
             result = self.handler(request, descriptor, instance)
             if inspect.isawaitable(result):
                 result = await result
-        except Exception as exc:
-            raise ModelAdapterError(
-                f"local imported model failed: {exc}"
-            ) from exc
+        except Exception:
+            failure = ModelAdapterError("local imported model failed")
+        if failure is not None:
+            raise failure
         if not isinstance(result, ModelResponse):
-            raise ModelAdapterError(
-                "local imported handler must return ModelResponse"
-            )
+            raise ModelAdapterError("local imported handler must return ModelResponse")
         return result
 
     async def stream(

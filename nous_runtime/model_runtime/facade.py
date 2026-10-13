@@ -361,7 +361,7 @@ class GatewayResponse:
     instance_id: str = ""
     route: Mapping[str, Any] = field(default_factory=dict)
     usage: Mapping[str, Any] = field(default_factory=dict)
-    cost_usd: float = 0.0
+    cost_usd: float | None = None
     latency_ms: int = 0
     retry_count: int = 0
     fallback_history: tuple[str, ...] = ()
@@ -376,6 +376,16 @@ class GatewayResponse:
     def ok(self) -> bool:
         return not self.error
 
+    @property
+    def cost_measurement(self) -> str:
+        marker = self.raw_metadata.get("cost_measurement")
+        return (
+            marker
+            if isinstance(marker, str)
+            and marker in {"reported", "estimated", "derived", "unknown"}
+            else "unknown"
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "request_id": self.request_id,
@@ -388,6 +398,7 @@ class GatewayResponse:
             "route": dict(self.route),
             "usage": dict(self.usage),
             "cost_usd": self.cost_usd,
+            "cost_measurement": self.cost_measurement,
             "latency_ms": self.latency_ms,
             "retry_count": self.retry_count,
             "fallback_history": list(self.fallback_history),
@@ -507,7 +518,9 @@ class ModelGatewayFacade:
             instance_id=response.instance_id,
             route=route,
             usage=Usage.from_mapping(response.usage).to_dict(),
-            cost_usd=response.cost_usd,
+            cost_usd=response.cost_usd
+            if self.gateway._cost_measurement(response) != "unknown"
+            else None,
             latency_ms=response.latency_ms,
             retry_count=len(failures),
             fallback_history=fallback_history,
@@ -515,7 +528,10 @@ class ModelGatewayFacade:
             verification_metadata=verification,
             trace_context=request.trace.to_dict(),
             finish_reason=_normalize_finish_reason(response.finish_reason),
-            raw_metadata=response.metadata,
+            raw_metadata={
+                **dict(response.metadata),
+                "cost_measurement": self.gateway._cost_measurement(response),
+            },
         )
 
 

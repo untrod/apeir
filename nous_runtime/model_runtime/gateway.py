@@ -25,6 +25,8 @@ from nous_runtime.core.events import EventEnvelope
 from nous_runtime.model_runtime.adapters import (
     ModelAdapterRegistry,
     ModelBackendAdapter,
+    _provider_cost,
+    _safe_provider_error_code,
 )
 from nous_runtime.model_runtime.cost_control import (
     CostController,
@@ -82,8 +84,8 @@ class ParallelInvocationResult:
     responses: tuple[ModelResponse, ...]
     failures: tuple[str, ...]
     cancelled_models: tuple[str, ...]
-    total_cost_usd: float
-    total_tokens: int
+    total_cost_usd: float | None
+    total_tokens: int | None
 
     @property
     def successful(self) -> bool:
@@ -234,6 +236,18 @@ class ModelGateway:
                 break
             candidate_provider_id = ""
             reservation: Reservation | None = None
+            dispatched = False
+
+            def before_dispatch() -> None:
+                nonlocal dispatched
+                if (
+                    reservation is not None
+                    and not reservation.replayed
+                    and self._cost_controller is not None
+                ):
+                    self._cost_controller.mark_dispatched(reservation)
+                dispatched = True
+
             try:
                 descriptor, instance = self._resolve_candidate(
                     model_id,
@@ -263,11 +277,24 @@ class ModelGateway:
                             getattr(provider, "credential_ref", "") or ""
                         ),
                         attempt=attempt_number,
+                        context_window=descriptor.context_length
+                        or getattr(provider, "context_window", None),
+                        output_window=descriptor.metadata.get(
+                            "output_window", getattr(provider, "output_window", None)
+                        ),
+                        kernel_binding=self._kernel_accounting_binding(provider)
+                        if use_kernel
+                        else None,
                     )
                     guarded_request = reservation.request
                 if use_kernel:
                     response = await self._nki_execute(
-                        guarded_request, descriptor, instance, adapter
+                        guarded_request,
+                        descriptor,
+                        instance,
+                        adapter,
+                        before_dispatch=before_dispatch,
+                        reconcile_only=reservation is not None and reservation.replayed,
                     )
                 else:
                     await self._ensure_loaded(instance, adapter)
@@ -279,6 +306,7 @@ class ModelGateway:
                     )
                     async with lease:
                         self._active[request.request_id] = adapter
+                        dispatched = True
                         response = await asyncio.wait_for(
                             adapter.invoke(guarded_request, descriptor, instance),
                             timeout=max(
@@ -296,6 +324,12 @@ class ModelGateway:
                 self._add_metrics(
                     responses=1,
                     cost_usd=response.cost_usd,
+                    unknown_cost_responses=int(
+                        self._cost_measurement(response) == "unknown"
+                    ),
+                    unknown_usage_responses=int(
+                        response.usage.get("total_tokens") is None
+                    ),
                     tokens=int(
                         response.usage.get("total_tokens")
                         or response.usage.get("tokens")
@@ -320,7 +354,8 @@ class ModelGateway:
                         "model_id": response.model_id,
                         "instance_id": response.instance_id,
                         "usage": dict(response.usage),
-                        "cost_usd": response.cost_usd,
+                        "cost_usd": self._safe_response(response)["cost_usd"],
+                        "cost_measurement": self._cost_measurement(response),
                         "latency_ms": response.latency_ms,
                     },
                 )
@@ -328,7 +363,9 @@ class ModelGateway:
                 return response
             except asyncio.TimeoutError:
                 if reservation is not None and self._cost_controller is not None:
-                    self._cost_controller.fail(reservation, reason="timeout")
+                    self._cost_controller.fail(
+                        reservation, reason="timeout", dispatched=dispatched
+                    )
                 adapter = self._active.pop(request.request_id, None)
                 if adapter is not None:
                     await adapter.cancel(request.request_id)
@@ -343,9 +380,13 @@ class ModelGateway:
                         "attempt": attempt_number,
                     },
                 )
+                if use_kernel and dispatched and self._cost_controller is None:
+                    break
             except asyncio.CancelledError:
                 if reservation is not None and self._cost_controller is not None:
-                    self._cost_controller.fail(reservation, reason="cancelled")
+                    self._cost_controller.fail(
+                        reservation, reason="cancelled", dispatched=dispatched
+                    )
                 adapter = self._active.pop(request.request_id, None)
                 if adapter is not None:
                     await adapter.cancel(request.request_id)
@@ -359,26 +400,29 @@ class ModelGateway:
                 )
                 raise
             except CostLimitExceeded:
+                self._active.pop(request.request_id, None)
                 if reservation is not None and self._cost_controller is not None:
                     self._cost_controller.fail(
-                        reservation, reason="cost policy rejected request"
+                        reservation,
+                        reason="cost policy rejected request",
+                        dispatched=dispatched,
                     )
                 self._add_metrics(failed_requests=1)
                 raise
             except Exception as exc:
                 self._active.pop(request.request_id, None)
-                message = f"{model_id}: {exc}"
-                errors.append(message)
                 failure = self._classify_provider_failure(
                     exc,
                     provider_id=candidate_provider_id,
                     model_id=model_id,
                 )
+                errors.append(f"{model_id}: {failure.explanation}")
                 if reservation is not None and self._cost_controller is not None:
                     self._cost_controller.fail(
                         reservation,
                         reason=failure.explanation,
                         balance_exhausted=failure.category == "budget_exceeded",
+                        dispatched=dispatched,
                     )
                 self._record_provider_failure(candidate_provider_id, failure)
                 if failure.category in {
@@ -387,7 +431,7 @@ class ModelGateway:
                     "budget_exceeded",
                 }:
                     last_blocking_error = ModelProviderResponseError(
-                        str(exc),
+                        failure.explanation,
                         provider_error_code=str(
                             failure.evidence.get("provider_error_code") or ""
                         ),
@@ -400,7 +444,7 @@ class ModelGateway:
                     request,
                     {
                         "model_id": model_id,
-                        "error": str(exc),
+                        "error": failure.explanation,
                         "failure_category": failure.category,
                         "http_status": failure.evidence.get("http_status"),
                         "provider_error_code": failure.evidence.get(
@@ -410,6 +454,8 @@ class ModelGateway:
                         "attempt": attempt_number,
                     },
                 )
+                if use_kernel and dispatched and self._cost_controller is None:
+                    break
 
         self._add_metrics(failed_requests=1)
         # Record the kernel failure.
@@ -470,6 +516,7 @@ class ModelGateway:
         failures: list[str] = []
         total_cost = 0.0
         total_tokens = 0
+        unknown_cost = unknown_tokens = False
         budget_exhausted = False
         while pending:
             remaining = deadline - time.monotonic()
@@ -491,6 +538,11 @@ class ModelGateway:
                     continue
                 responses_by_model[model_id] = response
                 total_cost += response.cost_usd
+                unknown_cost |= self._cost_measurement(response) == "unknown"
+                unknown_tokens |= (
+                    response.usage.get("total_tokens", response.usage.get("tokens"))
+                    is None
+                )
                 total_tokens += int(
                     response.usage.get("total_tokens")
                     or response.usage.get("tokens")
@@ -498,10 +550,10 @@ class ModelGateway:
                 )
             budget_exhausted = (
                 active_policy.max_total_cost_usd is not None
-                and total_cost >= active_policy.max_total_cost_usd
+                and (unknown_cost or total_cost >= active_policy.max_total_cost_usd)
             ) or (
                 active_policy.max_total_tokens is not None
-                and total_tokens >= active_policy.max_total_tokens
+                and (unknown_tokens or total_tokens >= active_policy.max_total_tokens)
             )
             if budget_exhausted:
                 break
@@ -515,7 +567,11 @@ class ModelGateway:
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
         if budget_exhausted:
-            failures.append("parallel invocation budget exhausted")
+            failures.append(
+                "parallel invocation budget is unknown"
+                if unknown_cost or unknown_tokens
+                else "parallel invocation budget exhausted"
+            )
         candidate_order = {model_id: index for index, model_id in enumerate(candidates)}
         cancelled_models.sort(key=candidate_order.__getitem__)
         ordered_responses = tuple(
@@ -533,8 +589,8 @@ class ModelGateway:
                 "success_count": len(ordered_responses),
                 "failure_count": len(failures),
                 "cancelled_models": cancelled_models,
-                "total_cost_usd": total_cost,
-                "total_tokens": total_tokens,
+                "total_cost_usd": None if unknown_cost else total_cost,
+                "total_tokens": None if unknown_tokens else total_tokens,
             },
         )
         return ParallelInvocationResult(
@@ -542,42 +598,69 @@ class ModelGateway:
             responses=ordered_responses,
             failures=tuple(failures),
             cancelled_models=tuple(cancelled_models),
-            total_cost_usd=total_cost,
-            total_tokens=total_tokens,
+            total_cost_usd=None if unknown_cost else total_cost,
+            total_tokens=None if unknown_tokens else total_tokens,
         )
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[Any]:
         """Stream one selected route while retaining its lease."""
+        if self._use_nki:
+            # The current NKI operation returns a complete response. Reuse its
+            # admitted invocation rather than silently opening a direct stream.
+            response = await self.invoke(request)
+            yield response.content
+            return
         decision = self.router.route(request)
         descriptor, instance = self._resolve_candidate(
             decision.selected_model_id,
             decision,
         )
         adapter = self.adapters.require(instance.backend)
-        await self._ensure_loaded(instance, adapter)
-        lease = await self.scheduler.acquire(
-            request_id=request.request_id,
-            instance_id=instance.instance_id,
-            timeout_s=request.timeout_s,
-            priority=int(request.metadata.get("priority", 50)),
-        )
+        reservation: Reservation | None = None
+        guarded_request = request
+        if self._cost_controller is not None:
+            provider = getattr(adapter, "provider", None)
+            reservation = self._cost_controller.authorize(
+                request,
+                provider_id=descriptor.provider_id,
+                model_id=str(
+                    descriptor.metadata.get("provider_model")
+                    or getattr(provider, "model", "")
+                    or descriptor.model_id
+                ),
+                credential_ref=str(getattr(provider, "credential_ref", "") or ""),
+                context_window=descriptor.context_length
+                or getattr(provider, "context_window", None),
+                output_window=descriptor.metadata.get(
+                    "output_window", getattr(provider, "output_window", None)
+                ),
+            )
+            guarded_request = reservation.request
         started = time.monotonic()
-        await self._emit(
-            "model.stream.started",
-            request,
-            {"decision": decision.to_dict()},
-        )
+        dispatched = False
         finished = False
-        cancel_sent = False
+        iterator = None
+        failure: ModelInvocationError | None = None
         try:
+            await self._ensure_loaded(instance, adapter)
+            lease = await self.scheduler.acquire(
+                request_id=request.request_id,
+                instance_id=instance.instance_id,
+                timeout_s=request.timeout_s,
+                priority=int(request.metadata.get("priority", 50)),
+            )
+            await self._emit(
+                "model.stream.started", request, {"decision": decision.to_dict()}
+            )
             async with lease:
                 self._active[request.request_id] = adapter
-                iterator = adapter.stream(request, descriptor, instance)
+                iterator = adapter.stream(guarded_request, descriptor, instance)
                 while True:
                     remaining = request.timeout_s - (time.monotonic() - started)
                     if remaining <= 0:
                         raise asyncio.TimeoutError
                     try:
+                        dispatched = True
                         item = await asyncio.wait_for(
                             anext(iterator),
                             timeout=remaining,
@@ -586,17 +669,35 @@ class ModelGateway:
                         finished = True
                         break
                     yield item
-        except asyncio.TimeoutError as exc:
-            await adapter.cancel(request.request_id)
-            cancel_sent = True
-            raise ModelInvocationError("model stream timed out") from exc
+        except asyncio.TimeoutError:
+            failure = ModelInvocationError("model stream timed out")
         except asyncio.CancelledError:
-            await adapter.cancel(request.request_id)
-            cancel_sent = True
             raise
+        except Exception:
+            failure = ModelInvocationError(
+                "model stream failed; usage remains uncertain"
+                if dispatched
+                else "model stream failed before dispatch"
+            )
         finally:
-            if not finished and not cancel_sent:
-                await adapter.cancel(request.request_id)
+            if reservation is not None and self._cost_controller is not None:
+                # The stream contract supplies content chunks, not terminal
+                # usage. Exhaustion or close cannot establish free execution.
+                self._cost_controller.fail(
+                    reservation,
+                    reason="stream has no terminal usage evidence",
+                    dispatched=dispatched,
+                )
+            if dispatched and not finished:
+                try:
+                    await adapter.cancel(request.request_id)
+                except Exception:
+                    logging.warning("Model stream cancellation failed")
+            if iterator is not None and hasattr(iterator, "aclose"):
+                try:
+                    await iterator.aclose()
+                except Exception:
+                    logging.warning("Model stream cleanup failed")
             self._active.pop(request.request_id, None)
             await self._emit(
                 "model.stream.finished",
@@ -606,6 +707,8 @@ class ModelGateway:
                     "instance_id": instance.instance_id,
                 },
             )
+        if failure is not None:
+            raise failure
 
     # Kernel integration.
 
@@ -627,12 +730,8 @@ class ModelGateway:
                     "NKI readiness probe reported an unhealthy kernel (journal: %s)",
                     journal.get("message", "unknown"),
                 )
-        except Exception as exc:
-            logging.warning(
-                "NKI readiness probe failed (%s: %s)",
-                type(exc).__name__,
-                exc,
-            )
+        except Exception:
+            logging.warning("NKI readiness probe failed")
             available = False
         with self._nki_lock:
             self._nki_available = available
@@ -696,6 +795,9 @@ class ModelGateway:
         descriptor: ModelDescriptor,
         instance: ModelInstance,
         adapter: Any,
+        *,
+        before_dispatch: Callable[[], None] | None = None,
+        reconcile_only: bool = False,
     ) -> ModelResponse:
         """Execute the selected model inside the production Runtime path."""
         provider = getattr(adapter, "provider", None)
@@ -765,7 +867,7 @@ class ModelGateway:
             "credential_env": credential_env,
             "provider_entrypoint": "",
             "input": encoded_input,
-            "delivery": "IDEMPOTENT",
+            "delivery": "AT_MOST_ONCE",
             "snapshot": {
                 "model_revision": model,
                 "provider_revision": f"{provider_id}-runtime-v1",
@@ -790,21 +892,46 @@ class ModelGateway:
         }
         self._nki_workloads[request.request_id] = workload_id
         started = time.perf_counter()
-        client = await self._new_nki_client()
+        client = None
         try:
+            client = await self._new_nki_client()
+            original_receipt = (
+                await self._nki_original_receipt(client, operation, request.timeout_s)
+                if reconcile_only
+                else None
+            )
+            if before_dispatch is not None:
+                before_dispatch()
             execution = await asyncio.wait_for(
                 client.execute_operation(operation, idempotency_key=request.request_id),
                 timeout=request.timeout_s,
             )
+            expected = {
+                **self._nki_receipt_binding(operation),
+                "workload_id": workload_id,
+                **(original_receipt or {}),
+            }
+            if (
+                not isinstance(execution, dict)
+                or any(execution.get(key) != value for key, value in expected.items())
+                or not isinstance(execution.get("result"), str)
+                or not isinstance(execution.get("output_digest"), str)
+                or hashlib.sha256(execution["result"].encode("utf-8")).hexdigest()
+                != execution["output_digest"]
+            ):
+                raise CostLimitExceeded(
+                    "original Kernel result does not match its bound receipt"
+                )
         finally:
-            await client.close()
             self._nki_workloads.pop(request.request_id, None)
+            if client is not None:
+                await client.close()
         try:
             output = json.loads(str(execution.get("result") or ""))
-        except json.JSONDecodeError as exc:
+        except json.JSONDecodeError:
             raise ModelInvocationError(
                 "Runtime returned an invalid model response"
-            ) from exc
+            ) from None
         if output.get("schema_version") != 1:
             raise ModelInvocationError("Runtime returned an unsupported model response")
         metadata = dict(output.get("metadata") or {})
@@ -820,16 +947,105 @@ class ModelGateway:
         tool_calls = output.get("tool_calls") or metadata.get("tool_calls") or ()
         if tool_calls:
             content = {"content": content, "tool_calls": list(tool_calls)}
+        cost, measurement = _provider_cost(output)
+        metadata["cost_measurement"] = measurement
         return ModelResponse(
             request_id=request.request_id,
             model_id=descriptor.model_id,
             instance_id=instance.instance_id,
             content=content,
             usage=dict(output.get("usage") or {}),
-            cost_usd=float(output.get("cost_usd") or 0.0),
+            cost_usd=cost,
             latency_ms=int((time.perf_counter() - started) * 1000),
             finish_reason=str(output.get("finish_reason") or "completed"),
             metadata=metadata,
+        )
+
+    def _kernel_accounting_binding(self, provider: Any) -> dict[str, str]:
+        if provider is None:
+            raise ModelInvocationError(
+                "the selected adapter cannot be represented as a Runtime provider"
+            )
+        endpoint = self._kernel_endpoint(provider)
+        backend = self._kernel_backend(
+            str(getattr(provider, "provider_id", "")), endpoint
+        )
+        return {
+            "kernel_endpoint": self._nki_endpoint
+            or os.environ.get("NOUS_KERNEL_ENDPOINT", "tcp://127.0.0.1:8771"),
+            "provider_endpoint": endpoint,
+            "backend": backend,
+            "credential_env": self._kernel_credential_reference(provider, backend),
+        }
+
+    @staticmethod
+    def _nki_receipt_binding(operation: dict[str, Any]) -> dict[str, str]:
+        return {
+            "operation_id": operation["operation_id"],
+            "input_digest": hashlib.sha256(
+                operation["input"].encode("utf-8")
+            ).hexdigest(),
+            "snapshot_digest": hashlib.sha256(
+                json.dumps(
+                    operation["snapshot"], separators=(",", ":"), ensure_ascii=False
+                ).encode("utf-8")
+            ).hexdigest(),
+            "provider_revision": operation["snapshot"]["provider_revision"],
+        }
+
+    @staticmethod
+    async def _nki_original_receipt(
+        client: Any, operation: dict[str, Any], timeout_s: float
+    ) -> dict[str, str]:
+        """Prove a committed original result before requesting its cached bytes.
+
+        The frozen Kernel's ExplainExecution projects receipt digests, while
+        SubmitWorkload returns committed bytes before Provider execution. A
+        missing receipt never justifies resubmitting an uncertain model call.
+        """
+        query = getattr(client, "_request", None)
+        if not callable(query):
+            raise CostLimitExceeded("original Kernel receipt query is unavailable")
+        selector = {
+            "workload_id": operation["workload_id"],
+        }
+        # The frozen projection combines selectors with OR. Select only the
+        # workload used by committed_receipt, then bind its StepCommit below.
+        failure = None
+        try:
+            projection = await asyncio.wait_for(
+                query("ExplainExecution", selector), timeout=timeout_s
+            )
+        except Exception:
+            failure = CostLimitExceeded(
+                "original Kernel receipt query failed; usage remains uncertain"
+            )
+        if failure is not None:
+            raise failure
+        expected = ModelGateway._nki_receipt_binding(operation)
+        if (
+            isinstance(projection, dict)
+            and all(projection.get(key) == value for key, value in selector.items())
+            and projection.get("operation_id") is None
+            and isinstance(projection.get("facts"), list)
+        ):
+            for entry in projection["facts"]:
+                if not isinstance(entry, dict):
+                    continue
+                fact = entry.get("fact")
+                if (
+                    entry.get("object_type") == "StepCommit"
+                    and entry.get("object_id") == operation["operation_id"]
+                    and entry.get("phase") == "COMMITTED"
+                    and isinstance(fact, dict)
+                    and all(fact.get(key) == value for key, value in expected.items())
+                    and isinstance(fact.get("output_digest"), str)
+                    and re.fullmatch(r"[0-9a-f]{64}", fact["output_digest"])
+                ):
+                    return {**expected, "output_digest": fact["output_digest"]}
+        raise CostLimitExceeded(
+            "original Kernel receipt is unavailable or mismatched; "
+            "usage reconciliation is required"
         )
 
     @staticmethod
@@ -1199,7 +1415,7 @@ class ModelGateway:
                 result = self.event_sink(event)
                 if inspect.isawaitable(result):
                     await result
-            except Exception as exc:
+            except Exception:
                 if self.strict_observability:
                     raise
                 self.events.append(
@@ -1208,7 +1424,7 @@ class ModelGateway:
                         source="model_gateway",
                         payload={
                             "failed_event_type": event_type,
-                            "error": str(exc),
+                            "error": "model event publication failed",
                         },
                         metadata={
                             "request_id": request.request_id,
@@ -1233,7 +1449,7 @@ class ModelGateway:
                 metadata=metadata,
             )
             self.artifacts.register(artifact)
-        except Exception as exc:
+        except Exception:
             if self.strict_observability:
                 raise
             self.events.append(
@@ -1242,7 +1458,7 @@ class ModelGateway:
                     source="model_gateway",
                     payload={
                         "failed_artifact_type": artifact_type.value,
-                        "error": str(exc),
+                        "error": "model artifact publication failed",
                     },
                 )
             )
@@ -1267,6 +1483,8 @@ class ModelGateway:
                 match = re.search(r"\((\d{3})\s+[^)]*\)", message)
             if match is not None:
                 http_status = int(match.group(1))
+        if type(http_status) is not int or not 100 <= http_status <= 599:
+            http_status = None
         provider_error_code = str(
             getattr(error, "provider_error_code", "")
             or getattr(error, "code", "")
@@ -1301,7 +1519,7 @@ class ModelGateway:
             retryable = explicit_retryable
         evidence = {
             "http_status": http_status,
-            "provider_error_code": provider_error_code,
+            "provider_error_code": _safe_provider_error_code(provider_error_code),
         }
         return _ProviderFailure(
             category=category,
@@ -1310,7 +1528,11 @@ class ModelGateway:
             explanation=(
                 f"Classified as {category}"
                 + (f"; HTTP {http_status}" if http_status else "")
-                + (f"; code={provider_error_code}" if provider_error_code else "")
+                + (
+                    f"; code={evidence['provider_error_code']}"
+                    if evidence["provider_error_code"]
+                    else ""
+                )
             ),
         )
 
@@ -1361,6 +1583,18 @@ class ModelGateway:
         }
 
     @staticmethod
+    def _cost_measurement(response: ModelResponse) -> str:
+        marker = response.metadata.get("cost_measurement")
+        if isinstance(marker, str) and marker in {
+            "reported",
+            "estimated",
+            "derived",
+            "unknown",
+        }:
+            return marker
+        return "reported" if response.cost_usd > 0 else "unknown"
+
+    @staticmethod
     def _safe_response(response: ModelResponse) -> dict[str, Any]:
         return {
             "response_id": response.response_id,
@@ -1369,7 +1603,10 @@ class ModelGateway:
             "instance_id": response.instance_id,
             "content_type": type(response.content).__name__,
             "usage": dict(response.usage),
-            "cost_usd": response.cost_usd,
+            "cost_usd": response.cost_usd
+            if ModelGateway._cost_measurement(response) != "unknown"
+            else None,
+            "cost_measurement": ModelGateway._cost_measurement(response),
             "latency_ms": response.latency_ms,
             "finish_reason": response.finish_reason,
         }

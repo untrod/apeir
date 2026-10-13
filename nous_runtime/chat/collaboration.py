@@ -57,11 +57,7 @@ class CollaborationPreparation:
             "enabled": self.enabled,
             "manager_completed": bool(self.manager_brief),
             "lanes": [
-                {
-                    key: value
-                    for key, value in item.items()
-                    if key != "content"
-                }
+                {key: value for key, value in item.items() if key != "content"}
                 for item in self.lanes
             ],
             "failures": list(self.failures),
@@ -95,15 +91,31 @@ def should_collaborate(text: str, intent: str = "") -> bool:
             "专业系统",
         )
     )
-    return explicit or matched >= 2 or (
-        intent_value in {"workflow_request", "code_task", "create"} and matched >= 1
+    return (
+        explicit
+        or matched >= 2
+        or (
+            intent_value in {"workflow_request", "code_task", "create"} and matched >= 1
+        )
     )
 
 
 def build_lanes(text: str) -> tuple[CollaborationLane, ...]:
     value = text.casefold()
     lanes: list[CollaborationLane] = []
-    if any(marker in value for marker in ("program", "application", "code", "程序", "代码", "软件", "系统", "应用")):
+    if any(
+        marker in value
+        for marker in (
+            "program",
+            "application",
+            "code",
+            "程序",
+            "代码",
+            "软件",
+            "系统",
+            "应用",
+        )
+    ):
         lanes.append(
             CollaborationLane(
                 "implementation",
@@ -220,7 +232,9 @@ class ChatCollaborationCoordinator:
             )
             notify("manager.failed", {"error": self._error(manager)})
 
-        def run_lane(lane: CollaborationLane) -> tuple[CollaborationLane, GatewayResponse]:
+        def run_lane(
+            lane: CollaborationLane,
+        ) -> tuple[CollaborationLane, GatewayResponse]:
             notify(
                 "model.lane.started",
                 {
@@ -256,7 +270,11 @@ class ChatCollaborationCoordinator:
                         "role": "user",
                         "content": (
                             objective
-                            + ("\n\nManager contract:\n" + result.manager_brief if result.manager_brief else "")
+                            + (
+                                "\n\nManager contract:\n" + result.manager_brief
+                                if result.manager_brief
+                                else ""
+                            )
                         ),
                     },
                 ),
@@ -277,6 +295,19 @@ class ChatCollaborationCoordinator:
                         "model_id": response.model_id,
                         "usage": dict(response.usage),
                         "cost_usd": response.cost_usd,
+                        "cost_measurement": response.cost_measurement,
+                        "usage_receipt_ref": str(
+                            (response.raw_metadata.get("usage_receipt") or {}).get(
+                                "receipt_id"
+                            )
+                            or ""
+                        ),
+                        "usage_request_id": (
+                            response.raw_metadata.get("usage_receipt") or {}
+                        ).get("request_id"),
+                        "usage_attempt": (
+                            response.raw_metadata.get("usage_receipt") or {}
+                        ).get("attempt"),
                         "latency_ms": response.latency_ms,
                         "retry_count": response.retry_count,
                         "fallback_history": list(response.fallback_history),
@@ -289,17 +320,13 @@ class ChatCollaborationCoordinator:
                     )
                 else:
                     error = self._error(response)
-                    result.failures.append(
-                        {"lane_id": lane.lane_id, "error": error}
-                    )
+                    result.failures.append({"lane_id": lane.lane_id, "error": error})
                     notify(
                         "model.lane.failed",
                         {"lane_id": lane.lane_id, "error": error},
                     )
         result.lanes = [
-            completed[lane.lane_id]
-            for lane in lanes
-            if lane.lane_id in completed
+            completed[lane.lane_id] for lane in lanes if lane.lane_id in completed
         ]
         notify(
             "collaboration.prepared",
@@ -359,12 +386,14 @@ class ChatCollaborationCoordinator:
         verdict = str(response.content or "")[:4_000] if response.ok else ""
         tool_steps = list(candidate.get("tool_steps") or ())
         named_steps = [
-            item for item in tool_steps
+            item
+            for item in tool_steps
             if isinstance(item, Mapping) and str(item.get("tool") or "")
         ]
         if named_steps:
             writes = [
-                item for item in named_steps
+                item
+                for item in named_steps
                 if item.get("tool") in {"write_file", "write_files"}
             ]
             verifications = [
@@ -373,10 +402,7 @@ class ChatCollaborationCoordinator:
             receipts_verified = (
                 bool(writes)
                 and all(bool(item.get("ok")) for item in writes)
-                and (
-                    not verifications
-                    or bool(verifications[-1].get("ok"))
-                )
+                and (not verifications or bool(verifications[-1].get("ok")))
             )
         else:
             receipts_verified = bool(tool_steps) and all(
@@ -395,9 +421,10 @@ class ChatCollaborationCoordinator:
             "verdict": verdict,
             "error": "" if response.ok else self._error(response),
         }
-        notify("review.completed" if response.ok else "review.failed", {
-            key: value for key, value in payload.items() if key != "verdict"
-        })
+        notify(
+            "review.completed" if response.ok else "review.failed",
+            {key: value for key, value in payload.items() if key != "verdict"},
+        )
         return payload
 
     def _invoke(
@@ -446,6 +473,17 @@ class ChatCollaborationCoordinator:
             "model_id": response.model_id,
             "usage": dict(response.usage),
             "cost_usd": response.cost_usd,
+            "cost_measurement": response.cost_measurement,
+            "usage_receipt_ref": str(
+                (response.raw_metadata.get("usage_receipt") or {}).get("receipt_id")
+                or ""
+            ),
+            "usage_request_id": (response.raw_metadata.get("usage_receipt") or {}).get(
+                "request_id"
+            ),
+            "usage_attempt": (response.raw_metadata.get("usage_receipt") or {}).get(
+                "attempt"
+            ),
             "latency_ms": response.latency_ms,
             "retry_count": response.retry_count,
             "fallback_history": list(response.fallback_history),

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ContextInspector } from "../components/ContextInspector";
 import { fetchRunEvents, runPrompt, setConfig } from "../lib/api";
@@ -23,7 +23,7 @@ beforeEach(() => {
 
 describe("persisted actual-input inspection", () => {
   it("distinguishes estimates, actual usage and verified effects without any model invocation", async () => {
-    vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: props.runId, events: [started, { event_type: "model.invocation.completed", payload: { iteration: 1, model_id: "fixture/model", provider_id: "fixture", usage: { input_tokens: 31, cached_input_tokens: 10 }, cost_usd: 0, latency_ms: 8 } }], next_after_sequence: 2 });
+    vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: props.runId, events: [started, { event_type: "model.invocation.completed", payload: { iteration: 1, model_id: "fixture/model", provider_id: "fixture", usage: { input_tokens: 31, cached_input_tokens: 10, counter_measurements: { input_tokens: "reported", cached_input_tokens: "reported" } }, cost_usd: 0, cost_measurement: "reported", latency_ms: 8 } }], next_after_sequence: 2 });
     render(<ContextInspector {...props} />);
     expect(await screen.findByText(/Recorded input tokens: 31/)).toBeInTheDocument();
     expect(screen.getByText(/Estimated input tokens: 24/)).toBeInTheDocument();
@@ -32,6 +32,27 @@ describe("persisted actual-input inspection", () => {
     expect(screen.getByText(/File: main.py · lines 1–4/)).toBeInTheDocument();
     expect(screen.getByText(/Tool declarations do not grant permission/)).toBeInTheDocument();
     expect(runPrompt).not.toHaveBeenCalled();
+  });
+
+  it("keeps unclassified legacy zero cost UNKNOWN and distinguishes counter provenance", async () => {
+    vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: props.runId, events: [started, {
+      event_type: "model.invocation.completed", payload: {
+        iteration: 1, cost_usd: 0, usage_receipt_ref: "receipt-original", usage_request_id: "request-original", usage_attempt: 2,
+        usage: { input_tokens: 31, output_tokens: 6, total_tokens: 37, cached_input_tokens: null,
+          reasoning_tokens: null, cache_creation_input_tokens: 0, cache_miss_input_tokens: null,
+          counter_measurements: { input_tokens: "reported", output_tokens: "estimated", total_tokens: "derived",
+            cached_input_tokens: "unknown", reasoning_tokens: "unknown", cache_creation_input_tokens: "reported", cache_miss_input_tokens: "unknown" } },
+      },
+    }], next_after_sequence: 2 });
+    render(<ContextInspector {...props} />);
+    expect(await screen.findByText(/cost: UNKNOWN/)).toBeInTheDocument();
+    expect(screen.getByText(/Recorded input tokens: 31 · Provider reported/)).toBeInTheDocument();
+    expect(screen.getByText(/Output tokens: ~6 · Estimated/)).toBeInTheDocument();
+    expect(screen.getByText(/Total tokens: 37 · Derived/)).toBeInTheDocument();
+    expect(screen.getByText(/Cache creation input tokens: 0 · Provider reported/)).toBeInTheDocument();
+    expect(screen.getByText(/Reasoning tokens: UNKNOWN/)).toBeInTheDocument();
+    expect(screen.getByText(/receipt-original · request: request-original · attempt: 2/)).toBeInTheDocument();
+    expect(screen.queryByText(/\$0\.000000/)).not.toBeInTheDocument();
   });
 
   it("shows UNKNOWN for absent legacy evidence and missing terminal usage", async () => {
@@ -96,6 +117,14 @@ describe("persisted actual-input inspection", () => {
     vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: "wrong-run", events: [started], next_after_sequence: 1 });
     view.rerender(<ContextInspector {...props} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("does not match");
+  });
+
+  it("invalidates already loaded context on a Controller connection change", async () => {
+    render(<ContextInspector {...props} />);
+    await screen.findByText(/Estimated input tokens: 24/);
+    act(() => setConfig({ url: "http://other-controller:8770", token: "fake.other.service" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Controller changed");
+    expect(screen.queryByText(/Estimated input tokens/)).not.toBeInTheDocument();
   });
 
   it("bounds replay instead of pretending later events were inspected", async () => {

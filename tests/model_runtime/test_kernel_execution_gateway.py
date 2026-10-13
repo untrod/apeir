@@ -1,12 +1,37 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 
 import pytest
 
 from nous_runtime.model_runtime.factory import build_gateway_from_providers
 from nous_runtime.model_runtime.models import ModelRequest
+
+
+@pytest.fixture(autouse=True)
+def configure_fake_kernel_prices(tmp_path, monkeypatch):
+    pricing = tmp_path / "fake-kernel-prices.json"
+    pricing.write_text(
+        json.dumps(
+            {
+                "models": {
+                    f"deepseek/{model}": {
+                        "input_per_million_usd": 1,
+                        "output_per_million_usd": 2,
+                    }
+                    for model in (
+                        "deepseek-chat",
+                        "deepseek-reasoner",
+                        "deepseek-coder",
+                    )
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("APEIR_MODEL_PRICING_FILE", str(pricing))
 
 
 class RemoteProvider:
@@ -69,7 +94,7 @@ class FakeKernelClient:
 
     async def execute_operation(self, operation, idempotency_key=""):
         self.operation = operation
-        return {
+        result = {
             "result": json.dumps(
                 {
                     "schema_version": 1,
@@ -87,6 +112,21 @@ class FakeKernelClient:
             ),
             "decision_trace": {"selected": "local-remote"},
         }
+        result.update(
+            {
+                "operation_id": operation["operation_id"],
+                "workload_id": operation["workload_id"],
+                "input_digest": hashlib.sha256(operation["input"].encode()).hexdigest(),
+                "snapshot_digest": hashlib.sha256(
+                    json.dumps(
+                        operation["snapshot"], separators=(",", ":"), ensure_ascii=False
+                    ).encode()
+                ).hexdigest(),
+                "provider_revision": operation["snapshot"]["provider_revision"],
+                "output_digest": hashlib.sha256(result["result"].encode()).hexdigest(),
+            }
+        )
+        return result
 
     async def close(self) -> None:
         self.closed = True

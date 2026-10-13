@@ -25,9 +25,7 @@ def _request(**metadata: object) -> ModelRequest:
 
 def _controller(path: Path, **limits: object) -> CostController:
     policy = CostPolicy(**limits)
-    pricing = PricingCatalog(
-        {"provider/model": Pricing(1.0, 2.0, 0.25)}
-    )
+    pricing = PricingCatalog({"provider/model": Pricing(1.0, 2.0, 0.25)})
     return CostController(path / "usage.sqlite3", policy=policy, pricing=pricing)
 
 
@@ -47,6 +45,16 @@ def test_usage_normalizes_provider_field_names() -> None:
         "cache_miss_input_tokens": 16,
         "reasoning_tokens": 3,
         "total_tokens": 25,
+        "cache_creation_input_tokens": None,
+        "counter_measurements": {
+            "input_tokens": "reported",
+            "output_tokens": "reported",
+            "cached_input_tokens": "reported",
+            "cache_miss_input_tokens": "derived",
+            "reasoning_tokens": "reported",
+            "total_tokens": "derived",
+            "cache_creation_input_tokens": "unknown",
+        },
     }
 
 
@@ -127,10 +135,14 @@ def test_receipt_is_durable_and_grouped_without_api_key_value(tmp_path: Path) ->
     assert summary["items"][0]["task_id"] == "task-1"
 
 
-def test_balance_exhaustion_blocks_later_requests_for_same_reference(tmp_path: Path) -> None:
+def test_balance_exhaustion_blocks_later_requests_for_same_reference(
+    tmp_path: Path,
+) -> None:
     controller = _controller(tmp_path)
     reservation = controller.authorize(
-        _request(), provider_id="provider", model_id="model",
+        _request(),
+        provider_id="provider",
+        model_id="model",
         credential_ref="env:API_KEY_ONE",
     )
     controller.fail(
@@ -140,7 +152,9 @@ def test_balance_exhaustion_blocks_later_requests_for_same_reference(tmp_path: P
     )
     with pytest.raises(CostLimitExceeded, match="spending is blocked"):
         controller.authorize(
-            _request(), provider_id="provider", model_id="model",
+            _request(),
+            provider_id="provider",
+            model_id="model",
             credential_ref="env:API_KEY_ONE",
         )
 
@@ -156,11 +170,16 @@ def test_retry_attempt_and_retry_token_budgets_are_enforced(tmp_path: Path) -> N
     with pytest.raises(CostLimitExceeded, match="retry token"):
         controller.authorize(
             _request(estimated_input_tokens=4, max_tokens=8),
-            provider_id="provider", model_id="model", attempt=2,
+            provider_id="provider",
+            model_id="model",
+            attempt=2,
         )
     with pytest.raises(CostLimitExceeded, match="attempt"):
         controller.authorize(
-            _request(), provider_id="provider", model_id="model", attempt=3,
+            _request(),
+            provider_id="provider",
+            model_id="model",
+            attempt=3,
         )
 
 
