@@ -2,23 +2,87 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from typer.testing import CliRunner
 
 from nous_runtime.artifact import ContentAddressedArtifactStore
-from nous_runtime.node_runtime.protocol import NodeProtocolError
+from nous_runtime.node_runtime.protocol import (
+    NODE_PROTOCOL_VERSION,
+    NodeProtocolEnvelope,
+    NodeProtocolError,
+)
 from nous_runtime.node_runtime.distributed_work import (
     DistributedWork,
     DistributedWorkState,
     WorkRequirements,
 )
-from nous_runtime.node_runtime.relay import NodeRelayClient, NodeRelayServer
+from nous_runtime.node_runtime.relay import (
+    NodeRelayClient,
+    NodeRelayServer,
+    public_key_hex,
+)
 from nous_runtime.node_runtime.relay_cli import app
 from nous_runtime.node_runtime.cli import node_daemon_app
 from nous_runtime.node_runtime.service import NodeRuntimeConfig, NodeRuntimeService
+
+
+def _record_placement_reports(
+    server,
+    node_id,
+    node_name,
+    architecture,
+    operating_system,
+    capabilities,
+    *,
+    gpu=False,
+):
+    key = Ed25519PrivateKey.generate()
+    server.register_node(node_id, public_key_hex(key))
+    reports = {
+        "REGISTER": {
+            "node_id": node_id,
+            "supported_versions": [NODE_PROTOCOL_VERSION],
+            "identity": {
+                "node_id": node_id,
+                "node_name": node_name,
+                "capabilities": capabilities,
+                "platform": {
+                    "os": operating_system,
+                    "arch": architecture,
+                    "abi": "glibc" if operating_system == "Linux" else "msvc",
+                },
+                "word_size_bits": 64,
+            },
+        },
+        "HEARTBEAT": {
+            "node_id": node_id,
+            "status": "ONLINE",
+            "heartbeat_sequence": 1,
+        },
+        "RESOURCE_REPORT": {
+            "schema": "nous.node-resource-report/v1",
+            "measurement_source": "test-fixture",
+            "memory_total_bytes": 16 * 1024**3,
+            "memory_available_bytes": 12 * 1024**3,
+        },
+        "DEVICE_REPORT": {
+            "devices": [{"device_id": "gpu-0", "spec": {"device_type": "CUDA"}}]
+            if gpu
+            else []
+        },
+    }
+    for sequence, (message_type, payload) in enumerate(reports.items(), start=1):
+        envelope = NodeProtocolEnvelope(
+            message_type=message_type,
+            source=node_id,
+            target="control_plane",
+            sequence=sequence,
+            payload=payload,
+        ).sign(key)
+        server._record_observation(node_id, envelope)
 
 
 def test_controller_cli_initializes_artifacts_and_trusts_identity_file(
@@ -59,36 +123,12 @@ def test_controller_cli_initializes_artifacts_and_trusts_identity_file(
 
 def test_controller_selects_arm64_node_by_deterministic_capability_match():
     server = NodeRelayServer(heartbeat_seconds=60.0)
-    server.node_keys = {"node-arm64": "01" * 32, "node-x64": "02" * 32}
-    observed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-    def observation(node_id: str, node_name: str, architecture: str) -> dict:
-        return {
-            "observed_at": observed_at,
-            "REGISTER": {
-                "identity": {
-                    "node_id": node_id,
-                    "node_name": node_name,
-                    "capabilities": ["system.echo"],
-                    "platform": {
-                        "os": "Linux" if architecture == "aarch64" else "Windows",
-                        "arch": architecture,
-                        "abi": "glibc" if architecture == "aarch64" else "msvc",
-                    },
-                    "word_size_bits": 64,
-                }
-            },
-            "HEARTBEAT": {
-                "node_id": node_id,
-                "status": "ONLINE",
-                "heartbeat_sequence": 1,
-            },
-        }
-
-    server.reports = {
-        "node-arm64": observation("node-arm64", "jetson", "aarch64"),
-        "node-x64": observation("node-x64", "windows", "AMD64"),
-    }
+    _record_placement_reports(
+        server, "node-arm64", "jetson", "aarch64", "Linux", ["system.echo"]
+    )
+    _record_placement_reports(
+        server, "node-x64", "windows", "AMD64", "Windows", ["system.echo"]
+    )
 
     decision = server.select_node(
         {"architecture": "aarch64", "capability": "system.echo"}
@@ -123,50 +163,23 @@ def test_controller_schedules_work_by_capability_resource_and_device_facts(
     tmp_path: Path,
 ):
     server = NodeRelayServer(state_dir=tmp_path / "controller", heartbeat_seconds=60)
-    server.node_keys = {"node-jetson": "01" * 32, "node-windows": "02" * 32}
-    observed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-    def observation(
-        node_id: str, node_name: str, architecture: str, os_name: str, gpu: bool
-    ) -> dict:
-        devices = (
-            [{"device_id": "gpu-0", "spec": {"device_type": "CUDA"}}] if gpu else []
-        )
-        return {
-            "observed_at": observed_at,
-            "REGISTER": {
-                "identity": {
-                    "node_id": node_id,
-                    "node_name": node_name,
-                    "capabilities": ["vision.run", "system.echo"],
-                    "platform": {
-                        "os": os_name,
-                        "arch": architecture,
-                        "abi": "glibc" if os_name == "Linux" else "msvc",
-                    },
-                    "word_size_bits": 64,
-                }
-            },
-            "HEARTBEAT": {
-                "node_id": node_id,
-                "status": "ONLINE",
-                "heartbeat_sequence": 1,
-            },
-            "RESOURCE_REPORT": {
-                "schema": "nous.node-resource-report/v1",
-                "measurement_source": "test-fixture",
-                "memory_total_bytes": 16 * 1024**3,
-                "memory_available_bytes": 12 * 1024**3,
-            },
-            "DEVICE_REPORT": {"devices": devices},
-        }
-
-    server.reports = {
-        "node-jetson": observation("node-jetson", "jetson", "aarch64", "Linux", True),
-        "node-windows": observation(
-            "node-windows", "windows", "AMD64", "Windows", False
-        ),
-    }
+    _record_placement_reports(
+        server,
+        "node-jetson",
+        "jetson",
+        "aarch64",
+        "Linux",
+        ["vision.run", "system.echo"],
+        gpu=True,
+    )
+    _record_placement_reports(
+        server,
+        "node-windows",
+        "windows",
+        "AMD64",
+        "Windows",
+        ["vision.run", "system.echo"],
+    )
     assert server.work_store is not None
     server.work_store.create(
         DistributedWork(
