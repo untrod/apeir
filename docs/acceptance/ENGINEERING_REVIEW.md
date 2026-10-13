@@ -689,3 +689,22 @@ The global Controller send guard can delay other Nodes behind socket backpressur
 stuck storage or a saturated default executor can extend cancellation drain.
 These tests claim local software contracts, not performance improvement,
 Windows timing closure, native binary integrity or physical qualification.
+
+PR #58 source `e6e1b0530ef8b537b8b557302015d2d08b506f98` passed Core,
+Desktop, Security and the additional Multi-Arch run `38371097444`. Windows
+reported **4128 passed, 51 skipped, 272 deselected**, including both original
+hostname-probe recovery cases. Resulting main `eaae0e9c35c48303cd70a98c851763b73b10d5b0`
+passed Multi-Arch, Windows/macOS/Python 3.12 Core, Desktop and Security, but Core
+Python 3.10 job `115220330294` retained **4 failed, 4410 passed, 58 skipped**.
+Those four new repeated-cancellation contracts expected exception arguments
+after the Python Task boundary. Python 3.10 locally reproduced **4 failed,
+20 passed**; a minimal independent coroutine likewise retained the original
+arguments inside the coroutine and discarded them on retrieving its Task outcome.
+
+The test now observes the original Relay exception before that boundary and
+asserts its exact first-cancellation arguments, while separately asserting the
+Task is cancelled. Writer drain, repeated cancellation, wire order, failure,
+cleanup and timeout assertions remain unchanged. No production code or timeout
+changes. I/O, original reconciliation and shutdown selections pass **47 tests**
+on Python 3.10 (5.75 s) and **47 tests** on Python 3.12 (5.98 s). These overlapping
+local runs do not substitute for the corrected source and resulting-main CI.
