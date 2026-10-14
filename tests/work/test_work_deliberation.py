@@ -830,7 +830,7 @@ def test_recorded_work_verifier_ignores_denied_unregistered_tool_name(tmp_path):
 
 
 def _completed_code_work_observations(revision):
-    return (
+    observations = (
         {
             "kind": "tool",
             "tool": "read_file",
@@ -870,6 +870,9 @@ def _completed_code_work_observations(revision):
             "result": {"stdout": "diff --git a/src/example.py b/src/example.py"},
         },
     )
+    for sequence, observation in enumerate(observations, start=1):
+        observation["action_sequence"] = sequence
+    return observations
 
 
 def test_work_cli_lists_durable_runs_without_loading_a_model(tmp_path):

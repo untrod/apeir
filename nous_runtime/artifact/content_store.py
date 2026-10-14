@@ -216,8 +216,12 @@ class ContentAddressedArtifactStore:
 
     def get(self, digest: str) -> ContentArtifact | None:
         _digest_hex(digest)
-        value = self._index.get(digest)
-        return ContentArtifact.from_dict(value) if value else None
+        with self._lock:
+            # Other instances publish the same authoritative index atomically.
+            # A cached record cannot hide publication, GC or corrupt evidence.
+            self._index = self._load_index()
+            value = self._index.get(digest)
+            return ContentArtifact.from_dict(value) if value else None
 
     def list(
         self, artifact_type: str | ArtifactType | None = None
@@ -227,14 +231,18 @@ class ContentAddressedArtifactStore:
             if isinstance(artifact_type, ArtifactType)
             else str(artifact_type or "")
         )
-        values = [ContentArtifact.from_dict(value) for value in self._index.values()]
+        with self._lock:
+            self._index = self._load_index()
+            values = [
+                ContentArtifact.from_dict(value) for value in self._index.values()
+            ]
         if normalized:
             values = [value for value in values if value.artifact_type == normalized]
         return sorted(values, key=lambda value: (value.created_at, value.digest))
 
     def resolve(self, digest: str, *, verify: bool = True) -> Path:
         path = self._object_path(digest)
-        if digest not in self._index or not path.is_file():
+        if self.get(digest) is None or not path.is_file():
             raise ArtifactError(f"artifact not found: {digest}")
         if verify and not self.verify(digest):
             raise ArtifactError(f"artifact integrity verification failed: {digest}")
