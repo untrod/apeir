@@ -754,6 +754,24 @@ Agent/Workflow/workspace regression has **858 passed** (134.73 s). Counts overla
 Required new-source and resulting-main CI remain pending; native hashes and
 physical/remote-network acceptance retain their separate blockers.
 
+## CAS reader freshness correction — 2026-10-13
+
+Classification: **REUSE** the existing ContentAddressedArtifactStore, immutable
+objects, atomic index publication and error contract; **FIX** stale metadata on
+long-lived readers; **DEFER** cache optimization pending measurement. Independent
+store instances previously could publish an object that get/list/resolve/verify
+on an existing reader did not see. An already cached valid index also concealed
+corrupt persisted metadata and could still report verification success. Five
+pre-change cases fail under those controlled conditions.
+
+Readers now load the current authoritative index under the existing in-process
+guard. They observe atomic old-or-new publication without adding a file-lock
+nest or another index owner. Four publication and four corruption cases preserve
+the original object bytes, leave corrupt records unchanged, and require an
+Artifact error rather than guessed success. This adds filesystem reads; no
+latency or throughput improvement is claimed. Source/PR and resulting-main CI,
+native bytes and physical effects remain separate acceptance requirements.
+
 ### Parallel Workflow overlap contract
 
 Usage merge main `508504a` passed Core, Desktop and Security, but Multi-Arch
