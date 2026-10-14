@@ -636,13 +636,15 @@ def test_recovery_uses_monotonic_checkpoint_sequence(tmp_path):
     assert restored.state is RunState.COMPLETED
 
 
-def test_tool_failure_causes_reanalysis_and_versioned_replan(tmp_path):
+def test_read_tool_failure_causes_reanalysis_and_versioned_replan(tmp_path):
     harness = WorkHarness(tmp_path)
     created = harness.create(
         "Fix the code in this project and run targeted tests",
         completion_criteria=("targeted verification passes",),
     )
-    tools = StubTools(({"ok": False, "error": "test failed"}, {"ok": True}))
+    # This fixture inspects recorded checks; it never applies a mutation.
+    tools = EffectTools("read")
+    tools.results = [{"ok": False, "error": "test failed"}, {"ok": True}]
     decisions = iter(
         (
             WorkDecision(
@@ -658,7 +660,7 @@ def test_tool_failure_causes_reanalysis_and_versioned_replan(tmp_path):
                 plan_revision_required=True,
                 replacement_steps=(
                     PlanStepDraft(
-                        "Apply the corrected implementation",
+                        "Inspect the corrected implementation",
                         "workspace_action",
                         "fix",
                     ),
@@ -672,14 +674,14 @@ def test_tool_failure_causes_reanalysis_and_versioned_replan(tmp_path):
             ),
             WorkDecision(
                 DecisionStatus.CONTINUE,
-                "Apply the corrected implementation",
+                "Inspect the corrected implementation",
                 tool_name="workspace_action",
                 step_id="fix",
             ),
             WorkDecision(
                 DecisionStatus.COMPLETE,
-                "Implementation and verification are complete",
-                output={"changed": True},
+                "Inspection and verification are complete",
+                output={"inspected": True},
             ),
         )
     )
@@ -838,9 +840,11 @@ def test_bound_network_approval_replays_exact_action_once(tmp_path):
     )
 
 
-def test_resume_reattaches_persistent_shell_without_replaying_start(tmp_path):
+def test_resume_reattaches_persistent_shell_without_replaying_start(
+    tmp_path, bound_process_recovery
+):
     harness = WorkHarness(tmp_path)
-    created = harness.create("Run a persistent targeted test")
+    created = harness.create("Inspect original process evidence")
     created.pending_action = {
         "tool": "shell_start",
         "step_id": "run-tests",
@@ -856,21 +860,9 @@ def test_resume_reattaches_persistent_shell_without_replaying_start(tmp_path):
         {"action": dict(created.pending_action)},
     )
 
-    class RecoveringShellTools(StubTools):
-        def execute(self, name, arguments):
-            self.calls.append((name, dict(arguments)))
-            assert name == "shell_recover"
-            return {
-                "ok": True,
-                "found": True,
-                "recovery_required": False,
-                "automatic_replay": False,
-                "session_id": "ps_existing",
-                "state": "RUNNING",
-                "artifacts": {},
-            }
-
-    tools = RecoveringShellTools()
+    tools, store, session, _spec, _host, recovery_calls = bound_process_recovery(
+        harness, created
+    )
     contexts = []
 
     def finish(context):
@@ -889,12 +881,13 @@ def test_resume_reattaches_persistent_shell_without_replaying_start(tmp_path):
 
     assert completed.state is RunState.COMPLETED
     assert completed.pending_action == {}
-    assert tools.calls == [
-        (
-            "shell_recover",
-            {"work_id": created.run_id, "action_sequence": 1},
-        )
+    assert recovery_calls == [
+        {"session_id": "", "work_id": created.run_id, "action_sequence": 1}
     ]
+    assert store.require(session.session_id).work_id == created.run_id
+    assert (
+        store.require(session.session_id).process_identity == session.process_identity
+    )
     assert contexts[0].recovering is True
     assert "without replay" in contexts[0].reanalysis_reason
     assert any(item.get("recovered") for item in completed.observations)
