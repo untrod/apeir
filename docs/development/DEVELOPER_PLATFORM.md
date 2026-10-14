@@ -254,6 +254,39 @@ ownership key in ConversationStore; it cannot choose a filesystem root.
 Agent and Decision context providers read
 the selected existing stores; an Agent profile is not a dictionary or authority.
 
+Context, Evaluation and Experience state APIs retain an explicitly configured
+`NOUS_WORKSPACE_ROOT` when that existing project has no `.nous` directory yet.
+Their existing stores initialize only under that selected root, including direct
+default store constructors and snapshot creation. Explicit store paths retain
+their existing meaning; unconfigured constructors retain their cwd defaults.
+Default Context collection binds its project readers through the same `project.workspace`
+resolver. An invalid or unavailable configured root, resolver error, linked
+`.nous` or non-directory state produces an error instead of reading cwd state.
+The default initialized-only `find_workspace()` contract and unconfigured
+cwd/ancestor discovery remain compatible. This extends existing store selection;
+it adds no state owner, workspace registry or permission grant.
+
+The existing Context, Evaluation and Experience SQLite connection boundaries
+also reject symbolic/reparse links, multiply linked or nonregular database/sidecar files and a replaced linked
+state directory before opening or creating state. A real `.nous` directory alone
+does not certify the files within it. Healthy empty stores still return normal
+empty history and zero statistics; an Evaluation initialization/list/statistics
+failure or Experience list/statistics failure now raises its existing domain
+exception so the API can report an error. These read models cannot establish
+Operation authority or replace recorded EffectVerification. Read-only SQLite
+connections use an encoded absolute file URI, preserving literal `#`, `?`, `%`,
+spaces and Unicode names instead of interpreting filename text as URI control
+syntax. Write connections retain their plain filesystem paths. This is static local
+path admission, not protection against an OS owner changing a path after the
+check, Windows ACL qualification or a new storage subsystem.
+
+The same literal-path URI encoding is used by the existing GovernanceStore,
+SQLiteRuntime (including integrity metrics), CapabilityRegistry, legacy Network
+Registry and explicit SQLite Connector. This does not transfer trust or permission
+between those owners; the Connector retains its explicitly selected database.
+Nonlocal UNC URI authority is not qualified and unsupported SQLite builds fail
+closed. NFS/SMB or cross-host shared runtime state remains unsupported.
+
 Trusted Workflow handler registration can supply `WorkflowHandlerPolicy` from
 the existing `nous_runtime.workflow` package, or a typed policy on the registered
 host callable. A matching Capability contract declares retry safety and a bounded

@@ -1078,12 +1078,9 @@ def handle_inspector_consistency() -> dict[str, Any]:
 
 
 def _get_context_workspace() -> str:
-    try:
-        from nous_runtime.project.workspace import find_workspace
+    from nous_runtime.project.workspace import find_workspace
 
-        return find_workspace() or ""
-    except Exception:
-        return ""
+    return str(find_workspace(allow_uninitialized=True) or "")
 
 
 def handle_context_current() -> dict[str, Any]:
@@ -1184,12 +1181,7 @@ def handle_context_restore(body: dict | None = None) -> dict[str, Any]:
 
 
 def _get_eval_workspace() -> str:
-    try:
-        from nous_runtime.project.workspace import find_workspace
-
-        return find_workspace() or ""
-    except Exception:
-        return ""
+    return _get_context_workspace()
 
 
 def handle_evaluation_current() -> dict[str, Any]:
@@ -1260,12 +1252,7 @@ def handle_evaluation_run(body: dict | None = None) -> dict[str, Any]:
 
 
 def _get_exp_workspace() -> str:
-    try:
-        from nous_runtime.project.workspace import find_workspace
-
-        return find_workspace() or ""
-    except Exception:
-        return ""
+    return _get_context_workspace()
 
 
 def handle_experience_list() -> dict[str, Any]:
@@ -1283,8 +1270,9 @@ def handle_experience_list() -> dict[str, Any]:
 def handle_experience_search() -> dict[str, Any]:
     try:
         from nous_runtime.experience.similarity import SimilarityEngine
+        from nous_runtime.experience.store import ExperienceStore
 
-        engine = SimilarityEngine()
+        engine = SimilarityEngine(ExperienceStore(_get_exp_workspace()))
         results = engine.find_similar_tasks("", limit=20)
         return ok_response([{"record": r.to_dict(), "score": s} for r, s in results])
     except Exception as e:
@@ -1294,8 +1282,9 @@ def handle_experience_search() -> dict[str, Any]:
 def handle_experience_recommend() -> dict[str, Any]:
     try:
         from nous_runtime.experience.recommendation import RecommendationEngine
+        from nous_runtime.experience.store import ExperienceStore
 
-        engine = RecommendationEngine()
+        engine = RecommendationEngine(ExperienceStore(_get_exp_workspace()))
         recs = engine.recommend("general task")
         return ok_response([r.to_dict() for r in recs])
     except Exception as e:
