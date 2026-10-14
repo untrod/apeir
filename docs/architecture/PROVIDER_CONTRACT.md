@@ -742,6 +742,10 @@ digest, current original Run and Governance/ContextGuard, exact saved bytes and
 independent `context.transfer` permission for the actual Provider ID, endpoint and
 transport. Gateway calls it under its existing scheduler lease after setup,
 immediately before every adapter invocation/stream or actual NKI submission.
+After admission and dispatch accounting, the Gateway removes its private hook
+from the request passed to direct/stream adapters. The original host request
+retains it for fresh checks and evidence; adapter input IDs, messages, tools and
+metadata stay the same. NKI continues to receive only its bound operation payload.
 Retry/fallback targets receive fresh admission, including per-capability endpoint
 changes. Request copies retain the hook; serialized input requires fresh host
 admission. Billing reconciliation of an original NKI receipt is not a new

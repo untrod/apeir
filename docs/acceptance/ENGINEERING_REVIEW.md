@@ -996,10 +996,19 @@ hard-link regressions before correction: **4 failed, 60 deselected** (0.80 s).
 Corrected selected-input and collaboration focus: **102 passed** on Python 3.12
 (13.85 s) and Python 3.10 (15.08 s).
 Context, collaboration, Gateway/facade/accounting, fake NKI, persistent checkpoint
-and Runtime admission regression: **592 passed** (17.38 s). The reviewer negatives
+and Runtime admission regression: **596 passed** (17.38 s). The reviewer negatives
 require no secondary dispatch or budget reservation; lawful review retains its
 ordinary reported usage and original source lineage. One mistyped regression
 path collected no tests and is retained; the corrected named selection ran.
 These are controlled software/HTTP-fixture checks, not live model, native Kernel,
 remote-human, physical or installed Desktop qualification. Existing isolation,
 PID64, Kernel and component lock remain unchanged; source/main CI is still required.
+
+The Gateway also removes the private admission hook from direct/stream adapter
+requests after checking it and fencing dispatch. The original host request retains
+its checks and evidence, while serialized IDs, messages, tools and metadata remain
+unchanged. The original fake-adapter boundary checks had **2 failed, 2 passed**;
+four allowed/denied direct/stream cases now pass within the regression above.
+This minimizes exposure of a host callback; it is not evidence of leaked real
+credentials or an authority exploit by a trusted host adapter. NKI payload and
+original accounting/reconciliation semantics are unchanged.

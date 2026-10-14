@@ -728,9 +728,9 @@ def test_selected_source_derived_review_reuses_live_admission_and_accounting(
 
     async def fake_invoke(request, descriptor, instance):
         observed.append(request)
-        if request._input_admission is not None and not request.metadata.get(
-            "collaboration_role"
-        ):
+        if request.metadata.get(
+            "requires_selected_input_admission"
+        ) and not request.metadata.get("collaboration_role"):
             main_requests.append(request)
             content = "The saved constraint is: exact saved middle constraint"
             if change == "transfer_revoked":
@@ -806,13 +806,11 @@ def test_selected_source_derived_review_reuses_live_admission_and_accounting(
                 request.metadata["context_input_kind"]
                 == "selected_source_derived_review"
             )
-            assert request._input_admission is not None
+            assert all(item._input_admission is None for item in observed)
+            assert dispatches[0]["input_sha256"] != dispatches[1]["input_sha256"]
             assert (
-                request._input_admission.input_sha256
-                != main_requests[0]._input_admission.input_sha256
-            )
-            assert (
-                request._input_admission.input_sha256 == dispatches[1]["input_sha256"]
+                SelectedInputAdmission._digest(request.messages, ())
+                == dispatches[1]["input_sha256"]
             )
             assert not review["error"]
             assert review["usage_receipt_ref"]
@@ -829,3 +827,90 @@ def test_selected_source_derived_review_reuses_live_admission_and_accounting(
             assert review_receipts[0]["dispatch_uncertain"] is False
     finally:
         gateway.close_sync_bridge()
+
+
+@requires_safe_read
+@pytest.mark.parametrize("boundary", ["invoke", "stream"])
+@pytest.mark.parametrize("allowed", [True, False])
+def test_private_selected_authority_stays_with_gateway_at_adapter_boundary(
+    admitted_context, boundary, allowed
+):
+    from nous_runtime.model_runtime.adapters import MockModelAdapter
+
+    guard, gate, _ = admitted_context
+    value = reader(admitted_context, [reference(Path(guard._workspace))])
+    snapshot = build(value)
+    messages = ({"role": "system", "content": snapshot.items[0].content},)
+    adapter = MockModelAdapter(content="bounded fake result")
+    adapter.backend_id = RECIPIENT_A.provider_id
+    adapter.endpoint = RECIPIENT_A.endpoint
+    recipient = ProviderRecipient(
+        adapter.backend_id, adapter.endpoint, adapter.backend_id
+    )
+    gate.permission_engine.add(
+        PermissionRule(
+            "*",
+            "context.transfer",
+            value.transfer_resource(recipient),
+            effect="allow" if allowed else "deny",
+        )
+    )
+    gateway = gateway_for(adapter)
+    checks = []
+
+    def original_active():
+        checks.append(len(gateway.scheduler.active_leases()))
+        return True
+
+    hook = SelectedInputAdmission(value, snapshot, original_active, messages, ())
+    request = ModelRequest(
+        task_id="private-boundary",
+        messages=messages,
+        required_capabilities=frozenset({"reasoning"}),
+        _input_admission=hook,
+        metadata={"requires_selected_input_admission": True},
+    )
+    received = []
+    invoke = adapter.invoke
+    stream = adapter.stream
+
+    async def inspect_invoke(provider_request, descriptor, instance):
+        received.append(provider_request)
+        return await invoke(provider_request, descriptor, instance)
+
+    async def inspect_stream(provider_request, descriptor, instance):
+        received.append(provider_request)
+        async for item in stream(provider_request, descriptor, instance):
+            yield item
+
+    if boundary == "invoke":
+        adapter.invoke = inspect_invoke
+    else:
+        adapter.stream = inspect_stream
+
+    async def scenario():
+        async def call():
+            if boundary == "stream":
+                return [chunk async for chunk in gateway.stream(request)]
+            return await gateway.invoke(request)
+
+        if not allowed:
+            with pytest.raises(Exception):
+                await call()
+            assert received == [] and adapter.invocations == []
+        else:
+            await call()
+            assert len(received) == 1
+            provider_request = received[0]
+            assert provider_request._input_admission is None
+            assert provider_request.to_dict() == request.to_dict()
+            assert request._input_admission is hook
+            assert hook.last_evidence["input_sha256"] == SelectedInputAdmission._digest(
+                provider_request.messages, ()
+            )
+            assert hook.last_evidence["provider_receipt_confirmed"] is False
+            assert hook.last_evidence["sources"][0]["status"] == "sent"
+        assert checks == [1]
+        assert gateway.scheduler.active_leases() == ()
+
+    asyncio.run(scenario())

@@ -327,7 +327,11 @@ class ModelGateway:
                         self._mark_selected_input(guarded_request)
                         self._active[request.request_id] = adapter
                         response = await asyncio.wait_for(
-                            adapter.invoke(guarded_request, descriptor, instance),
+                            adapter.invoke(
+                                replace(guarded_request, _input_admission=None),
+                                descriptor,
+                                instance,
+                            ),
                             timeout=max(
                                 0.001,
                                 request.timeout_s - (time.monotonic() - started),
@@ -703,7 +707,11 @@ class ModelGateway:
                 dispatched = True
                 self._mark_selected_input(guarded_request)
                 self._active[request.request_id] = adapter
-                iterator = adapter.stream(guarded_request, descriptor, instance)
+                iterator = adapter.stream(
+                    replace(guarded_request, _input_admission=None),
+                    descriptor,
+                    instance,
+                )
                 while True:
                     remaining = request.timeout_s - (time.monotonic() - started)
                     if remaining <= 0:
