@@ -46,6 +46,15 @@ checks descriptor identity/version and link count around its bounded read and
 revalidates source and transfer authority at actual dispatch. Models still receive
 only admitted ordinary data; neither a filename nor a link supplies permission.
 
+The trusted host may explicitly select `NOUS_PERMISSION_POLICY` under its current
+Governance private-state directory. This feeds the existing PermissionEngine;
+file existence is not trust, and model/request data cannot select it. POSIX
+owner-only, single-link and bounded JSON checks precede admission. Rules are
+reloaded for checks; expiration, revocation or invalid state cannot reuse a cached
+allow. Conditions require present, exact-typed facts. Inspection reports
+configuration and UNKNOWN grants, not an authorization or new authority. Native
+Operation approvals, credential leases and execution/effect evidence stay distinct.
+
 ## Signed Node identity and trust persistence
 
 The product connectivity audit at Distribution `edb932c` classifies signed

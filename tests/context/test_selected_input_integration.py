@@ -198,6 +198,104 @@ def test_saved_reference_crosses_real_api_and_http_provider(
         gateway.close_sync_bridge()
 
 
+@requires_safe_read
+@pytest.mark.parametrize("revoke_after_setup", [False, True])
+def test_explicit_host_policy_bootstraps_real_api_without_engine_injection(
+    admitted_context, endpoint, monkeypatch, revoke_after_setup
+):
+    from nous_runtime.api.server import create_server
+    from nous_runtime.chat.runtime import ChatRuntime
+    from nous_runtime.compat.capability import register_capability
+    from nous_runtime.governance import GovernanceStore, get_gate
+
+    register_capability(
+        "product.chat",
+        category="software",
+        executor_type="runtime",
+        side_effect_class="read_only",
+        reversibility="reversible",
+        idempotent=True,
+        model_uncertainty=0.0,
+    )
+    guard, _, _ = admitted_context
+    root = Path(guard._workspace)
+    url, received = endpoint
+    adapter = OpenAICompatibleAdapter(
+        backend_id="selected-http", endpoint=url, model="fake-selected-model"
+    )
+    recipient = ProviderRecipient("selected-http", url, adapter.backend_id)
+    workspace = "workspace:" + hashlib.sha256(str(root).encode()).hexdigest()
+    path = root / ".nous" / "permission-policy.json"
+    document = {
+        "rules": [
+            {"subject": "api-service", "action": action, "resource": resource}
+            for action, resource in (
+                ("context.read", "*"),
+                ("product.chat", "*"),
+                ("workspace.read", workspace),
+                ("context.transfer", workspace + ":provider:" + recipient.digest),
+            )
+        ]
+    }
+    path.write_text(json.dumps(document))
+    path.chmod(0o600)
+    monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(root))
+    monkeypatch.setenv("NOUS_PERMISSION_POLICY", str(path))
+    monkeypatch.setattr("nous_runtime.governance.gate._gate_instance", None)
+    gate = get_gate(store=GovernanceStore(root / ".nous"))
+    assert gate.permission_engine.configuration_status()["source"] == "owner-file"
+    gateway = gateway_for(adapter)
+    pipeline = RuntimePipeline(
+        workspace_root=str(root),
+        gate=gate,
+        product_handlers={"chat": GatewayChatHandler(ModelGatewayFacade(gateway))},
+    )
+    if revoke_after_setup:
+
+        async def load_and_revoke(instance):
+            path.write_text(json.dumps({"rules": []}))
+
+        adapter.load = load_and_revoke
+    chat = ChatRuntime(str(root), orchestrator=SimpleNamespace(run=pipeline.run))
+    monkeypatch.setattr("nous_runtime.chat.ChatRuntime", lambda *_: chat)
+    service_session = "fake.input.host-policy"
+    monkeypatch.setenv("NOUS_API_TOKEN", service_session)
+    monkeypatch.setenv("NOUS_API_SUBJECT", "api-service")
+    server = create_server(host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    ref = reference(root)
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/v1/chat",
+            data=json.dumps(
+                {
+                    "text": "Explain these notes",
+                    "agent_mode": "chat",
+                    "workspace_file_refs": [{"path": ref.path, "sha256": ref.sha256}],
+                }
+            ).encode(),
+            headers={
+                "Authorization": f"Bearer {service_session}",
+                "Content-Type": "application/json",
+            },
+        )
+        response = json.loads(urllib.request.urlopen(request, timeout=10).read())
+        if revoke_after_setup:
+            assert received == []
+            assert response["data"]["status"] != "ok"
+        else:
+            assert response["data"]["status"] == "ok", response
+            assert len(received) == 1
+            assert "exact saved middle constraint" in json.dumps(received)
+        assert "permission-policy.json" not in json.dumps(received)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(2)
+        gateway.close_sync_bridge()
+
+
 @pytest.mark.parametrize(
     "change",
     [

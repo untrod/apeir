@@ -67,6 +67,17 @@ text or raw paths. Sent identifies the Gateway Provider boundary, not confirmed
 Provider receipt. Native Windows delivery remains BLOCKED where safe no-follow
 file descriptors are unavailable.
 
+The stock Controller creates no file-sharing permissions. A trusted maintainer
+can explicitly select an owner-only policy under the current Governance `.nous`
+directory using `NOUS_PERMISSION_POLICY` before starting Runtime; see
+[configuration](../operations/configuration/CONFIG_REFERENCE.md#context-permission-policy).
+This feeds the existing PermissionEngine, not a second authority. It is re-read
+at checks, so expiry, revocation or corrupt configuration blocks later dispatch.
+The permission-status API describes configuration with UNKNOWN grants when no
+subject/action/resource request was evaluated. File selection and those labels
+never grant access. Real Provider, strong sandbox and native qualification remain
+separate prerequisites.
+
 Runtime source collection requires the trusted entry point's live authenticated
 context. Serialized actor claims cannot supply that proof. Normal initialization
 declares `context.read` in the existing Capability Registry; it creates no

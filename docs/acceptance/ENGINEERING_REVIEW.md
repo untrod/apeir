@@ -1163,3 +1163,36 @@ Context/Model/Runtime/Chat/Workbench/proposal/API/checkpoint regression has
 **103 passed** (15.48 s). One initial private probe compared the enum against an
 incorrect uppercase literal; the corrected probe uses the authoritative enum.
 These checks do not qualify host-owner race resistance or native installation.
+
+### Explicit host permission configuration and truthful status — 2026-10-14
+
+**REUSE** PermissionEngine, PermissionRule, the canonical Gate and its authority's
+private state. **EXTEND** explicit trusted-host policy input, selected solely by
+`NOUS_PERMISSION_POLICY`; discovered files and model/request data cannot configure
+authority. No policy/grant store or approval implementation is added. POSIX
+owner-only regular-file, directory, no-follow, single-link, byte/rule bounds,
+unique-key JSON, secret filtering and optional expiration fail closed. Every
+permission check reloads policy; file removal/revocation/corruption blocks later
+use. Runtime `add` is refused on file-backed policy. Native grants, Approval,
+authorization/credential expiry, sandbox and billing remain separate requirements.
+Windows owner-file loading is unqualified/blocked; trusted host injection remains
+compatible, and selected file descriptor limits are unchanged.
+
+The legacy permission query fabricated static granted flags from a new empty
+engine. It now reads the canonical configuration, returns nullable UNKNOWN grants
+without a subject-bound evaluation, and reports read errors instead of fake
+success. Its four corrected contracts failed on the original handler. Rule
+conditions also require present, exact-typed facts: original absent-null and
+boolean/integer coercion contracts had **3 failed**; their corrected cases pass.
+
+An actual Runtime HTTP service-bearer request now loads an explicitly selected
+owner policy through ordinary Gate construction, without injecting a PermissionEngine,
+and delivers admitted bytes to the owned HTTP Provider fixture exactly once.
+Removing permissions after Provider setup causes zero sends. These **2 passed**
+(2.55 s) preserve the original source/recipient/budget/Run checks. Initial fixture
+errors omitted the known read-only chat Capability declaration and assumed a
+load method; those failed attempts remain, corrected without changing admission.
+Governance/Context/Model/Runtime/Chat/Workbench/proposal/API/checkpoint regression:
+**1107 passed** (31.52 s). Final Python 3.10 policy/input/alias selection has
+**127 passed** (18.31 s), including the exact-type cases. Live vendor,
+remote-human, strong execution, physical and native qualification stay incomplete.

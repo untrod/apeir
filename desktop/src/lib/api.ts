@@ -171,7 +171,8 @@ export interface PermissionView {
   id: string;
   name: string;
   description: string;
-  granted: boolean;
+  granted: boolean | null;
+  evaluation_state?: "UNKNOWN";
   risk: string;
 }
 
@@ -430,7 +431,7 @@ export const addKnowledge = (data: { title: string; category: string; content: s
 
 // Security
 export const fetchPermissions = () =>
-  api<{ permissions: PermissionView[] }>("/api/v1/security/permissions");
+  api<{ permissions: PermissionView[]; configuration_state?: "configured" | "unconfigured" | "unknown"; permissions_evaluated?: boolean; reason?: string }>("/api/v1/security/permissions");
 
 export const fetchApprovals = () =>
   api<{ approvals: unknown[] }>("/api/v1/control/approvals");
