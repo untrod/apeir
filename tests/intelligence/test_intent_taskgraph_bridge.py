@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from threading import Lock
-from time import sleep
+from threading import Barrier, Lock
 
 from nous_runtime.intelligence.planning.parallel import (
     ParallelTaskPlanner,
@@ -39,17 +38,14 @@ def test_parallel_planner_builds_dag_and_workflow_executes_it(
     plan = ParallelTaskPlanner().generate(resolution.analysis)
 
     execution_ids = [
-        step.step_id
-        for step in plan.steps
-        if step.step_id.startswith("execute_")
+        step.step_id for step in plan.steps if step.step_id.startswith("execute_")
     ]
-    assert all(
-        plan.dependencies[step_id] == ("analyze",)
-        for step_id in execution_ids
-    )
+    assert all(plan.dependencies[step_id] == ("analyze",) for step_id in execution_ids)
     assert plan.dependencies["verify"] == tuple(execution_ids)
+    assert 2 <= len(execution_ids) <= 8
 
     lock = Lock()
+    execution_wave = Barrier(len(execution_ids))
     active = 0
     maximum = 0
 
@@ -58,16 +54,17 @@ def test_parallel_planner_builds_dag_and_workflow_executes_it(
         with lock:
             active += 1
             maximum = max(maximum, active)
-        if step.step_id.startswith("execute_"):
-            sleep(0.02)
-        with lock:
-            active -= 1
+        try:
+            if step.step_id.startswith("execute_"):
+                # Admission and scheduling can outlast a short artificial sleep.
+                # Wait for the original wave, so serialization still fails.
+                execution_wave.wait(timeout=5)
+        finally:
+            with lock:
+                active -= 1
         return {"step": step.step_id}
 
-    handlers = {
-        step.capability: handler
-        for step in plan.steps
-    }
+    handlers = {step.capability: handler for step in plan.steps}
     run = PlanWorkflowBridge().execute(
         plan,
         root=str(tmp_path),
@@ -77,15 +74,11 @@ def test_parallel_planner_builds_dag_and_workflow_executes_it(
 
     assert run.state is WorkflowState.COMPLETED
     assert maximum >= 2
-    assert set(run.outputs) == {
-        step.step_id for step in plan.steps
-    }
+    assert set(run.outputs) == {step.step_id for step in plan.steps}
 
 
 def test_plan_workflow_bridge_preserves_human_approval(tmp_path):
-    resolution = IntentResolver().resolve(
-        IntentRequest("Design a sensor system")
-    )
+    resolution = IntentResolver().resolve(IntentRequest("Design a sensor system"))
     plan = ParallelTaskPlanner().generate(resolution.analysis)
     first = plan.steps[1]
     first.metadata["approval_required"] = True
@@ -94,9 +87,7 @@ def test_plan_workflow_bridge_preserves_human_approval(tmp_path):
         plan,
         root=str(tmp_path),
         handlers={
-            step.capability: (
-                lambda step, context: {"step": step.step_id}
-            )
+            step.capability: (lambda step, context: {"step": step.step_id})
             for step in plan.steps
         },
     )

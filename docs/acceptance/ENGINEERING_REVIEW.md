@@ -753,3 +753,23 @@ Containers were removed after exit. Final Node/Governance/Reality/Control Plane/
 Agent/Workflow/workspace regression has **858 passed** (134.73 s). Counts overlap.
 Required new-source and resulting-main CI remain pending; native hashes and
 physical/remote-network acceptance retain their separate blockers.
+
+### Parallel Workflow overlap contract
+
+Usage merge main `508504a` passed Core, Desktop and Security, but Multi-Arch
+Linux amd64 job `115411003370` retained **1 failed, 4303 passed, 59 skipped,
+272 deselected** (473.00 s). The existing planner/Workflow test completed its
+original DAG but observed only one simultaneously active handler. Its 20 ms
+sleep assumed host scheduling and durable step admission were faster than that.
+A controlled, serialized 30 ms admission delay reproduces the same assertion
+failure without changing the original DAG, outputs or execution handlers.
+
+The test now synchronizes the original execution wave with a bounded barrier.
+It retains COMPLETED, dependency/output and `maximum >= 2` assertions, and
+requires at least two planned execution steps. Forced serial execution still
+fails. Activity counters unwind if the barrier fails. Runtime, persistence,
+authority, production timeouts and default resources are unchanged; this does
+not identify the original CI host's timing cause or claim a performance gain.
+Final Workflow/Agent contracts pass **64 tests**; the same controlled admission
+delay also passes after correction. Python 3.10 focused contracts pass **3**.
+New source and resulting-main CI remain separate acceptance requirements.
