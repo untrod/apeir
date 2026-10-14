@@ -773,3 +773,21 @@ not identify the original CI host's timing cause or claim a performance gain.
 Final Workflow/Agent contracts pass **64 tests**; the same controlled admission
 delay also passes after correction. Python 3.10 focused contracts pass **3**.
 New source and resulting-main CI remain separate acceptance requirements.
+
+## OCI readiness truth correction — 2026-10-14
+
+**REUSE** the existing OCI Provider and strict ProcessSandbox report; **FIX**
+passive readiness claims; **DEFER** engine and workload qualification. The
+existing probe treated an engine path as available execution and containment.
+Seven controlled cases fail before correction; one existing default-runner
+denial case passes. Resolving an executable now only establishes discovery.
+An exact strong report is required for default control readiness, failed probes
+stay UNKNOWN, and a host-injected runner does not self-certify qualification.
+The probe executes no command and claims no container isolation or engine health.
+The actual default runner, injected reference execution and PID64 controls remain
+unchanged. Final affected Environment, external reference, admission, Governance,
+Control Plane and SDK contracts have **503 passed, 3 skipped** (17.50 s);
+Python 3.10 focused readiness contracts have **12 passed**. These controlled
+contracts do not qualify default Linux OCI, Python/scientific execution, PTY,
+native installation or physical hardware. Source and resulting-main CI remain
+required before acceptance.
