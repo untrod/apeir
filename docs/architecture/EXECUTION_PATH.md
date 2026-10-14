@@ -99,6 +99,69 @@ executed again merely because an approval/grant remains valid. See
 [State/failure semantics](STATE_OWNERSHIP.md) and
 [Reality acceptance](../acceptance/REALITY_ARCHITECTURE_AUDIT.md).
 
+## Bounded Automation consumer
+
+The explicit `simulated-reality` Automation template compiles a structured
+TaskPlan with the existing `PlanWorkflowBridge`: read simulated firmware, propose
+its update, then independently observe and verify through
+`RealityOperationWorkflowHandler`. The existing fixed simulator factory isolates
+Node/Device/relay state under `.nous/automation-simulation`; Workflow and current
+Governance remain workspace-owned. Only that simulated Node and Device are
+enrolled. No real resource is trusted and no approval or grant is issued by the
+factory or consumer. This is runtime-service simulation, not physical acceptance.
+
+`AutomationConsumer` stores an immutable definition digest and trigger-to-original
+Workflow run relation in the existing `WorkflowStore`. The relation, original
+run, inputs and idempotency key commit together before handlers can run. A manual
+trigger requires an explicit bounded key. `run_due` consumes at most ten one-shot
+UTC due proposals; it never resumes an already consumed due trigger. Repeated
+keys and restart reuse the original run and Work. Every distinct firmware Work
+requires its own current approval; prior Approve Once cannot authorize another.
+
+CLI execution requires `--simulation`. HTTP management uses the existing live
+trusted human session, exact mutation nonce and `control.automation.manage`
+permission; listing and history require `control.automation.read`, including
+empty, legacy-only and mixed HTTP stores. The existing Governance
+human boundary also requires `governance.approve` for the workspace resource.
+Service bearer authentication, constructed actor claims, `approved_steps`, a
+legacy `enabled` flag and arbitrary text/capabilities cannot supply this authority.
+Management revalidates before and after simulator startup; the original Operation
+revalidates again at Node admission. Cancellation uses the original Governance
+interruption and Workflow cancellation; an effect that may already have occurred remains
+unresolved until evidence is reconciled. Explicit `reconcile` reads the original
+Node journal/receipt and acquires independent observation without entering a
+mutation handler. History verifies original CAS references before projecting
+success. MISMATCH and UNKNOWN cannot commit Work.
+
+Before opening transport, the consumer checks every unresolved effectful Work in
+the shared isolated Automation relay store against its original Node journal.
+Node terminal records use `COMPLETED` or `FAILED`, distinct from Controller Work
+states. The original journal key, Work/Operation, Node assignment, dispatch/request
+digest and bound receipt must agree with existing Governance and relay evidence.
+Missing, malformed, incomplete or changed evidence fences the run as UNKNOWN
+before delivery opens. An unbound pre-start `CANCELLED` record cannot resolve an
+uncertain effect. Starting another Automation cannot reopen unsafe original
+delivery from the shared spool. Valid terminal evidence is still reconciled
+through the existing signed Node result path and independently observed; the
+preflight issues no authority and cannot commit an effect.
+
+The existing Operations Console now consumes these same HTTP endpoints. Its
+Automation pane displays structured simulated definitions, original run history,
+pending approvals and receipt/observation/verification evidence. Approve Once or
+Deny addresses the original approval, then resumes that exact run. An uncertain
+trigger response retains its original key and queries persisted history instead
+of creating another trigger. Session expiry, logout and Controller configuration
+changes invalidate retained views and mutations, including an address/token ABA
+change. The browser stores no private run or identity state; simulator and
+runtime-service labels do not imply Kernel or physical execution.
+
+The existing free-text Automation JSON stays `UNQUALIFIED` configuration. A
+background timer, recurring Cron/event/webhook triggers, general executable Skill
+workflows and a semantic action recorder are unimplemented. Other production
+Workflow handlers require their own trusted factory and exercised contracts;
+the consumer introduces no general capability executor or model fallback. See
+the [runnable Workflow example](../../examples/hello_workflow/README.md).
+
 ## Product execution projection
 
 RuntimePipeline dispatch requires the existing Gate to return both EXECUTE and

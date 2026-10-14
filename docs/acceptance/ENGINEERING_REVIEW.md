@@ -773,3 +773,32 @@ not identify the original CI host's timing cause or claim a performance gain.
 Final Workflow/Agent contracts pass **64 tests**; the same controlled admission
 delay also passes after correction. Python 3.10 focused contracts pass **3**.
 New source and resulting-main CI remain separate acceptance requirements.
+
+## Bounded Automation product consumer — 2026-10-14
+
+**REUSE / EXTEND** existing WorkflowStore, PlanWorkflowBridge, Reality handler,
+Governance, signed Node journal, EventStream, CAS and Operations Console. Legacy
+enabled text remains UNQUALIFIED. A structured simulated definition now drives
+manual or one-shot due execution, preserving the original run/Work through human
+approval, denial, cancellation, restart, duplicate delivery and reconciliation.
+The scheduler issues no authority; missing original journal/receipt/CAS evidence
+is UNKNOWN and cannot reopen an uncertain effect.
+
+Current combined backend regression has **813 passed** (251.49 s); Desktop has
+**185 passed in 37 files**, with lint/typecheck/build passing. A newly installed
+wheel outside the checkout completes **18 independent CLI subprocess commands**:
+Approve Once yields the original COMMITTED/MATCH Work with effect count1;
+duplicate trigger retains the same run/count; Deny and Cancel retain count0 and
+late approval cannot revive cancellation. Wheel SHA-256 is
+`b1834ba22fce5be049e3f44ff1a46d652679897d9548a8b7792689df265ecec2`;
+that source qualification is not a native binary release.
+
+Actual Runtime HTTP plus built-source App/Operations Console also exercises
+create/trigger/Approve Once, Deny, Cancel and logout refusal through the same
+stores. A 390px source-browser view has no document overflow. Browser screenshots
+and raw histories are source UI evidence with a cryptographic fake IdP and
+simulated device effects, not installed APEIR.exe, a real IdP or physical hardware.
+No model calls are used for these deterministic operations. Background Cron,
+semantic Recorder, executable professional Skills and production execution remain
+unqualified. Source and resulting-main CI are separate required gates; overall
+product status stays PARTIAL.

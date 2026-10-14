@@ -22,6 +22,7 @@ journal and do not imply Kernel traversal.
 | --- | --- | --- |
 | AgentSession coordination | `AgentSessionCoordinator` / session store | `.nous/agent_sessions.db` |
 | Plan execution, run, pause/resume | existing Workflow Runtime / WorkflowStore | `.nous/workflows.db` and its checkpoints |
+| Automation definition binding and trigger-to-original run relation | existing WorkflowStore | Additional tables in `.nous/workflows.db`; execution state remains original Workflow/Work |
 | Distributed Work lifecycle, placement and dispatch | `DistributedWorkStore` / `NodeRelayServer` | Controller `distributed-works.json` and relay spool |
 | Node identity, delivery and terminal execution evidence | Node Runtime | Node identity and workload journals |
 | Device lifecycle and stable identity | Reality `DeviceRegistry` | existing Reality device store |
@@ -180,6 +181,7 @@ unqualified; #8 stays open. Source/PR/main CI must qualify the final correction.
 | Duplicate original receipt/result | Validate identical bindings and deduplicate; no new effect |
 | Effect occurred, acknowledgement lost | Reconcile persisted Node/Work evidence and acquire a fresh Observation |
 | Executing journal exists but terminal receipt is missing | RECOVERY_REQUIRED/UNKNOWN; no blind replay or fabricated receipt |
+| Automation opens its shared isolated relay for original uncertain Work | Require original bound Node `COMPLETED`/`FAILED` journal and receipt before transport; missing/corrupt/changed evidence stays UNKNOWN |
 | Approval remains valid during uncertain recovery | Authority still does not prove delivery safety; reconcile first |
 | Interrupted commit with durable MATCH evidence | Revalidate persisted bindings/evidence; commit the original verified outcome |
 | Device rediscovery/reconnect or locator change | Preserve stable identity/trust and terminal revocation |
