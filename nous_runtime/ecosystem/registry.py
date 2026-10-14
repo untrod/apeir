@@ -21,7 +21,9 @@ _log = logging.getLogger("nous.ecosystem.registry")
 def _db(db_path: str, readonly: bool = False):
     p = Path(db_path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(f"file:{p}?mode=ro" if readonly else str(p), uri=readonly)
+    conn = sqlite3.connect(
+        p.absolute().as_uri() + "?mode=ro" if readonly else str(p), uri=readonly
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     try:
@@ -63,10 +65,19 @@ class CapabilityRegistry:
                            (name,version,description,author,category,risk_level,
                             trust,entry_point,signature,manifest_json,installed_at)
                            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                        (manifest.name, manifest.version, manifest.description,
-                         manifest.author, manifest.category, manifest.risk_level,
-                         manifest.trust, manifest.entry_point, manifest.signature,
-                         manifest_json, manifest.created_at),
+                        (
+                            manifest.name,
+                            manifest.version,
+                            manifest.description,
+                            manifest.author,
+                            manifest.category,
+                            manifest.risk_level,
+                            manifest.trust,
+                            manifest.entry_point,
+                            manifest.signature,
+                            manifest_json,
+                            manifest.created_at,
+                        ),
                     )
             _log.info("Installed capability: %s v%s", manifest.name, manifest.version)
             return True
@@ -77,8 +88,14 @@ class CapabilityRegistry:
     def get(self, name: str) -> CapabilityManifest | None:
         try:
             with _db(self.db_path, readonly=True) as db:
-                row = db.execute("SELECT manifest_json FROM capabilities WHERE name=?", (name,)).fetchone()
-            return CapabilityManifest.from_dict(json.loads(row["manifest_json"])) if row else None
+                row = db.execute(
+                    "SELECT manifest_json FROM capabilities WHERE name=?", (name,)
+                ).fetchone()
+            return (
+                CapabilityManifest.from_dict(json.loads(row["manifest_json"]))
+                if row
+                else None
+            )
         except Exception:
             return None
 
@@ -93,7 +110,10 @@ class CapabilityRegistry:
             params.append(limit)
             with _db(self.db_path, readonly=True) as db:
                 rows = db.execute(q, params).fetchall()
-            return [CapabilityManifest.from_dict(json.loads(r["manifest_json"])) for r in rows]
+            return [
+                CapabilityManifest.from_dict(json.loads(r["manifest_json"]))
+                for r in rows
+            ]
         except Exception:
             return []
 
@@ -110,7 +130,12 @@ class CapabilityRegistry:
         try:
             with _db(self.db_path, readonly=True) as db:
                 total = db.execute("SELECT COUNT(*) FROM capabilities").fetchone()[0]
-                cats = db.execute("SELECT category, COUNT(*) as n FROM capabilities GROUP BY category").fetchall()
-            return {"total": total, "by_category": {r["category"]: r["n"] for r in cats}}
+                cats = db.execute(
+                    "SELECT category, COUNT(*) as n FROM capabilities GROUP BY category"
+                ).fetchall()
+            return {
+                "total": total,
+                "by_category": {r["category"]: r["n"] for r in cats},
+            }
         except Exception:
             return {"total": 0, "by_category": {}}
