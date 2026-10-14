@@ -388,7 +388,23 @@ class ProcessSessionStore:
                 "error": "a unique process session could not be proven",
                 "match_count": len(matches),
             }
-        result = self.status(matches[0].session_id)
+        original = matches[0]
+        if (
+            (work_id and original.work_id != work_id)
+            or (action_sequence and original.action_sequence != action_sequence)
+            or not self._recovery_spec_matches(original)
+        ):
+            return {
+                **self._result(original),
+                "ok": False,
+                "found": False,
+                "state": ProcessSessionState.RECOVERY_REQUIRED.value,
+                "recovery_required": True,
+                "stdin_available": False,
+                "automatic_replay": False,
+                "error": "original process recovery binding could not be proven",
+            }
+        result = self.status(original.session_id)
         return {
             **result,
             "found": True,
@@ -399,6 +415,29 @@ class ProcessSessionStore:
             },
             "automatic_replay": False,
         }
+
+    def _recovery_spec_matches(self, session: ProcessSession) -> bool:
+        """Revalidate the original host specification without spawning or controlling it."""
+        try:
+            directory = self._directory(session.session_id)
+            if not directory.resolve().is_relative_to(self.workspace):
+                return False
+            spec = json.loads((directory / "spec.json").read_text(encoding="utf-8"))
+            cwd = Path(session.cwd).resolve(strict=True)
+            return (
+                isinstance(spec, Mapping)
+                and spec.get("schema") == "nous.process-host/v1"
+                and spec.get("session_id") == session.session_id
+                and spec.get("command") == session.command
+                and spec.get("command_digest") == session.command_digest
+                and spec.get("cwd") == session.cwd
+                and str(cwd) == session.cwd
+                and cwd.is_relative_to(self.workspace)
+                and isinstance(spec.get("env"), Mapping)
+                and _digest(dict(spec["env"])) == session.environment_ref
+            )
+        except (OSError, ValueError, TypeError):
+            return False
 
     def require(self, session_id: str) -> ProcessSession:
         path = self._directory(session_id) / "session.json"
