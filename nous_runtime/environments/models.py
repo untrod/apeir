@@ -445,6 +445,8 @@ class ExecutionEnvironment:
             raise EnvironmentValidationError("image is required for an OCI container")
         if any(character.isspace() for character in image):
             raise EnvironmentValidationError("image cannot contain whitespace")
+        if image.startswith("-"):
+            raise EnvironmentValidationError("image cannot be a command-line option")
         cpu_limit = _bounded_number(value.get("cpu_limit", 1.0), "cpu_limit", 0.1, 64)
         memory_limit = _bounded_number(
             value.get("memory_limit_mb", value.get("memory_limit", 512)),
