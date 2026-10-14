@@ -22,7 +22,7 @@ def _db_connect(db_path: str, readonly: bool = False):
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if readonly:
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        conn = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)
     else:
         conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row

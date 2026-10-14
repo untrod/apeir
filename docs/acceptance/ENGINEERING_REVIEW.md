@@ -831,3 +831,115 @@ not identify the original CI host's timing cause or claim a performance gain.
 Final Workflow/Agent contracts pass **64 tests**; the same controlled admission
 delay also passes after correction. Python 3.10 focused contracts pass **3**.
 New source and resulting-main CI remain separate acceptance requirements.
+
+
+### Private history database admission and truthful read errors
+
+Classification: **REUSE** the selected workspace resolver, three existing
+SQLite owners, private-file security layer and API error contracts; **FIX**
+file-level state admission and false empty/zero history on storage failures.
+With the selected `.nous` directory real, links for `context.db`, `evaluation.db`
+and `experience.db` previously exposed another disposable workspace's records.
+A Context audit write followed the same link. The controlled Linux probes use
+only owned fake workspaces; they do not establish a remotely authenticated
+exploit or access to real private files. The connection boundaries now reject
+static symbolic/reparse links, broken links, multiply linked database files,
+nonregular database/sidecar files and a replaced
+state directory before opening state. Independent review then reproduced a
+second binding defect without a link: an unescaped read-only SQLite URI for a
+literal `#` workspace name opened a sibling fake database instead of the validated
+file. Percent escapes and question marks also changed path interpretation.
+Read-only connections now use the encoded absolute file URI; writes keep plain
+paths. Actual sibling-database probes retain the original bytes and exercise
+empty/read/write/reload/API behavior with hash, percent, spaces and Unicode names.
+Question-mark names are tested only on systems where they are valid filenames.
+Normal explicit paths and first-use
+creation remain supported; OS ancestor aliases are not new authority.
+
+A corrupt Evaluation database previously returned successful empty API history;
+after initialization, missing Experience tables also produced empty lists and
+zero statistics. Existing domain exceptions now distinguish these failures from
+healthy empty stores. Context corrupt-store errors already fail closed. Optional
+history/learning diagnostics remain separate from authorization and effect
+verification: losing a trend is not proof of an effect, and the Task Center's
+recorded MATCH/COMMITTED projection is not derived from Evaluation scores.
+
+Prerepair focused contracts: **33 failed**; three additional hardlink probes also
+failed before admission was extended. Repaired workspace-binding contracts are
+included in Context/Evaluation/Experience/Governance/Agent/API regressions:
+**872 passed** (14.06 s); Python 3.10 Context/Evaluation/Experience/intelligence
+regressions: **570 passed** (8.75 s). The URI contracts had **9 failed, 3 passed**
+before correction; final workspace-binding contracts have **135 passed** (1.42 s).
+Counts overlap. Static path checks do not
+claim malicious same-OS-owner TOCTOU protection or native Windows ACL acceptance.
+Kernel and component lock remain unchanged; source and resulting-main CI are
+separate acceptance requirements.
+
+The bounded URI audit also found six raw read-only URI entries in five existing
+modules: GovernanceStore, SQLiteRuntime (connection and integrity metrics),
+CapabilityRegistry, legacy NetworkRegistry and SQLiteConnector. Owned Governance
+getters read foreign EXECUTE decisions, PENDING approvals and ACTIVE leases;
+the selected store's write transaction still rejected foreign lease consumption.
+This is a reproduced authority-record binding defect, not evidence that an
+unauthorized effect executed. Those entries now use the same encoded file URI,
+without changing each owner's path, permission, transaction or trust contract and
+without applying the private-history path guard to different stores.
+
+Additional contracts before correction: **18 failed, 6 passed**; final combined
+URI/workspace contracts: **159 passed** (1.49 s). Extended Context/Evaluation/
+Experience/Governance/Agent/Control Plane/Network/SQLite/Connector/API regression:
+**1093 passed** (23.10 s); Python 3.10 affected subset: **1021 passed** (23.78 s).
+Counts overlap. Four newly touched modules had existing formatter failures;
+only those files were mechanically formatted and the patched AST was unchanged.
+No network-filesystem or UNC qualification is claimed; unsupported nonlocal URI
+authority fails closed rather than reverting to an unescaped path.
+
+### Original-result recovery versus readiness snapshot — 2026-10-14
+
+**REUSE** the Node journal, signed Relay result delivery and Controller-local
+connectivity/resource projection. **FIX** the existing transport-loss acceptance
+test's temporal assumption; no production transport, execution, lease, timeout
+or retry policy is changed. The original result and resource placement readiness
+remain separate facts, neither of which grants authority.
+
+Main `8f917db05484950e6ce1e5157c3cf9f56733e459` Core, Desktop and Security CI
+passed, but Multi-Arch run `38501837733`, Windows job `115650359887`, retained
+**1 failed, 4339 passed, 51 skipped, 272 deselected, 4 warnings** (1132.86 s).
+`test_completed_work_is_delivered_after_transport_loss_without_reexecution`
+had already received the original result and asserted one execution. It then
+waited for one ONLINE projection and separately read another projection whose
+lease was expired. The same inherited assertion failed in Work candidate run
+`38502195601`: **1 failed, 4445 passed, 51 skipped, 272 deselected, 4 warnings**
+(1236.23 s); its new Work/ProcessSession tests passed. These failures remain
+recorded. Logs do not identify the Windows scheduling/event-loop cause; Issues
+#4/#8 remain open, and passing reruns cannot close them.
+
+ONLINE is the connection phase, not proof of a fresh lease or resource report.
+The existing test heartbeat is 50 ms and its lease window is 150 ms. A controlled
+projection using the canonical projector supplies two ONLINE-but-expired samples
+after the actual original result is delivered. The original test fails the same
+lease assertion; the corrected test waits for, and asserts, one identical
+snapshot for the exact Node with current connection, lease and fresh resources.
+It retains the five-second readiness bound, original output, removed pending
+assignment, disconnect and exactly-one-execution assertions. A permanently
+expired projection still fails within that unchanged bound; it is not reported
+as successful readiness. Normal and controlled cases are retained in the suite.
+
+Shutdown always removes the transport and stops the owned server, even after an
+assertion failure. It requires DEGRADED when the lease is still valid; if the
+150 ms lease expires during bounded shutdown, it instead requires STALE/OFFLINE
+and forbids scheduling. Existing direct projection tests preserve both fresh
+DEGRADED and expired/disconnected contracts, with an additional explicit expired
+ONLINE negative. This corrects observation timing, not lease renewal or authority.
+
+Focused contracts: **25 passed** on Python 3.12 (4.06 s), **25 passed** on Python
+3.10 (4.31 s). Node/Reality/Governance/Artifact regression: **570 passed**
+(104.02 s). Repository contracts: **288 passed** (0.85 s). Counts overlap.
+Whole Ruff, changed-file format, compile, existing documentation/235 local-link,
+comment/identity/Git/version/diff checks pass; security retains **0 HIGH / 3
+unchanged MEDIUM** and component-lock contracts **3 passed**. One initial
+regression invocation named a nonexistent test directory and collected no tests;
+the corrected selection above ran successfully, not a hidden product failure.
+Kernel and component lock are unchanged. Source and resulting-main cross-platform
+CI are required before qualification; native Windows hashes and physical/network
+acceptance retain their independent blockers.

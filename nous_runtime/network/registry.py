@@ -22,7 +22,7 @@ def _db(db_path: str, readonly: bool = False):
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if readonly:
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        conn = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)
     else:
         conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
@@ -75,9 +75,20 @@ class NetworkRegistry:
                            (id,name,node_type,status,capabilities,trust_level,
                             host,port,version,metadata_json,registered_at,last_heartbeat)
                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        (node.id, node.name, node.node_type, node.status, caps,
-                         node.trust_level, node.host, node.port, node.version,
-                         meta, node.registered_at, node.last_heartbeat),
+                        (
+                            node.id,
+                            node.name,
+                            node.node_type,
+                            node.status,
+                            caps,
+                            node.trust_level,
+                            node.host,
+                            node.port,
+                            node.version,
+                            meta,
+                            node.registered_at,
+                            node.last_heartbeat,
+                        ),
                     )
             return True
         except Exception as exc:
@@ -87,21 +98,32 @@ class NetworkRegistry:
     def get(self, node_id: str) -> AgentNode | None:
         try:
             with _db(self.db_path, readonly=True) as db:
-                row = db.execute("SELECT * FROM agent_nodes WHERE id=?", (node_id,)).fetchone()
+                row = db.execute(
+                    "SELECT * FROM agent_nodes WHERE id=?", (node_id,)
+                ).fetchone()
             if row is None:
                 return None
             return AgentNode(
-                id=row["id"], name=row["name"], node_type=row["node_type"],
-                status=row["status"], capabilities=tuple(json.loads(row["capabilities"])),
-                trust_level=row["trust_level"], host=row["host"] or "", port=row["port"] or 0,
-                version=row["version"] or "", metadata=json.loads(row["metadata_json"]),
-                registered_at=row["registered_at"] or "", last_heartbeat=row["last_heartbeat"] or "",
+                id=row["id"],
+                name=row["name"],
+                node_type=row["node_type"],
+                status=row["status"],
+                capabilities=tuple(json.loads(row["capabilities"])),
+                trust_level=row["trust_level"],
+                host=row["host"] or "",
+                port=row["port"] or 0,
+                version=row["version"] or "",
+                metadata=json.loads(row["metadata_json"]),
+                registered_at=row["registered_at"] or "",
+                last_heartbeat=row["last_heartbeat"] or "",
             )
         except Exception as exc:
             _log.error("Failed to get node: %s", exc)
             return None
 
-    def list(self, node_type: str = "", status: str = "", limit: int = 50) -> list[AgentNode]:
+    def list(
+        self, node_type: str = "", status: str = "", limit: int = 50
+    ) -> list[AgentNode]:
         try:
             query = "SELECT * FROM agent_nodes WHERE 1=1"
             params: list[Any] = []
@@ -117,10 +139,16 @@ class NetworkRegistry:
                 rows = db.execute(query, params).fetchall()
             return [
                 AgentNode(
-                    id=r["id"], name=r["name"], node_type=r["node_type"],
-                    status=r["status"], capabilities=tuple(json.loads(r["capabilities"])),
-                    trust_level=r["trust_level"], host=r["host"] or "", port=r["port"] or 0,
-                ) for r in rows
+                    id=r["id"],
+                    name=r["name"],
+                    node_type=r["node_type"],
+                    status=r["status"],
+                    capabilities=tuple(json.loads(r["capabilities"])),
+                    trust_level=r["trust_level"],
+                    host=r["host"] or "",
+                    port=r["port"] or 0,
+                )
+                for r in rows
             ]
         except Exception as exc:
             _log.error("Failed to list: %s", exc)
@@ -129,6 +157,7 @@ class NetworkRegistry:
     def heartbeat(self, node_id: str) -> bool:
         try:
             from nous_runtime.network.models import _now
+
             with self._lock:
                 with _db(self.db_path) as db:
                     db.execute(
@@ -143,7 +172,9 @@ class NetworkRegistry:
         try:
             with self._lock:
                 with _db(self.db_path) as db:
-                    db.execute("UPDATE agent_nodes SET status=? WHERE id=?", (status, node_id))
+                    db.execute(
+                        "UPDATE agent_nodes SET status=? WHERE id=?", (status, node_id)
+                    )
             return True
         except Exception:
             return False

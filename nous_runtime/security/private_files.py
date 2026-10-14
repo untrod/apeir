@@ -1,10 +1,11 @@
-"""Fail-closed owner-only permissions for local secret material."""
+"""Local private-file permissions and static database path admission."""
 
 from __future__ import annotations
 
 import ctypes
 import os
 import stat
+from pathlib import Path
 from ctypes import wintypes
 
 
@@ -112,3 +113,39 @@ def _set_current_user_only_windows_acl(path: str) -> None:
         if sid_text:
             kernel32.LocalFree(sid_text)
         kernel32.CloseHandle(token)
+
+
+def validate_private_database_path(path: str | os.PathLike[str]) -> None:
+    """Reject static links and nonregular SQLite state before a connection.
+
+    Validate the state directory and SQLite sidecars without resolving
+    links. Missing files remain valid for ordinary first-use creation. This is
+    admission of local state paths, not protection against an OS owner swapping
+    a path after validation, nor a replacement for owner-only ACLs.
+    """
+    target = Path(os.path.abspath(os.fspath(path)))
+    try:
+        parent_info = target.parent.lstat()
+    except FileNotFoundError:
+        parent_info = None
+    if parent_info is not None and (
+        stat.S_ISLNK(parent_info.st_mode)
+        or getattr(parent_info, "st_file_attributes", 0) & 0x400
+        or not stat.S_ISDIR(parent_info.st_mode)
+    ):
+        raise PermissionError("private state must use an unlinked directory")
+    for candidate in (
+        target,
+        *(Path(str(target) + suffix) for suffix in ("-wal", "-shm", "-journal")),
+    ):
+        try:
+            info = candidate.lstat()
+        except FileNotFoundError:
+            continue
+        if (
+            stat.S_ISLNK(info.st_mode)
+            or getattr(info, "st_file_attributes", 0) & 0x400
+            or not stat.S_ISREG(info.st_mode)
+            or info.st_nlink > 1
+        ):
+            raise PermissionError("private database must use unlinked regular files")
