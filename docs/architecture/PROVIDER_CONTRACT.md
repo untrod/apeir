@@ -725,9 +725,11 @@ Saved Workspace input extends ContextBuilder, ContextGuard, WorkspaceGuard and
 the configured canonical PermissionEngine. The public Chat/Runtime field
 `workspace_file_refs` accepts at most eight distinct `{path, sha256}` saved text
 references within the resolved host Workspace. Reads are bounded to 64 KiB per
-file and 128 KiB total. Binary/private/secret sources, traversal and symlinks are
-refused. Every path component uses no-follow descriptors; unsupported hosts deny
-delivery. There is no native Windows fallback, upload or OS-wide read authority.
+file and 128 KiB total. Binary/private/secret sources, traversal, symlinks and
+hard-linked files are refused. The opened file must have exactly one link before
+and after reading, so a harmless alias cannot admit protected or external data.
+Every path component uses no-follow descriptors; unsupported hosts deny delivery.
+There is no native Windows fallback, upload or OS-wide read authority.
 
 Selection creates no Work or permission. The existing original Runtime request
 and Run bind the actor, context, Workspace, purpose and source version. Explicit
@@ -746,11 +748,22 @@ admission. Billing reconciliation of an original NKI receipt is not a new
 selected-source transfer or dispatch claim. Kernel and its authority remain
 unchanged. A read permission never grants Provider transfer authority.
 
+Collaboration review retains the same admission for a source-derived candidate.
+Its private host factory binds the newly rendered review messages to the original
+Run, identity, Workspace and saved source versions; the actual reviewer recipient
+must have current transfer permission. A changed version, revocation or cancelled
+Run blocks reviewer dispatch and records the existing failed/unapproved review
+result. Review keeps its ordinary Gateway accounting and does not acquire authority
+from the main model's response. The review input digest describes the candidate
+text actually submitted at that Gateway boundary; source provenance records its
+authorized origin, not a claim that the review transmits the entire saved file.
+
 The existing input Inspector and Gateway/accounting response metadata project
 content-free source versions, digests and selected/read/sent/rejected/budget
 states. Sent records entry into the Gateway Provider boundary; Provider receipt
 and provider-specific formatting remain unproven. Revocation blocks subsequent
 dispatch but cannot retract an earlier send. Tests exercise the Runtime HTTP API
 through an isolated OpenAI-compatible HTTP fixture plus retry, fallback, stream,
-NKI contract and source/authority/lifecycle negatives. These use fake credentials
+NKI contract and source/authority/lifecycle negatives, including source-derived
+review admission and billing. These use fake credentials
 and do not qualify a real model account, remote Provider or installed Desktop.

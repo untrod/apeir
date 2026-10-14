@@ -776,6 +776,20 @@ class GatewayChatHandler:
                 trace_id=str(context.get("trace_id") or request_id),
                 preferred_model=str(constraints.get("model_id") or ""),
                 emit=emit,
+                input_admission_factory=(
+                    lambda review_messages: self._selected_admission(
+                        selected_reader,
+                        runtime_request,
+                        context,
+                        context_snapshot,
+                        workspace_path,
+                        review_messages,
+                        (),
+                        emit,
+                    )
+                )
+                if selected_reader is not None
+                else None,
             )
             result["collaboration"]["review"] = reviewer
         result["agent_execution"] = agent_execution.finish(

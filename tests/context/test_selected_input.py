@@ -222,6 +222,57 @@ def test_symlink_inside_workspace_refused(admitted_context):
         value.collect()
 
 
+@requires_safe_read
+@pytest.mark.parametrize("origin", [".nous", ".git", "outside"])
+def test_hard_link_cannot_alias_protected_or_external_input(admitted_context, origin):
+    guard, _, _ = admitted_context
+    root = Path(guard._workspace)
+    source = (
+        root.parent / "outside-selected-source.txt"
+        if origin == "outside"
+        else root / origin / "private-selected-source.txt"
+    )
+    source.parent.mkdir(parents=True, exist_ok=True)
+    content = b"owned private boundary fixture 42\n"
+    source.write_bytes(content)
+    alias = root / "review-notes.txt"
+    os.link(source, alias)
+    assert alias.stat().st_nlink == 2
+    value = reader(
+        admitted_context,
+        [WorkspaceFileReference(alias.name, hashlib.sha256(content).hexdigest())],
+    )
+    with pytest.raises(SelectedInputError, match="source_link_refused"):
+        value.collect()
+    assert value.provenance()[0]["status"] == "rejected"
+    assert value.provenance()[0]["was_read"] is False
+
+
+@requires_safe_read
+def test_link_created_during_read_cannot_publish_context(admitted_context, monkeypatch):
+    guard, _, _ = admitted_context
+    root = Path(guard._workspace)
+    ref = reference(root)
+    value = reader(admitted_context, [ref])
+    actual_read = os.read
+    linked = False
+
+    def read_and_link(descriptor, size):
+        nonlocal linked
+        data = actual_read(descriptor, size)
+        if data and not linked:
+            os.link(root / ref.path, root / "late-alias.txt")
+            linked = True
+        return data
+
+    monkeypatch.setattr(os, "read", read_and_link)
+    with pytest.raises(SelectedInputError, match="source_link_refused"):
+        value.collect()
+    assert linked
+    assert value.provenance()[0]["status"] == "rejected"
+    assert value.provenance()[0]["was_read"] is True
+
+
 def test_unsupported_descriptor_host_denies(admitted_context, monkeypatch):
 
     guard, _, _ = admitted_context

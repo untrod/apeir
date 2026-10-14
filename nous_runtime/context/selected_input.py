@@ -382,6 +382,8 @@ class SelectedWorkspaceInput:
             )
             descriptors.append(descriptor)
             before = os.fstat(descriptor)
+            if before.st_nlink != 1:
+                raise SelectedInputError("source_link_refused")
             if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= min(
                 byte_limit, MAX_FILE_BYTES
             ):
@@ -395,6 +397,8 @@ class SelectedWorkspaceInput:
                 if len(data) > MAX_FILE_BYTES:
                     raise SelectedInputError("source_byte_bound_or_type")
             after = os.fstat(descriptor)
+            if after.st_nlink != 1:
+                raise SelectedInputError("source_link_refused")
             if (
                 (before.st_size, before.st_mtime_ns, before.st_ctime_ns)
                 != (after.st_size, after.st_mtime_ns, after.st_ctime_ns)

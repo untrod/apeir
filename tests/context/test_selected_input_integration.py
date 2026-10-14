@@ -687,3 +687,145 @@ def test_explicit_selection_failure_cannot_dispatch_without_source(
         )
     finally:
         gateway.close_sync_bridge()
+
+
+@requires_safe_read
+@pytest.mark.parametrize(
+    "change", ["admitted", "transfer_revoked", "recipient", "version", "cancel"]
+)
+def test_selected_source_derived_review_reuses_live_admission_and_accounting(
+    admitted_context, monkeypatch, change
+):
+    from nous_runtime.events import EventStream
+    from nous_runtime.events.models import RunState
+    from nous_runtime.model_runtime.cost_control import (
+        CostController,
+        Pricing,
+        PricingCatalog,
+    )
+    from nous_runtime.model_runtime.models import ModelResponse
+
+    monkeypatch.setenv("NOUS_LLM_API_KEY", "")
+    pipeline, gateway, adapter, actor = pipeline_fixture(
+        admitted_context, "mock://selected/main"
+    )
+    descriptor = gateway.registry.get("selected-model").descriptor
+    gateway.registry.register(
+        replace(
+            descriptor,
+            capabilities=frozenset({"chat", "planning", "review", "reasoning"}),
+        ),
+        replace_existing=True,
+        state=gateway.registry.get("selected-model").state,
+    )
+    gateway._cost_controller = CostController(
+        Path(pipeline.workspace_root) / ".nous" / "usage.sqlite3",
+        pricing=PricingCatalog({"selected-http/fake-selected-model": Pricing(1, 2)}),
+    )
+    ref = reference(Path(pipeline.workspace_root))
+    observed = []
+    main_requests = []
+
+    async def fake_invoke(request, descriptor, instance):
+        observed.append(request)
+        if request._input_admission is not None and not request.metadata.get(
+            "collaboration_role"
+        ):
+            main_requests.append(request)
+            content = "The saved constraint is: exact saved middle constraint"
+            if change == "transfer_revoked":
+                pipeline.gate.permission_engine.add(
+                    PermissionRule("*", "context.transfer", "*", effect="deny")
+                )
+            elif change == "recipient":
+                adapter.provider.endpoint = "mock://selected/unapproved-review"
+            elif change == "version":
+                (Path(pipeline.workspace_root) / ref.path).write_text("changed source")
+            elif change == "cancel":
+                EventStream(pipeline.workspace_root).emit_state_change(
+                    "selected-derived-review",
+                    RunState.CANCELLED,
+                    task_id="selected-derived-review",
+                )
+        else:
+            content = "APPROVED bounded fake brief"
+        return ModelResponse(
+            request_id=request.request_id,
+            model_id=descriptor.model_id,
+            instance_id=instance.instance_id,
+            content=content,
+            usage={"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3},
+        )
+
+    adapter.invoke = fake_invoke
+    try:
+        response = pipeline.run(
+            RuntimeRequest(
+                "Explain these notes in parallel",
+                request_id="selected-derived-review",
+                user_id=actor.subject_id,
+                authenticated_context=actor,
+                constraints={"product_capability": "chat", "agent_mode": "chat"},
+                workspace_file_refs=(ref,),
+            )
+        )
+        result = response.result["execution"]["result"]
+        review = result["collaboration"]["review"]
+        reviews = [
+            request
+            for request in observed
+            if request.metadata.get("collaboration_role") == "nous.reviewer"
+        ]
+        assert len(main_requests) == 1
+        assert gateway.scheduler.active_leases() == ()
+        events = pipeline.events.load_events("selected-derived-review")
+        dispatches = [
+            event.payload
+            for event in events
+            if event.event_type == "context.input.dispatched"
+        ]
+        assert len(dispatches) == (2 if change == "admitted" else 1)
+        assert all(item["provider_receipt_confirmed"] is False for item in dispatches)
+        assert "middle constraint" not in json.dumps(dispatches)
+        assert all(item["sources"][0]["status"] == "sent" for item in dispatches)
+        accounting = gateway._cost_controller.summary()
+        review_receipts = [
+            receipt
+            for receipt in accounting["receipts"]
+            if receipt["task_id"] == "selected-derived-review.review"
+        ]
+        assert len(review_receipts) == 1
+        assert accounting["pending_requests"] == 0
+        assert accounting["reserved_tokens"] == 0
+        if change == "admitted":
+            assert len(observed) == 5 and len(reviews) == 1
+            request = reviews[0]
+            assert "exact saved middle constraint" in json.dumps(request.messages)
+            assert request.metadata["requires_selected_input_admission"] is True
+            assert (
+                request.metadata["context_input_kind"]
+                == "selected_source_derived_review"
+            )
+            assert request._input_admission is not None
+            assert (
+                request._input_admission.input_sha256
+                != main_requests[0]._input_admission.input_sha256
+            )
+            assert (
+                request._input_admission.input_sha256 == dispatches[1]["input_sha256"]
+            )
+            assert not review["error"]
+            assert review["usage_receipt_ref"]
+            assert review_receipts[0]["status"] == "completed"
+            assert review_receipts[0]["usage"]["total_tokens"] == 3
+        else:
+            assert len(observed) == 4 and reviews == []
+            assert review["approved"] is False
+            assert review["error"]
+            assert any(event.event_type == "context.input.rejected" for event in events)
+            assert review_receipts[0]["status"] == "not_dispatched"
+            assert review_receipts[0]["usage"]["total_tokens"] == 0
+            assert review_receipts[0]["cost_usd"] == 0
+            assert review_receipts[0]["dispatch_uncertain"] is False
+    finally:
+        gateway.close_sync_bridge()

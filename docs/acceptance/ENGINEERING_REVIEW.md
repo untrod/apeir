@@ -969,3 +969,37 @@ PTY or native Windows qualification. Existing Ruff/format/compile/documentation/
 235 links/hygiene/version/security checks pass; scanner retains **0 HIGH / 3 known
 MEDIUM**, lock contracts **3 passed**. Kernel and component lock are unchanged.
 Required source and resulting-main CI remain separate acceptance gates.
+
+### Selected input secondary transfer and file alias admission — 2026-10-14
+
+**REUSE** the original ContextBuilder/ContextGuard, WorkspaceGuard, Runtime Run,
+Model Gateway recipient admission and usage ledger. **FIX** two candidate input
+boundaries before publication; no additional authority, model registry or store.
+The primary model's answer can contain selected-source text. Its collaboration
+review previously lacked the selected-input hook, so current transfer revocation,
+reviewer recipient changes, source changes or cancellation did not block that
+secondary request. A private host factory now binds the actual review messages to
+the same original Run, source snapshot and current reviewer permission. Review
+failure stays visible and unapproved; model review grants no execution authority.
+The new input digest describes source-derived candidate text, not proof that the
+entire raw file was sent again or that a remote Provider received it.
+
+Descriptor traversal denied symlinks but did not reject hard-linked input. The
+opened regular file must now have one link both before and after its bounded
+read. Protected/external aliases fail before reading; a link created during the
+read prevents Context publication. Ordinary single-link files retain their path,
+version, secret filtering and permission checks. Unsupported no-follow hosts,
+including the current native Windows path, remain BLOCKED without a fallback.
+
+Original deterministic fake-Provider reviewer regressions: **5 failed**. Owned
+hard-link regressions before correction: **4 failed, 60 deselected** (0.80 s).
+Corrected selected-input and collaboration focus: **102 passed** on Python 3.12
+(13.85 s) and Python 3.10 (15.08 s).
+Context, collaboration, Gateway/facade/accounting, fake NKI, persistent checkpoint
+and Runtime admission regression: **592 passed** (17.38 s). The reviewer negatives
+require no secondary dispatch or budget reservation; lawful review retains its
+ordinary reported usage and original source lineage. One mistyped regression
+path collected no tests and is retained; the corrected named selection ran.
+These are controlled software/HTTP-fixture checks, not live model, native Kernel,
+remote-human, physical or installed Desktop qualification. Existing isolation,
+PID64, Kernel and component lock remain unchanged; source/main CI is still required.
