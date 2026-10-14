@@ -451,6 +451,7 @@ class OCIContainerProvider:
             argv.extend(["--volume", f"{source}:{mount.target}:{mode}"])
         argv.extend(
             [
+                "--",
                 environment.image,
                 "/bin/sh",
                 "-c",

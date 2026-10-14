@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from nous_runtime.conversation import ConversationMessage, ConversationStore
+from nous_runtime.core.redaction import redact_sensitive_text
 
 Executor = Callable[[str, threading.Event], str]
 
@@ -73,6 +74,8 @@ class TerminalSession:
     def execute(self, text: str, executor: Executor) -> TerminalResult:
         if not text.strip():
             raise ValueError("terminal input is required")
+        if redact_sensitive_text(text) != text:
+            raise ValueError("terminal input contains protected material")
         operation_id = f"op_{uuid.uuid4().hex}"
         self.cancel_event.clear()
         self.store.append(ConversationMessage(self.conversation_id, "user", text))
@@ -81,9 +84,10 @@ class TerminalSession:
 
         def invoke() -> None:
             try:
-                results.put(("completed", str(executor(text, self.cancel_event))))
+                content = redact_sensitive_text(str(executor(text, self.cancel_event)))
+                results.put(("completed", content))
             except Exception as exc:
-                results.put(("failed", str(exc)))
+                results.put(("failed", redact_sensitive_text(str(exc))))
 
         worker = threading.Thread(
             target=invoke,
@@ -97,9 +101,7 @@ class TerminalSession:
         except KeyboardInterrupt:
             self.cancel_event.set()
             self._operation_event(operation_id, "cancelled")
-            return TerminalResult(
-                operation_id, "cancelled", "", self.conversation_id
-            )
+            return TerminalResult(operation_id, "cancelled", "", self.conversation_id)
         status, content = results.get()
         if self.cancel_event.is_set():
             status = "cancelled"

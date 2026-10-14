@@ -754,6 +754,46 @@ Agent/Workflow/workspace regression has **858 passed** (134.73 s). Counts overla
 Required new-source and resulting-main CI remain pending; native hashes and
 physical/remote-network acceptance retain their separate blockers.
 
+## Execution input and output boundary review — 2026-10-13
+
+**REUSE** existing Environment validation, OCI Provider, terminal conversation
+owner and centralized sensitive-data redaction. **FIX** OCI image operands and
+protected terminal material at the existing execution/recording boundary.
+No Provider, terminal database, permission owner or host-execution fallback is
+introduced. Kernel, component lock and default PID64 remain unchanged.
+
+OCI images are rejected if they can be interpreted as command-line options,
+including through direct Provider inputs or a persisted record with a matching
+digest. The existing engine command also terminates option parsing before its
+image operand. Two prerepair operand probes reached the runner; the repaired
+probes fail before any runner call. **23 contracts** cover negative inputs,
+restart validation and unchanged Docker/Podman normal-image arguments and
+resource/isolation controls. These are validation/argv contracts, not actual
+container isolation, engine availability or physical qualification.
+
+Terminal results and exceptions are redacted before entering the result queue,
+conversation, history, summaries or CLI output. Protected input is rejected
+before writing a message or calling the executor. The existing cancellation and
+failure statuses remain intact, and ordinary diagnostics remain readable.
+Prerepair **3 failed, 2 passed**; terminal/conversation/Governance/credential
+regressions have **312 passed, 1 skipped** on Python 3.12 (9.22 s) and Python 3.10
+(9.68 s). The tests reopen the actual SQLite conversation and scan persisted
+files using deterministic fake material. This does not implement or qualify an
+interactive PTY and cannot retroactively remove historical leaked records.
+
+Default strong-process/OCI execution, installed Windows Desktop, real model
+accounts and physical devices retain their separately documented blockers.
+In particular, an installed OCI engine does not establish that its default
+control runner can pass strict admission; source contracts do not promote the
+overall product beyond PARTIAL. Source and resulting-main CI remain required.
+
+Combined Environment/Node/Governance/terminal/conversation/credential regression:
+**629 passed, 3 skipped**, 23.26 s. Whole Ruff, five changed-file format checks,
+compile, existing documentation/235 links/comment/identity/Git/version checks
+and diff checks pass; the security scanner retains **0 HIGH / 3 MEDIUM**.
+Counts overlap the focused qualification and do not imply hardware or release
+integrity.
+
 ### Parallel Workflow overlap contract
 
 Usage merge main `508504a` passed Core, Desktop and Security, but Multi-Arch
