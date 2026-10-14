@@ -2168,6 +2168,16 @@ def _authorize_mutation_route(
     if authorization_context is None:
         return err_response("NOUS_UNAUTHENTICATED", "Authentication required")
     capability_id, side_effect_class, reversibility = governance
+    if capability_id == "environment.run":
+        from nous_runtime.api.environment_routes import environment_run_arguments
+
+        try:
+            environment_run_arguments(params["environment_id"], body or {})
+        except (KeyError, TypeError, ValueError):
+            return err_response(
+                "NOUS_INVALID_REQUEST",
+                "Environment command target does not match the route",
+            )
     if (
         capability_id == "project.control"
         and str((body or {}).get("action") or "").lower() == "cancel"

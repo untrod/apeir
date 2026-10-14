@@ -863,3 +863,23 @@ the corrected selection above ran successfully, not a hidden product failure.
 Kernel and component lock are unchanged. Source and resulting-main cross-platform
 CI are required before qualification; native Windows hashes and physical/network
 acceptance retain their independent blockers.
+
+### Environment command target binding — 2026-10-14
+
+**REUSE** the existing Environment API, mutation Governance and canonical Runtime
+capability dispatcher. **FIX** command target consistency: the execution arguments
+must retain the same Environment selected by the route and reviewed by Governance.
+A conflicting body target is rejected before policy/approval construction and
+before the handler invokes the dispatcher; an omitted or identical target stays
+compatible. Authentication still precedes this validation. No permission, Provider,
+execution database or host fallback is added.
+
+The original controlled handler/route/actual-loopback-HTTP regression retained
+**15 failed, 3 passed**. Its dispatcher was instrumented with a fake bounded
+result; this proves argument misbinding, not an unauthorized real workload effect.
+The corrected contracts have **18 passed** on Python 3.12 (1.00 s) and Python 3.10
+(1.70 s). Environment/Governance/Control Plane/Runtime-dispatch/terminal regression:
+**509 passed, 2 skipped** (14.08 s). Original strict sandbox, high-risk approval,
+credential and resource boundaries remain unchanged; default OCI control remains
+BLOCKED without qualified strong isolation. This does not qualify actual OCI,
+interactive PTY, native installation, physical devices or a remote human.
