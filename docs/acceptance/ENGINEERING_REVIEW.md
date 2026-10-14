@@ -925,3 +925,47 @@ the corrected selection above ran successfully, not a hidden product failure.
 Kernel and component lock are unchanged. Source and resulting-main cross-platform
 CI are required before qualification; native Windows hashes and physical/network
 acceptance retain their independent blockers.
+
+### Original ProcessSession cleanup admission — 2026-10-14
+
+**REUSE** ProcessSessionStore, its original process/helper identity checks and
+bounded control acknowledgement. **FIX** the startup test's cleanup observation
+assumption; no production identity, control, retry, isolation or timeout changes.
+Main `cf55c6d8e160eef330abd26f4150ef3250998615` passed Desktop, Security and
+Multi-Arch CI, but Windows Core run `38588916681`, job `115938259917`, retained
+**1 failed, 4790 passed, 60 skipped, 4 warnings** (1865.80 s). All startup/no-new-
+spawn assertions had passed. During cleanup, a RUNNING status was followed by
+`kill` performing its own identity check and rejecting RECOVERY_REQUIRED before
+writing a control. The actual Windows OS-query cause is not established; neither
+this correction nor passing reruns closes Issues #4/#8.
+
+A controlled identity-query miss between the first observation and control
+admission reproduces the same rejection: **2 failed, 2 passed, 2 deselected**.
+The corrected cleanup observes the same original session and may re-attempt only
+that explicit pre-dispatch refusal. Every attempt still requires the production
+identity check. After a control is accepted it only observes terminal evidence;
+acknowledgement loss and other uncertain failures propagate without another
+control. It never kills a bare PID, invents identity, respawns a process or treats
+UNKNOWN as terminal success. The existing five-second control bound is unchanged.
+
+The normal/transient cases retain one launch, original identities and recovered
+attachment. Actual atomic control-file writes must be exactly one, bound to that
+session and action. Permanent identity uncertainty writes zero controls and
+fails closed; cleanup succeeds only after the fixture restores real observation.
+Two response-loss cases perform the original accepted control once, then lose the
+result and prove the helper does not repeat it. The actual signed/session/lifecycle
+contracts remain in their existing owners.
+
+Final focused startup contracts: **9 passed** on Python 3.12 (18.70 s) and Python
+3.10 (18.82 s); startup/catalog/Node-readiness/reconciliation selection: **61 passed**
+(23.17 s). Earlier broader selection **251 passed** remains scoped to the earlier
+seven-case candidate. One mistyped test-path invocation collected no tests and is
+retained separately; the corrected selection above ran successfully.
+Actual initialized Linux ProcessSession/startup contracts: **20 passed** (33.66 s),
+using the pinned public image, non-root UID, read-only source/rootfs, network-none,
+dropped capabilities, no-new-privileges, PID64, CPU2 and RAM2GiB. The owned container
+was removed and checked absent. This is a test harness, not product strong-sandbox,
+PTY or native Windows qualification. Existing Ruff/format/compile/documentation/
+235 links/hygiene/version/security checks pass; scanner retains **0 HIGH / 3 known
+MEDIUM**, lock contracts **3 passed**. Kernel and component lock are unchanged.
+Required source and resulting-main CI remain separate acceptance gates.
