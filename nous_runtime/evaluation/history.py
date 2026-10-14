@@ -16,11 +16,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from nous_runtime.security.private_files import validate_private_database_path
+
+from nous_runtime.evaluation.exceptions import EvaluationError
 from nous_runtime.evaluation.models import EvaluationRecord
 
 _log = logging.getLogger("nous.evaluation.history")
-
-
 
 
 # Internal helpers
@@ -29,9 +30,10 @@ _log = logging.getLogger("nous.evaluation.history")
 @contextmanager
 def _db_connect(db_path: str, readonly: bool = False):
     path = Path(db_path)
+    validate_private_database_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if readonly:
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        conn = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)
     else:
         conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
@@ -51,7 +53,6 @@ def _db_connect(db_path: str, readonly: bool = False):
         conn.close()
 
 
-
 # EvaluationHistory
 
 
@@ -67,6 +68,12 @@ class EvaluationHistory:
     """
 
     def __init__(self, workspace_path: str | Path = ""):
+        if not workspace_path and os.environ.get("NOUS_WORKSPACE_ROOT"):
+            from nous_runtime.project.workspace import find_workspace
+
+            workspace_path = find_workspace(allow_uninitialized=True)
+            if workspace_path is None:
+                raise ValueError("Configured workspace state is unavailable")
         if workspace_path:
             self.db_path = str(Path(workspace_path) / "evaluation.db")
         else:
@@ -75,7 +82,6 @@ class EvaluationHistory:
         self._ensure_tables()
 
     def _ensure_tables(self) -> None:
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
             try:
                 with _db_connect(self.db_path) as db:
@@ -102,7 +108,9 @@ class EvaluationHistory:
                             ON evaluation_records(status);
                     """)
             except Exception as exc:
-                _log.error("Failed to init evaluation history: %s", exc)
+                raise EvaluationError(
+                    "Failed to initialise evaluation history"
+                ) from exc
 
     # -- CRUD --
 
@@ -119,11 +127,18 @@ class EvaluationHistory:
                             evaluated_by, created_at, duration_ms, record_json)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
-                            record.id, record.target_type, record.target_id,
-                            record.status, record.input_summary,
-                            record.composite_score, record.confidence,
-                            record.recommendation, record.evaluated_by,
-                            record.created_at, record.duration_ms, record_json,
+                            record.id,
+                            record.target_type,
+                            record.target_id,
+                            record.status,
+                            record.input_summary,
+                            record.composite_score,
+                            record.confidence,
+                            record.recommendation,
+                            record.evaluated_by,
+                            record.created_at,
+                            record.duration_ms,
+                            record_json,
                         ),
                     )
             return True
@@ -173,10 +188,11 @@ class EvaluationHistory:
                 query += f" ORDER BY created_at {order} LIMIT ?"
                 params.append(limit)
                 rows = db.execute(query, params).fetchall()
-            return [EvaluationRecord.from_dict(json.loads(r["record_json"])) for r in rows]
+            return [
+                EvaluationRecord.from_dict(json.loads(r["record_json"])) for r in rows
+            ]
         except Exception as exc:
-            _log.error("Failed to list evaluation records: %s", exc)
-            return []
+            raise EvaluationError("Failed to list evaluation history") from exc
 
     # -- Analytics --
 
@@ -250,9 +266,12 @@ class EvaluationHistory:
                 passed = db.execute(
                     "SELECT COUNT(*) FROM evaluation_records WHERE status = 'pass'"
                 ).fetchone()[0]
-                avg_score = db.execute(
-                    "SELECT AVG(composite_score) FROM evaluation_records"
-                ).fetchone()[0] or 0.0
+                avg_score = (
+                    db.execute(
+                        "SELECT AVG(composite_score) FROM evaluation_records"
+                    ).fetchone()[0]
+                    or 0.0
+                )
                 by_type = db.execute(
                     "SELECT target_type, COUNT(*) as cnt FROM evaluation_records GROUP BY target_type"
                 ).fetchall()
@@ -266,5 +285,6 @@ class EvaluationHistory:
                 "db_path": self.db_path,
             }
         except Exception as exc:
-            _log.error("Failed to get stats: %s", exc)
-            return {"error": str(exc)}
+            raise EvaluationError(
+                "Failed to get evaluation history statistics"
+            ) from exc

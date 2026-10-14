@@ -38,6 +38,7 @@ def default_workspace_path(*parts: str) -> _Path:
     """
     return _Path(NOUS_DIR).joinpath(*parts)
 
+
 DEFAULT_STRUCTURE: dict[str, list[str]] = {
     "memory": [
         "timeline.jsonl",
@@ -56,16 +57,39 @@ DEFAULT_STRUCTURE: dict[str, list[str]] = {
 
 # Detection
 
-def find_workspace(start_dir: str | _Path | None = None) -> _Path | None:
+
+def find_workspace(
+    start_dir: str | _Path | None = None, *, allow_uninitialized: bool = False
+) -> _Path | None:
     """
     Walk up from *start_dir* (default: cwd) looking for a .nous/ directory.
 
     Returns the absolute Path to the .nous/ directory, or None if no
     workspace was found before hitting the filesystem root.
+
+    With *allow_uninitialized*, an explicitly configured existing project root
+    retains its .nous/ path even before state is created. Invalid roots and
+    linked/non-directory state are rejected rather than permitting cwd fallback.
+    Ancestor discovery and the default initialized-only contract are unchanged.
     """
-    configured_root = _os.environ.get("NOUS_WORKSPACE_ROOT") if start_dir is None else ""
+    configured_root = (
+        _os.environ.get("NOUS_WORKSPACE_ROOT") if start_dir is None else ""
+    )
     if configured_root:
-        candidate = _Path(configured_root).expanduser().resolve() / NOUS_DIR
+        root = _Path(configured_root).expanduser().resolve(strict=allow_uninitialized)
+        candidate = root / NOUS_DIR
+        if allow_uninitialized:
+            if not root.is_dir():
+                raise NotADirectoryError(
+                    "Configured workspace root must be a directory"
+                )
+            if candidate.is_symlink():
+                raise ValueError("Configured workspace state must not be linked")
+            if candidate.exists() and not candidate.is_dir():
+                raise NotADirectoryError(
+                    "Configured workspace state must be a directory"
+                )
+            return candidate
         return candidate if candidate.is_dir() else None
 
     current = _Path(start_dir).resolve() if start_dir else _Path.cwd()
@@ -77,6 +101,7 @@ def find_workspace(start_dir: str | _Path | None = None) -> _Path | None:
 
 
 # Initialisation
+
 
 def init_workspace(path: str | _Path | None = None) -> _Path:
     """
@@ -144,10 +169,15 @@ def init_workspace(path: str | _Path | None = None) -> _Path:
         if decision.action_mode == "DENY":
             _log = logging.getLogger("nous.project.workspace")
             if should_fail_closed(surface="local_cli"):
-                raise PermissionError(f"Workspace creation authorization denied: {decision.reason_message}")
-            _log.warning("Workspace creation authorization denied: %s", decision.reason_message)
+                raise PermissionError(
+                    f"Workspace creation authorization denied: {decision.reason_message}"
+                )
+            _log.warning(
+                "Workspace creation authorization denied: %s", decision.reason_message
+            )
     except Exception as e:
         from nous_runtime.governance.runtime_mode import should_fail_closed
+
         _log_gate = logging.getLogger("nous.project.workspace")
         if should_fail_closed(surface="local_cli"):
             raise
@@ -196,6 +226,7 @@ def init_workspace(path: str | _Path | None = None) -> _Path:
 
 # Read helpers
 
+
 def read_project_config(workspace: str | _Path) -> dict[str, Any]:
     """Read project.json from a .nous/ workspace."""
     fp = _Path(workspace) / "project.json"
@@ -210,6 +241,7 @@ def workspace_root(workspace: str | _Path) -> _Path:
 
 
 # Internal helpers
+
 
 def _write_json_if_missing(filepath: _Path, data: Any) -> bool:
     """Write *data* as JSON only if *filepath* does not already exist."""

@@ -35,7 +35,11 @@ class SQLiteRuntime:
             with self._guard:
                 self._active_writers += 1
         try:
-            target = f"file:{self.path}?mode=ro" if readonly else str(self.path)
+            target = (
+                self.path.absolute().as_uri() + "?mode=ro"
+                if readonly
+                else str(self.path)
+            )
             connection = sqlite3.connect(
                 target, uri=readonly, timeout=self.busy_timeout_ms / 1_000
             )
@@ -56,18 +60,14 @@ class SQLiteRuntime:
             finally:
                 connection.close()
                 with self._guard:
-                    self._transaction_ms.append(
-                        (time.perf_counter() - started) * 1_000
-                    )
+                    self._transaction_ms.append((time.perf_counter() - started) * 1_000)
                     self._lock_wait_ms.append(lock_wait_ms)
         finally:
             if not readonly:
                 with self._guard:
                     self._active_writers -= 1
 
-    def execute(
-        self, sql: str, params: Sequence[Any] = (), *, retries: int = 2
-    ) -> int:
+    def execute(self, sql: str, params: Sequence[Any] = (), *, retries: int = 2) -> int:
         """Execute one short write transaction with bounded busy retry."""
         for attempt in range(max(0, retries) + 1):
             try:
@@ -78,15 +78,13 @@ class SQLiteRuntime:
                     raise
                 with self._guard:
                     self._busy_retries += 1
-                time.sleep(min(0.01 * (2 ** attempt), 0.05))
+                time.sleep(min(0.01 * (2**attempt), 0.05))
         raise RuntimeError("unreachable SQLite retry state")
 
     def batch(self, sql: str, rows: Sequence[Sequence[Any]]) -> int:
         """Execute a justified batch in one transaction."""
         with self.connect() as connection:
-            return connection.executemany(
-                sql, [tuple(row) for row in rows]
-            ).rowcount
+            return connection.executemany(sql, [tuple(row) for row in rows]).rowcount
 
     def explain_query_plan(
         self, sql: str, params: Sequence[Any] = ()
@@ -105,9 +103,7 @@ class SQLiteRuntime:
             raise ValueError(f"Unsupported checkpoint mode: {mode}")
         started = time.perf_counter()
         with self.connect() as connection:
-            row = connection.execute(
-                f"PRAGMA wal_checkpoint({normalized})"
-            ).fetchone()
+            row = connection.execute(f"PRAGMA wal_checkpoint({normalized})").fetchone()
         duration_ms = (time.perf_counter() - started) * 1_000
         with self._guard:
             self._checkpoint_ms = duration_ms
@@ -134,7 +130,7 @@ class SQLiteRuntime:
         if self.path.is_file():
             try:
                 connection = sqlite3.connect(
-                    f"file:{self.path}?mode=ro", uri=True, timeout=1
+                    self.path.absolute().as_uri() + "?mode=ro", uri=True, timeout=1
                 )
                 try:
                     integrity = str(
