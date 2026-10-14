@@ -813,3 +813,36 @@ not identify the original CI host's timing cause or claim a performance gain.
 Final Workflow/Agent contracts pass **64 tests**; the same controlled admission
 delay also passes after correction. Python 3.10 focused contracts pass **3**.
 New source and resulting-main CI remain separate acceptance requirements.
+
+
+### Private history database admission and truthful read errors
+
+Classification: **REUSE** the selected workspace resolver, three existing
+SQLite owners, private-file security layer and API error contracts; **FIX**
+file-level state admission and false empty/zero history on storage failures.
+With the selected `.nous` directory real, links for `context.db`, `evaluation.db`
+and `experience.db` previously exposed another disposable workspace's records.
+A Context audit write followed the same link. The controlled Linux probes use
+only owned fake workspaces; they do not establish a remotely authenticated
+exploit or access to real private files. The connection boundaries now reject
+static symbolic/reparse links, broken links, multiply linked database files,
+nonregular database/sidecar files and a replaced
+state directory before opening state. Normal explicit paths and first-use
+creation remain supported; OS ancestor aliases are not new authority.
+
+A corrupt Evaluation database previously returned successful empty API history;
+after initialization, missing Experience tables also produced empty lists and
+zero statistics. Existing domain exceptions now distinguish these failures from
+healthy empty stores. Context corrupt-store errors already fail closed. Optional
+history/learning diagnostics remain separate from authorization and effect
+verification: losing a trend is not proof of an effect, and the Task Center's
+recorded MATCH/COMMITTED projection is not derived from Evaluation scores.
+
+Prerepair focused contracts: **33 failed**; three additional hardlink probes also
+failed before admission was extended. Repaired workspace-binding contracts are
+included in Context/Evaluation/Experience/Governance/Agent/API regressions:
+**860 passed** (12.85 s); Python 3.10 Context/Evaluation/Experience/intelligence
+regressions: **558 passed** (7.71 s). Counts overlap. Static path checks do not
+claim malicious same-OS-owner TOCTOU protection or native Windows ACL acceptance.
+Kernel and component lock remain unchanged; source and resulting-main CI are
+separate acceptance requirements.

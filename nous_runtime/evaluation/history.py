@@ -16,6 +16,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from nous_runtime.security.private_files import validate_private_database_path
+
+from nous_runtime.evaluation.exceptions import EvaluationError
 from nous_runtime.evaluation.models import EvaluationRecord
 
 _log = logging.getLogger("nous.evaluation.history")
@@ -27,6 +30,7 @@ _log = logging.getLogger("nous.evaluation.history")
 @contextmanager
 def _db_connect(db_path: str, readonly: bool = False):
     path = Path(db_path)
+    validate_private_database_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if readonly:
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
@@ -78,7 +82,6 @@ class EvaluationHistory:
         self._ensure_tables()
 
     def _ensure_tables(self) -> None:
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
             try:
                 with _db_connect(self.db_path) as db:
@@ -105,7 +108,9 @@ class EvaluationHistory:
                             ON evaluation_records(status);
                     """)
             except Exception as exc:
-                _log.error("Failed to init evaluation history: %s", exc)
+                raise EvaluationError(
+                    "Failed to initialise evaluation history"
+                ) from exc
 
     # -- CRUD --
 
@@ -187,8 +192,7 @@ class EvaluationHistory:
                 EvaluationRecord.from_dict(json.loads(r["record_json"])) for r in rows
             ]
         except Exception as exc:
-            _log.error("Failed to list evaluation records: %s", exc)
-            return []
+            raise EvaluationError("Failed to list evaluation history") from exc
 
     # -- Analytics --
 
@@ -281,5 +285,6 @@ class EvaluationHistory:
                 "db_path": self.db_path,
             }
         except Exception as exc:
-            _log.error("Failed to get stats: %s", exc)
-            return {"error": str(exc)}
+            raise EvaluationError(
+                "Failed to get evaluation history statistics"
+            ) from exc

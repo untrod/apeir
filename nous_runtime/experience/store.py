@@ -12,6 +12,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from nous_runtime.security.private_files import validate_private_database_path
+
+from nous_runtime.experience.exceptions import ExperienceStoreError
 from nous_runtime.experience.models import ExperiencePattern, ExperienceRecord
 
 _log = logging.getLogger("nous.experience.store")
@@ -20,6 +23,7 @@ _log = logging.getLogger("nous.experience.store")
 @contextmanager
 def _db_connect(db_path: str, readonly: bool = False):
     path = Path(db_path)
+    validate_private_database_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if readonly:
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
@@ -60,7 +64,6 @@ class ExperienceStore:
         self._ensure_tables()
 
     def _ensure_tables(self) -> None:
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
             with _db_connect(self.db_path) as db:
                 db.executescript("""
@@ -196,8 +199,7 @@ class ExperienceStore:
                 ExperienceRecord.from_dict(json.loads(r["record_json"])) for r in rows
             ]
         except Exception as exc:
-            _log.error("Failed to list experiences: %s", exc)
-            return []
+            raise ExperienceStoreError("Failed to list experience store") from exc
 
     def search(self, query_text: str, limit: int = 20) -> list[ExperienceRecord]:
         """Full-text-ish search across task_summary, action, failure_reason, lessons."""
@@ -313,11 +315,7 @@ class ExperienceStore:
                 "success_rate": round(success / max(total, 1), 3),
                 "patterns": patterns,
             }
-        except Exception:
-            return {
-                "total_experiences": 0,
-                "trusted": 0,
-                "success_count": 0,
-                "success_rate": 0.0,
-                "patterns": 0,
-            }
+        except Exception as exc:
+            raise ExperienceStoreError(
+                "Failed to get experience store statistics"
+            ) from exc

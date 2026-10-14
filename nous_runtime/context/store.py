@@ -15,6 +15,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from nous_runtime.security.private_files import validate_private_database_path
+
 from nous_runtime.context.exceptions import ContextStoreError
 from nous_runtime.context.models import ContextSnapshot
 
@@ -29,6 +31,7 @@ _log = logging.getLogger("nous.context.store")
 @contextmanager
 def _db_connect(db_path: str, readonly: bool = False):
     path = Path(db_path)
+    validate_private_database_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if readonly:
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
@@ -83,7 +86,6 @@ class ContextStore:
     # schema
 
     def _ensure_tables(self) -> None:
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
             try:
                 with _db_connect(self.db_path) as db:

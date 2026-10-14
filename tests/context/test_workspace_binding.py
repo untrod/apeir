@@ -9,11 +9,14 @@ from nous_runtime.api import routes
 from nous_runtime.agent.models import AgentIdentity, AgentManifest
 from nous_runtime.agent.registry import AgentRegistry
 from nous_runtime.context.builder import BuildRequest, ContextBuilder
+from nous_runtime.context.exceptions import ContextStoreError
 from nous_runtime.context.models import ContextSnapshot
 from nous_runtime.context.snapshot import create_snapshot
 from nous_runtime.context.store import ContextStore
+from nous_runtime.evaluation.exceptions import EvaluationError
 from nous_runtime.evaluation.history import EvaluationHistory
 from nous_runtime.evaluation.models import EvaluationRecord
+from nous_runtime.experience.exceptions import ExperienceStoreError
 from nous_runtime.experience.models import ExperienceRecord
 from nous_runtime.experience.store import ExperienceStore
 from nous_runtime.project.workspace import find_workspace
@@ -280,3 +283,148 @@ def test_unconfigured_default_stores_keep_cwd_paths(
     nested.mkdir()
     monkeypatch.chdir(nested)
     assert Path(store_type().db_path).parent == nested / ".nous"
+
+
+PRIVATE_STATE_ERRORS = (
+    ContextStoreError,
+    EvaluationError,
+    ExperienceStoreError,
+    PermissionError,
+)
+
+
+PRIVATE_STORES = (
+    (ContextStore, ContextSnapshot(id="saved-selected"), "context.db"),
+    (EvaluationHistory, EvaluationRecord(id="saved-selected"), "evaluation.db"),
+    (
+        ExperienceStore,
+        ExperienceRecord(id="saved-selected", task_type="coding", action="test"),
+        "experience.db",
+    ),
+)
+
+
+@pytest.mark.parametrize("store_type,record,name", PRIVATE_STORES)
+@pytest.mark.parametrize(
+    "kind", ["linked", "broken-linked", "hard-linked", "directory"]
+)
+def test_private_database_constructor_rejects_nonregular_files(
+    selected_workspace, store_type, record, name, kind
+):
+    selected, outside = selected_workspace
+    state = selected / ".nous"
+    state.mkdir()
+    path = state / name
+    if kind == "directory":
+        path.mkdir()
+    else:
+        target = outside / ".nous" / name
+        if kind == "broken-linked":
+            target = outside / ".nous" / "missing.db"
+        if kind == "hard-linked":
+            path.hardlink_to(target)
+        else:
+            path.symlink_to(target)
+    before = (outside / ".nous" / name).read_bytes()
+    with pytest.raises(PRIVATE_STATE_ERRORS):
+        store_type()
+    assert before == (outside / ".nous" / name).read_bytes()
+
+
+@pytest.mark.parametrize("store_type,record,name", PRIVATE_STORES)
+@pytest.mark.parametrize("action", ["read", "write", "restart"])
+def test_private_database_replacement_cannot_cross_workspace(
+    selected_workspace, store_type, record, name, action
+):
+    selected, outside = selected_workspace
+    store = store_type()
+    assert store.save(record) is True
+    path = Path(store.db_path)
+    path.unlink()
+    path.symlink_to(outside / ".nous" / name)
+    before = (outside / ".nous" / name).read_bytes()
+    if action == "write":
+        try:
+            assert store.save(record) is False
+        except PRIVATE_STATE_ERRORS:
+            pass
+    else:
+        with pytest.raises(PRIVATE_STATE_ERRORS):
+            if action == "restart":
+                store_type()
+            else:
+                store.list()
+    assert before == (outside / ".nous" / name).read_bytes()
+    assert not any(r.id == record.id for r in store_type(outside / ".nous").list())
+
+
+@pytest.mark.parametrize("handler,error_code", READ_HANDLERS)
+def test_linked_private_database_preserves_api_error(
+    selected_workspace, handler, error_code
+):
+    selected, outside = selected_workspace
+    state = selected / ".nous"
+    state.mkdir()
+    for name in ("context.db", "evaluation.db", "experience.db"):
+        (state / name).symlink_to(outside / ".nous" / name)
+    result = handler()
+    assert result["ok"] is False, result
+    assert result["error"]["code"] == error_code
+    assert "outside" not in str(result)
+
+
+def test_corrupt_evaluation_is_not_successful_empty_history(selected_workspace):
+    selected, outside = selected_workspace
+    state = selected / ".nous"
+    state.mkdir()
+    (state / "evaluation.db").write_bytes(b"owned fake invalid SQLite")
+    result = routes.handle_evaluation_history()
+    assert result["ok"] is False, result
+    assert result["error"]["code"] == "EVAL_HISTORY_ERROR"
+
+
+@pytest.mark.parametrize(
+    "store_type,table",
+    [(EvaluationHistory, "evaluation_records"), (ExperienceStore, "experiences")],
+)
+@pytest.mark.parametrize("action", ["list", "stats"])
+def test_private_history_read_error_is_not_empty_data(
+    tmp_path, store_type, table, action
+):
+    import sqlite3
+
+    store = store_type(tmp_path / ".nous")
+    with sqlite3.connect(store.db_path) as db:
+        db.execute(f"DROP TABLE {table}")
+    with pytest.raises((EvaluationError, ExperienceStoreError)):
+        getattr(store, action)()
+
+
+@pytest.mark.parametrize("store_type,record,name", PRIVATE_STORES)
+def test_private_database_replaced_parent_is_rejected(
+    selected_workspace, store_type, record, name
+):
+    selected, outside = selected_workspace
+    store = store_type()
+    state = selected / ".nous"
+    state.rename(selected / "original-state")
+    state.symlink_to(outside / ".nous", target_is_directory=True)
+    with pytest.raises(PRIVATE_STATE_ERRORS):
+        store.list()
+
+
+@pytest.mark.parametrize("store_type,record,name", PRIVATE_STORES)
+@pytest.mark.parametrize("suffix", ["-wal", "-shm", "-journal"])
+def test_private_database_linked_sidecar_is_rejected(
+    selected_workspace, store_type, record, name, suffix
+):
+    selected, outside = selected_workspace
+    store = store_type()
+    target = outside / "owned-fake-sidecar"
+    target.write_bytes(b"owned fake unchanged sidecar")
+    sidecar = Path(store.db_path + suffix)
+    sidecar.unlink(missing_ok=True)
+    sidecar.symlink_to(target)
+    with pytest.raises(PRIVATE_STATE_ERRORS):
+        store.list()
+    assert target.read_bytes() == b"owned fake unchanged sidecar"

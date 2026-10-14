@@ -266,6 +266,17 @@ The default initialized-only `find_workspace()` contract and unconfigured
 cwd/ancestor discovery remain compatible. This extends existing store selection;
 it adds no state owner, workspace registry or permission grant.
 
+The existing Context, Evaluation and Experience SQLite connection boundaries
+also reject symbolic/reparse links, multiply linked or nonregular database/sidecar files and a replaced linked
+state directory before opening or creating state. A real `.nous` directory alone
+does not certify the files within it. Healthy empty stores still return normal
+empty history and zero statistics; an Evaluation initialization/list/statistics
+failure or Experience list/statistics failure now raises its existing domain
+exception so the API can report an error. These read models cannot establish
+Operation authority or replace recorded EffectVerification. This is static local
+path admission, not protection against an OS owner changing a path after the
+check, Windows ACL qualification or a new storage subsystem.
+
 Trusted Workflow handler registration can supply `WorkflowHandlerPolicy` from
 the existing `nous_runtime.workflow` package, or a typed policy on the registered
 host callable. A matching Capability contract declares retry safety and a bounded
