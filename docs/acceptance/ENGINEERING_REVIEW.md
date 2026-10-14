@@ -946,3 +946,53 @@ not identify the original CI host's timing cause or claim a performance gain.
 Final Workflow/Agent contracts pass **64 tests**; the same controlled admission
 delay also passes after correction. Python 3.10 focused contracts pass **3**.
 New source and resulting-main CI remain separate acceptance requirements.
+
+### Original-result recovery versus readiness snapshot — 2026-10-14
+
+**REUSE** the Node journal, signed Relay result delivery and Controller-local
+connectivity/resource projection. **FIX** the existing transport-loss acceptance
+test's temporal assumption; no production transport, execution, lease, timeout
+or retry policy is changed. The original result and resource placement readiness
+remain separate facts, neither of which grants authority.
+
+Main `8f917db05484950e6ce1e5157c3cf9f56733e459` Core, Desktop and Security CI
+passed, but Multi-Arch run `38501837733`, Windows job `115650359887`, retained
+**1 failed, 4339 passed, 51 skipped, 272 deselected, 4 warnings** (1132.86 s).
+`test_completed_work_is_delivered_after_transport_loss_without_reexecution`
+had already received the original result and asserted one execution. It then
+waited for one ONLINE projection and separately read another projection whose
+lease was expired. The same inherited assertion failed in Work candidate run
+`38502195601`: **1 failed, 4445 passed, 51 skipped, 272 deselected, 4 warnings**
+(1236.23 s); its new Work/ProcessSession tests passed. These failures remain
+recorded. Logs do not identify the Windows scheduling/event-loop cause; Issues
+#4/#8 remain open, and passing reruns cannot close them.
+
+ONLINE is the connection phase, not proof of a fresh lease or resource report.
+The existing test heartbeat is 50 ms and its lease window is 150 ms. A controlled
+projection using the canonical projector supplies two ONLINE-but-expired samples
+after the actual original result is delivered. The original test fails the same
+lease assertion; the corrected test waits for, and asserts, one identical
+snapshot for the exact Node with current connection, lease and fresh resources.
+It retains the five-second readiness bound, original output, removed pending
+assignment, disconnect and exactly-one-execution assertions. A permanently
+expired projection still fails within that unchanged bound; it is not reported
+as successful readiness. Normal and controlled cases are retained in the suite.
+
+Shutdown always removes the transport and stops the owned server, even after an
+assertion failure. It requires DEGRADED when the lease is still valid; if the
+150 ms lease expires during bounded shutdown, it instead requires STALE/OFFLINE
+and forbids scheduling. Existing direct projection tests preserve both fresh
+DEGRADED and expired/disconnected contracts, with an additional explicit expired
+ONLINE negative. This corrects observation timing, not lease renewal or authority.
+
+Focused contracts: **25 passed** on Python 3.12 (4.06 s), **25 passed** on Python
+3.10 (4.31 s). Node/Reality/Governance/Artifact regression: **570 passed**
+(104.02 s). Repository contracts: **288 passed** (0.85 s). Counts overlap.
+Whole Ruff, changed-file format, compile, existing documentation/235 local-link,
+comment/identity/Git/version/diff checks pass; security retains **0 HIGH / 3
+unchanged MEDIUM** and component-lock contracts **3 passed**. One initial
+regression invocation named a nonexistent test directory and collected no tests;
+the corrected selection above ran successfully, not a hidden product failure.
+Kernel and component lock are unchanged. Source and resulting-main cross-platform
+CI are required before qualification; native Windows hashes and physical/network
+acceptance retain their independent blockers.
