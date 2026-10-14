@@ -130,8 +130,16 @@ revalidates again at Node admission. Cancellation uses the original Governance
 interruption and Workflow cancellation; an effect that may already have occurred remains
 unresolved until evidence is reconciled. Explicit `reconcile` reads the original
 Node journal/receipt and acquires independent observation without entering a
-mutation handler. History verifies original CAS references before projecting
-success. MISMATCH and UNKNOWN cannot commit Work.
+mutation handler. History verifies original CAS references and the committed
+Work's semantic binding to the original Workflow definition, Governance request,
+Capability, Device, input, signed receipt and independent Observation. The exact
+original CAS EffectVerification must match the Work, and the existing v1 verifier
+must reproduce its semantic fields from that receipt and Observation. Historical
+signature checks omit transport clock freshness; later grant revocation does not
+invalidate lawful recorded evidence. History opens no transport and performs no
+new execution admission, provider call or effect. These local integrity checks
+do not resist a host owner rewriting all stores and signing keys. MISMATCH and
+UNKNOWN cannot commit Work.
 
 Before opening transport, the consumer checks every unresolved effectful Work in
 the shared isolated Automation relay store against its original Node journal.

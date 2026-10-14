@@ -534,12 +534,263 @@ class AutomationConsumer:
         except (OSError, KeyError, TypeError, ValueError, PermissionError):
             return False
 
+    def _historical_result(self, work, cas, relay):
+        """Read original signed execution evidence without admitting a new call."""
+        from nous_runtime.node_runtime.protocol import NodeProtocolEnvelope
+        from nous_runtime.node_runtime.relay import (
+            CONTROL_PLANE_ID,
+            _payload_digest,
+            _verify_at_most_once_result,
+            _verify_recorded_result,
+            remote_execution_receipt,
+        )
+
+        def read(ref):
+            digest = "sha256:" + ref.removeprefix("artifact://sha256/")
+            return json.loads(
+                cas.resolve(digest, verify=True).read_text(encoding="utf-8")
+            )
+
+        summary = work.result_summary
+        evidence = read(summary["evidence_artifact"])
+        receipt = evidence["remote_execution_receipt"]
+        raw = receipt["signed_envelope"]
+        envelope = NodeProtocolEnvelope.from_json(json.dumps(raw), check_time=False)
+        payload = envelope.payload
+        assignment = work.assignment
+        if (
+            evidence.get("schema") != "apeir.distributed-work-evidence/v1"
+            or evidence.get("work_id") != work.work_id
+            or summary["evidence_artifact"] not in work.evidence_refs
+            or summary["output_artifact"] not in work.output_artifacts
+            or receipt != summary["remote_execution_receipt"]
+            or receipt
+            != remote_execution_receipt(raw, expected_operation_id=work.work_id)
+            or envelope.source != work.assigned_node
+            or envelope.target != CONTROL_PLANE_ID
+            or not envelope.verify(relay.node_keys.get(work.assigned_node, ""))
+            or relay.results.get(work.work_id) != payload
+            or assignment is None
+            or assignment.work_id != work.work_id
+            or assignment.node_id != work.assigned_node
+            or assignment.input_artifacts != work.input_artifacts
+            or assignment.execution_policy != work.execution_policy
+        ):
+            raise ValueError("Original signed Work receipt binding changed")
+        _verify_recorded_result(work, payload, raw, status="VERIFIED")
+        request = {
+            "schema": "nous.remote-provider-request/v1",
+            "operation_id": work.work_id,
+            "workload_id": work.work_id,
+            "step_id": assignment.assignment_id,
+            "node_id": work.assigned_node,
+            "capability": work.execution_capability,
+            "arguments": work.execution_arguments,
+            "timeout_seconds": 30.0,
+            "delivery_semantics": "at_most_once",
+            "binding": payload["binding"],
+            "input_artifacts": list(work.input_artifacts),
+        }
+        dispatch = work.dispatch_record
+        if any(
+            dispatch.get(key) != value
+            for key, value in {
+                "work_id": work.work_id,
+                "assignment_id": assignment.assignment_id,
+                "node_id": work.assigned_node,
+                "delivery": "at_most_once",
+                "input_artifacts": list(work.input_artifacts),
+                "provider_request_digest": _payload_digest(request),
+            }.items()
+        ):
+            raise ValueError("Original Work dispatch binding changed")
+        _verify_at_most_once_result(work.assigned_node, request, payload)
+        if read(summary["output_artifact"]) != {
+            "schema": "apeir.distributed-work-output/v1",
+            "work_id": work.work_id,
+            "node_id": work.assigned_node,
+            "output": payload.get("output"),
+        }:
+            raise ValueError("Original Work output changed")
+        original = self.gate.get_operation_request(
+            work.execution_arguments["authorization_id"]
+        )
+        if (
+            original.operation_id != work.work_id
+            or original.work_id != work.work_id
+            or original.node_id != work.assigned_node
+            or original.capability_id != work.execution_capability
+            or original.resource_id != work.target_resource_id
+            or original.expected_effect != work.expected_effect
+        ):
+            raise ValueError("Original Work Governance binding changed")
+        return receipt, payload, original
+
+    def _historical_work_evidence(self, run, step, work, cas, relay, works):
+        from dataclasses import replace
+        from nous_runtime.node_runtime.distributed_workflow import (
+            DistributedWorkflowAdapter,
+        )
+        from nous_runtime.planner.observation import Observation
+        from nous_runtime.reality.execution import _operation_from_dict
+        from nous_runtime.reality.verification import EffectVerifier
+
+        receipt, _, original = self._historical_result(work, cas, relay)
+        inputs = run.inputs
+        provenance = {
+            "plan_id": inputs["_plan_id"],
+            "workflow_id": run.workflow_id,
+            "workflow_run_id": run.run_id,
+            "workflow_step_id": step.step_id,
+        }
+        if (
+            work.work_id
+            != DistributedWorkflowAdapter._work_id(step, {"run_id": run.run_id})
+            or any(
+                work.provenance.get(key) != value for key, value in provenance.items()
+            )
+            or original.plan_id != inputs["_plan_id"]
+            or original.workflow_run_id != run.run_id
+            or original.subject_id != inputs["_agent_id"]
+            or original.agent_session_id != str(inputs.get("_agent_session_id") or "")
+            or work.execution_capability != step.params["capability"]
+            or work.target_resource_id != step.params["device_id"]
+            or work.expected_effect != step.params.get("expected_effect", {})
+            or work.execution_policy.require_effect_verification
+            != (step.action == "reality.operation")
+        ):
+            raise ValueError("Original Workflow and Work semantic binding changed")
+        if not work.execution_policy.require_effect_verification:
+            return
+        operation_value = work.execution_arguments["operation"]
+        operation = _operation_from_dict(operation_value, node_id=work.assigned_node)
+        if (
+            any(
+                operation_value.get(key) != value
+                for key, value in {
+                    **provenance,
+                    "work_id": work.work_id,
+                    "operation_id": work.work_id,
+                    "capability_id": work.execution_capability,
+                    "target_resource_id": work.target_resource_id,
+                    "expected_effect": work.expected_effect,
+                }.items()
+                if key != "workflow_step_id"
+            )
+            or operation.input_artifacts != work.input_artifacts
+            or original.input_artifacts != work.input_artifacts
+            or list(work.input_artifacts)
+            != [work.execution_arguments["mutation_artifact"]]
+        ):
+            raise ValueError("Original Operation binding changed")
+        mutation = json.loads(
+            cas.resolve(
+                "sha256:" + work.input_artifacts[0].removeprefix("artifact://sha256/"),
+                verify=True,
+            ).read_text(encoding="utf-8")
+        )
+        if (
+            mutation.get("schema") != "apeir.reality-mutation-input/v1"
+            or mutation.get("operation_id") != work.work_id
+            or mutation.get("device_id") != work.target_resource_id
+            or mutation.get("capability_id") != work.execution_capability
+            or mutation.get("mutation") != step.params["mutation"]
+            or any(
+                mutation.get("provenance", {}).get(key) != value
+                for key, value in {
+                    **provenance,
+                    "work_id": work.work_id,
+                    "operation_id": work.work_id,
+                }.items()
+            )
+        ):
+            raise ValueError("Original mutation CAS provenance changed")
+        observations = []
+        verifications = []
+        for ref in work.evidence_refs:
+            digest = "sha256:" + ref.removeprefix("artifact://sha256/")
+            artifact = cas.get(digest)
+            if artifact.media_type not in {
+                "application/vnd.apeir.observation+json",
+                "application/vnd.apeir.effect-verification+json",
+            }:
+                continue
+            value = json.loads(
+                cas.resolve(digest, verify=True).read_text(encoding="utf-8")
+            )
+            if artifact.media_type == "application/vnd.apeir.effect-verification+json":
+                if artifact.produced_by != "reality.effect-verifier/v1":
+                    raise ValueError("Original EffectVerifier provenance changed")
+                verifications.append((artifact, value))
+                continue
+            observation = Observation(**value)
+            acquisition_id = observation.metadata["acquisition_id"]
+            read_work = works.get(acquisition_id)
+            if read_work is None:
+                raise ValueError("Original observation Work is unavailable")
+            _, result, read_request = self._historical_result(read_work, cas, relay)
+            if (
+                result.get("output") != value
+                or read_work.execution_capability != "device.state.read"
+                or read_work.target_resource_id != work.target_resource_id
+                or read_work.assigned_node != work.assigned_node
+                or read_request.plan_id != original.plan_id
+                or read_request.workflow_run_id != run.run_id
+                or read_request.subject_id != original.subject_id
+                or artifact.metadata.get("observation_work_id") != acquisition_id
+                or artifact.metadata.get("observation_id") != observation.observation_id
+                or any(
+                    "sha256:" + item.removeprefix("artifact://sha256/")
+                    not in artifact.depends_on
+                    for item in read_work.evidence_refs
+                )
+            ):
+                raise ValueError("Original independent Observation provenance changed")
+            observations.append((artifact, observation))
+        matching = [
+            item for item in verifications if item[1] == work.effect_verification
+        ]
+        selected = [
+            item
+            for item in observations
+            if item[1].observation_id
+            in work.effect_verification.get("observation_ids", ())
+        ]
+        if len(matching) != 1 or not selected:
+            raise ValueError(
+                "Original Observation or EffectVerification proof is unavailable"
+            )
+        artifact, recorded = matching[0]
+        if any(item.digest not in artifact.depends_on for item, _ in selected):
+            raise ValueError("Original verification CAS dependencies changed")
+        operation = replace(
+            operation, observation_request_id=selected[-1][1].metadata["acquisition_id"]
+        )
+        verified = json.loads(
+            json.dumps(
+                EffectVerifier()
+                .verify(operation, receipt, [item for _, item in selected])
+                .to_dict()
+            )
+        )
+        # Re-evaluation creates a new identity/time; compare the original CAS
+        # record exactly above, then compare only the deterministic semantics.
+        if recorded.get("verdict") != "MATCH" or any(
+            recorded.get(key) != value
+            for key, value in verified.items()
+            if key not in {"verification_id", "verified_at"}
+        ):
+            raise ValueError("Original EffectVerification semantics changed")
+
     def _projection(self, automation_id, run_id, *, provider=None):
         run = self.store.automation_run(automation_id, run_id)
         works = DistributedWorkStore(self.controller_state)
         records = []
         cas = ContentAddressedArtifactStore(self.controller_state / "artifacts")
-        for output in run.outputs.values():
+        definition = self.store.get_definition(run.workflow_id, run.workflow_version)
+        steps = {step.step_id: step for step in definition.steps}
+        relay = None
+        for step_id, output in run.outputs.items():
             if not isinstance(output, dict) or not output.get("work_id"):
                 continue
             work = works.get(output["work_id"])
@@ -556,6 +807,26 @@ class AutomationConsumer:
                     "sha256:" + ref.removeprefix("artifact://sha256/")
                 ):
                     raise ArtifactError("Original Automation Artifact integrity failed")
+            if work.state is DistributedWorkState.COMMITTED:
+                from nous_runtime.node_runtime.relay import NodeRelayServer
+
+                try:
+                    if relay is None:
+                        relay = NodeRelayServer(state_dir=self.controller_state)
+                    self._historical_work_evidence(
+                        run, steps[step_id], work, cas, relay, works
+                    )
+                except (
+                    OSError,
+                    KeyError,
+                    TypeError,
+                    ValueError,
+                    PermissionError,
+                    RuntimeError,
+                ) as exc:
+                    raise WorkflowBindingError(
+                        "Original Automation semantic evidence is unavailable or changed"
+                    ) from exc
             records.append(work.to_dict())
         if provider is None:
             from nous_runtime.reality.preview import DEFINITION

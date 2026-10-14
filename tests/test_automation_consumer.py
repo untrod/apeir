@@ -959,6 +959,7 @@ def test_terminal_evidence_requires_exact_original_work_and_authorization_proven
     binding, pending = prepare(consumer)
     approve(consumer, pending)
     completed = consumer.resume(binding["id"], pending["run_id"])
+    original_request_reader = consumer.gate.get_operation_request
     work = deepcopy(completed["works"][-1])
     components = create_automation_simulation_components(
         consumer.root, governance=consumer.gate
@@ -1015,6 +1016,11 @@ def test_terminal_evidence_requires_exact_original_work_and_authorization_proven
             )
         assert not consumer._terminal_journals_match(components, [work])
         assert components.server._server is None
+        # The projection now checks Governance evidence too. Restore the real
+        # reader after the deliberately changed preflight request was rejected.
+        monkeypatch.setattr(
+            consumer.gate, "get_operation_request", original_request_reader
+        )
         assert (
             consumer._projection(binding["id"], pending["run_id"])["effect_counts"][
                 work["work_id"]
@@ -1023,3 +1029,198 @@ def test_terminal_evidence_requires_exact_original_work_and_authorization_proven
         )
     finally:
         asyncio.run(components.close())
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        "expected-effect",
+        "capability",
+        "device",
+        "plan",
+        "step",
+        "operation",
+        "inputs",
+        "receipt",
+        "verification-device",
+        "verification-observations",
+        "verification-receipt",
+        "verification-verdict",
+        "verification-proof",
+        "observation-proof",
+    ],
+)
+def test_committed_history_rejects_changed_original_semantic_evidence(
+    consumer, changed
+):
+    binding, pending = prepare(consumer)
+    approve(consumer, pending)
+    completed = consumer.resume(binding["id"], pending["run_id"])
+    work_id = completed["outputs"]["mutate"]["work_id"]
+    path = consumer.controller_state / "distributed-works.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    work = document["works"][work_id]
+    if changed == "expected-effect":
+        work["expected_effect"] = {"firmware_version": "9.9.9"}
+    elif changed == "capability":
+        work["execution_capability"] = "device.state.read"
+    elif changed == "device":
+        work["target_resource_id"] = "another-device"
+    elif changed in {"plan", "step"}:
+        work["provenance"]["plan_id" if changed == "plan" else "workflow_step_id"] = (
+            "other"
+        )
+    elif changed == "operation":
+        work["execution_arguments"]["operation"]["operation_id"] = "other"
+    elif changed == "inputs":
+        work["input_artifacts"] = []
+    elif changed == "receipt":
+        work["result_summary"]["remote_execution_receipt"]["node_id"] = "other"
+    elif changed.startswith("verification-"):
+        field = changed.removeprefix("verification-")
+        if field == "proof":
+            cas = ContentAddressedArtifactStore(consumer.controller_state / "artifacts")
+            work["evidence_refs"] = [
+                ref
+                for ref in work["evidence_refs"]
+                if cas.get(
+                    "sha256:" + ref.removeprefix("artifact://sha256/")
+                ).media_type
+                != "application/vnd.apeir.effect-verification+json"
+            ]
+        else:
+            key = {
+                "device": "device_id",
+                "observations": "observation_ids",
+                "receipt": "receipt_digest",
+                "verdict": "verdict",
+            }[field]
+            work["effect_verification"][key] = (
+                ["other"]
+                if key == "observation_ids"
+                else "UNKNOWN"
+                if key == "verdict"
+                else "other"
+            )
+    else:
+        cas = ContentAddressedArtifactStore(consumer.controller_state / "artifacts")
+        work["evidence_refs"] = [
+            ref
+            for ref in work["evidence_refs"]
+            if cas.get("sha256:" + ref.removeprefix("artifact://sha256/")).media_type
+            != "application/vnd.apeir.observation+json"
+        ]
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(WorkflowBindingError):
+        AutomationConsumer(consumer.root, gate=consumer.gate).history(binding["id"])
+    assert completed["effect_counts"][work_id] == 1
+
+
+def test_committed_history_after_grant_revocation_reads_original_evidence_only(
+    consumer, monkeypatch
+):
+    from nous_runtime.reality.preview import _DemoComponents
+
+    binding, pending = prepare(consumer)
+    approve(consumer, pending)
+    completed = consumer.resume(binding["id"], pending["run_id"])
+    work_id = completed["outputs"]["mutate"]["work_id"]
+    authorization_id = completed["works"][-1]["execution_arguments"]["authorization_id"]
+    with consumer.gate.store.operation_transaction() as db:
+        grant_id = db.execute(
+            "SELECT lease_id FROM governance_leases WHERE proposal_hash=?",
+            (authorization_id,),
+        ).fetchone()[0]
+    consumer.gate.revoke_operation_authority(
+        authorization_id, _build_context(), grant_id=grant_id
+    )
+    monkeypatch.setattr(
+        _DemoComponents, "start", lambda _: pytest.fail("history cannot open transport")
+    )
+    monkeypatch.setattr(
+        consumer.gate,
+        "evaluate_operation",
+        lambda *_: pytest.fail("history is not new execution admission"),
+    )
+    history = AutomationConsumer(consumer.root, gate=consumer.gate).history(
+        binding["id"]
+    )
+    result = history["history"][0]
+    assert result["state"] == "completed"
+    assert result["works"][-1]["state"] == "COMMITTED"
+    assert result["works"][-1]["effect_verification"]["verdict"] == "MATCH"
+    assert result["effect_counts"][work_id] == 1
+
+
+@pytest.mark.parametrize("proof", ["verification", "observation"])
+def test_history_rejects_rehashed_semantic_proof_with_valid_cas_bytes(consumer, proof):
+    binding, pending = prepare(consumer)
+    approve(consumer, pending)
+    completed = consumer.resume(binding["id"], pending["run_id"])
+    work_id = completed["outputs"]["mutate"]["work_id"]
+    path = consumer.controller_state / "distributed-works.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    work = document["works"][work_id]
+    cas = ContentAddressedArtifactStore(consumer.controller_state / "artifacts")
+    media_type = (
+        "application/vnd.apeir.effect-verification+json"
+        if proof == "verification"
+        else "application/vnd.apeir.observation+json"
+    )
+    ref = next(
+        ref
+        for ref in work["evidence_refs"]
+        if cas.get("sha256:" + ref.removeprefix("artifact://sha256/")).media_type
+        == media_type
+    )
+    artifact = cas.get("sha256:" + ref.removeprefix("artifact://sha256/"))
+    original_bytes = cas.resolve(artifact.digest, verify=True).read_bytes()
+    value = json.loads(original_bytes)
+    if proof == "verification":
+        value["device_id"] = "other-device"
+        work["effect_verification"] = value
+    else:
+        value["data"]["state"]["firmware_version"] = "9.9.9"
+    stored = cas.store_bytes(
+        json.dumps(value).encode(),
+        artifact_type=artifact.artifact_type,
+        name=artifact.name,
+        media_type=artifact.media_type,
+        produced_by=artifact.produced_by,
+        depends_on=artifact.depends_on,
+        derived_from=artifact.derived_from,
+        metadata=artifact.metadata,
+    )
+    digest = stored["artifact"]["digest"]
+    assert cas.verify(digest)
+    work["evidence_refs"][work["evidence_refs"].index(ref)] = (
+        "artifact://sha256/" + digest.removeprefix("sha256:")
+    )
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(WorkflowBindingError):
+        consumer.history(binding["id"])
+    assert cas.resolve(artifact.digest, verify=True).read_bytes() == original_bytes
+
+
+def test_history_retains_old_signed_evidence_without_transport_clock_freshness(
+    consumer, monkeypatch
+):
+    from nous_runtime.node_runtime import protocol
+
+    binding, pending = prepare(consumer)
+    approve(consumer, pending)
+    completed = consumer.resume(binding["id"], pending["run_id"])
+    snapshots = {
+        path: path.read_bytes() for path in consumer.controller_state.rglob("*.json")
+    }
+
+    class LaterClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.now(tz) + timedelta(days=2)
+
+    monkeypatch.setattr(protocol, "datetime", LaterClock)
+    result = consumer.history(binding["id"])["history"][0]
+    assert result["works"] == completed["works"]
+    assert result["effect_counts"] == completed["effect_counts"]
+    assert all(path.read_bytes() == value for path, value in snapshots.items())
