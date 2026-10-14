@@ -2,6 +2,7 @@
 
 import os
 import sys
+import time
 
 import pytest
 
@@ -10,25 +11,39 @@ from nous_runtime.tools.process_session import ProcessSessionStore
 
 
 @pytest.mark.parametrize("missed_probe", [1, 2])
+@pytest.mark.parametrize("missed_cleanup_probe", [False, True])
 def test_startup_reobserves_original_identity_without_spawning_again(
-    tmp_path, monkeypatch, missed_probe
+    tmp_path, monkeypatch, missed_probe, missed_cleanup_probe
 ):
     original_launch = process_session.ProcessSandboxHost.launch
     original_matches = process_session.process_identity_matches
+    original_write = process_session._atomic_json
     launches, probes = [], []
+    controls = []
+    cleanup_miss_pending = False
 
     def launch(spec):
         launches.append(spec)
         return original_launch(spec)
 
     def matches(identity):
+        nonlocal cleanup_miss_pending
         probes.append(dict(identity))
+        if cleanup_miss_pending:
+            cleanup_miss_pending = False
+            return False
         if len(probes) == missed_probe:
             return False
         return original_matches(identity)
 
+    def write(path, value):
+        original_write(path, value)
+        if path.parent.name == "control":
+            controls.append(dict(value))
+
     monkeypatch.setattr(process_session.ProcessSandboxHost, "launch", launch)
     monkeypatch.setattr(process_session, "process_identity_matches", matches)
+    monkeypatch.setattr(process_session, "_atomic_json", write)
     store = ProcessSessionStore(tmp_path)
     result = store.start(
         [sys.executable, "-u", "-c", "import sys; sys.stdin.readline()"],
@@ -55,9 +70,12 @@ def test_startup_reobserves_original_identity_without_spawning_again(
     finally:
         # A failed assertion must not leave a verified original test process.
         # Unknown identities remain non-controllable; never kill a bare PID.
-        current = store.status(result["session_id"])
-        if current["state"] == "RUNNING":
-            store.kill(result["session_id"])
+        cleanup_miss_pending = missed_cleanup_probe
+        _cleanup_original_session(store, result["session_id"])
+        assert len(launches) == 1
+        assert len(controls) == 1
+        assert controls[0]["session_id"] == result["session_id"]
+        assert controls[0]["action"] == "kill"
 
 
 @pytest.mark.parametrize("unknown", ["identity-query", "host-binding"])
@@ -114,6 +132,110 @@ def test_startup_never_controls_or_replays_an_unproven_original_host(
         assert len(launches) == 1
     finally:
         monkeypatch.undo()
-        current = store.status(result["session_id"])
-        if current["state"] == "RUNNING":
-            store.kill(result["session_id"])
+        _cleanup_original_session(store, result["session_id"])
+
+
+def _cleanup_original_session(store, session_id):
+    """Reobserve a rejected control; never repeat an accepted/uncertain one."""
+    deadline = time.monotonic() + 5.0
+    accepted = False
+    while time.monotonic() < deadline:
+        if not accepted:
+            try:
+                store.kill(session_id)
+            except ValueError as exc:
+                current = store.status(session_id)
+                if current["state"] in process_session._TERMINAL_STATES:
+                    return current
+                # This exception is raised before a control file is written.
+                # Each next attempt still performs the original identity check.
+                if str(exc) != "process session is not running: RECOVERY_REQUIRED":
+                    raise
+            else:
+                accepted = True
+        current = store.status(session_id)
+        if current["state"] in process_session._TERMINAL_STATES:
+            return current
+        time.sleep(0.025)
+    raise AssertionError("Original process cleanup did not obtain terminal evidence")
+
+
+def test_cleanup_does_not_control_a_persistently_unverified_original(
+    tmp_path, monkeypatch
+):
+    original_launch = process_session.ProcessSandboxHost.launch
+    launches = []
+
+    def launch(spec):
+        launches.append(spec)
+        return original_launch(spec)
+
+    monkeypatch.setattr(process_session.ProcessSandboxHost, "launch", launch)
+    store = ProcessSessionStore(tmp_path)
+    result = store.start(
+        [sys.executable, "-u", "-c", "import sys; sys.stdin.readline()"],
+        cwd=tmp_path,
+        environment={
+            "PATH": os.defpath,
+            **({"SystemRoot": os.environ["SystemRoot"]} if os.name == "nt" else {}),
+        },
+        work_id="work-cleanup-identity-denial",
+        tool_call_id="call-cleanup-identity-denial",
+    )
+    try:
+        assert result["state"] == "RUNNING"
+        with monkeypatch.context() as fault:
+            fault.setattr(process_session, "process_identity_matches", lambda _: False)
+            with pytest.raises(AssertionError, match="terminal evidence"):
+                _cleanup_original_session(store, result["session_id"])
+            assert store.status(result["session_id"])["state"] == "RECOVERY_REQUIRED"
+            assert not list(
+                (store.root / result["session_id"] / "control").glob("*.json")
+            )
+            assert len(launches) == 1
+    finally:
+        _cleanup_original_session(store, result["session_id"])
+
+
+@pytest.mark.parametrize("failure", [RuntimeError, OSError])
+def test_cleanup_never_repeats_an_accepted_control_after_response_loss(
+    tmp_path, monkeypatch, failure
+):
+    store = ProcessSessionStore(tmp_path)
+    result = store.start(
+        [sys.executable, "-u", "-c", "import sys; sys.stdin.readline()"],
+        cwd=tmp_path,
+        environment={
+            "PATH": os.defpath,
+            **({"SystemRoot": os.environ["SystemRoot"]} if os.name == "nt" else {}),
+        },
+        work_id="work-cleanup-control-response-loss",
+        tool_call_id="call-cleanup-control-response-loss",
+    )
+    controls = []
+    original_kill = store.kill
+
+    def kill_then_lose_response(session_id):
+        controls.append(session_id)
+        original_kill(session_id)
+        raise failure("controlled loss after original control acceptance")
+
+    try:
+        assert result["state"] == "RUNNING"
+        with monkeypatch.context() as fault:
+            fault.setattr(store, "kill", kill_then_lose_response)
+            with pytest.raises(failure, match="after original control acceptance"):
+                _cleanup_original_session(store, result["session_id"])
+        assert controls == [result["session_id"]]
+    finally:
+        # If terminal publication lags, observe it; do not submit a new control.
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if (
+                store.status(result["session_id"])["state"]
+                in process_session._TERMINAL_STATES
+            ):
+                break
+            time.sleep(0.025)
+        else:
+            pytest.fail("Accepted original control has no terminal evidence")
