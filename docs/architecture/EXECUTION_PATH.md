@@ -218,6 +218,33 @@ Resume restores the latest Goal, Plan, observations, artifacts, and Agent
 checkpoint, then produces a new deliberation against the current workspace.
 The last requested tool action is not replayed automatically.
 
+Work result admission requires explicit, agreeing boolean `ok`, `success` or
+`passed` fields. Error, contradictory and unknown envelopes cannot become a
+successful observation or verification merely because the handler returned.
+Scalar payloads retain their data without an invented success flag. An ambiguous
+effect response or an exception after dispatch retains the original pending
+action for recovery; a recovery discovery flag cannot override invalid evidence.
+A completed failed write, execute or unknown tool response also retains recovery:
+failure alone cannot prove that no effect occurred. Only the selected host
+Workspace runtime and exact persisted original proposal/approval binding can
+establish the existing pre-effect proposal pause. Provider-returned hints cannot
+authorize a new attempt.
+Process recovery also requires the selected canonical ProcessSession owner and
+the original pending Work/action/invocation binding. The host-prepared command,
+workspace cwd and environment profile digests are persisted before dispatch;
+recovery compares them with the original session and host specification, then
+uses the existing process identity observation. A generic `found=true` response,
+another valid host for the same Work/action, or a missing legacy binding remains
+RECOVERY_REQUIRED. Recovery neither launches nor controls a process, and a
+changed Work checkpoint (including cancellation) stops continuation. This does
+not expose the currently unsupported `shell_start` tool or qualify a live PTY.
+Unplanned tool Work still passes the existing recorded-work completion gate.
+Coding verification uses current Plan evidence: tests and diff review must follow
+the latest recorded change, and a process started before it does not gain
+freshness from later polling. Test success requires EXITED with exact integer
+exit code zero. These records remain software evidence, not an independent
+Reality Observation or physical-effect commitment.
+
 Tool discovery is progressive:
 
 ```text

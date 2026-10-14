@@ -754,6 +754,159 @@ Agent/Workflow/workspace regression has **858 passed** (134.73 s). Counts overla
 Required new-source and resulting-main CI remain pending; native hashes and
 physical/remote-network acceptance retain their separate blockers.
 
+
+## CAS reader freshness correction — 2026-10-13
+
+Classification: **REUSE** the existing ContentAddressedArtifactStore, immutable
+objects, atomic index publication and error contract; **FIX** stale metadata on
+long-lived readers; **DEFER** cache optimization pending measurement. Independent
+store instances previously could publish an object that get/list/resolve/verify
+on an existing reader did not see. An already cached valid index also concealed
+corrupt persisted metadata and could still report verification success. Five
+pre-change cases fail under those controlled conditions.
+
+Readers now load the current authoritative index under the existing in-process
+guard. They observe atomic old-or-new publication without adding a file-lock
+nest or another index owner. Four publication and four corruption cases preserve
+the original object bytes, leave corrupt records unchanged, and require an
+Artifact error rather than guessed success. This adds filesystem reads; no
+latency or throughput improvement is claimed. Source/PR and resulting-main CI,
+native bytes and physical effects remain separate acceptance requirements.
+
+## Work result and coding evidence admission — 2026-10-13
+
+Read-only product audit starts at main `566b801`. **REUSE** the original Work,
+Agent invocation, ToolCatalog, ProcessSession, checkpoints and recorded-work
+verifier; **FIX** result admission and current coding evidence. No executor,
+verification authority, grant, Kernel or component lock is added or changed.
+An original Work receiving an error-only read-tool envelope completed with a
+successful observation and baseline verification. An error-only verifier also
+completed Work. Empty, truthy and contradictory result mappings had the same
+problem; scalar Catalog/Work responses invented a success flag. The original
+completion gate skipped verification for unplanned Work without explicit criteria.
+Recovery separately trusted a `found` flag rather than the original result.
+
+Admission now requires explicit agreeing boolean success fields, refusing
+errors, uncertainty and contradictory flags. Built-in Workspace, Git, Artifact,
+Skill, Web and ProcessSession producers already emit boolean `ok`. Custom or
+extension scalar/arbitrary mappings no longer prove success and must normalize
+through their existing adapter; boolean verifier responses remain supported.
+Unknown effect responses and post-dispatch exceptions retain their original
+pending action and fail closed across restart, without another effect. Recovery
+uses the same admission rule. Unplanned tool Work reuses the existing recorded-work
+verification; a pure explanation does not acquire mandatory coding criteria.
+
+The existing coding gate accepted tests and diff review from before a later
+patch or another Plan revision. Missing/null/coerced exit codes also qualified as
+successful tests. Current revision and recorded action ordering now fence these
+facts; a real ProcessSession's original Work/start sequence must follow the
+latest change, so polling an old test cannot manufacture freshness. Only exact
+integer-zero EXITED test evidence qualifies. Positive fixture evidence now carries
+its actual action ordering; original success and no-replay assertions remain.
+The reattachment fixture's goal now describes its actual process-state inspection;
+a separate negative proves RUNNING tests cannot complete original coding Work.
+
+Controlled contracts exercise complete original Work progression, real Artifact
+reader envelopes, boolean verifier compatibility, scalar Catalog results,
+ambiguous effects/restart, recovery discovery, test/diff freshness and exact exit
+codes. Registered fake sensitive material remains absent from durable state after
+an effect-then-exception result. Evidence uses fake seams, not live models, real
+PTY/build execution, native Windows, IdP or physical hardware. Their independent
+qualification blockers remain unchanged. Final local checks and source/main CI
+must be reported separately; this repair does not certify overall product PASS.
+
+Initial controlled suite on original `566b801`: **73 failed, 14 passed**; the same
+contracts on the corrected tree: **87 passed** on Python 3.12 and **87 passed**
+on Python 3.10. Affected Work/Agent/Governance/Catalog/built-in tools/Chat:
+**498 passed, 1 skipped** (13.74 s). Repository contracts: **282 passed**.
+Counts overlap. Changed-file Ruff/format/compile and diff checks pass; current
+Markdown links (**235 files**), document/comment hygiene pass. Security retains
+**0 HIGH / 3 unchanged MEDIUM** findings. No full regression, live process sandbox,
+Provider account, physical or native test was performed by this bounded repair.
+Source/PR and resulting-main CI remain prerequisites for integration acceptance.
+
+Root review on Usage main `508504a` exposed another concrete replay defect:
+a non-idempotent fake effect increments its state, then returns explicit boolean
+failure. Both original `566b801` and the initial corrected candidate invoke it
+again during automatic Work reanalysis: two effects for write, execute and unknown
+handlers. Real Workspace/runtime-capability and ProcessSession adapters also
+collapse pre-dispatch and post-effect failures into failed response envelopes;
+a boolean failure does not establish that no effect occurred.
+
+Completed failures for these effect classes now preserve the original pending
+operation and require recovery. The repaired probe records one effect and restart
+invokes neither handler nor model. This deliberately blocks genuine pre-dispatch
+failures conservatively; Provider-returned `no_effect` hints cannot authorize
+retry. The existing original proposal pause requires the selected host Workspace
+runtime and current canonical Work/Plan/manifest/authorization/approval binding,
+with the original journal still PROPOSED and approval PENDING. Forged proposal
+fields cannot substitute for that owner. Read failures and known Web GET behavior
+retain their existing contracts. The original no-replay proposal recovery,
+human approval and MATCH-only application remain exercised.
+
+Four new initial-candidate contracts retained **4 failures**. An old generic
+check fixture now declares its actual read-only semantics while preserving its
+replan and completion assertions. The old failed-patch fixture's assumption of
+safe automatic retry is replaced by recovery, unchanged source revision and no
+second mutation or model call after restart. Independent same-Plan verification
+probing found no stale success reuse: the verifier runs again after the later
+mutation and its failure blocks completion. Incoming Usage diagnostic tests
+continue to distinguish missing/null counters from explicitly reported zero.
+
+Final combined affected Work/Agent/Governance/Catalog/built-in tools/Chat plus
+proposal/API selection on `508504a`: **551 passed, 1 skipped** (16.91 s).
+Work/Catalog selection: **180 passed**. Python 3.10 result admission and original
+proposal recovery: **101 passed**. These counts overlap earlier evidence.
+No new full regression or external qualification was run; source/PR and
+resulting-main CI remain separate prerequisites.
+
+Review on 2026-10-14 retained a further concrete failed-effect recovery probe:
+after the original fake shell effect returned failure, a generic
+`found=true/state=RUNNING` response reopened Work and produced a second effect.
+The original log remains preserved. Recovery now selects the canonical bound
+ProcessSession owner, validates the persisted original Work/action/invocation
+and prepared command/cwd/environment digests, revalidates the host specification
+and uses the existing original process identity observation. A matching Work and
+action alone cannot substitute a different command or profile. Work checkpoint
+changes during observation, including cancellation, stop continuation.
+Generic recovery responses and missing legacy descriptors fail closed; this
+intentional compatibility correction cannot reconstruct an unrecorded binding.
+
+The controlled repaired Work exercises one original fake effect, retains the
+original pending action through restart, and calls neither the forged recovery
+executor nor the model. Canonical positive and negative fixtures use persisted
+original session/spec/host records with an explicit identity seam; they reject
+different Work/action/session/invocation/arguments/command/profile/cwd and lost
+helper/target identity. Fixtures explicitly fail if recovery launches or controls
+a host. These are software contracts, not a live process, PTY, build/test,
+Provider-account or physical qualification; `shell_start` remains unsupported
+by the public ProcessSession runtime. No Kernel or component-lock changes occur.
+
+Final candidate on base `508504a` has **561 passed, 1 skipped** across the affected
+Work/Agent/Governance/Catalog/built-in tools/Chat/workspace proposal/API selection.
+Work/Catalog has **195 passed**; Python 3.10 original Work/result/proposal recovery
+has **139 passed**; repository contracts have **286 passed**. Counts overlap.
+All repository Ruff, changed-file formatting, compile, documentation/link,
+comment/identity/git hygiene and version checks pass. Security retains **0 HIGH /
+3 unchanged MEDIUM** findings; component-lock contracts pass **3 tests**, while
+actual native hash verification remains BLOCKED by the missing locked Windows
+`nousd` binary. Required source and resulting-main CI remain pending integration.
+
+Directly affected original ProcessSession and startup contracts were additionally
+executed in the supported initialized Linux harness: **15 passed** on Python 3.12
+(19.31 s), and **15 passed** on Python 3.10 (15.29 s). These execute real disposable
+host processes and preserve the existing identity, crash-recovery and orphan
+cleanup assertions. The harness uses the previously pinned Python image,
+`--init`, PID64, CPU2/RAM2GiB, network disabled, read-only source/rootfs, dropped
+capabilities and no new privileges; both containers were removed after exit.
+An initial candidate regression dropped `state` from an unprovable-spec recovery
+response. Its unchanged original test failed with `KeyError`; the failure was
+retained, and the corrected response preserves original diagnostic identifiers
+while explicitly denying recovery/control/replay. Invalid selectors do not
+change another Work's journal. This bounded Linux contract run does not qualify
+public PTY, Windows installed Desktop, remote Nodes or weaker execution isolation.
+
+
 ## Execution input and output boundary review — 2026-10-13
 
 **REUSE** existing Environment validation, OCI Provider, terminal conversation

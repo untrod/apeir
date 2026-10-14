@@ -52,6 +52,12 @@ index and pin state under that same lock, preserving another instance's protecte
 objects and transitive evidence dependencies. Corrupt pin state blocks these
 mutations. Object bytes still require digest verification.
 
+Long-lived CAS readers also reload the existing atomically published index before
+get/list/resolve/verify. Evidence published by another store instance is visible
+without recreating the reader; corrupt current metadata raises an Artifact error
+instead of letting an older cache certify integrity. Readers do not rewrite or
+repair that evidence. This adds index reads, not a second cache or state owner.
+
 ## Admission, durability and commitment
 
 1. Bind the current authenticated actor, Work, Operation, Node, Capability,

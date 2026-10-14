@@ -291,3 +291,45 @@ def test_fetch_recursively_caches_artifact_graph(tmp_path: Path):
 
     assert cache.verify(source)
     assert cache.verify(binary)
+
+
+@pytest.mark.parametrize("operation", ["get", "list", "verify", "resolve"])
+def test_existing_reader_observes_evidence_published_by_another_store(
+    tmp_path, operation
+):
+    reader = ContentAddressedArtifactStore(tmp_path)
+    writer = ContentAddressedArtifactStore(tmp_path)
+    published = writer.store_bytes(
+        b"fresh independent evidence", artifact_type="evidence", name="fresh"
+    )
+    digest = published["artifact"]["digest"]
+    if operation == "get":
+        assert reader.get(digest).digest == digest
+    elif operation == "list":
+        assert [item.digest for item in reader.list()] == [digest]
+    elif operation == "verify":
+        assert reader.verify(digest)
+    else:
+        assert reader.resolve(digest).read_bytes() == b"fresh independent evidence"
+
+
+@pytest.mark.parametrize("operation", ["get", "list", "verify", "resolve"])
+def test_persisted_index_corruption_cannot_be_hidden_by_reader_cache(
+    tmp_path, operation
+):
+    writer = ContentAddressedArtifactStore(tmp_path)
+    original = writer.store_bytes(
+        b"original", artifact_type="evidence", name="original"
+    )
+    reader = ContentAddressedArtifactStore(tmp_path)
+    digest = original["artifact"]["digest"]
+    assert reader.verify(digest)
+    damaged = '{"sha256:invalid": {}}'
+    writer.index_path.write_text(damaged, encoding="utf-8")
+    with pytest.raises(ArtifactError):
+        if operation == "list":
+            reader.list()
+        else:
+            getattr(reader, operation)(digest)
+    assert writer.index_path.read_text(encoding="utf-8") == damaged
+    assert writer._object_path(digest).read_bytes() == b"original"
