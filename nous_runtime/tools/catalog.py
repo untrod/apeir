@@ -170,10 +170,17 @@ class ToolCatalog:
         }
 
     def require(self, tool_id: str) -> ToolDefinition:
+        if tool_id == CATALOG_EXPAND_TOOL:
+            return self._expand_definition()
         entry = self._entries.get(str(tool_id or ""))
         if entry is None:
             raise KeyError(tool_id)
         return entry.definition
+
+    def executor_owner(self, tool_id: str) -> Any:
+        """Return the host-selected bound runtime, never model-supplied metadata."""
+        entry = self._entries.get(str(tool_id or ""))
+        return getattr(entry.executor, "__self__", None) if entry else None
 
     def specifications(self) -> tuple[dict[str, Any], ...]:
         """Return full schemas for invocation-boundary capability binding."""
@@ -210,7 +217,8 @@ class ToolCatalog:
             }
         if isinstance(value, Mapping):
             return dict(value)
-        return {"ok": True, "result": value}
+        # A returned payload alone does not establish the executor's outcome.
+        return {"result": value}
 
     @staticmethod
     def _expand_definition() -> ToolDefinition:
