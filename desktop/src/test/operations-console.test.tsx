@@ -282,7 +282,7 @@ describe("Secure Node onboarding", () => {
 });
 
 describe("Controlled Skill Center", () => {
-  const entry = { skill_key: "catalog:review-skill:source", skill_id: "review-skill", name: "Review Skill", description: "Inspect bounded evidence", version: "1.0.0", digest: "sha256:" + "a".repeat(64), provider: "catalog", source: "/reviewed/catalog/review-skill", risk: "high", trust: "unverified", requested_capabilities: ["device.state.read"], dependencies: [], compatibility: "linux", installable: true, enabled: true, installed: false, artifact_ref: "" };
+  const entry = { skill_key: "catalog:review-skill:source", skill_id: "review-skill", name: "Review Skill", description: "Inspect bounded evidence", version: "1.0.0", digest: "sha256:" + "a".repeat(64), provider: "catalog", source: "/reviewed/catalog/review-skill", catalog_source: "/reviewed/catalog", package_source: "/reviewed/catalog/review-skill", risk: "high", trust: "unverified", requested_capabilities: ["device.state.read"], dependencies: [], compatibility: "linux", installable: true, enabled: true, installed: false, artifact_ref: "" };
   beforeEach(() => { vi.stubGlobal("EventSource", class { close() {} addEventListener() {} }); });
   it("requires exact-package review and submits existing human nonce actions", async () => {
     let skills = [entry];
@@ -309,7 +309,7 @@ describe("Controlled Skill Center", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed this exact/ }));
     fireEvent.click(install);
     await screen.findByRole("button", { name: "installed:review-skill" });
-    expect(requests[0]).toEqual({ kind: "skills", action: "install", target_id: entry.skill_key, version: entry.version, digest: entry.digest });
+    expect(requests[0]).toEqual({ kind: "skills", action: "install", target_id: entry.skill_key, version: entry.version, digest: entry.digest, catalog_source: entry.catalog_source, package_source: entry.package_source });
     fireEvent.click(screen.getByRole("button", { name: "installed:review-skill" }));
     fireEvent.click(screen.getByRole("button", { name: "Load instructions" }));
     expect(await screen.findByLabelText("Loaded Skill instructions")).toHaveTextContent("never self-approve");
@@ -329,4 +329,55 @@ describe("Controlled Skill Center", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Catalog digest changed");
     expect(screen.queryByRole("button", { name: "installed:review-skill" })).not.toBeInTheDocument();
   });
+  it("adds, refreshes and removes exact catalogs through the original nonce body", async () => {
+    const source = "https://catalog.example.test/catalog.json";
+    const requests: { url: string; body?: Record<string, unknown> }[] = [];
+    let catalogs: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string, options: RequestInit = {}) => {
+      const body = options.body ? JSON.parse(String(options.body)) : undefined;
+      requests.push({ url, body });
+      if (url.endsWith("/operations/actions")) {
+        catalogs = body.action === "catalog_remove" ? [] : [{ source, remote: true }];
+      }
+      const data = url.endsWith("/human/session") ? { subject_id: "fake-human", expires_at: Date.now() / 1000 + 300 } : url.endsWith("/human/nonce") ? { nonce: "catalog-body-nonce" } : { ...fixture, skills: [], skill_catalogs: catalogs };
+      return { ok: true, json: async () => ({ ok: true, data }) };
+    }));
+    render(<OperationsConsole />);
+    await screen.findByText("Human: fake-human");
+    fireEvent.click(screen.getByRole("button", { name: /^skills/ }));
+    const add = screen.getByRole("button", { name: "Add catalog" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Catalog HTTPS URL" }), { target: { value: source } });
+    expect(add).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "I confirm this exact catalog URL." }));
+    fireEvent.click(add);
+    await screen.findByRole("button", { name: "Refresh catalog" });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh catalog" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove catalog" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "Remove catalog" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Refresh catalog" })).not.toBeInTheDocument());
+    const actions = requests.filter(request => request.url.endsWith("/operations/actions"));
+    expect(actions.map(request => request.body?.action)).toEqual(["catalog_add", "catalog_refresh", "catalog_remove"]);
+    const nonces = requests.filter(request => request.url.endsWith("/human/nonce"));
+    actions.forEach((request, index) => {
+      expect(request.body).toEqual({ kind: "skills", action: request.body?.action, target_id: source, catalog_source: source });
+      expect(nonces[index].body?.body).toEqual(request.body);
+    });
+    expect(requests.every(request => !request.url.startsWith(source))).toBe(true);
+    expect(JSON.stringify(localStorage) + JSON.stringify(sessionStorage)).not.toContain(source);
+  });
+  it("clears the package review when the backend package URL changes with the same digest", async () => {
+    let skill = { ...entry, source: "https://packages.example.test/old.zip", package_source: "https://packages.example.test/old.zip", catalog_source: "https://catalog.example.test/catalog.json" };
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string) => ({ ok: true, json: async () => ({ ok: true, data: url.endsWith("/human/session") ? { subject_id: "fake-human", expires_at: Date.now() / 1000 + 300 } : { ...fixture, skills: [skill] } }) })));
+    render(<OperationsConsole />);
+    await screen.findByText("Human: fake-human");
+    fireEvent.click(screen.getByRole("button", { name: /^skills/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Review package" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed this exact/ }));
+    expect(screen.getByRole("button", { name: "Install reviewed package" })).not.toBeDisabled();
+    skill = { ...skill, source: "https://packages.example.test/new.zip", package_source: "https://packages.example.test/new.zip" };
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Install reviewed package" })).toBeDisabled());
+    expect(screen.getByRole("checkbox", { name: /I reviewed this exact/ })).not.toBeChecked();
+  });
+
 });

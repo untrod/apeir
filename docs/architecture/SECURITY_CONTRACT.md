@@ -571,15 +571,36 @@ existing authority checks; acquisition does not issue a grant.
 
 Skill catalog JSON files are bounded to 1 MiB, matching the existing HTTPS metadata
 fetch limit, to 512 entries and 32 registered sources; nonregular local files are rejected. This bounds metadata reads;
-it does not establish trust in a catalog or enable remote package installation.
-Remote catalogs remain discovery metadata, not authority or executable content.
-The source Operations Console now manages registered local catalogs through the
-existing human session, exact-body nonce and Governance permission checks. Review
-binds the exact skill ID, version, digest and declared capabilities; changed or
-ambiguous entries fail closed. Package paths must remain under the registered
-catalog directory. UI/API callers cannot register arbitrary catalogs or URLs.
-Passive snapshots never fetch remote catalogs. Remote package acquisition remains
-unqualified and is rejected, not delegated to an unrestricted downloader.
+it does not establish trust in a catalog. Remote catalogs remain discovery
+metadata, not authority or executable content. The existing OperationsPlane
+Skills API and Desktop view expose explicit remote catalog add/refresh/remove
+through the current trusted human session, original exact-body nonce and
+Governance permission checks. Catalog administration requires
+`governance.approve` and `control.skill_manage` for `skill-catalog:<exact source>`.
+Acquisition additionally requires an explicit current PermissionEngine decision
+for `tool.web_fetch` on the exact catalog URL. Installing requires the existing
+`skill:<skill ID>` human administration permission and separate current
+`tool.web_fetch` decisions on both the original registered catalog and reviewed
+package URL. No policy or grant is created from a catalog, installation or model.
+
+Review binds the exact catalog URL, package_source, skill ID, version, normalized
+package-tree digest and declared capabilities. Both source URLs remain in the
+original nonce body. Changed or ambiguous entries fail closed. The remote entry
+is reacquired before package acquisition and the cached review, catalog
+membership, current human/session and both URL permissions are checked again
+before publication. Refreshing or removing a catalog during acquisition prevents
+publication under an obsolete review. Local package paths remain under their
+registered catalog directory. Passive list/search/Operations snapshots read
+cached metadata and never fetch remote catalogs.
+
+Remote packages use bounded acquisition-only WebGateway bytes, verified TLS,
+public-address admission, no redirects or retries, a 1 MiB catalog limit and a
+5 MiB archive limit. These transient bytes do not become Research text or raw
+Source/Snapshot/Artifact/Event evidence. The existing inspected source-bundle CAS
+and Extension publication path retain normalized package provenance. ZIP
+transport hash, normalized package-tree digest and CAS bundle digest are distinct.
+Terminal Extension revocation and concurrent index writers share the existing
+publication fence; stale installs/admissions cannot revive a revoked package.
 
 The Registry snapshots bounded content and writes CAS evidence before Extension
 publication. The CAS reference is bound into the existing Extension index/lock;
@@ -600,6 +621,18 @@ Sandboxed Chromium using real Runtime HTTP/CAS and a cryptographic fake IdP exer
 review/install/instruction-load/disable/enable/remove, along with live Node pairing
 and revocation. These records qualify local source software, not installed Windows,
 real remote identity, remote packages, device Operations or physical hardware.
+Controlled remote API software qualification additionally exercises **28 actual
+owned HTTP / child-process HTTPS cases**: current canonical URL permission,
+original nonce bindings/replay, service denial, stale catalog/package review,
+post-acquisition human/control/network revocation, failed publication, cached
+reads and owner reload with terminal revocation. Affected regressions have
+**969 passed, 17 skipped**; Desktop lint/typecheck/build and **137 tests in 31 files**
+pass. The initial combined run retained three real destination-rate-limit failures
+from reused fake hostnames; each isolated HTTP fixture now starts a fresh canonical
+limiter with the unchanged default budget. The local TLS routing seam and
+cryptographic fake identity prove only the controlled software path. Real
+publisher/signature trust, production catalogs, deployed human identity, installed
+native Desktop, executable Skills, models and hardware remain unqualified.
 See the [public Skill example](../../examples/hello_skill/README.md) for commands.
 
 ### Signed one-time Node enrollment

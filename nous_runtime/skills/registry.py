@@ -24,6 +24,7 @@ from nous_runtime.extensions.sources import (
 )
 from nous_runtime.locking import file_lock
 from nous_runtime.skills.models import SkillRecord
+from nous_runtime.skills.remote import require_remote_url
 
 
 _STATE_SCHEMA = "apeir.skill-registry-state/v1"
@@ -225,8 +226,18 @@ class SkillRegistry:
             )
             artifact_ref = str(artifact["artifact"]["digest"])
             store.pin(artifact_ref, reason=f"installed-skill:{manifest.extension_id}")
+
+            def revalidate_publication():
+                if before_publish is not None:
+                    before_publish()
+                current = self.extensions.get_record(manifest.extension_id)
+                if current and current.get("state") == "revoked":
+                    raise PermissionError(
+                        "Skill Extension was revoked during acquisition"
+                    )
+
             installed = self.extensions.install(
-                staged, artifact_ref=artifact_ref, before_publish=before_publish
+                staged, artifact_ref=artifact_ref, before_publish=revalidate_publication
             )
         # Existing enable/disable state survives updates. New Skills have the
         # existing enabled default; neither case grants execution permission.
@@ -246,15 +257,14 @@ class SkillRegistry:
         version: str,
         digest: str,
         before_publish: Callable[[], None] | None = None,
+        authorize_remote: Callable[[str], None] | None = None,
+        package_source: str = "",
     ) -> SkillRecord:
         if catalog_source not in self.catalogs():
             raise PermissionError(
                 "Catalog must first be registered by the workspace owner"
             )
-        if catalog_source.startswith("https://"):
-            raise ValueError(
-                "Remote package acquisition is not qualified; use a reviewed local catalog"
-            )
+        remote = "://" in catalog_source
         candidates = [
             item
             for item in self.catalog_records(local_only=True)
@@ -264,14 +274,68 @@ class SkillRegistry:
         if len(candidates) != 1:
             raise ValueError("Catalog entry is missing or ambiguous")
         entry = candidates[0]
-        if "://" in entry.source:
-            raise ValueError("Remote package acquisition is not qualified")
         if (
             entry.version != version
             or entry.digest != digest
             or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest)
         ):
             raise ValueError("Catalog version or digest changed; review it again")
+        if remote:
+            if package_source != entry.source:
+                raise ValueError("Skill package source changed; review it again")
+            require_remote_url(catalog_source)
+            require_remote_url(package_source)
+            self._require_remote_authority(before_publish, authorize_remote)
+            assert before_publish is not None and authorize_remote is not None
+
+            def revalidate():
+                if catalog_source not in self.catalogs():
+                    raise PermissionError(
+                        "Skill catalog was removed during acquisition"
+                    )
+                before_publish()
+                authorize_remote(catalog_source)
+                authorize_remote(package_source)
+                current = [
+                    item
+                    for item in self.catalog_records(local_only=True)
+                    if item.skill_id == skill_id
+                    and item.metadata.get("catalog_source") == catalog_source
+                ]
+                if current != [entry]:
+                    raise PermissionError(
+                        "Skill catalog review changed during acquisition"
+                    )
+
+            revalidate()
+            # Reacquire the original catalog; a cached review is never a network
+            # or package permission and cannot hide a changed remote binding.
+            live = self._read_catalog(catalog_source, allow_remote=True)
+            live_entries = [
+                _catalog_record(raw, catalog_source)
+                for raw in live["skills"]
+                if isinstance(raw, Mapping)
+                and str(raw.get("name") or raw.get("skill_id") or "").strip()
+                == skill_id
+            ]
+            if len(live_entries) != 1 or live_entries[0] != entry:
+                raise ValueError("Skill catalog entry changed; review it again")
+            revalidate()
+            content = self._remote_bytes(package_source, max_bytes=5 * 1024 * 1024)
+            with tempfile.TemporaryDirectory(prefix="apeir-remote-skill-") as temporary:
+                archive = Path(temporary) / "package.zip"
+                archive.write_bytes(content)
+                with file_lock(self.state_path.with_suffix(".lock")):
+                    try:
+                        return self.install(
+                            archive, expected=entry, before_publish=revalidate
+                        )
+                    except zipfile.BadZipFile as exc:
+                        raise ValueError(
+                            "Remote Skill package is not a valid ZIP"
+                        ) from exc
+        if "://" in entry.source:
+            raise ValueError("Remote packages require a registered remote catalog")
         catalog_path = Path(catalog_source).expanduser().resolve()
         base = catalog_path if catalog_path.is_dir() else catalog_path.parent
         source = Path(entry.source).expanduser()
@@ -329,27 +393,53 @@ class SkillRegistry:
     def disable(self, skill_id: str) -> SkillRecord:
         return self._set_enabled(skill_id, False)
 
-    def add_catalog(self, source: str) -> None:
-        source = str(source or "").strip()
+    def add_catalog(
+        self,
+        source: str,
+        *,
+        before_publish: Callable[[], None] | None = None,
+        authorize_remote: Callable[[str], None] | None = None,
+    ) -> None:
+        source = str(source or "")
+        if "://" not in source:
+            source = source.strip()
         if not source:
             raise ValueError("catalog source is required")
-        self._read_catalog(source)
+        remote = "://" in source
+        if remote:
+            require_remote_url(source)
+            self._require_remote_authority(before_publish, authorize_remote)
+            assert before_publish is not None and authorize_remote is not None
+            before_publish()
+            authorize_remote(source)
+        catalog = self._read_catalog(source, allow_remote=remote)
+        if remote:
+            self._validate_remote_entries(catalog, source)
         with file_lock(self.state_path.with_suffix(".lock")):
             state = self._state()
             catalogs = state.setdefault("catalogs", [])
             if source not in catalogs:
                 if len(catalogs) >= 32:
                     raise ValueError("Skill Registry exceeds 32 catalogs")
+                if remote:
+                    before_publish()
+                    authorize_remote(source)
+                    state.setdefault("catalog_snapshots", {})[source] = catalog
                 catalogs.append(source)
                 self._write_state(state)
 
-    def remove_catalog(self, source: str) -> bool:
+    def remove_catalog(
+        self, source: str, *, before_publish: Callable[[], None] | None = None
+    ) -> bool:
         with file_lock(self.state_path.with_suffix(".lock")):
             state = self._state()
             catalogs = state.setdefault("catalogs", [])
             if source not in catalogs:
                 return False
+            if before_publish is not None:
+                before_publish()
             catalogs.remove(source)
+            state.setdefault("catalog_snapshots", {}).pop(source, None)
             self._write_state(state)
             return True
 
@@ -431,15 +521,6 @@ class SkillRegistry:
     def _catalog_records(self, *, local_only: bool = False) -> list[SkillRecord]:
         records: list[SkillRecord] = []
         for source in self.catalogs():
-            if local_only and source.startswith("https://"):
-                self.diagnostics.append(
-                    {
-                        "provider": "catalog",
-                        "source": source,
-                        "error": "Remote catalog requires explicit refresh; remote package install is not qualified",
-                    }
-                )
-                continue
             try:
                 catalog = self._read_catalog(source)
             except (OSError, ValueError) as exc:
@@ -521,22 +602,18 @@ class SkillRegistry:
             self._write_state(state)
         return replace(record, enabled=enabled)
 
-    def _read_catalog(self, source: str) -> dict[str, Any]:
-        if source.startswith("https://"):
-            from nous_runtime.evidence.web_gateway import WebGateway, WebRequest
-
-            response = WebGateway().fetch(
-                WebRequest(
-                    url=source,
-                    method="GET",
-                    timeout_seconds=30,
-                    max_size_bytes=_MAX_CATALOG_BYTES,
-                    approval_requirement="not_required",
-                )
+    def _read_catalog(
+        self, source: str, *, allow_remote: bool = False
+    ) -> dict[str, Any]:
+        if "://" in source and not allow_remote:
+            snapshot = (self._state().get("catalog_snapshots") or {}).get(source)
+            if not isinstance(snapshot, dict):
+                raise ValueError("Remote catalog requires explicit authorized refresh")
+            return self._validate_catalog(snapshot)
+        if "://" in source:
+            text = self._remote_bytes(source, max_bytes=_MAX_CATALOG_BYTES).decode(
+                "utf-8"
             )
-            if not response.ok:
-                raise ValueError(response.error_message or "catalog fetch failed")
-            text = response.content
         else:
             path = Path(source).expanduser().resolve()
             if path.is_dir():
@@ -552,6 +629,10 @@ class SkillRegistry:
             value = json.loads(text)
         except json.JSONDecodeError as exc:
             raise ValueError("skill catalog must be valid JSON") from exc
+        return self._validate_catalog(value)
+
+    @staticmethod
+    def _validate_catalog(value: Any) -> dict[str, Any]:
         if not isinstance(value, dict) or value.get("schema") != _CATALOG_SCHEMA:
             raise ValueError(f"skill catalog schema must be {_CATALOG_SCHEMA}")
         if not isinstance(value.get("skills"), list):
@@ -559,6 +640,63 @@ class SkillRegistry:
         if len(value["skills"]) > _MAX_CATALOG_SKILLS:
             raise ValueError("skill catalog exceeds 512 entries")
         return value
+
+    def refresh_catalog(
+        self,
+        source: str,
+        *,
+        before_publish: Callable[[], None],
+        authorize_remote: Callable[[str], None],
+    ) -> list[SkillRecord]:
+        """Explicitly acquire metadata under the original human URL permission."""
+        if source not in self.catalogs():
+            raise PermissionError(
+                "Catalog must first be registered by the workspace owner"
+            )
+        require_remote_url(source)
+        self._require_remote_authority(before_publish, authorize_remote)
+        before_publish()
+        authorize_remote(source)
+        catalog = self._read_catalog(source, allow_remote=True)
+        self._validate_remote_entries(catalog, source)
+        with file_lock(self.state_path.with_suffix(".lock")):
+            state = self._state()
+            if source not in state.get("catalogs", []):
+                raise PermissionError("Skill catalog was removed during acquisition")
+            before_publish()
+            authorize_remote(source)
+            state.setdefault("catalog_snapshots", {})[source] = catalog
+            self._write_state(state)
+        return [_catalog_record(raw, source) for raw in catalog["skills"]]
+
+    @staticmethod
+    def _validate_remote_entries(catalog: dict[str, Any], source: str) -> None:
+        seen: set[str] = set()
+        for raw in catalog["skills"]:
+            if not isinstance(raw, Mapping):
+                raise ValueError("Remote catalog Skill entries must be objects")
+            entry = _catalog_record(raw, source)
+            require_remote_url(entry.source)
+            if not re.fullmatch(r"sha256:[0-9a-f]{64}", entry.digest):
+                raise ValueError(
+                    "Remote catalog Skills require exact SHA-256 package digests"
+                )
+            if entry.skill_id in seen:
+                raise ValueError("Remote catalog contains ambiguous Skill entries")
+            seen.add(entry.skill_id)
+
+    @staticmethod
+    def _require_remote_authority(before_publish, authorize_remote) -> None:
+        if not callable(before_publish) or not callable(authorize_remote):
+            raise PermissionError(
+                "Remote Skills require trusted human and exact source permission callbacks"
+            )
+
+    @staticmethod
+    def _remote_bytes(source: str, *, max_bytes: int) -> bytes:
+        from nous_runtime.skills.remote import RemoteSkillGateway
+
+        return RemoteSkillGateway().fetch_bytes(source, max_bytes=max_bytes)
 
     def _state(self) -> dict[str, Any]:
         if not self.state_path.is_file():
