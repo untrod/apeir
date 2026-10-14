@@ -717,3 +717,40 @@ revalidate admission immediately before task dispatch, integrate complete Work/
 Workflow and independent effect verification, and qualify health/errors,
 cancellation, cleanup, recovery, credentials/identity and conformance. A prior
 approval, startup success or profile name alone cannot satisfy that Gate.
+
+
+## Selected saved-file input admission
+
+Saved Workspace input extends ContextBuilder, ContextGuard, WorkspaceGuard and
+the configured canonical PermissionEngine. The public Chat/Runtime field
+`workspace_file_refs` accepts at most eight distinct `{path, sha256}` saved text
+references within the resolved host Workspace. Reads are bounded to 64 KiB per
+file and 128 KiB total. Binary/private/secret sources, traversal and symlinks are
+refused. Every path component uses no-follow descriptors; unsupported hosts deny
+delivery. There is no native Windows fallback, upload or OS-wide read authority.
+
+Selection creates no Work or permission. The existing original Runtime request
+and Run bind the actor, context, Workspace, purpose and source version. Explicit
+collection failure blocks dispatch even when an ordinary Context provider error
+would be omitted. Whole-item Context budgets may omit a selected source with
+recorded budget provenance; required objective/governance items stay whole.
+
+A private, nonserialized ModelRequest hook verifies the actual messages/tools
+digest, current original Run and Governance/ContextGuard, exact saved bytes and
+independent `context.transfer` permission for the actual Provider ID, endpoint and
+transport. Gateway calls it under its existing scheduler lease after setup,
+immediately before every adapter invocation/stream or actual NKI submission.
+Retry/fallback targets receive fresh admission, including per-capability endpoint
+changes. Request copies retain the hook; serialized input requires fresh host
+admission. Billing reconciliation of an original NKI receipt is not a new
+selected-source transfer or dispatch claim. Kernel and its authority remain
+unchanged. A read permission never grants Provider transfer authority.
+
+The existing input Inspector and Gateway/accounting response metadata project
+content-free source versions, digests and selected/read/sent/rejected/budget
+states. Sent records entry into the Gateway Provider boundary; Provider receipt
+and provider-specific formatting remain unproven. Revocation blocks subsequent
+dispatch but cannot retract an earlier send. Tests exercise the Runtime HTTP API
+through an isolated OpenAI-compatible HTTP fixture plus retry, fallback, stream,
+NKI contract and source/authority/lifecycle negatives. These use fake credentials
+and do not qualify a real model account, remote Provider or installed Desktop.

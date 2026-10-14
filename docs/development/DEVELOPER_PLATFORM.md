@@ -59,8 +59,13 @@ Details are bounded to 256 messages, 64 tools and 128 selected context sources
 per invocation; counts and the input digest cover the complete Gateway input.
 The UI replays up to 1,600 events with cursor pagination and explicitly labels
 truncation. Old events remain readable without fabricated manifests. A selected
-workspace reference is still metadata only: selecting it does not automatically
-upload its contents or establish that a model read the file.
+workspace selection is an exact saved path/SHA-256 reference. **Send** carries
+`workspace_file_refs` through the existing Chat API and requests current source
+read and Provider transfer admission; selection alone sends no file bytes. The
+inspector records selected/read/sent/rejected/budget-limited states without source
+text or raw paths. Sent identifies the Gateway Provider boundary, not confirmed
+Provider receipt. Native Windows delivery remains BLOCKED where safe no-follow
+file descriptors are unavailable.
 
 Runtime source collection requires the trusted entry point's live authenticated
 context. Serialized actor claims cannot supply that proof. Normal initialization
@@ -84,7 +89,10 @@ items remain whole; if they cannot fit, dispatch stops with
 Retained Runtime context is rechecked before each Chat model invocation and
 collaboration entry. Revoked access pauses the existing Agent execution before
 the next Provider call; it cannot retract bytes already sent. Snapshot integrity
-and permission revalidation do not establish current filesystem freshness.
+and permission revalidation alone do not establish current filesystem freshness.
+Explicit saved-file references additionally re-read their exact bounded version
+and revalidate read/transfer permission after setup at every actual Gateway
+attempt, including retries, fallback and NKI submission.
 Incremental snapshot updates require the same binding and supplied current
 source versions; they remain read data, not execution authority or a qualified
 cross-task cache.

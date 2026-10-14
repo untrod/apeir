@@ -305,6 +305,7 @@ export const runPrompt = (
   agentMode: "agent" | "read_only" | "chat" = "agent",
   signal?: AbortSignal,
   requestId?: string,
+  workspaceFileRefs?: readonly { path: string; sha256: string }[],
 ) =>
   api<{
     conversation_id: string;
@@ -327,6 +328,7 @@ export const runPrompt = (
         workspace_id: "default",
         agent_mode: agentMode,
         request_id: requestId,
+        workspace_file_refs: workspaceFileRefs,
       }),
     },
   );

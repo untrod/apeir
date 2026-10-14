@@ -86,6 +86,8 @@ export function ContextInspector({ runId, controller, onClose }: {
   const completed = record(completion?.payload);
   const usage = record(completed.usage);
   const measurements = record(usage.counter_measurements);
+  const selectedInputEvents = visibleEvents.filter(event => event.event_type?.startsWith("context.input.") && (record(event.payload).input_sha256 === manifest.input_sha256 || record(event.payload).input_sha256 === undefined));
+  const selectedInput = array(record(selectedInputEvents.at(-1)?.payload).sources);
 
   return <section aria-label="Model Context Inspector" style={{ padding: space.md, border: `1px solid ${colors.border}`, borderRadius: radius.md, background: colors.surface, fontSize: typo.xs, overflowWrap: "anywhere", maxHeight: "50vh", overflowY: "auto" }}>
     <div style={{ display: "flex", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
@@ -96,6 +98,7 @@ export function ContextInspector({ runId, controller, onClose }: {
     <p>Run {runId}. Recorded Gateway input; provider-specific formatting and provider receipt are not proven here. Tool declarations do not grant permission. Prompt and file contents are not copied into this manifest.</p>
     {loading || !currentEvidence ? <p role="status">Loading persisted model input…</p> : error ? <p role="alert">Context unavailable: {error}</p> : <>
       {partial && <p>Partial replay: the 1,600-event inspection bound was reached. Later input is UNKNOWN.</p>}
+      {selectedInput.length > 0 && <section aria-label="Saved file input provenance"><h3>Selected saved files</h3><p>Sent means the Gateway dispatched to its provider boundary; provider receipt is not confirmed.</p><ul>{selectedInput.slice(0, 8).map((value, index) => { const source = record(value); const status = ["selected", "read", "sent", "rejected", "budget_limited"].includes(String(source.status)) ? String(source.status) : "UNKNOWN"; return <li key={index}>{status} · read: {source.was_read === true ? "yes" : source.was_read === false ? "no" : "UNKNOWN"}<div>Source: {typeof source.source_id === "string" && /^workspace-file:[a-f0-9]{64}$/.test(source.source_id) ? source.source_id : "UNKNOWN"}</div><div>Saved SHA-256: {hash(source.source_version)}</div></li>; })}</ul></section>}
       {invocations.length === 0 ? <p>UNKNOWN — no recorded model input for this Run. This does not mean that the model saw no context.</p> : <>
         <label>Model invocation <select aria-label="Model invocation" value={selected} onChange={event => setSelected(Number(event.target.value))}>
           {invocations.map((event, index) => <option key={event.event_id || index} value={index}>Iteration {String(record(event.payload).iteration || index + 1)}</option>)}

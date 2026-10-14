@@ -16,7 +16,7 @@ import time
 import uuid
 from collections import deque
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -240,6 +240,8 @@ class ModelGateway:
 
             def before_dispatch() -> None:
                 nonlocal dispatched
+                if request.timeout_s - (time.monotonic() - started) <= 0:
+                    raise asyncio.TimeoutError
                 if (
                     reservation is not None
                     and not reservation.replayed
@@ -288,14 +290,23 @@ class ModelGateway:
                     )
                     guarded_request = reservation.request
                 if use_kernel:
-                    response = await self._nki_execute(
-                        guarded_request,
-                        descriptor,
-                        instance,
-                        adapter,
-                        before_dispatch=before_dispatch,
-                        reconcile_only=reservation is not None and reservation.replayed,
+                    await self._ensure_loaded(instance, adapter)
+                    lease = await self.scheduler.acquire(
+                        request_id=request.request_id,
+                        instance_id=instance.instance_id,
+                        timeout_s=remaining,
+                        priority=int(request.metadata.get("priority", 50)),
                     )
+                    async with lease:
+                        response = await self._nki_execute(
+                            guarded_request,
+                            descriptor,
+                            instance,
+                            adapter,
+                            before_dispatch=before_dispatch,
+                            reconcile_only=reservation is not None
+                            and reservation.replayed,
+                        )
                 else:
                     await self._ensure_loaded(instance, adapter)
                     lease = await self.scheduler.acquire(
@@ -305,7 +316,15 @@ class ModelGateway:
                         priority=int(request.metadata.get("priority", 50)),
                     )
                     async with lease:
+                        if request.timeout_s - (time.monotonic() - started) <= 0:
+                            raise asyncio.TimeoutError
+                        self._admit_selected_input(
+                            guarded_request, descriptor, instance, adapter
+                        )
+                        if request.timeout_s - (time.monotonic() - started) <= 0:
+                            raise asyncio.TimeoutError
                         before_dispatch()
+                        self._mark_selected_input(guarded_request)
                         self._active[request.request_id] = adapter
                         response = await asyncio.wait_for(
                             adapter.invoke(guarded_request, descriptor, instance),
@@ -317,6 +336,16 @@ class ModelGateway:
                 if reservation is not None and self._cost_controller is not None:
                     response, _receipt = self._cost_controller.commit(
                         reservation, response
+                    )
+                if guarded_request._input_admission is not None and not (
+                    reservation is not None and reservation.replayed
+                ):
+                    response = replace(
+                        response,
+                        metadata={
+                            **response.metadata,
+                            "selected_input": guarded_request._input_admission.last_evidence,
+                        },
                     )
                 self._active.pop(request.request_id, None)
                 self.registry.record_usage(model_id)
@@ -497,7 +526,10 @@ class ModelGateway:
             metadata = dict(payload.get("metadata") or {})
             metadata["parent_request_id"] = request.request_id
             payload["metadata"] = metadata
-            locked_request = ModelRequest.from_dict(payload)
+            locked_request = replace(
+                ModelRequest.from_dict(payload),
+                _input_admission=request._input_admission,
+            )
             return await self.invoke(locked_request)
 
         timeout = min(
@@ -659,9 +691,17 @@ class ModelGateway:
                 "model.stream.started", request, {"decision": decision.to_dict()}
             )
             async with lease:
+                if request.timeout_s - (time.monotonic() - started) <= 0:
+                    raise asyncio.TimeoutError
+                self._admit_selected_input(
+                    guarded_request, descriptor, instance, adapter
+                )
+                if request.timeout_s - (time.monotonic() - started) <= 0:
+                    raise asyncio.TimeoutError
                 if reservation is not None and self._cost_controller is not None:
                     self._cost_controller.mark_dispatched(reservation)
                 dispatched = True
+                self._mark_selected_input(guarded_request)
                 self._active[request.request_id] = adapter
                 iterator = adapter.stream(guarded_request, descriptor, instance)
                 while True:
@@ -908,8 +948,20 @@ class ModelGateway:
                 if reconcile_only
                 else None
             )
+            if not reconcile_only:
+                self._admit_selected_input(
+                    request,
+                    descriptor,
+                    instance,
+                    adapter,
+                    endpoint=endpoint,
+                    transport="nki:" + backend,
+                    provider_id=provider_id,
+                )
             if before_dispatch is not None:
                 before_dispatch()
+            if not reconcile_only:
+                self._mark_selected_input(request)
             execution = await asyncio.wait_for(
                 client.execute_operation(operation, idempotency_key=request.request_id),
                 timeout=request.timeout_s,
@@ -968,6 +1020,57 @@ class ModelGateway:
             finish_reason=str(output.get("finish_reason") or "completed"),
             metadata=metadata,
         )
+
+    def _admit_selected_input(
+        self,
+        request,
+        descriptor,
+        instance,
+        adapter,
+        *,
+        endpoint=None,
+        transport=None,
+        provider_id=None,
+    ):
+        admission = request._input_admission
+        if admission is None:
+            if request.metadata.get("requires_selected_input_admission"):
+                from nous_runtime.context.selected_input import SelectedInputError
+
+                raise SelectedInputError("selected_input_admission_required")
+            return
+        from nous_runtime.context.selected_input import (
+            ProviderRecipient,
+            SelectedInputAdmission,
+            SelectedInputError,
+        )
+
+        if not isinstance(admission, SelectedInputAdmission):
+            raise SelectedInputError("private_input_admission_required")
+        provider = getattr(adapter, "provider", None)
+        from nous_runtime.provider.adapters.openai import OpenAIProvider
+
+        if endpoint is None and isinstance(provider, OpenAIProvider):
+            endpoint = provider._endpoint(adapter._legacy_capability(request))
+        actual_endpoint = (
+            endpoint
+            if endpoint is not None
+            else str(
+                getattr(provider, "endpoint", "") or getattr(adapter, "endpoint", "")
+            )
+        )
+        recipient = ProviderRecipient(
+            provider_id
+            or str(getattr(provider, "provider_id", "") or descriptor.provider_id),
+            actual_endpoint,
+            transport or str(adapter.backend_id),
+        )
+        admission(request, recipient)
+
+    @staticmethod
+    def _mark_selected_input(request):
+        if request._input_admission is not None:
+            request._input_admission.dispatched()
 
     def _kernel_accounting_binding(self, provider: Any) -> dict[str, str]:
         if provider is None:
@@ -1483,6 +1586,15 @@ class ModelGateway:
         provider_id: str,
         model_id: str,
     ):
+        from nous_runtime.context.selected_input import SelectedInputError
+
+        if isinstance(error, SelectedInputError):
+            return _ProviderFailure(
+                category="authorization",
+                retryable=False,
+                evidence={},
+                explanation="Selected saved input admission failed",
+            )
         message = str(error)
         http_status = getattr(error, "http_status", None)
         if http_status is None and "http" in message.casefold():
@@ -1617,6 +1729,11 @@ class ModelGateway:
             "cost_measurement": ModelGateway._cost_measurement(response),
             "latency_ms": response.latency_ms,
             "finish_reason": response.finish_reason,
+            **(
+                {"selected_input": response.metadata["selected_input"]}
+                if "selected_input" in response.metadata
+                else {}
+            ),
         }
 
 

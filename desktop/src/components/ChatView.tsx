@@ -287,7 +287,6 @@ export function ChatView({
       setLocalMessages(prev => [...prev, { id: `e_${Date.now()}`, role: "system", content: "Controller changed; remove the original file reference before continuing.", timestamp: new Date().toISOString() }]);
       return;
     }
-    const prompt = workspaceFile ? `${text}\n\nSelected workspace file reference (metadata only; this grants no permission): ${JSON.stringify({ path: workspaceFile.path, sha256: workspaceFile.sha256 })}` : text;
     const userMsg = { id: `u_${Date.now()}`, role: "user", content: text, timestamp: new Date().toISOString() };
     setLocalMessages((prev) => [...prev, userMsg]);
     setLoading(true);
@@ -313,15 +312,16 @@ export function ChatView({
 
     try {
       const result = await runPrompt(
-        prompt,
+        text,
         constraints.model_id,
         conversationId,
         readOnly ? "read_only" : constraints.agent_mode || "agent",
         controller.signal,
         requestId,
+        workspaceFile ? [{ path: workspaceFile.path, sha256: workspaceFile.sha256 }] : undefined,
       );
       if (getConfig().url !== originalController) throw new Error("Controller changed; inspect the original request before continuing.");
-      if (result.status === "failed") {
+      if (result.status === "failed" || result.status === "selected_input_rejected") {
         throw new Error(describeRuntimeFailure(result.message || ""));
       }
       if (result.status === "waiting_approval" && result.result?.proposal_id) onProposalCreated?.(result.result.proposal_id);
@@ -391,7 +391,7 @@ export function ChatView({
       {contextView && <ContextInspector {...contextView} onClose={() => setContextView(null)} />}
       {workspaceFile && <div aria-label="Selected workspace reference" style={{ padding: space.md, overflowWrap: "anywhere", fontSize: typo.xs }}>
         {workspaceFile.path} · SHA-256 {workspaceFile.sha256}<br />
-        Reference only. File content is not automatically sent; access still requires Runtime admission.
+        File content is not automatically sent. Send requests the saved version; current read and provider transfer permission are required.
         <button onClick={onClearWorkspaceFile} style={{ marginLeft: space.sm }}>Remove reference</button>
       </div>}
 
