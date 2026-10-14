@@ -12,6 +12,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from nous_runtime.security.private_files import validate_private_database_path
+
+from nous_runtime.experience.exceptions import ExperienceStoreError
 from nous_runtime.experience.models import ExperiencePattern, ExperienceRecord
 
 _log = logging.getLogger("nous.experience.store")
@@ -20,9 +23,10 @@ _log = logging.getLogger("nous.experience.store")
 @contextmanager
 def _db_connect(db_path: str, readonly: bool = False):
     path = Path(db_path)
+    validate_private_database_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if readonly:
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        conn = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)
     else:
         conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
@@ -46,6 +50,12 @@ class ExperienceStore:
     """SQLite-backed store for experience records and patterns."""
 
     def __init__(self, workspace_path: str | Path = ""):
+        if not workspace_path and os.environ.get("NOUS_WORKSPACE_ROOT"):
+            from nous_runtime.project.workspace import find_workspace
+
+            workspace_path = find_workspace(allow_uninitialized=True)
+            if workspace_path is None:
+                raise ValueError("Configured workspace state is unavailable")
         if workspace_path:
             self.db_path = str(Path(workspace_path) / "experience.db")
         else:
@@ -54,7 +64,6 @@ class ExperienceStore:
         self._ensure_tables()
 
     def _ensure_tables(self) -> None:
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
             with _db_connect(self.db_path) as db:
                 db.executescript("""
@@ -122,11 +131,26 @@ class ExperienceStore:
                             success, failure_reason, error_code, confidence, status,
                             occurrence_count, created_at, record_json)
                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        (record.id, record.source_type, record.task_type, record.task_summary,
-                         record.context_hash, record.action, record.agent_id, record.provider_id,
-                         record.result, record.evaluation_score, int(record.success),
-                         record.failure_reason, record.error_code, record.confidence,
-                         record.status, record.occurrence_count, record.created_at, record_json),
+                        (
+                            record.id,
+                            record.source_type,
+                            record.task_type,
+                            record.task_summary,
+                            record.context_hash,
+                            record.action,
+                            record.agent_id,
+                            record.provider_id,
+                            record.result,
+                            record.evaluation_score,
+                            int(record.success),
+                            record.failure_reason,
+                            record.error_code,
+                            record.confidence,
+                            record.status,
+                            record.occurrence_count,
+                            record.created_at,
+                            record_json,
+                        ),
                     )
             return True
         except Exception as exc:
@@ -136,7 +160,9 @@ class ExperienceStore:
     def get(self, record_id: str) -> ExperienceRecord | None:
         try:
             with _db_connect(self.db_path, readonly=True) as db:
-                row = db.execute("SELECT record_json FROM experiences WHERE id = ?", (record_id,)).fetchone()
+                row = db.execute(
+                    "SELECT record_json FROM experiences WHERE id = ?", (record_id,)
+                ).fetchone()
             if row is None:
                 return None
             return ExperienceRecord.from_dict(json.loads(row["record_json"]))
@@ -145,8 +171,13 @@ class ExperienceStore:
             return None
 
     def list(
-        self, *, task_type: str = "", status: str = "", result: str = "",
-        limit: int = 50, offset: int = 0,
+        self,
+        *,
+        task_type: str = "",
+        status: str = "",
+        result: str = "",
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[ExperienceRecord]:
         try:
             query = "SELECT record_json FROM experiences WHERE 1=1"
@@ -164,10 +195,11 @@ class ExperienceStore:
             params.extend([limit, offset])
             with _db_connect(self.db_path, readonly=True) as db:
                 rows = db.execute(query, params).fetchall()
-            return [ExperienceRecord.from_dict(json.loads(r["record_json"])) for r in rows]
+            return [
+                ExperienceRecord.from_dict(json.loads(r["record_json"])) for r in rows
+            ]
         except Exception as exc:
-            _log.error("Failed to list experiences: %s", exc)
-            return []
+            raise ExperienceStoreError("Failed to list experience store") from exc
 
     def search(self, query_text: str, limit: int = 20) -> list[ExperienceRecord]:
         """Full-text-ish search across task_summary, action, failure_reason, lessons."""
@@ -181,7 +213,9 @@ class ExperienceStore:
                        ORDER BY created_at DESC LIMIT ?""",
                     (like, like, like, like, limit),
                 ).fetchall()
-            return [ExperienceRecord.from_dict(json.loads(r["record_json"])) for r in rows]
+            return [
+                ExperienceRecord.from_dict(json.loads(r["record_json"])) for r in rows
+            ]
         except Exception as exc:
             _log.error("Failed to search experiences: %s", exc)
             return []
@@ -190,14 +224,21 @@ class ExperienceStore:
         try:
             with self._lock:
                 with _db_connect(self.db_path) as db:
-                    db.execute("UPDATE experiences SET status = ? WHERE id = ?", (status, record_id))
+                    db.execute(
+                        "UPDATE experiences SET status = ? WHERE id = ?",
+                        (status, record_id),
+                    )
                     # Also update the status in record_json
-                    row = db.execute("SELECT record_json FROM experiences WHERE id = ?", (record_id,)).fetchone()
+                    row = db.execute(
+                        "SELECT record_json FROM experiences WHERE id = ?", (record_id,)
+                    ).fetchone()
                     if row:
                         record_data = json.loads(row["record_json"])
                         record_data["status"] = status
-                        db.execute("UPDATE experiences SET record_json = ? WHERE id = ?",
-                                  (json.dumps(record_data, ensure_ascii=False), record_id))
+                        db.execute(
+                            "UPDATE experiences SET record_json = ? WHERE id = ?",
+                            (json.dumps(record_data, ensure_ascii=False), record_id),
+                        )
             return True
         except Exception as exc:
             _log.error("Failed to update status: %s", exc)
@@ -215,16 +256,26 @@ class ExperienceStore:
                            (id, pattern_type, name, description, frequency,
                             success_rate, confidence, created_at, pattern_json)
                            VALUES (?,?,?,?,?,?,?,?,?)""",
-                        (pattern.id, pattern.pattern_type, pattern.name, pattern.description,
-                         pattern.frequency, pattern.success_rate, pattern.confidence,
-                         pattern.created_at, pattern_json),
+                        (
+                            pattern.id,
+                            pattern.pattern_type,
+                            pattern.name,
+                            pattern.description,
+                            pattern.frequency,
+                            pattern.success_rate,
+                            pattern.confidence,
+                            pattern.created_at,
+                            pattern_json,
+                        ),
                     )
             return True
         except Exception as exc:
             _log.error("Failed to save pattern: %s", exc)
             return False
 
-    def list_patterns(self, pattern_type: str = "", limit: int = 50) -> list[ExperiencePattern]:
+    def list_patterns(
+        self, pattern_type: str = "", limit: int = 50
+    ) -> list[ExperiencePattern]:
         try:
             query = "SELECT pattern_json FROM experience_patterns WHERE 1=1"
             params: list[Any] = []
@@ -235,7 +286,9 @@ class ExperienceStore:
             params.append(limit)
             with _db_connect(self.db_path, readonly=True) as db:
                 rows = db.execute(query, params).fetchall()
-            return [ExperiencePattern.from_dict(json.loads(r["pattern_json"])) for r in rows]
+            return [
+                ExperiencePattern.from_dict(json.loads(r["pattern_json"])) for r in rows
+            ]
         except Exception as exc:
             _log.error("Failed to list patterns: %s", exc)
             return []
@@ -246,9 +299,15 @@ class ExperienceStore:
         try:
             with _db_connect(self.db_path, readonly=True) as db:
                 total = db.execute("SELECT COUNT(*) FROM experiences").fetchone()[0]
-                trusted = db.execute("SELECT COUNT(*) FROM experiences WHERE status='trusted'").fetchone()[0]
-                success = db.execute("SELECT COUNT(*) FROM experiences WHERE success=1").fetchone()[0]
-                patterns = db.execute("SELECT COUNT(*) FROM experience_patterns").fetchone()[0]
+                trusted = db.execute(
+                    "SELECT COUNT(*) FROM experiences WHERE status='trusted'"
+                ).fetchone()[0]
+                success = db.execute(
+                    "SELECT COUNT(*) FROM experiences WHERE success=1"
+                ).fetchone()[0]
+                patterns = db.execute(
+                    "SELECT COUNT(*) FROM experience_patterns"
+                ).fetchone()[0]
             return {
                 "total_experiences": total,
                 "trusted": trusted,
@@ -256,5 +315,7 @@ class ExperienceStore:
                 "success_rate": round(success / max(total, 1), 3),
                 "patterns": patterns,
             }
-        except Exception:
-            return {"total_experiences": 0, "trusted": 0, "success_count": 0, "success_rate": 0.0, "patterns": 0}
+        except Exception as exc:
+            raise ExperienceStoreError(
+                "Failed to get experience store statistics"
+            ) from exc

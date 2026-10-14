@@ -832,6 +832,68 @@ cryptographic fake identity qualify software boundaries only; production Catalog
 real IdP, installed Desktop, executable Skill and physical acceptance remain
 unqualified. No Kernel or component-lock change is made.
 
+
+### Private history database admission and truthful read errors
+
+Classification: **REUSE** the selected workspace resolver, three existing
+SQLite owners, private-file security layer and API error contracts; **FIX**
+file-level state admission and false empty/zero history on storage failures.
+With the selected `.nous` directory real, links for `context.db`, `evaluation.db`
+and `experience.db` previously exposed another disposable workspace's records.
+A Context audit write followed the same link. The controlled Linux probes use
+only owned fake workspaces; they do not establish a remotely authenticated
+exploit or access to real private files. The connection boundaries now reject
+static symbolic/reparse links, broken links, multiply linked database files,
+nonregular database/sidecar files and a replaced
+state directory before opening state. Independent review then reproduced a
+second binding defect without a link: an unescaped read-only SQLite URI for a
+literal `#` workspace name opened a sibling fake database instead of the validated
+file. Percent escapes and question marks also changed path interpretation.
+Read-only connections now use the encoded absolute file URI; writes keep plain
+paths. Actual sibling-database probes retain the original bytes and exercise
+empty/read/write/reload/API behavior with hash, percent, spaces and Unicode names.
+Question-mark names are tested only on systems where they are valid filenames.
+Normal explicit paths and first-use
+creation remain supported; OS ancestor aliases are not new authority.
+
+A corrupt Evaluation database previously returned successful empty API history;
+after initialization, missing Experience tables also produced empty lists and
+zero statistics. Existing domain exceptions now distinguish these failures from
+healthy empty stores. Context corrupt-store errors already fail closed. Optional
+history/learning diagnostics remain separate from authorization and effect
+verification: losing a trend is not proof of an effect, and the Task Center's
+recorded MATCH/COMMITTED projection is not derived from Evaluation scores.
+
+Prerepair focused contracts: **33 failed**; three additional hardlink probes also
+failed before admission was extended. Repaired workspace-binding contracts are
+included in Context/Evaluation/Experience/Governance/Agent/API regressions:
+**872 passed** (14.06 s); Python 3.10 Context/Evaluation/Experience/intelligence
+regressions: **570 passed** (8.75 s). The URI contracts had **9 failed, 3 passed**
+before correction; final workspace-binding contracts have **135 passed** (1.42 s).
+Counts overlap. Static path checks do not
+claim malicious same-OS-owner TOCTOU protection or native Windows ACL acceptance.
+Kernel and component lock remain unchanged; source and resulting-main CI are
+separate acceptance requirements.
+
+The bounded URI audit also found six raw read-only URI entries in five existing
+modules: GovernanceStore, SQLiteRuntime (connection and integrity metrics),
+CapabilityRegistry, legacy NetworkRegistry and SQLiteConnector. Owned Governance
+getters read foreign EXECUTE decisions, PENDING approvals and ACTIVE leases;
+the selected store's write transaction still rejected foreign lease consumption.
+This is a reproduced authority-record binding defect, not evidence that an
+unauthorized effect executed. Those entries now use the same encoded file URI,
+without changing each owner's path, permission, transaction or trust contract and
+without applying the private-history path guard to different stores.
+
+Additional contracts before correction: **18 failed, 6 passed**; final combined
+URI/workspace contracts: **159 passed** (1.49 s). Extended Context/Evaluation/
+Experience/Governance/Agent/Control Plane/Network/SQLite/Connector/API regression:
+**1093 passed** (23.10 s); Python 3.10 affected subset: **1021 passed** (23.78 s).
+Counts overlap. Four newly touched modules had existing formatter failures;
+only those files were mechanically formatted and the patched AST was unchanged.
+No network-filesystem or UNC qualification is claimed; unsupported nonlocal URI
+authority fails closed rather than reverting to an unescaped path.
+
 ### Original-result recovery versus readiness snapshot — 2026-10-14
 
 **REUSE** the Node journal, signed Relay result delivery and Controller-local
