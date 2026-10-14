@@ -813,3 +813,21 @@ not identify the original CI host's timing cause or claim a performance gain.
 Final Workflow/Agent contracts pass **64 tests**; the same controlled admission
 delay also passes after correction. Python 3.10 focused contracts pass **3**.
 New source and resulting-main CI remain separate acceptance requirements.
+
+## Controlled Skill identity and removal review — 2026-10-14
+
+REUSE the Skill, Extension, Governance, human-session and CAS owners. FIX derived
+Skill identity metadata and bind uninstall to its original reviewed content under
+the existing Extension writer fence. Revoked Extension records retain their
+existing trust state across owner reload and rejected reinstall. Tests cover
+current human scope, content changes before removal, interrupted authority,
+compatible updates/restarts and another installed Skill remaining unchanged.
+The controlled pre-fix run retained **11 failed cases** (including missing bound
+API contracts), plus **3 failed format/alias cases**; the same cases pass after
+correction. Final added regression cases: **15 passed**. Affected Skill, Extension
+and Control Plane regressions: **441 passed, 17 skipped**, also reproduced on
+Python 3.10. Desktop lint/typecheck/build and **168 tests in 35 files** pass;
+repository contracts: **288 passed**. These counts overlap. Owned HTTP/TLS and a
+cryptographic fake identity qualify software boundaries only; production Catalog,
+real IdP, installed Desktop, executable Skill and physical acceptance remain
+unqualified. No Kernel or component-lock change is made.

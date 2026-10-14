@@ -289,3 +289,43 @@ def test_other_metadata_paths_cannot_restore_revoked_extension(tmp_path, mutatio
             installer.sign(first.extension_id, tmp_path / "unneeded-key")
     assert actor.get_record(first.extension_id)["state"] == "revoked"
     assert actor.get_record(first.extension_id)["authority"] == "none"
+
+
+def test_removal_cannot_erase_persisted_revocation(tmp_path):
+    installer, actor, source, first, _ = setup(tmp_path)
+    actor.record_revocation(first.extension_id, decision(first))
+    with pytest.raises(PermissionError, match="revoked"):
+        installer.remove(first.extension_id)
+    restored = ExtensionRegistry(installer.root)
+    assert restored.get_record(first.extension_id)["state"] == "revoked"
+    with pytest.raises(PermissionError, match="revoked"):
+        restored.install(source)
+
+
+@pytest.mark.parametrize("binding", ["digest", "version", "skill_id"])
+def test_bound_remove_validates_current_canonical_content(tmp_path, binding):
+    installer, _, _, first, _ = setup(tmp_path)
+    kwargs = {"expected_" + binding: "wrong-original-binding"}
+    with pytest.raises(PermissionError, match="review"):
+        installer.remove(first.extension_id, **kwargs)
+    assert (
+        installer.verify(first.extension_id).provenance.digest
+        == first.provenance.digest
+    )
+
+
+def test_bound_remove_reloads_revocation_after_trusted_callback(tmp_path):
+    installer, actor, _, first, _ = setup(tmp_path)
+
+    def revoke():
+        actor.record_revocation(first.extension_id, decision(first))
+
+    with pytest.raises(PermissionError, match="revoked"):
+        installer.remove(
+            first.extension_id,
+            expected_digest=first.provenance.digest,
+            expected_version=first.version,
+            expected_skill_id=first.skills[0].name,
+            before_remove=revoke,
+        )
+    assert actor.get_record(first.extension_id)["state"] == "revoked"

@@ -284,6 +284,22 @@ describe("Secure Node onboarding", () => {
 describe("Controlled Skill Center", () => {
   const entry = { skill_key: "catalog:review-skill:source", skill_id: "review-skill", name: "Review Skill", description: "Inspect bounded evidence", version: "1.0.0", digest: "sha256:" + "a".repeat(64), provider: "catalog", source: "/reviewed/catalog/review-skill", catalog_source: "/reviewed/catalog", package_source: "/reviewed/catalog/review-skill", risk: "high", trust: "unverified", requested_capabilities: ["device.state.read"], dependencies: [], compatibility: "linux", installable: true, enabled: true, installed: false, artifact_ref: "" };
   beforeEach(() => { vi.stubGlobal("EventSource", class { close() {} addEventListener() {} }); });
+  it("shows canonical identity conflicts and blocks alias management", async () => {
+    const conflicting = { ...entry, provider: "installed", skill_key: "installed:review-skill:import", installed: true, identity_status: "AMBIGUOUS" };
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string) => {
+      requests.push(url);
+      const data = url.endsWith("/human/session") ? { subject_id: "fake-human", expires_at: Date.now() / 1000 + 300 } : { ...fixture, skills: [conflicting] };
+      return { ok: true, json: async () => ({ ok: true, data }) };
+    }));
+    render(<OperationsConsole />);
+    await screen.findByText("Human: fake-human");
+    fireEvent.click(screen.getByRole("button", { name: /^skills/ }));
+    fireEvent.click(screen.getByRole("button", { name: conflicting.skill_key }));
+    expect(screen.getByRole("status")).toHaveTextContent("Conflicting installed Skill identities");
+    for (const name of ["Load instructions", "Disable", "Uninstall"]) expect(screen.getByRole("button", { name })).toBeDisabled();
+    expect(requests.some(url => url.endsWith("/operations/actions") || url.endsWith("/human/nonce"))).toBe(false);
+  });
   it("requires exact-package review and submits existing human nonce actions", async () => {
     let skills = [entry];
     const requests: Record<string, unknown>[] = [];

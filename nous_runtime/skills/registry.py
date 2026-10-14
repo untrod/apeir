@@ -148,7 +148,17 @@ class SkillRegistry:
         ]
         if not matches:
             raise KeyError(skill_id)
-        return max(matches, key=lambda item: _PROVIDER_PRIORITY.get(item.provider, 0))
+        preferred = max(_PROVIDER_PRIORITY.get(item.provider, 0) for item in matches)
+        selected = [
+            item
+            for item in matches
+            if _PROVIDER_PRIORITY.get(item.provider, 0) == preferred
+        ]
+        if selected[0].provider == "installed" and len(selected) != 1:
+            raise ValueError(
+                "Installed Skill identity is ambiguous; review its imports"
+            )
+        return selected[0]
 
     def load(self, skill_id: str) -> SkillRecord:
         """Load full instructions and resource names without executing resources."""
@@ -235,15 +245,38 @@ class SkillRegistry:
                     raise PermissionError(
                         "Skill Extension was revoked during acquisition"
                     )
+                for existing in self.extensions.list():
+                    if existing["extension_id"] == manifest.extension_id:
+                        continue
+                    stored = self.extensions.verify(existing["extension_id"])
+                    if any(
+                        item.name == manifest.skills[0].name for item in stored.skills
+                    ):
+                        raise PermissionError(
+                            "Installed Skill identity conflicts with another import; "
+                            "review an explicit migration first"
+                        )
 
             installed = self.extensions.install(
                 staged, artifact_ref=artifact_ref, before_publish=revalidate_publication
             )
         # Existing enable/disable state survives updates. New Skills have the
         # existing enabled default; neither case grants execution permission.
-        return self.resolve(
-            f"installed:{installed.skills[0].name}", include_disabled=True
-        )
+        assert installed.provenance is not None
+        published = [
+            record
+            for record in self._installed_records()
+            if record.metadata["extension_id"] == installed.extension_id
+            and record.skill_id == installed.skills[0].name
+            and record.version == installed.version
+            and record.digest == installed.provenance.digest
+            and record.artifact_ref == artifact_ref
+        ]
+        if len(published) != 1:
+            raise ValueError(
+                "Published Skill content does not match its original install"
+            )
+        return self._apply_state(published[0])
 
     def catalog_records(self, *, local_only: bool = False) -> list[SkillRecord]:
         """Inspect registered catalogs; passive UI polling never fetches URLs."""
@@ -362,18 +395,47 @@ class SkillRegistry:
             ContentAddressedArtifactStore(self.artifact_root).unpin(previous_artifact)
         return updated
 
-    def remove(self, skill_id: str) -> bool:
+    def remove(
+        self,
+        skill_id: str,
+        *,
+        expected_digest: str = "",
+        expected_version: str = "",
+        before_publish: Callable[[], None] | None = None,
+    ) -> bool:
         with file_lock(self.state_path.with_suffix(".lock")):
-            return self._remove(skill_id)
+            return self._remove(
+                skill_id,
+                expected_digest=expected_digest,
+                expected_version=expected_version,
+                before_publish=before_publish,
+            )
 
-    def _remove(self, skill_id: str) -> bool:
+    def _remove(
+        self,
+        skill_id: str,
+        *,
+        expected_digest: str,
+        expected_version: str,
+        before_publish: Callable[[], None] | None,
+    ) -> bool:
         requested = str(skill_id or "").split(":", 1)[-1]
         try:
             record = self.resolve(f"installed:{requested}", include_disabled=True)
         except KeyError as exc:
             raise ValueError("only installed skills can be removed") from exc
+        if (expected_digest and expected_digest != record.digest) or (
+            expected_version and expected_version != record.version
+        ):
+            raise PermissionError("Skill content changed; review it again")
         extension_id = str(record.metadata.get("extension_id") or "")
-        removed = self.extensions.remove(extension_id)
+        removed = self.extensions.remove(
+            extension_id,
+            expected_digest=record.digest,
+            expected_version=record.version,
+            expected_skill_id=record.skill_id,
+            before_remove=before_publish,
+        )
         if not removed:
             return False
         state = self._state()
@@ -448,12 +510,24 @@ class SkillRegistry:
 
     def _effective(self, include_disabled: bool) -> dict[str, SkillRecord]:
         selected: dict[str, SkillRecord] = {}
+        ambiguous: set[str] = set()
         for record in self.list(include_disabled=include_disabled):
             current = selected.get(record.skill_id)
             if current is None or _PROVIDER_PRIORITY.get(
                 record.provider, 0
             ) > _PROVIDER_PRIORITY.get(current.provider, 0):
                 selected[record.skill_id] = record
+            elif record.provider == current.provider == "installed":
+                ambiguous.add(record.skill_id)
+        for skill_id in ambiguous:
+            selected.pop(skill_id, None)
+            self.diagnostics.append(
+                {
+                    "provider": "installed",
+                    "source": skill_id,
+                    "error": "Installed Skill identity is ambiguous; review its imports",
+                }
+            )
         return dict(sorted(selected.items()))
 
     def _local_records(self) -> list[SkillRecord]:
@@ -582,11 +656,11 @@ class SkillRegistry:
             resources=tuple(skill.resources),
             trust="builtin" if provider == "builtin" else "unverified",
             metadata={
+                **dict(skill.metadata),
                 "authority": "none",
                 "extension_id": manifest.extension_id,
                 "license": skill.license,
                 "compatibility": skill.compatibility,
-                **dict(skill.metadata),
             },
         )
 

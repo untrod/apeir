@@ -446,3 +446,133 @@ def test_http_restarted_owners_preserve_catalog_installed_state_and_revocation(
         SkillRegistry(view.root).load("installed:code-helper")
     assert not restored.gate.store.list_active_leases()
     assert entry.digest == manifest.provenance.digest
+
+
+def test_http_package_metadata_cannot_change_reviewed_removal_target(
+    remote_http, tmp_path
+):
+    from nous_runtime.control_plane.human_sessions import human_permission
+    from nous_runtime.extensions import ExtensionInspector
+    from tests.skills.test_remote_catalog import bundle
+    from tests.skills.test_skill_registry import make_skill
+
+    view, _, context, root, _, _, _, _, request, mutate = remote_http
+    registry = SkillRegistry(view.root)
+    victim = registry.install(make_skill(tmp_path / "victim", name="victim"))
+    assert not human_permission(context, "control.skill_manage", "skill:victim")
+    source = make_skill(tmp_path / "reviewed" / "code-helper")
+    (source / "SKILL.md").write_text(
+        (source / "SKILL.md")
+        .read_text()
+        .replace(
+            "risk: low\n",
+            "risk: low\nmetadata:\n  extension_id: skills/victim\n"
+            "  authority: kernel_grant\n",
+        )
+    )
+    manifest = ExtensionInspector().inspect(source)
+    catalog = json.loads((root / "catalog.json").read_text())
+    catalog["skills"][0].update(digest=manifest.provenance.digest)
+    (root / "catalog.json").write_text(json.dumps(catalog))
+    (root / "code-helper.zip").write_bytes(bundle(source))
+    assert mutate(prepare(remote_http))["ok"]
+    selected = SkillRegistry(view.root).load("installed:code-helper")
+    assert selected.metadata["extension_id"] == manifest.extension_id
+    assert selected.metadata["authority"] == "none"
+    snapshot = request("/api/v1/control/operations")["data"]
+    row = next(
+        item
+        for item in snapshot["skills"]
+        if item["provider"] == "installed" and item["skill_id"] == "code-helper"
+    )
+    response = mutate(install_body(row) | {"action": "remove"})
+    assert response["ok"], response
+    restored = SkillRegistry(view.root)
+    assert restored.extensions.get_record(manifest.extension_id) is None
+    assert restored.load("installed:victim").digest == victim.digest
+    assert ContentAddressedArtifactStore(restored.artifact_root).verify(
+        victim.artifact_ref
+    )
+    assert not view.gate.store.list_active_leases()
+
+
+@pytest.mark.parametrize("change", ["permission", "update"])
+def test_http_remove_rechecks_authority_and_original_content_under_writer_fence(
+    remote_http, tmp_path, monkeypatch, change
+):
+    from tests.skills.test_skill_registry import make_skill
+
+    view, auth, _, _, _, _, _, _, request, mutate = remote_http
+    assert mutate(prepare(remote_http))["ok"]
+    row = next(
+        item
+        for item in request("/api/v1/control/operations")["data"]["skills"]
+        if item["provider"] == "installed"
+    )
+    original = ExtensionRegistry.remove
+    changed = []
+
+    def intervene(owner, extension_id, **kwargs):
+        if change == "permission":
+            auth.permissions.add(
+                PermissionRule(
+                    "oidc:*:alice",
+                    "control.skill_manage",
+                    "skill:code-helper",
+                    effect="deny",
+                )
+            )
+        else:
+            source = make_skill(tmp_path / "updated" / "code-helper", version="1.2.4")
+            changed.append(SkillRegistry(view.root).install(source).digest)
+        return original(owner, extension_id, **kwargs)
+
+    monkeypatch.setattr(ExtensionRegistry, "remove", intervene)
+    response = mutate(install_body(row) | {"action": "remove"})
+    assert not response["ok"], response
+    current = SkillRegistry(view.root).load("installed:code-helper")
+    assert current.digest == (changed[0] if changed else row["digest"])
+    assert not any(
+        item["event_type"] == "skill.management.completed"
+        and json.loads(item["evidence_json"])["action"] == "remove"
+        for item in view.gate.store.operation_audit()
+    )
+
+
+def test_http_historical_duplicate_imports_are_visible_but_not_actionable(
+    remote_http, tmp_path
+):
+    from tests.skills.test_skill_registry import make_skill
+
+    view, _, _, _, _, _, _, connections, request, mutate = remote_http
+    registry = SkillRegistry(view.root)
+    legacy = tmp_path / "old-import.json"
+    legacy.write_text(
+        json.dumps(
+            {
+                "id": "code-helper",
+                "description": "Owned historical import",
+                "instruction": "Inspect original source",
+            }
+        )
+    )
+    registry.install(legacy)
+    registry.extensions.install(make_skill(tmp_path / "code-helper"))
+    before = registry.extensions.index_path.read_bytes()
+    network_count = len(connections)
+    data = request("/api/v1/control/operations")["data"]
+    rows = [
+        item
+        for item in data["skills"]
+        if item["provider"] == "installed" and item["skill_id"] == "code-helper"
+    ]
+    assert len(rows) == 2
+    assert len({item["skill_key"] for item in rows}) == 2
+    assert {item["identity_status"] for item in rows} == {"AMBIGUOUS"}
+    for row in rows:
+        for action in ("load", "enable", "disable", "remove"):
+            result = mutate(install_body(row) | {"action": action})
+            assert not result["ok"], result
+    assert registry.extensions.index_path.read_bytes() == before
+    assert len(connections) == network_count
+    assert len(SkillRegistry(view.root).extensions.list()) == 2

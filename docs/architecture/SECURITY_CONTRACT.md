@@ -614,6 +614,22 @@ prevents loading. Install/enable/load never executes scripts or issues execution
 grants. Human identity, package digest and artifact references use the existing
 Governance audit. Actual Operations still require existing Work authorization.
 
+Skill identity and authority fields come from the verified canonical manifest,
+not package-defined display metadata. Uninstall binds the original reviewed
+Skill ID, Extension ID, version and content digest. The existing Extension writer
+fence rechecks that binding and current human authority immediately before
+removal. A changed installation requires a new review; revoked Extension records
+remain durable tombstones and cannot be removed to restore trust implicitly.
+Ordinary uninstall still removes valid installed references, while immutable
+objects and previously retained CAS evidence remain subject to the documented
+rollback/audit retention behavior.
+Importing another format under the same installed Skill name is an explicit
+identity conflict, not an implicit migration. Publication rejects it under the
+existing writer fence and preserves the original installation. Historical
+same-name imports remain visible with distinct canonical keys and an ambiguity
+diagnostic; loading and management of their shared alias fail closed. No record
+is silently selected, deleted or migrated.
+
 Local software qualification: **17 focused package/authority cases passed**, plus
 **594 affected Skill/Extension/Control Plane/repository/public SDK cases passed,
 17 skipped**; source Desktop lint/typecheck/build and **65 tests in 25 files passed**.

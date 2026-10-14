@@ -69,6 +69,21 @@ class OperationsPlane:
         registry = SkillRegistry(self.root)
         records = registry.list(include_disabled=True, include_catalogs=False)
         records.extend(registry.catalog_records(local_only=True))
+        installed_names: dict[str, int] = {}
+        for item in records:
+            if item.provider == "installed":
+                installed_names[item.skill_id] = (
+                    installed_names.get(item.skill_id, 0) + 1
+                )
+        ambiguous = {name for name, count in installed_names.items() if count > 1}
+        for name in sorted(ambiguous):
+            registry.diagnostics.append(
+                {
+                    "provider": "installed",
+                    "source": name,
+                    "error": "Installed Skill identity is ambiguous; review its imports",
+                }
+            )
         return [
             item.summary()
             | {
@@ -81,8 +96,19 @@ class OperationsPlane:
                         str(item.metadata["catalog_source"]).encode()
                     ).hexdigest()[:16]
                     if item.provider == "catalog"
+                    else ":"
+                    + hashlib.sha256(
+                        str(item.metadata["extension_id"]).encode()
+                    ).hexdigest()[:16]
+                    if item.provider == "installed" and item.skill_id in ambiguous
                     else ""
                 ),
+                "extension_id": str(item.metadata.get("extension_id") or ""),
+                "identity_status": "AMBIGUOUS"
+                if item.provider == "installed" and item.skill_id in ambiguous
+                else "BOUND"
+                if item.provider == "installed"
+                else "DECLARED",
                 "source": item.source,
                 "catalog_source": str(item.metadata.get("catalog_source") or ""),
                 "package_source": item.source if item.provider == "catalog" else "",
@@ -511,6 +537,10 @@ class OperationsPlane:
         )
         if row is None:
             raise KeyError(target)
+        if row["identity_status"] == "AMBIGUOUS":
+            raise PermissionError(
+                "Installed Skill identity is ambiguous; review its imports"
+            )
         if body.get("digest") != row["digest"] or body.get("version") != row["version"]:
             raise PermissionError("Skill version or digest changed; review it again")
         request = GovernanceRequest(
@@ -571,7 +601,12 @@ class OperationsPlane:
                 if row["provider"] != "installed":
                     raise PermissionError("Only installed Skills can be removed")
                 result = {
-                    "removed": registry.remove(qualified),
+                    "removed": registry.remove(
+                        qualified,
+                        expected_digest=row["digest"],
+                        expected_version=row["version"],
+                        before_publish=revalidate,
+                    ),
                     "skill_id": row["skill_id"],
                 }
             else:

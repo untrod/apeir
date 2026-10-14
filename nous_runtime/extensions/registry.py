@@ -594,17 +594,59 @@ class ExtensionRegistry:
         digest = manifest.provenance.digest.removeprefix("sha256:")
         return self.objects / digest / "package"
 
-    def remove(self, extension_id: str) -> bool:
+    def remove(
+        self,
+        extension_id: str,
+        *,
+        expected_digest: str = "",
+        expected_version: str = "",
+        expected_skill_id: str = "",
+        before_remove: Callable[[], None] | None = None,
+    ) -> bool:
         with self._writer_lock():
-            return self._remove(extension_id)
+            if before_remove is not None:
+                before_remove()
+            return self._remove(
+                extension_id,
+                expected_digest=expected_digest,
+                expected_version=expected_version,
+                expected_skill_id=expected_skill_id,
+            )
 
-    def _remove(self, extension_id: str) -> bool:
+    def _remove(
+        self,
+        extension_id: str,
+        *,
+        expected_digest: str,
+        expected_version: str,
+        expected_skill_id: str,
+    ) -> bool:
         """Remove a registry reference; immutable objects remain for rollback/audit."""
 
         index = self._index()
         records = index.get("extensions") or {}
         if extension_id not in records:
             return False
+        if records[extension_id].get("state") == "revoked":
+            raise PermissionError(
+                "Extension is revoked; removal cannot erase its trust state"
+            )
+        if expected_digest or expected_version or expected_skill_id:
+            manifest = self.verify(extension_id)
+            assert manifest.provenance is not None
+            if (
+                manifest.extension_id != extension_id
+                or (expected_digest and manifest.provenance.digest != expected_digest)
+                or (expected_version and manifest.version != expected_version)
+                or (
+                    expected_skill_id
+                    and (
+                        len(manifest.skills) != 1
+                        or manifest.skills[0].name != expected_skill_id
+                    )
+                )
+            ):
+                raise PermissionError("Extension content changed; review it again")
         del records[extension_id]
         _write_json(self.index_path, index)
         self._write_lock(index)
