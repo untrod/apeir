@@ -874,6 +874,46 @@ class AgentLoop:
             def invoke(_request: Any) -> Any:
                 arguments = dict(decision.tool_arguments)
                 if decision.tool_name == "shell_start":
+                    from nous_runtime.tools import (
+                        ToolCatalog,
+                        ProcessSessionToolRuntime,
+                    )
+                    from nous_runtime.tools.process_session import _digest
+
+                    owner = (
+                        tools.executor_owner(decision.tool_name)
+                        if type(tools) is ToolCatalog
+                        else tools
+                    )
+                    if (
+                        type(owner) is ProcessSessionToolRuntime
+                        and owner.store.workspace == self.harness.root
+                    ):
+                        host = owner.workspace_runtime
+                        snapshot.pending_action["process_binding"] = {
+                            "schema": "nous.work-process-binding/v1",
+                            "arguments_digest": snapshot.pending_action[
+                                "arguments_digest"
+                            ],
+                            "work_id": snapshot.run_id,
+                            "action_sequence": snapshot.action_sequence + 1,
+                            "tool_call_id": str(_request.invocation_id),
+                            "command_digest": _digest(
+                                host.prepare_development_command(
+                                    arguments.get("command")
+                                )
+                            ),
+                            "cwd": str(host.prepare_process_cwd(arguments.get("cwd"))),
+                            "environment_ref": _digest(host.safe_process_environment()),
+                        }
+                        self.harness.persist_progress(
+                            snapshot,
+                            "work.progress",
+                            {
+                                "summary": "Recorded original host process input binding",
+                                "action": dict(snapshot.pending_action),
+                            },
+                        )
                     arguments.update(
                         {
                             "_work_id": snapshot.run_id,
@@ -897,7 +937,7 @@ class AgentLoop:
             tool_call_id = invocation.invocation_id
             invocation_status = invocation.status.value
             result = captured.get("result")
-            if result is None:
+            if "result" not in captured:
                 result = {
                     "ok": False,
                     "error": invocation.message or "tool invocation failed",
@@ -905,6 +945,18 @@ class AgentLoop:
                 }
 
         normalized = self._result_mapping(result)
+        if invocation_status == "failed" and effect_class not in {"none", "read"}:
+            # An exception after dispatch does not prove the effect was rolled back.
+            normalized["recovery_required"] = True
+        if (
+            invocation_status == "completed"
+            and self._result_outcome(normalized) is None
+        ):
+            normalized.setdefault("error", "tool result has no unambiguous outcome")
+            if effect_class not in {"none", "read"}:
+                # Preserve the original envelope and pending action. A malformed
+                # response cannot establish that a dispatched effect did not occur.
+                normalized["recovery_required"] = True
         self._bind_change_records(normalized, snapshot.run_id, tool_call_id)
         ok = invocation_status == "completed" and self._result_ok(normalized)
         if decision.tool_name == "web_fetch" and not ok:
@@ -963,6 +1015,9 @@ class AgentLoop:
             and str(normalized.get("error_code") or "") == "NOUS_APPROVAL_REQUIRED"
             and str(normalized.get("proposal_id") or "")
             and str(normalized.get("approval_request_id") or "")
+            and self._original_workspace_approval(
+                snapshot, tools, decision.tool_name, normalized
+            )
         ):
             reason = (
                 "Review the original workspace proposal before its files can be applied"
@@ -995,6 +1050,7 @@ class AgentLoop:
             return
         if (
             decision.tool_name in {"web_search", "web_fetch"}
+            and effect_class == "network"
             and not ok
             and str(normalized.get("error_code") or "") == "NOUS_APPROVAL_REQUIRED"
             and str(normalized.get("approval_request_id") or "")
@@ -1030,6 +1086,13 @@ class AgentLoop:
                 },
             )
             return
+        if (
+            invocation_status == "completed"
+            and not ok
+            and effect_class in {"write", "execute", "unknown"}
+        ):
+            # A failed response is not evidence that the effect did not happen.
+            normalized["recovery_required"] = True
         if self._effect_outcome_requires_recovery(effect_class, normalized):
             reason = (
                 f"tool {decision.tool_name} has an uncertain effect outcome; "
@@ -1066,6 +1129,50 @@ class AgentLoop:
             },
         )
 
+    def _original_workspace_approval(
+        self,
+        snapshot: WorkSnapshot,
+        tools: Any,
+        tool_name: str,
+        result: Mapping[str, Any],
+    ) -> bool:
+        from nous_runtime.chat.agent_tools import WorkspaceToolRuntime
+        from nous_runtime.tools.catalog import ToolCatalog
+
+        owner = tools.executor_owner(tool_name) if type(tools) is ToolCatalog else tools
+        if (
+            type(owner) is not WorkspaceToolRuntime
+            or tool_name
+            not in {"write_file", "write_files", "propose_files", "patch_file"}
+            or str(owner.root) != str(self.harness.root)
+            or owner.source_work_id != snapshot.run_id
+        ):
+            return False
+        try:
+            original = owner._proposal_runtime().read(
+                str(result["proposal_id"]), include_diff=False
+            )
+            return (
+                original["source_work_id"] == snapshot.run_id
+                and original["subject_id"] == "agent.apeir.work"
+                and original["plan_id"]
+                == (snapshot.plan.plan_id if snapshot.plan else "")
+                and original["approval_status"] == "PENDING"
+                and original["state"] == "PROPOSED"
+                and not original["cancellation_requested"]
+                and all(
+                    original[key] == result.get(key)
+                    for key in (
+                        "proposal_id",
+                        "manifest_ref",
+                        "authorization_id",
+                        "approval_request_id",
+                    )
+                )
+            )
+        except Exception:
+            return False
+
     @staticmethod
     def _effect_outcome_requires_recovery(
         effect_class: str,
@@ -1073,7 +1180,7 @@ class AgentLoop:
     ) -> bool:
         """Keep uncertain side effects pending until durable evidence resolves them."""
 
-        if effect_class not in {"write", "execute", "network"}:
+        if effect_class not in {"write", "execute", "network", "unknown"}:
             return False
         state = (
             str(
@@ -1570,11 +1677,22 @@ class AgentLoop:
                 if snapshot.goal.completion_criteria or snapshot.plan is not None
                 else "",
             }
+            if not snapshot.goal.completion_criteria and snapshot.plan is None:
+                from nous_runtime.work.deliberation import verify_recorded_work
+
+                result = verify_recorded_work(self.harness.context_for(snapshot))
         else:
             try:
                 value = verifier(self.harness.context_for(snapshot))
                 result = (
-                    dict(value) if isinstance(value, Mapping) else {"ok": bool(value)}
+                    dict(value)
+                    if isinstance(value, Mapping)
+                    else {"ok": value}
+                    if type(value) is bool
+                    else {
+                        "ok": False,
+                        "error": "verification handler returned an unsupported result",
+                    }
                 )
             except Exception as exc:
                 result = {"ok": False, "error": str(exc)}
@@ -1620,6 +1738,16 @@ class AgentLoop:
         snapshot: WorkSnapshot,
         verifier: Verifier | None,
     ) -> bool:
+        requires_verification = (
+            snapshot.plan is not None
+            or bool(snapshot.goal.completion_criteria)
+            or any(
+                item.get("kind") == "tool"
+                and item.get("tool")
+                not in {"catalog_expand", "skill_list", "skill_search", "skill_load"}
+                for item in snapshot.observations
+            )
+        )
         verified = any(
             item.get("kind") == "verification"
             and item.get("ok") is True
@@ -1628,13 +1756,9 @@ class AgentLoop:
             == (snapshot.plan.revision if snapshot.plan else 0)
             for item in snapshot.observations
         )
-        if not verified and (
-            snapshot.plan is not None or snapshot.goal.completion_criteria
-        ):
+        if not verified and requires_verification:
             verified = self._verify(snapshot, verifier)
-        if not verified and (
-            snapshot.plan is not None or snapshot.goal.completion_criteria
-        ):
+        if not verified and requires_verification:
             return False
         if snapshot.plan is not None:
             if snapshot.plan.any_failed() or not snapshot.plan.all_done():
@@ -1815,13 +1939,38 @@ class AgentLoop:
     def _result_mapping(value: Any) -> dict[str, Any]:
         if isinstance(value, Mapping):
             return dict(value)
-        return {"ok": True, "result": value}
+        return {"result": value}
 
     @staticmethod
     def _result_ok(value: Mapping[str, Any]) -> bool:
-        for key in ("ok", "success", "passed"):
-            if key in value:
-                return bool(value[key])
+        return AgentLoop._result_outcome(value) is True
+
+    @staticmethod
+    def _result_outcome(value: Mapping[str, Any]) -> bool | None:
+        """Admit existing boolean result contracts; unknown evidence stays unknown."""
+        flags = [value[key] for key in ("ok", "success", "passed") if key in value]
+        if not flags or any(type(flag) is not bool for flag in flags):
+            return None
+        if any(flag is not flags[0] for flag in flags):
+            return None
+        states = {
+            str(value.get(key) or "").strip().upper()
+            for key in ("state", "status", "outcome")
+        }
+        if value.get("recovery_required") or states & {
+            "UNKNOWN",
+            "RECOVERY_REQUIRED",
+            "LOST",
+        }:
+            return None
+        if flags[0] is False:
+            return False
+        if (
+            any(value.get(key) for key in ("error", "errors", "error_code"))
+            or ("isError" in value and value["isError"] is not False)
+            or states & {"DENIED", "FAILED", "FAILURE", "ERROR"}
+        ):
+            return None
         return True
 
     @staticmethod

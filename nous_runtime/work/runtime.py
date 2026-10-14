@@ -289,25 +289,66 @@ class WorkHarness:
             and str(snapshot.pending_action.get("tool") or "") == "shell_start"
             and tools is not None
         ):
-            execute = getattr(tools, "execute", None)
+            from nous_runtime.work.loop import AgentLoop
+            from nous_runtime.tools import ToolCatalog, ProcessSessionToolRuntime
+            from nous_runtime.tools.process_session import ProcessSessionStore
+
             pending_shell = dict(snapshot.pending_action)
-            recovered = (
-                execute(
-                    "shell_recover",
-                    {
-                        "work_id": snapshot.run_id,
-                        "action_sequence": int(
-                            pending_shell.get("action_sequence") or 0
-                        ),
-                    },
-                )
-                if callable(execute)
-                else {}
+            owner = (
+                tools.executor_owner("shell_recover")
+                if type(tools) is ToolCatalog
+                else tools
             )
+            sequence = pending_shell.get("action_sequence")
+            binding = pending_shell.get("process_binding")
+            bound_owner = (
+                type(owner) is ProcessSessionToolRuntime
+                and type(owner.store) is ProcessSessionStore
+                and owner.store.workspace == self.root
+                and type(sequence) is int
+                and sequence > 0
+                and isinstance(binding, Mapping)
+                and binding.get("schema") == "nous.work-process-binding/v1"
+                and isinstance(binding.get("arguments_digest"), str)
+                and binding["arguments_digest"].startswith("sha256:")
+                and len(binding["arguments_digest"]) == 71
+                and binding.get("arguments_digest")
+                == pending_shell.get("arguments_digest")
+                and binding.get("work_id") == snapshot.run_id
+                and binding.get("action_sequence") == sequence
+                and isinstance(binding.get("tool_call_id"), str)
+                and bool(binding["tool_call_id"])
+            )
+            recovered = {}
+            if bound_owner:
+                try:
+                    recovered = owner.store.recover(
+                        session_id=str(pending_shell.get("process_session_id") or ""),
+                        work_id=snapshot.run_id,
+                        action_sequence=sequence,
+                    )
+                except Exception:
+                    # Unavailable original evidence cannot reopen an uncertain effect.
+                    recovered = {}
+            latest = self.require(run_id)
+            if latest.last_checkpoint_id != snapshot.last_checkpoint_id:
+                return latest
             if (
                 isinstance(recovered, Mapping)
-                and recovered.get("found")
-                and not recovered.get("recovery_required")
+                and recovered.get("found") is True
+                and AgentLoop._result_ok(recovered)
+                and recovered.get("work_id") == snapshot.run_id
+                and recovered.get("action_sequence") == sequence
+                and recovered.get("automatic_replay") is False
+                and all(
+                    recovered.get(key) == binding.get(key)
+                    for key in (
+                        "tool_call_id",
+                        "command_digest",
+                        "cwd",
+                        "environment_ref",
+                    )
+                )
             ):
                 snapshot.pending_action.clear()
                 snapshot.action_sequence = max(

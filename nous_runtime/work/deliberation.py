@@ -354,7 +354,12 @@ class ModelWorkDeliberator:
 
 
 def _execution_progress(context: WorkContext) -> dict[str, Any]:
-    observations = tuple(context.recent_observations)
+    current_revision = int((context.plan or {}).get("revision") or 0)
+    observations = tuple(
+        item
+        for item in context.recent_observations
+        if int(item.get("plan_revision", current_revision)) == current_revision
+    )
     assessment = dict(context.assessment)
     source_evidence = any(
         item.get("kind") == "tool"
@@ -373,12 +378,49 @@ def _execution_progress(context: WorkContext) -> dict[str, Any]:
     evidence_sufficient = source_evidence and (
         not bool(assessment.get("needs_web")) or web_evidence
     )
-    workspace_changed = any(
-        item.get("kind") == "tool"
-        and item.get("ok") is True
-        and _result_has_change(item.get("result"))
+    changes = [
+        item
         for item in observations
+        if (
+            item.get("kind") == "tool"
+            and item.get("ok") is True
+            and _result_has_change(item.get("result"))
+        )
+    ]
+    workspace_changed = bool(changes)
+    last_change_sequence = (
+        max(item["action_sequence"] for item in changes)
+        if changes
+        and all(
+            type(item.get("action_sequence")) is int
+            and type(item.get("plan_revision")) is int
+            and item["plan_revision"] == current_revision
+            for item in changes
+        )
+        else -1
     )
+
+    def after_current_change(item: Mapping[str, Any], *, process: bool = False) -> bool:
+        sequence = item.get("action_sequence")
+        if (
+            type(item.get("plan_revision")) is not int
+            or item["plan_revision"] != current_revision
+        ):
+            return False
+        if last_change_sequence < 0 or type(sequence) is not int:
+            return False
+        if sequence <= last_change_sequence:
+            return False
+        result = item.get("result")
+        if process and isinstance(result, Mapping) and "action_sequence" in result:
+            started_sequence = result["action_sequence"]
+            return (
+                type(started_sequence) is int
+                and started_sequence > last_change_sequence
+                and result.get("work_id") == context.run_id
+            )
+        return True
+
     shell_results = [
         item
         for item in observations
@@ -389,17 +431,33 @@ def _execution_progress(context: WorkContext) -> dict[str, Any]:
         and isinstance(item.get("result"), Mapping)
     ]
     execution_started = bool(shell_results)
-    tests_run = any(_completed_test_result(item["result"]) for item in shell_results)
+    tests_run = any(
+        after_current_change(item, process=True)
+        and _completed_test_result(item["result"])
+        for item in shell_results
+    )
     diff_reviewed = any(
         item.get("kind") == "tool"
         and item.get("tool") == "git_diff"
         and item.get("ok") is True
         and isinstance(item.get("result"), Mapping)
         and bool(str(item["result"].get("stdout") or "").strip())
+        and after_current_change(item)
         for item in observations
     )
+    latest_action_sequence = max(
+        (
+            item["action_sequence"]
+            for item in observations
+            if item.get("kind") == "tool" and type(item.get("action_sequence")) is int
+        ),
+        default=0,
+    )
     verification_passed = any(
-        item.get("kind") == "verification" and item.get("ok") is True
+        item.get("kind") == "verification"
+        and item.get("ok") is True
+        and type(item.get("action_sequence")) is int
+        and item["action_sequence"] == latest_action_sequence
         for item in observations
     )
     if verification_passed:
@@ -451,7 +509,8 @@ def _completed_test_result(result: Mapping[str, Any]) -> bool:
     command = tuple(str(item) for item in result.get("command") or ())
     is_test = any(item in {"pytest", "test"} or "pytest" in item for item in command)
     state = str(result.get("state") or "").upper()
-    return is_test and state == "EXITED" and int(result.get("exit_code") or 0) == 0
+    exit_code = result.get("exit_code")
+    return is_test and state == "EXITED" and type(exit_code) is int and exit_code == 0
 
 
 def _phase_step_id(context: WorkContext, phase: str) -> str:
@@ -905,7 +964,7 @@ def verify_recorded_work(context: WorkContext) -> dict[str, Any]:
         and item.get("tool")
         not in {"catalog_expand", "skill_list", "skill_search", "skill_load"}
         and (not loaded_tool_ids or str(item.get("tool") or "") in loaded_tool_ids)
-        and int(item.get("plan_revision") or current_revision) == current_revision
+        and int(item.get("plan_revision", current_revision)) == current_revision
     ]
     latest_tool_results: dict[tuple[str, str], dict[str, Any]] = {}
     for item in tool_observations:
