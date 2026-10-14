@@ -101,6 +101,23 @@ def test_connected_node_requires_reconciliation_before_online() -> None:
     assert online.schedulable is True
 
 
+def test_online_phase_does_not_keep_an_expired_lease_schedulable() -> None:
+    observed = datetime(2026, 10, 2, tzinfo=timezone.utc)
+    projection = project_node_connectivity(
+        connected=True,
+        connection_phase="ONLINE",
+        last_observed_at=_timestamp(observed),
+        resource_observed_at=_timestamp(observed),
+        resource_report_current=True,
+        heartbeat_seconds=5,
+        now=observed + timedelta(seconds=15.001),
+    )
+    assert projection.state is NodeConnectivityState.ONLINE
+    assert projection.lease_valid is False
+    assert projection.resource_report_fresh is False
+    assert projection.schedulable is False
+
+
 @pytest.mark.parametrize("connected", [True, False])
 @pytest.mark.parametrize(
     "resource_observed_at,resource_report_current,resource_report_fresh",
@@ -159,8 +176,11 @@ def test_connectivity_projection_preserves_original_positional_fields():
     assert projection.resource_report_fresh is False
 
 
+@pytest.mark.parametrize("expired_online_samples", [0, 2])
 def test_completed_work_is_delivered_after_transport_loss_without_reexecution(
     tmp_path: Path,
+    monkeypatch,
+    expired_online_samples: int,
 ) -> None:
     class DisconnectOnceClient(NodeRelayClient):
         def __init__(self, *args, **kwargs):
@@ -186,6 +206,47 @@ def test_completed_work_is_delivered_after_transport_loss_without_reexecution(
         service._handlers["system.echo"] = execute
         server = NodeRelayServer(heartbeat_seconds=0.05)
         server.register_node(service.identity.node_id, service.identity.public_key)
+        original_status = server.controller_status
+        injected_samples = 0
+
+        def status_with_expired_online_samples():
+            nonlocal injected_samples
+            status = original_status()
+            for node in status["nodes"]:
+                if (
+                    "work-disconnect-result" in server.results
+                    and node["node_id"] == service.identity.node_id
+                    and node["connected"]
+                    and node["connectivity_state"] == "ONLINE"
+                    and injected_samples < expired_online_samples
+                ):
+                    observed = datetime.fromisoformat(
+                        node["last_observed_at"].replace("Z", "+00:00")
+                    )
+                    projection = project_node_connectivity(
+                        connected=True,
+                        connection_phase="ONLINE",
+                        last_observed_at=node["last_observed_at"],
+                        resource_observed_at=node["resource_observed_at"],
+                        resource_report_current=node["resource_report_current"],
+                        heartbeat_seconds=server.heartbeat_seconds,
+                        now=observed
+                        + timedelta(seconds=server.heartbeat_seconds * 3 + 0.001),
+                    )
+                    assert projection.state is NodeConnectivityState.ONLINE
+                    assert projection.lease_valid is False
+                    node.update(
+                        connectivity_lease_valid=projection.lease_valid,
+                        schedulable=projection.schedulable,
+                        resource_report_fresh=projection.resource_report_fresh,
+                        observation_age_seconds=projection.observation_age_seconds,
+                    )
+                    injected_samples += 1
+            return status
+
+        monkeypatch.setattr(
+            server, "controller_status", status_with_expired_online_samples
+        )
         await server.queue_workload(
             service.identity.node_id,
             "work-disconnect-result",
@@ -202,13 +263,10 @@ def test_completed_work_is_delivered_after_transport_loss_without_reexecution(
             await _wait_for(lambda: "work-disconnect-result" in server.results)
             assert client.disconnected is True
             assert executions == 1
-            await _wait_for(
-                lambda: (
-                    server.controller_status()["nodes"][0]["connectivity_state"]
-                    == "ONLINE"
-                )
-            )
-            live = server.controller_status()["nodes"][0]
+            # ONLINE is a connection phase, not a current resource/lease proof.
+            # Assert the same observed ready snapshot rather than resampling time.
+            live = await _wait_for_ready_node(server, service.identity.node_id)
+            assert injected_samples == expired_online_samples
             assert live["connectivity_lease_valid"] is True
             assert live["schedulable"] is True
             assert server.results["work-disconnect-result"]["output"] == {
@@ -219,13 +277,23 @@ def test_completed_work_is_delivered_after_transport_loss_without_reexecution(
             )
         finally:
             stop.set()
-            await asyncio.wait_for(task, timeout=2)
-            await _wait_for(lambda: service.identity.node_id not in server.connections)
-            disconnected = server.controller_status()["nodes"][0]
-            assert disconnected["connectivity_state"] == "DEGRADED"
-            assert disconnected["connected"] is False
-            assert disconnected["connectivity_lease_valid"] is True
-            await server.stop()
+            try:
+                await asyncio.wait_for(task, timeout=2)
+                await _wait_for(
+                    lambda: service.identity.node_id not in server.connections
+                )
+                disconnected = server.controller_status()["nodes"][0]
+                assert disconnected["connected"] is False
+                # The 150ms test lease can expire during the bounded 2s shutdown.
+                # Expiration must remove placement readiness, not renew the lease.
+                if disconnected["connectivity_lease_valid"]:
+                    assert disconnected["connectivity_state"] == "DEGRADED"
+                else:
+                    assert disconnected["connectivity_state"] in {"STALE", "OFFLINE"}
+                    assert disconnected["schedulable"] is False
+                assert executions == 1
+            finally:
+                await server.stop()
 
     asyncio.run(scenario())
 
@@ -446,6 +514,42 @@ def test_cancelled_transport_preserves_inflight_effect_and_delivers_original_res
             await server.stop()
 
     asyncio.run(scenario())
+
+
+async def _wait_for_ready_node(server, node_id, timeout: float = 5.0):
+    observed = None
+
+    def ready():
+        nonlocal observed
+        node = next(
+            (
+                item
+                for item in server.controller_status()["nodes"]
+                if item["node_id"] == node_id
+            ),
+            None,
+        )
+        if (
+            node is not None
+            and node["connectivity_state"] == "ONLINE"
+            and all(
+                node.get(field) is True
+                for field in (
+                    "connected",
+                    "connectivity_lease_valid",
+                    "schedulable",
+                    "resource_report_current",
+                    "resource_report_fresh",
+                )
+            )
+        ):
+            observed = node
+            return True
+        return False
+
+    await _wait_for(ready, timeout)
+    assert observed is not None
+    return observed
 
 
 async def _wait_for(predicate, timeout: float = 5.0) -> None:
