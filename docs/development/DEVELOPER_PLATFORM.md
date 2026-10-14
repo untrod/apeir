@@ -273,9 +273,19 @@ does not certify the files within it. Healthy empty stores still return normal
 empty history and zero statistics; an Evaluation initialization/list/statistics
 failure or Experience list/statistics failure now raises its existing domain
 exception so the API can report an error. These read models cannot establish
-Operation authority or replace recorded EffectVerification. This is static local
+Operation authority or replace recorded EffectVerification. Read-only SQLite
+connections use an encoded absolute file URI, preserving literal `#`, `?`, `%`,
+spaces and Unicode names instead of interpreting filename text as URI control
+syntax. Write connections retain their plain filesystem paths. This is static local
 path admission, not protection against an OS owner changing a path after the
 check, Windows ACL qualification or a new storage subsystem.
+
+The same literal-path URI encoding is used by the existing GovernanceStore,
+SQLiteRuntime (including integrity metrics), CapabilityRegistry, legacy Network
+Registry and explicit SQLite Connector. This does not transfer trust or permission
+between those owners; the Connector retains its explicitly selected database.
+Nonlocal UNC URI authority is not qualified and unsupported SQLite builds fail
+closed. NFS/SMB or cross-host shared runtime state remains unsupported.
 
 Trusted Workflow handler registration can supply `WorkflowHandlerPolicy` from
 the existing `nous_runtime.workflow` package, or a typed policy on the registered

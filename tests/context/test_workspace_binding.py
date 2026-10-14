@@ -428,3 +428,37 @@ def test_private_database_linked_sidecar_is_rejected(
     with pytest.raises(PRIVATE_STATE_ERRORS):
         store.list()
     assert target.read_bytes() == b"owned fake unchanged sidecar"
+
+
+@pytest.mark.parametrize("store_type,record,name", PRIVATE_STORES)
+@pytest.mark.parametrize("suffix", ["#chosen", "?chosen", "%23chosen", " space-π"])
+def test_readonly_database_uri_keeps_exact_selected_file(
+    selected_workspace, monkeypatch, store_type, record, name, suffix
+):
+    import os
+    import shutil
+
+    if os.name == "nt" and "?" in suffix:
+        pytest.skip("Question marks are not legal Windows filename characters")
+    selected, outside = selected_workspace
+    prefix = selected / f"shadow-{name}"
+    shutil.copyfile(outside / ".nous" / name, prefix)
+    root = selected / f"{prefix.name}{suffix}"
+    root.mkdir()
+    monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(root))
+    store = store_type()
+    before = prefix.read_bytes()
+    assert store.list() == []
+    assert store.save(record) is True
+    assert [item.id for item in store.list()] == [record.id]
+    assert store.get(record.id).id == record.id
+    handler = {
+        "context.db": routes.handle_context_history,
+        "evaluation.db": routes.handle_evaluation_history,
+        "experience.db": routes.handle_experience_list,
+    }[name]
+    result = handler()
+    assert result["ok"] is True, result
+    assert [item["id"] for item in result["data"]] == [record.id]
+    assert "outside" not in str(result)
+    assert before == prefix.read_bytes()
