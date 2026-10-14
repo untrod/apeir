@@ -21,6 +21,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from nous_runtime.agents.adapters.workspace_guard import WorkspaceGuard
+from nous_runtime.workspace.isolation import WorkspaceHardLinkError
 from nous_runtime.context.exceptions import ContextPermissionError
 from nous_runtime.context.models import ContextItem, ContextSnapshot
 from nous_runtime.context.security import ContextAccessRequest, ContextGuard
@@ -353,7 +354,12 @@ class SelectedWorkspaceInput:
         WorkspaceGuard remains the canonical path boundary. Descriptor traversal
         additionally prevents symlink replacement between validation and read.
         """
-        self._paths.validate_path(reference.path)
+        try:
+            self._paths.validate_path(reference.path)
+        except ValueError as exc:
+            if isinstance(exc.__cause__, WorkspaceHardLinkError):
+                raise SelectedInputError("source_link_refused") from None
+            raise
         if (
             os.open not in os.supports_dir_fd
             or not hasattr(os, "O_NOFOLLOW")

@@ -1145,3 +1145,21 @@ four allowed/denied direct/stream cases now pass within the regression above.
 This minimizes exposure of a host callback; it is not evidence of leaked real
 credentials or an authority exploit by a trusted host adapter. NKI payload and
 original accounting/reconciliation semantics are unchanged.
+
+The same review extended the existing `normalize_workspace_path` owner for
+protected ordinary-file scopes. A benign owned probe established that hard-link
+aliases of protected/external files entered Workbench and Chat read/search,
+preview diffs and pre-approval proposal snapshots/CAS. Original files remained
+unchanged and proposals still required approval; no real secrets or unauthorized
+mutation were exercised. Placing an alias requires filesystem access to its
+source; this is a scope/data-provenance correction, not a demonstrated remote
+link-creation exploit. Static single-link admission now covers those existing
+consumers, without changing explicit unprotected internal callers or adding a
+file authority. Selected input preserves its stronger descriptor checks.
+The new ordinary-surface contracts retained **3 failed, 1 passed** before repair;
+after repair the alias/selected-input selection has **68 passed** (2.39 s).
+Context/Model/Runtime/Chat/Workbench/proposal/API/checkpoint regression has
+**863 passed** (25.99 s); Python 3.10 alias/selected-input regression has
+**103 passed** (15.48 s). One initial private probe compared the enum against an
+incorrect uppercase literal; the corrected probe uses the authoritative enum.
+These checks do not qualify host-owner race resistance or native installation.

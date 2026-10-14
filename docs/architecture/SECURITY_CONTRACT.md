@@ -29,6 +29,23 @@ not M3.4+ Operation policy. Operation policy is governed by the
 [M3.4-A contract](#m34-a-operation-governance-audit), with current human identity
 at the [M3.5 boundary](#m35-remote-human-boundary).
 
+## Ordinary workspace data
+
+Workbench, Chat tools and proposal snapshots reuse the canonical workspace path
+guard with private-state protection enabled. Named `.nous`/`.git` paths and
+regular files with multiple or unknown links are excluded from ordinary data.
+Lists/searches omit refused entries; reads, previews and proposals reject them
+before publishing original bytes or a proposal snapshot. Normal single-link
+files, directories and not-yet-created write targets retain their contracts.
+Trusted internal callers that explicitly omit private-state protection retain
+their existing scope; that compatibility mode grants no model permission.
+
+This shared guard admits a static path, not a defense against a malicious OS
+owner changing the filesystem after validation. Selected model input additionally
+checks descriptor identity/version and link count around its bounded read and
+revalidates source and transfer authority at actual dispatch. Models still receive
+only admitted ordinary data; neither a filename nor a link supplies permission.
+
 ## Signed Node identity and trust persistence
 
 The product connectivity audit at Distribution `edb932c` classifies signed
