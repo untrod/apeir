@@ -643,3 +643,15 @@ Sandboxed Chromium also exercised actual Runtime HTTP, signed Node CLI processes
 explicit fake-OIDC human nonce decisions, ONLINE resources and live revocation,
 with no mocked Runtime records, page errors or mobile horizontal overflow.
 Those are source-browser/fake-identity records, not installed APEIR.exe or real IdP.
+
+### Current Desktop intent during governed mutations
+
+Generic Operations actions and Automation reuse the existing exact-body human
+mutation helper. The client checks the captured Controller URL, token and
+configuration epoch (including A-to-B-to-A changes), together with its current
+human session, before dispatch and before publishing a response. Explicit
+reconnect, expiry, logout and unmount invalidate pending client intent. Logout
+remains available while an action waits, and clears private displayed content
+immediately. Client invalidation does not prove server revocation; uncertain
+responses remain explicit and never cause automatic resubmission. Server
+Governance, nonce consumption and fresh authorization remain authoritative.

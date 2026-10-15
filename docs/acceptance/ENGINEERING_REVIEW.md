@@ -1179,3 +1179,24 @@ Existing build warnings and original failure logs remain retained. These are
 runtime-service simulations, not a vendor account, deployed IdP, physical device,
 background Cron, Recorder, production strong sandbox or native installation.
 Kernel and component lock are unchanged; exact source/main CI remain required.
+
+### Generic Operations current-intent admission — 2026-10-15
+
+**REUSE / FIX** the existing humanMutation exact-body nonce helper and Runtime
+connection epoch for generic pairing, approval and Skill actions. Six controlled
+pending-nonce cases previously dispatched after URL/token/ABA/session expiry,
+while local logout was disabled. The repaired path binds current live human
+intent, synchronously invalidates on logout/reconnect/configuration/expiry/unmount,
+and rejects late response publication. A further same-Controller reconnect probe
+retained **1 failed** because one UI path bypassed the live-human invalidation;
+it now uses the same callback. No server authority is supplied by these guards.
+
+Original controlled cases: **6 failed, 21 passed**; final full Desktop selection:
+**204 passed in 37 files** (45.03 s). Post-dispatch context changes and lost responses
+retain one submission, no automatic retry, and unconfirmed-outcome guidance.
+Lawful bound logout/pairing/Skill behavior remains covered. Local logout failure
+reports server revocation unconfirmed; it is not presented as authenticated IdP
+qualification. One initial test command used the wrong directory and selected no
+matching test; the corrected causal invocation above is retained separately.
+Kernel, component lock, default limits and all backend authority owners remain
+unchanged. Source/main CI and actual source-browser acceptance are separate gates.

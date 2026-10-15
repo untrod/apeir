@@ -1,6 +1,6 @@
 /** Real runtime operations; every mutation returns to the existing Governance gate. */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, captureRuntimeConnection, getConfig, setConfig, subscribeRuntimeConfig } from "../lib/api";
+import { api, captureRuntimeConnection, getConfig, humanMutation, setConfig, subscribeRuntimeConfig } from "../lib/api";
 import { DeveloperWorkbench } from "./DeveloperWorkbench";
 import { AutomationInspector } from "./AutomationInspector";
 import { DeveloperPlatform } from "./DeveloperPlatform";
@@ -86,6 +86,9 @@ export function OperationsConsole() {
   const [workspaceDraft, setWorkspaceDraft] = useState(false);
   const [query, setQuery] = useState("");
   const [human, setHuman] = useState<Human | null>(null);
+  const liveHuman = useRef<Human | null>(null);
+  const active = useRef(true);
+  const updateHuman = useCallback((value: Human | null) => { liveHuman.current = value; setHuman(value); }, []);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [details, setDetails] = useState<Row | null>(null);
@@ -143,9 +146,9 @@ export function OperationsConsole() {
       let active = true;
       void api<Human>("/api/v1/control/human/session")
         .then(value => {
-          connection(); if (active && typeof value.subject_id === "string" && Number.isFinite(value.expires_at) && value.expires_at * 1000 > Date.now()) setHuman(value);
+          connection(); if (active && typeof value.subject_id === "string" && Number.isFinite(value.expires_at) && value.expires_at * 1000 > Date.now()) updateHuman(value);
         })
-        .catch(() => { if (active) setHuman(null); });
+        .catch(() => { if (active) updateHuman(null); });
       return () => { active = false; };
     }
     callbackHandled.current = true;
@@ -156,10 +159,10 @@ export function OperationsConsole() {
       const pending = JSON.parse(saved || "null") as { state: string; verifier: string; endpoint: string } | null;
       if (!pending || query.get("state") !== pending.state || pending.endpoint !== getConfig().url) throw new Error("Authentication state mismatch");
       void api<Human>("/api/v1/control/human/session", { method: "POST", body: JSON.stringify({ challenge_id: pending.state, code, code_verifier: pending.verifier }) })
-        .then(value => { setHuman(value); void reload(); })
+        .then(value => { updateHuman(value); void reload(); })
         .catch(err => setError(err instanceof Error ? err.message : "Authentication failed"));
     } catch (err) { setError(err instanceof Error ? err.message : "Authentication failed"); }
-  }, [reload]);
+  }, [reload, updateHuman]);
   useEffect(() => {
     if (!human) return;
     // SSE carries durable monotonic transition evidence, then refreshes real state.
@@ -169,9 +172,9 @@ export function OperationsConsole() {
       sequence.current = Math.max(sequence.current, value.sequence);
       void reload();
     });
-    const timer = setTimeout(() => { setHuman(null); source.close(); }, Math.max(0, human.expires_at * 1000 - Date.now()));
+    const timer = setTimeout(() => { updateHuman(null); source.close(); }, Math.max(0, human.expires_at * 1000 - Date.now()));
     return () => { clearTimeout(timer); source.close(); };
-  }, [human, reload]);
+  }, [human, reload, updateHuman]);
   async function signIn() {
     setBusy(true);
     try {
@@ -186,44 +189,55 @@ export function OperationsConsole() {
     finally { setBusy(false); }
   }
   async function action(kind: string, actionName: string, target: string, extra: Row = {}) {
-    const controller = getConfig().url;
+    const original = liveHuman.current;
+    const connection = captureRuntimeConnection();
+    const guard = () => {
+      connection();
+      if (!active.current || !original || liveHuman.current !== original || original.expires_at * 1000 <= Date.now()) throw new Error("Human session changed or expired; action outcome is unconfirmed.");
+    };
     setBusy(true);
     try {
       const path = "/api/v1/control/operations/actions";
       const body = { ...extra, kind, action: actionName, target_id: target };
-      const { nonce } = await api<{ nonce: string }>("/api/v1/control/human/nonce", { method: "POST", body: JSON.stringify({ method: "POST", path, body }) });
-      const result = await api<Row>(path, { method: "POST", headers: { "X-Control-Nonce": nonce }, body: JSON.stringify(body) });
-      if (getConfig().url !== controller) return;
+      const result = await humanMutation<Row>(path, body, guard);
+      guard();
       if (kind === "pairings" && actionName === "create") setInvitation(result);
       if (kind === "skills") setSkillContent(actionName === "load" ? record(record(result.skill).skill) : null);
       await reload();
-    } catch (err) { setError(err instanceof Error ? err.message : "Governed action rejected"); }
-    finally { setBusy(false); }
+      guard();
+    } catch (err) { if (active.current) setError(`Action not confirmed. ${err instanceof Error ? err.message : "Governed action rejected"}. Inspect the original Controller evidence before submitting another action.`); }
+    finally { if (active.current) setBusy(false); }
   }
   async function signOut() {
-    setHuman(null);
+    const connection = captureRuntimeConnection();
+    updateHuman(null);
+    setInvitation(null);
+    setSkillContent(null);
     setBusy(true);
     try {
       const path = "/api/v1/control/human/logout";
-      const { nonce } = await api<{ nonce: string }>("/api/v1/control/human/nonce", { method: "POST", body: JSON.stringify({ method: "POST", path, body: {} }) });
-      await api(path, { method: "POST", headers: { "X-Control-Nonce": nonce }, body: JSON.stringify({}) });
-      setHuman(null);
-      setInvitation(null);
-      setSkillContent(null);
+      await humanMutation(path, {}, () => {
+        connection();
+        if (!active.current || liveHuman.current !== null) throw new Error("Human session changed; sign out could not be confirmed.");
+      });
       setError("");
-    } catch (err) { setError(err instanceof Error ? err.message : "Sign out could not be confirmed"); }
-    finally { setBusy(false); }
+    } catch (err) { if (active.current) setError(`Sign out could not be confirmed. ${err instanceof Error ? err.message : "Inspect the original Controller session."}`); }
+    finally { if (active.current) setBusy(false); }
   }
-  useEffect(() => subscribeRuntimeConfig(() => { refreshSequence.current++; setHuman(null); setSnapshot(null); setDetails(null); setSkillContent(null); setInvitation(null); sequence.current = 0; }), []);
+  useEffect(() => {
+    active.current = true;
+    const unsubscribe = subscribeRuntimeConfig(() => { refreshSequence.current++; updateHuman(null); setSnapshot(null); setDetails(null); setSkillContent(null); setInvitation(null); sequence.current = 0; });
+    return () => { active.current = false; liveHuman.current = null; unsubscribe(); };
+  }, [updateHuman]);
   const enabled = !!human && human.expires_at * 1000 > Date.now() && !busy;
   const simulatedDevices = new Set((snapshot?.devices ?? []).filter(row => record(row.metadata).simulation === true && typeof row.device_id === "string" && row.device_id.length > 0).map(row => String(row.device_id)));
   const rows = (collection === "environments" || collection === "workspace" || collection === "usage" || collection === "automations") ? [] : snapshot?.[collection]?.filter(row => !query.trim() || JSON.stringify(row).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) ?? [];
   return <main className="operations-console" aria-label="Operations console" lang={layout.locale === "zh" ? "zh-CN" : "en"}>
     <header className="operations-header"><div><p className="operations-eyebrow">APEIR / OPERATIONS</p><h1>{t("Execution & reality")}</h1><p>{t("Observe state, inspect evidence, govern the next action.")}</p></div>
-      <div className="operations-controls"><button onClick={() => void reload()} disabled={busy}>{t("Refresh")}</button><button onClick={() => void signIn()} disabled={busy}>{t(human ? "Renew human session" : "Sign in as human")}</button>{human && <button onClick={() => void signOut()} disabled={busy}>{t("Sign out")}</button>}<button onClick={toggle} aria-label="Toggle theme">{resolved === "dark" ? "☀" : "☾"}</button><button onClick={() => setLayout(current => ({ ...current, locale: current.locale === "en" ? "zh" : "en" }))} aria-label="Change language">{layout.locale === "en" ? "中文" : "English"}</button></div>
+      <div className="operations-controls"><button onClick={() => void reload()} disabled={busy}>{t("Refresh")}</button><button onClick={() => void signIn()} disabled={busy}>{t(human ? "Renew human session" : "Sign in as human")}</button>{human && <button onClick={() => void signOut()}>{t("Sign out")}</button>}<button onClick={toggle} aria-label="Toggle theme">{resolved === "dark" ? "☀" : "☾"}</button><button onClick={() => setLayout(current => ({ ...current, locale: current.locale === "en" ? "zh" : "en" }))} aria-label="Change language">{layout.locale === "en" ? "中文" : "English"}</button></div>
     </header>
     <details className="operations-demo"><summary>Run the verified simulated demo</summary><p>Start with the source Quick Start. Run these CLI commands in an empty dedicated workspace; results and evidence come from the existing Runtime. Approval here is an explicit local OS-user action.</p><pre>apeir demo --workspace ./demo-match --phase prepare --json{"\n"}apeir demo --workspace ./demo-match --phase resume --approve-once --json</pre><p>SIMULATED · Runtime-service · Kernel not traversed. No physical or remote-human qualification.</p><a href="https://github.com/untrod/apeir/blob/main/examples/hello_runtime/README.md" target="_blank" rel="noreferrer">Failure scenarios and evidence guide</a></details>
-    <details><summary>{t("Controller connection")}</summary><form onSubmit={event => { event.preventDefault(); try { const address = new URL(endpoint); if (address.username || address.password || address.search || address.hash || !(address.protocol === "https:" || (address.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(address.hostname)))) throw new Error("Controller requires HTTPS or loopback HTTP without credentials, query or fragment"); const url = address.href.replace(/\/$/, ""); setConfig({ url, token: url === getConfig().url ? getConfig().token : "" }); setHuman(null); setInvitation(null); setControllerConfirmed(false); setSnapshot(null); setDetails(null); setSkillContent(null); selectedId.current = null; sequence.current = 0; void reload(); } catch (err) { setError(err instanceof Error ? err.message : "Invalid controller URL"); } }}><label>API URL <input aria-label="API URL" value={endpoint} onChange={event => setEndpoint(event.target.value)} /></label><button>{t("Connect")}</button></form></details>
+    <details><summary>{t("Controller connection")}</summary><form onSubmit={event => { event.preventDefault(); try { const address = new URL(endpoint); if (address.username || address.password || address.search || address.hash || !(address.protocol === "https:" || (address.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(address.hostname)))) throw new Error("Controller requires HTTPS or loopback HTTP without credentials, query or fragment"); const url = address.href.replace(/\/$/, ""); setConfig({ url, token: url === getConfig().url ? getConfig().token : "" }); updateHuman(null); setInvitation(null); setControllerConfirmed(false); setSnapshot(null); setDetails(null); setSkillContent(null); selectedId.current = null; sequence.current = 0; void reload(); } catch (err) { setError(err instanceof Error ? err.message : "Invalid controller URL"); } }}><label>API URL <input aria-label="API URL" value={endpoint} onChange={event => setEndpoint(event.target.value)} /></label><button>{t("Connect")}</button></form></details>
     <section aria-label="Secure Node onboarding" className="operations-demo"><button disabled={!snapshot || busy} onClick={() => { setNodeForm(current => !current); setControllerConfirmed(false); }}>{t("Add Node")}</button>{nodeForm && <form onSubmit={event => { event.preventDefault(); if (snapshot?.controller_public_key && controllerConfirmed) void action("pairings", "create", snapshot.controller_public_key, { relay_url: relayAddress }); }}><p>Pairing establishes identity trust only. Work execution still requires Governance. Verify this Controller key through a trusted channel before inviting a Node.</p><label>Controller public key <output>{snapshot?.controller_public_key || "UNKNOWN"}</output></label><label>Relay URL <input aria-label="Relay URL" placeholder="wss://controller.example:9771" value={relayAddress} onChange={event => setRelayAddress(event.target.value)} required /></label><label><input type="checkbox" checked={controllerConfirmed} onChange={event => setControllerConfirmed(event.target.checked)} />{t("Confirm Controller identity")}</label><button disabled={!enabled || !controllerConfirmed || !snapshot?.controller_public_key}>{t("Create one-time invitation")}</button><p>Remote connections require verified WSS/TLS. No default route or DNS changes.</p></form>}{invitation && <div aria-label="One-time Node invitation"><p>Enter this code on your Node. It is not saved in browser storage or an execution credential.</p><strong>{Number(invitation.expires_at) * 1000 > Date.now() ? String(invitation.pairing_code) : "EXPIRED"}</strong><p>Request: {String(invitation.request_id)} · Expires: {new Date(Number(invitation.expires_at) * 1000).toISOString()}</p><pre>{JSON.stringify(["apeir-node", "pair", "--request-id", invitation.request_id, "--relay-url", invitation.relay_url, "--server-public-key", invitation.controller_public_key])}</pre><p>Run the shown arguments in the Node terminal; the code is prompted privately. Inspect its exact public key in the pairings view before approving. After approval or response loss, query the same request with --status.</p><button onClick={() => { setInvitation(null); setNodeForm(false); setControllerConfirmed(false); selectCollection("pairings"); }}>Hide code and inspect pairing</button></div>}</section>
     {error && <p role="alert" className="operations-error">{error}</p>}
     <section className="operations-health" aria-label="System health"><div><span className={`operations-badge ${!snapshot || snapshot.health.degraded ? "uncertain" : "healthy"}`}>{!snapshot ? "UNKNOWN" : snapshot.health.degraded ? "DEGRADED" : "HEALTHY"}</span><p>{human ? `Human: ${human.subject_id}` : t("Observe mode · human authentication required for actions")}</p></div>
