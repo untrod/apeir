@@ -1455,3 +1455,24 @@ record is retained separately and the corrected cleanup reproduces the same
 single assertion failure. Final source Desktop lint/typecheck/test/build:
 **180 passed in 38 files** (44.80 s). These are observed UI callback/correctness
 contracts, not measured task latency, Token savings or native UI qualification.
+
+
+Selected-input candidate Core run `38819836324`, Windows job `116713447362`,
+retains **4983 passed, 149 skipped, 4 warnings, 2 errors** (1401.08 s).
+Both errors occur in pytest setup/teardown: its generated node ID embeds the
+65 KiB oversized bytes fixture and exceeds Windows' 32767-character environment
+variable limit before the test body can run. Explicit short parameter IDs retain
+all five original payloads, byte limits and refusal assertions. The 64 collected
+node IDs now have maximum length 138. No new skip, timeout increase or production
+read fallback is introduced. Current source still blocks selected-source delivery
+on hosts without the required safe descriptor operations.
+
+After integrating main `c43f942`, the combined Context/owner-policy/Gateway/Node/
+Reality/Artifact/file-alias/Node-and-Device projection regression has **1184 passed**
+(174.68 s); Desktop lint/typecheck/test/build has **181 passed in 38 files**.
+After the parameter-ID correction, selected-input/integration/owner-policy has
+**119 passed** (15.58 s), and selected-input alone has **64 passed** on Python 3.10
+(2.20 s). The failed Windows run remains evidence; corrected Windows and exact
+source/resulting-main CI are separate outstanding acceptance, not inferred from
+these local passes. No real Provider task, Token saving or Windows-native release
+qualification is claimed.

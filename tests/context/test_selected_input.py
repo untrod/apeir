@@ -182,6 +182,7 @@ def test_absent_permission_engine_and_wrong_workspace_fail_closed(admitted_conte
         b"password=FAKE_TEST_SECRET_VALUE",
         b"x" * (MAX_FILE_BYTES + 1),
     ],
+    ids=["binary", "invalid-utf8", "json-secret", "text-secret", "over-byte-bound"],
 )
 def test_binary_secret_and_byte_bounds_refused(admitted_context, content):
 
