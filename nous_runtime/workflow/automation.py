@@ -193,7 +193,8 @@ class AutomationConsumer:
                 "qualification": "SIMULATED_TEMPLATE",
                 "schedule": due_at,
                 "action": "device.firmware.update",
-            }
+            },
+            before_publish=self.before_consume,
         )
 
     def list(self):

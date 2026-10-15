@@ -1278,3 +1278,16 @@ Workflow writer excludes concurrent definition replacement; separate Governance
 revocation and Workflow commit are not claimed to be one atomic transaction.
 No Kernel, component lock, execution permission or default resource limit changes.
 Source and resulting-main CI remain required; overall product stays PARTIAL.
+
+The same bounded publication review covers new structured configuration: the
+existing add_simulation consumer now passes its existing current-human callback
+to WorkflowStore.put_automation after writer admission. Original HTTP probes
+have **2 failed, 1 passed**: withdrawing the session or management permission
+during writer contention still published an enabled configuration. Repaired
+creation/toggle contracts have **12 passed** (5.69 s), and **12 passed** on Python
+3.10 (6.02 s). Combined Automation/HumanSession/routes/Workflow/API enforcement:
+**223 passed** (171.87 s). Failed publication leaves no Automation, Workflow run
+or grant; a previously prepared immutable definition can remain and is explicitly
+not execution authority. Trusted-local use and idempotent stored bindings remain
+supported. Separate Governance and Workflow commits are not claimed atomic.
+No new authority, store, automatic trigger or execution fallback is introduced.

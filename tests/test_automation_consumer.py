@@ -668,9 +668,9 @@ def automation_http(consumer, human_env, monkeypatch):
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
-    def request(body, nonce):
+    def request(body, nonce, path="/api/v1/automations/action"):
         req = Request(
-            f"http://127.0.0.1:{server.server_port}/api/v1/automations/action",
+            f"http://127.0.0.1:{server.server_port}{path}",
             data=json.dumps(body).encode(),
             method="POST",
             headers={
@@ -1588,3 +1588,92 @@ def test_response_loss_reconcile_then_resume_completes_only_the_original_run(
     assert {work["work_id"] for work in completed["works"]} == original_works
     assert completed["effect_counts"][work_id] == 1
     assert len(consumer.history(binding["id"])["history"]) == 1
+
+
+@pytest.mark.parametrize("revocation", ["session", "permission", "none"])
+def test_http_creation_revalidates_after_binding_writer_admission(
+    consumer, automation_http, monkeypatch, revocation
+):
+    from nous_runtime.governance.permission import PermissionRule
+
+    auth, context, request = automation_http
+    path = "/api/v1/automations/add"
+    body = {"adapter": "simulated-reality", "name": "Original governed configuration"}
+    nonce = auth.nonce(context, "POST", path, body)["nonce"]
+    writer_attempt = Event()
+    blockers = []
+    scoped = local()
+    connect = WorkflowStore._connect
+    put = WorkflowStore.put_automation
+
+    def traced_connect(self):
+        connection = connect(self)
+        if getattr(scoped, "creation", False):
+            connection.set_trace_callback(
+                lambda sql: writer_attempt.set() if sql == "BEGIN IMMEDIATE" else None
+            )
+        return connection
+
+    def held_publication(self, *args, **kwargs):
+        blocker = sqlite3.connect(self.path, check_same_thread=False)
+        blocker.execute("BEGIN IMMEDIATE")
+        blockers.append(blocker)
+        scoped.creation = True
+        try:
+            return put(self, *args, **kwargs)
+        finally:
+            scoped.creation = False
+
+    monkeypatch.setattr(WorkflowStore, "_connect", traced_connect)
+    monkeypatch.setattr(WorkflowStore, "put_automation", held_publication)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(request, body, nonce, path)
+        try:
+            assert writer_attempt.wait(timeout=10)
+            assert not future.done()
+            assert consumer.store.list_automations() == []
+            if revocation == "session":
+                auth.logout(context)
+            elif revocation == "permission":
+                auth.permissions.add(
+                    PermissionRule(
+                        "oidc:*:alice",
+                        "control.automation.manage",
+                        consumer.resource_id,
+                        effect="deny",
+                    )
+                )
+            if revocation != "none":
+                with pytest.raises(PermissionError):
+                    consumer.admit_management(context, audit=False)
+            assert not future.done()
+        finally:
+            for blocker in blockers:
+                blocker.rollback()
+                blocker.close()
+        result = future.result(timeout=15)
+    restarted = AutomationConsumer(consumer.root, gate=consumer.gate)
+    if revocation == "none":
+        assert result["ok"], result
+        binding = result["data"]
+        assert restarted.store.list_automations() == [binding]
+        assert binding["simulated"] and binding["enabled"]
+    else:
+        assert result["error"]["code"] == "NOUS_FORBIDDEN", result
+        assert restarted.store.list_automations() == []
+    assert restarted.store.list_runs() == []
+    with restarted.store._db() as db:
+        # A prepared immutable definition is not a published Automation or Work.
+        assert (
+            db.execute("SELECT COUNT(*) FROM workflow_definitions").fetchone()[0] == 1
+        )
+    with consumer.gate.store.operation_transaction() as db:
+        assert db.execute("SELECT COUNT(*) FROM governance_leases").fetchone()[0] == 0
+        assert (
+            db.execute("SELECT consumed FROM governance_human_nonces").fetchone()[0]
+            == 1
+        )
+    replay = request(body, nonce, path)
+    assert replay["error"]["code"] == (
+        "NOUS_UNAUTHENTICATED" if revocation == "session" else "NOUS_CONTROL_REPLAY"
+    )

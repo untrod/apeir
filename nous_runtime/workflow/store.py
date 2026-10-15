@@ -183,7 +183,12 @@ class WorkflowStore:
         )
         return run
 
-    def put_automation(self, binding: dict[str, Any]) -> dict[str, Any]:
+    def put_automation(
+        self,
+        binding: dict[str, Any],
+        *,
+        before_publish: Callable[[], None] | None = None,
+    ) -> dict[str, Any]:
         """Bind a trigger proposal to an immutable original Workflow definition."""
         self._require_unredacted(binding)
         with self._db() as connection:
@@ -193,9 +198,11 @@ class WorkflowStore:
                 "SELECT * FROM workflow_automations WHERE automation_id=?",
                 (binding["id"],),
             ).fetchone()
+            if previous and previous["binding_digest"] != binding_digest(binding):
+                raise WorkflowBindingError("Automation binding changed")
+            if before_publish is not None:
+                before_publish()
             if previous:
-                if previous["binding_digest"] != binding_digest(binding):
-                    raise WorkflowBindingError("Automation binding changed")
                 return self._automation(previous)
             connection.execute(
                 "INSERT INTO workflow_automations VALUES (?, ?, ?, 1)",
