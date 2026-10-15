@@ -1546,3 +1546,13 @@ maximum RSS 86480 KiB, not aggregate steady-state service memory. An unavailable
 `/usr/bin/time` was a measurement preflight error; the successful wrapper uses
 Python's existing process/resource facilities. No comparison, Token reduction,
 WAN/physical performance or research-experiment PASS is inferred.
+
+
+A fresh wheel from clean Automation candidate `ab92d13` was installed into a new
+virtual environment and exercised outside the checkout with no `PYTHONPATH`.
+**18 CLI processes** again preserve the original approved COMMITTED/MATCH Work
+and duplicate trigger/effect count one, deny/cancel with zero effects, and reject
+late approval after cancellation. Explicit simulation is required. Wheel SHA-256:
+`8d975c0f0acd9b13698b21503d83e5a684e8bf8a69df8ca91131895fee37d6ee`.
+This is an installed source-package CLI and local OS-human boundary, not an
+NSIS/native installation, remote identity, background scheduler or physical Gate.
