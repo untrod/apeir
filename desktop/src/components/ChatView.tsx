@@ -266,10 +266,11 @@ export function ChatView({
     ...localMessages,
   ].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-  // Auto-scroll
+  // Unrelated Runtime snapshots must not move a reader's chat position.
+  const latestMessage = allMessages[allMessages.length - 1];
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [allMessages, loading]);
+  }, [latestMessage?.id, latestMessage?.content, latestMessage?.cards?.length, loading]);
 
 
   // Send handler — calls real API, stores real data

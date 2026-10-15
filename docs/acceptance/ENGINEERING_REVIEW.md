@@ -1348,3 +1348,16 @@ Relay I/O contracts: **69 passed** (5.41 s). No default PID, isolation, identity
 authorization, frozen Kernel or component-lock change. Standard repository checks
 and exact new-source/resulting-main CI remain distinct evidence from the earlier
 source and diagnostics above; none upgrades physical or native release status.
+
+
+The shared-store correction also exposed an existing Chat auto-scroll dependency
+on a newly allocated message array: an unrelated Node snapshot caused one extra
+scroll without new content (**1 failed** controlled subscriber probe). Chat now
+tracks the latest message identity/content/card count and loading state instead;
+real new/updated messages still scroll, while a Node refresh makes zero additional
+scroll calls and zero model/network requests in that fixture. An initial fixture
+removed its scroll stub before unmounting (**1 failed / 1 cleanup error**); that
+record is retained separately and the corrected cleanup reproduces the same
+single assertion failure. Final source Desktop lint/typecheck/test/build:
+**180 passed in 38 files** (44.80 s). These are observed UI callback/correctness
+contracts, not measured task latency, Token savings or native UI qualification.
