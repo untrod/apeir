@@ -1581,3 +1581,30 @@ late approval after cancellation. Explicit simulation is required. Wheel SHA-256
 `8d975c0f0acd9b13698b21503d83e5a684e8bf8a69df8ca91131895fee37d6ee`.
 This is an installed source-package CLI and local OS-human boundary, not an
 NSIS/native installation, remote identity, background scheduler or physical Gate.
+
+
+### Automation start acknowledgement and uncertain effect evidence — 2026-10-15
+
+After normal integration with main `893cbe4`, the combined run retained
+**1 failed, 203 passed** (170.13 s). The failure precedes cancellation: the Node
+already persisted COMPLETED and the device effect count is one, but the
+Controller still has ASSIGNED rather than RUNNING because its start ACK was not
+recorded. An isolated repeat passed (**1 passed**, 6.32 s), which is not a fix.
+Controlled omission of the start ACK reproduces the exact original assertion
+failure (**1 failed**, 5.79 s). Existing signed-result reconciliation already
+admits original ASSIGNED Work; ASSIGNED cannot prove an effect did not occur.
+
+The test now separates start-ACK delivery from terminal-response loss. The
+recorded-ACK cases use an explicit publication barrier and retain the exact
+RUNNING assertion. The ACK-loss cases require exact ASSIGNED, a completed original
+Node journal, no Controller receipt or MATCH, and reconciliation of the original
+operation. Both are tested with and without cancellation and later grant
+revocation. All original final MATCH/COMMITTED, same-run, one-effect and exactly
+one grant-consumption assertions remain. No production state, timeout, retry,
+protocol, authority or safety assertion is relaxed. This is a controlled causal
+fault matrix, not sleeping or treating a passing rerun as resolution.
+
+The four-case matrix has **4 passed** (23.16 s) on Python 3.12 and **4 passed**
+(23.30 s) on Python 3.10. This identifies the candidate test's notification
+assumption; it does not establish the OS cause of historical Issues #4/#8 or
+upgrade Windows, WAN, native or physical acceptance.

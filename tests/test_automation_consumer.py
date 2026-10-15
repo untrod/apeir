@@ -310,28 +310,65 @@ def test_legacy_enabled_text_cannot_execute_and_body_authority_is_rejected(
 
 
 @pytest.mark.parametrize("cancel", [False, True])
+@pytest.mark.parametrize(
+    "start_ack", [True, False], ids=["start-recorded", "start-lost"]
+)
 def test_effect_then_response_loss_reconciles_original_receipt_without_another_effect(
-    consumer, monkeypatch, cancel
+    consumer, monkeypatch, cancel, start_ack
 ):
+    from nous_runtime.node_runtime.relay import NodeRelayClient
     from nous_runtime.reality.preview import _DemoComponents, STABLE_ID
     from nous_runtime.reality import SimulationFault
 
     binding, pending = prepare(consumer)
     approve(consumer, pending)
+    work_id = pending["outputs"]["mutate"]["work_id"]
+    recorded_start = Event()
     original_initialize = _DemoComponents._initialize
+    original_send = NodeRelayClient._send
+
+    async def control_start_ack(self, websocket, message_type, payload, **kwargs):
+        if (
+            message_type == "ACK"
+            and payload.get("acknowledged") == "WORKLOAD_START"
+            and payload.get("workload_id") == work_id
+        ):
+            if not start_ack:
+                return  # Omit this notification, not the effect or its journal.
+            await original_send(self, websocket, message_type, payload, **kwargs)
+            # Isolate terminal-response loss from loss of the earlier start ACK.
+            # This is a causal barrier, not a delay or a longer recovery bound.
+            assert await asyncio.to_thread(recorded_start.wait, 5)
+            return
+        await original_send(self, websocket, message_type, payload, **kwargs)
 
     def inject_response_loss(self, *args, **kwargs):
         original_initialize(self, *args, **kwargs)
+        original_mark = self.server._mark_work_running
+
+        def record_start(acknowledged_work, node_id):
+            original_mark(acknowledged_work, node_id)
+            if acknowledged_work == work_id:
+                recorded_start.set()
+
+        monkeypatch.setattr(self.server, "_mark_work_running", record_start)
         self.response_loss = True
         self.provider.inject_fault(STABLE_ID, SimulationFault.EFFECT_THEN_RESPONSE_LOST)
 
+    monkeypatch.setattr(NodeRelayClient, "_send", control_start_ack)
     monkeypatch.setattr(_DemoComponents, "_initialize", inject_response_loss)
     uncertain = consumer.resume(binding["id"], pending["run_id"])
-    work_id = pending["outputs"]["mutate"]["work_id"]
     assert uncertain["state"] != "completed"
     assert uncertain["reconciliation_required"]
     assert uncertain["effect_counts"][work_id] == 1
-    assert uncertain["works"][-1]["state"] == "RUNNING"
+    if start_ack:
+        assert recorded_start.is_set()
+        assert uncertain["works"][-1]["state"] == "RUNNING"
+    else:
+        assert not recorded_start.is_set()
+        assert uncertain["works"][-1]["state"] == "ASSIGNED"
+    assert not uncertain["works"][-1]["result_summary"].get("remote_execution_receipt")
+    assert uncertain["works"][-1]["effect_verification"].get("verdict") != "MATCH"
     journal_path = (
         consumer.root / ".nous" / "automation-simulation" / "node" / "workloads.json"
     )
