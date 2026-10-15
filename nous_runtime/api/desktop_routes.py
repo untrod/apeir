@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import os
-import platform
 import time
 from pathlib import Path
 from typing import Any
@@ -352,94 +351,56 @@ def handle_work_inspect(run_id: str) -> dict[str, Any]:
 
 
 def handle_devices_list() -> dict[str, Any]:
-    """List known devices from the connectivity layer."""
-    devices = []
+    """Project managed Devices from the same registry as Operations."""
     try:
-        # Try connected nodes
-        try:
-            from nous_runtime.connectivity.cli.commands import _list_nodes
+        from nous_runtime.control_plane.operations import get_operations
+        from nous_runtime.reality.registry import DeviceRegistry
 
-            nodes = _list_nodes() if callable(_list_nodes) else []
-            for n in nodes if isinstance(nodes, list) else []:
-                devices.append(
-                    {
-                        "device_id": n.get("node_id", ""),
-                        "name": n.get("name", "Unknown"),
-                        "type": n.get("type", "node"),
-                        "status": n.get("status", "unknown"),
-                        "address": n.get("address", ""),
-                        "capabilities": n.get("capabilities", []),
-                    }
-                )
-        except Exception:
-            pass
-
-        # Add local machine
-        try:
-            local = {
-                "device_id": "local",
-                "name": platform.node() or "This Computer",
-                "type": "pc",
-                "status": "online",
-                "hardware": f"{platform.processor() or 'Unknown'}",
-                "address": "localhost",
-                "capabilities": ["runtime", "desktop"],
+        devices = [
+            {
+                **device.to_dict(),
+                "name": device.device_id,
+                "type": device.device_type,
+                "status": device.lifecycle.value.lower(),
+                "capabilities": list(device.capability_ids),
+                "liveness_status": "UNKNOWN",
             }
-            devices.insert(0, local)
-        except Exception:
-            devices.insert(
-                0,
-                {
-                    "device_id": "local",
-                    "name": "This Computer",
-                    "type": "pc",
-                    "status": "online",
-                    "hardware": platform.platform(),
-                    "address": "localhost",
-                    "capabilities": ["runtime", "desktop"],
-                },
-            )
-
+            for device in DeviceRegistry(get_operations().device_state).list()
+        ]
         return ok(
             {
                 "devices": devices,
                 "total": len(devices),
-                "online": sum(1 for d in devices if d["status"] == "online"),
-            }
-        )
-    except Exception as e:
-        return err("DEVICES_LIST_ERROR", str(e))
-
-
-def handle_devices_scan() -> dict[str, Any]:
-    """Scan local network for devices."""
-    try:
-        from nous_runtime.connectivity.control_plane.pairing_service import (
-            discover_devices,
-        )
-
-        discovered = discover_devices() if callable(discover_devices) else []
-        return ok(
-            {
-                "discovered": list(discovered) if discovered else [],
-                "timestamp": time.time(),
+                # Persisted lifecycle is not a current connectivity observation.
+                "online": 0,
+                "liveness_status": "UNKNOWN",
+                "source": "reality.device_registry",
             }
         )
     except Exception:
-        # Fallback: return local device only
-        return ok(
-            {
-                "discovered": [
-                    {
-                        "device_id": "local",
-                        "name": "This Computer",
-                        "status": "online",
-                        "type": "pc",
-                    }
-                ],
-                "timestamp": time.time(),
-            }
+        return err(
+            "DEVICES_LIST_ERROR",
+            "Managed Device state could not be read",
+            {"status": "UNKNOWN", "source": "reality.device_registry"},
         )
+
+
+def handle_devices_scan(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Report unavailable discovery without scanning or inventing candidates."""
+    if body is not None and body != {}:
+        return err(
+            "DEVICES_SCAN_INVALID_REQUEST",
+            "This compatibility endpoint does not accept discovery targets",
+        )
+    return ok(
+        {
+            "discovered": [],
+            "timestamp": time.time(),
+            "status": "UNAVAILABLE",
+            "scan_performed": False,
+            "reason": "No qualified discovery backend is configured; use explicit Node pairing or managed Device providers",
+        }
+    )
 
 
 # Automations

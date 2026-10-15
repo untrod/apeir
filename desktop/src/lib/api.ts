@@ -144,6 +144,9 @@ export interface DeviceView {
   type: string;
   status: string;
   hardware?: string;
+  lifecycle?: string;
+  node_id?: string;
+  liveness_status?: "UNKNOWN";
   address?: string;
   capabilities?: string[];
 }
@@ -402,10 +405,10 @@ export const fetchTaskTimeline = (taskId: string) =>
 
 // Devices
 export const fetchDevices = () =>
-  api<{ devices: DeviceView[]; total: number; online: number }>("/api/v1/devices");
+  api<{ devices: DeviceView[]; total: number; online: number; liveness_status: "UNKNOWN"; source: "reality.device_registry" }>("/api/v1/devices");
 
 export const scanDevices = () =>
-  api<{ discovered: DeviceView[]; timestamp: number }>("/api/v1/devices/scan", { method: "POST" });
+  api<{ discovered: DeviceView[]; timestamp: number; status: "UNAVAILABLE"; scan_performed: false; reason: string }>("/api/v1/devices/scan", { method: "POST" });
 
 // Automations
 export const fetchAutomations = () =>

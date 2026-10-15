@@ -58,8 +58,8 @@ Auth: Bearer token via `Authorization` header. Public: `/api/v1/health`, `/api/v
 |--------|------|---------|----------|
 | GET | `/tasks` | `?state=&limit=` | `{ tasks: TaskView[], total, running }` |
 | POST | `/tasks/action` | `{ action, task_id }` | `{ ok: true }` |
-| GET | `/devices` | — | `{ devices, total, online }` |
-| POST | `/devices/scan` | — | `{ discovered, timestamp }` |
+| GET | `/devices` | — | `{ devices, total, online, liveness_status, source }` |
+| POST | `/devices/scan` | absent or `{}` | `{ discovered: [], timestamp, status: "UNAVAILABLE", scan_performed: false, reason }` |
 | GET | `/automations` | — | `{ automations, total }` |
 | POST | `/automations/add` | `{ name, trigger, schedule?, action }` | `Automation` |
 | POST | `/automations/action` | `{ action, automation_id }` | `{ ok: true }` |
@@ -73,6 +73,16 @@ Auth: Bearer token via `Authorization` header. Public: `/api/v1/health`, `/api/v
 | GET | `/workspace` | — | `WorkspaceEntry` |
 | GET | `/health/dashboard` | — | `HealthDashboard` |
 | GET | `/service/status` | — | `ServiceStatus` |
+
+Device compatibility views use the same configured Reality DeviceRegistry as
+Operations, preserving stable identity, lifecycle, Node association and simulation
+metadata. Nodes and the local host are not manufactured as Devices. Persisted
+AVAILABLE/TRUSTED state is not a fresh liveness observation: `online` counts zero
+confirmed online records and `liveness_status` remains UNKNOWN, not proof that
+every device is offline. Corrupt/unavailable state returns an explicit UNKNOWN
+error. Discovery is currently UNAVAILABLE: the scan route performs no network
+probe, pairing or trust change and refuses nonempty request bodies. Use existing
+explicit Node pairing and qualified managed Device providers.
 
 ### 1.4 Inspector (`/api/inspector/`)
 

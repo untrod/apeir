@@ -1160,3 +1160,34 @@ compile, documentation/235 links/comments, security (**0 HIGH / 3 known MEDIUM**
 and component-lock contracts (**3 passed**) pass. These are software simulation
 contracts, not physical or native Windows installation qualification. Kernel and
 component lock remain unchanged; source and resulting-main CI are separate gates.
+
+### Truthful legacy Device projection — 2026-10-15
+
+**REUSE / FIX** the configured Operations DeviceRegistry and existing Desktop
+compatibility routes. The legacy list and scan called absent Connectivity
+helpers and fabricated a local online Device on fallback. Actual service-bearer
+HTTP reached this result; anonymous requests were rejected. Current Operations
+already read separate canonical Nodes and Devices; the exported legacy Desktop
+fetch helpers have no current UI callers. This was a fact-projection defect, not
+evidence of unauthorized execution or actual discovery.
+
+The list now preserves the registered stable identity, lifecycle (including
+REVOKED), Node association and simulation metadata without manufacturing a host
+or Node as a Device. Missing current liveness remains UNKNOWN; persisted
+AVAILABLE is not an online observation. Scan reports UNAVAILABLE, no candidates
+and scan_performed=false, without network activity or trust changes. Empty JSON
+bodies now receive the same unavailable result as bodyless requests; nonempty
+targets are refused. Corrupt registry content produces an UNKNOWN error rather
+than a fabricated local host or successful empty list. Original envelope/list
+keys remain; tests requiring a synthetic local Device were corrected to canonical
+facts and explicit liveness uncertainty.
+
+Prerepair contracts: **15 failed**. Final Device/API/Operations/enforcement and
+compatibility selection: **164 passed** (4.97 s); Python 3.10 focused contracts:
+**15 passed** (2.70 s). Full Desktop: **165 passed in 35 files**, lint/typecheck/build
+pass. An initial canonical-snapshot fixture compared JSON arrays with Python
+tuples (**7 failed, 157 passed**); expected transport normalization was corrected
+without changing the production identity/lifecycle assertions. A removed import
+was caught by Ruff and corrected. No registry, discovery protocol, trust source,
+Kernel, component lock, permissions or production liveness qualification added.
+Exact source/main CI remain required; overall product remains PARTIAL.
