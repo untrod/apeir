@@ -918,6 +918,35 @@ async def resume_firmware(sim, session_id, **kwargs):
     )
 
 
+async def resume_after_terminal_observation_delivery(sim, session_id):
+    """Continue once, only after the exact paused read has terminal evidence."""
+    result = await resume_firmware(sim, session_id)
+    if result.state is not AgentSessionState.WAITING:
+        return result
+    prefix = "distributed Workflow Work timed out: "
+    assert result.error.startswith(prefix), result.error
+    acquisition_id = result.error.removeprefix(prefix)
+    assert acquisition_id.startswith("observe_"), result.error
+    read = DistributedWorkStore(sim.controller_state).get(acquisition_id)
+    assert read is not None
+    assert read.execution_capability == "device.state.read"
+    assert read.target_resource_id == sim.device.device_id
+    assert read.assigned_node == sim.node.identity.node_id
+    assert read.provenance["workflow_run_id"] == result.workflow_run_id
+    assert read.execution_arguments["acquisition_id"] == acquisition_id
+    assert read.execution_arguments["device_id"] == sim.device.device_id
+    assert not read.execution_policy.require_effect_verification
+    assert read.input_artifacts == sim.work().input_artifacts
+    assert sim.work().state is DistributedWorkState.VERIFIED
+    assert sim.provider.execution_count(WORK_ID) == 1
+    await wait_for(lambda: acquisition_id in sim.server.results)
+    projected = sim.server.reconcile_work(acquisition_id)
+    assert projected["work"]["state"] == DistributedWorkState.COMMITTED.value
+    assert sim.work().state is DistributedWorkState.VERIFIED
+    assert sim.provider.execution_count(WORK_ID) == 1
+    return await resume_firmware(sim, session_id)
+
+
 @pytest.mark.parametrize("restart", [False, True])
 def test_firmware_approve_once_resumes_original_plan_work_and_commits_match(
     tmp_path, restart
@@ -1077,7 +1106,9 @@ def test_approved_firmware_lost_response_recovers_after_grant_revocation_without
                 auth_id, _build_context(), grant_id=grant_id
             )
         async with simulation(tmp_path) as restored:
-            completed = await resume_firmware(restored, paused.session_id)
+            completed = await resume_after_terminal_observation_delivery(
+                restored, paused.session_id
+            )
             assert completed.state is AgentSessionState.COMPLETED
             assert completed.workflow_run_id == paused.workflow_run_id
             assert restored.work().state is DistributedWorkState.COMMITTED
