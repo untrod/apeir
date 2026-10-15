@@ -1160,3 +1160,32 @@ compile, documentation/235 links/comments, security (**0 HIGH / 3 known MEDIUM**
 and component-lock contracts (**3 passed**) pass. These are software simulation
 contracts, not physical or native Windows installation qualification. Kernel and
 component lock remain unchanged; source and resulting-main CI are separate gates.
+
+### Observation fault-hold producer lifecycle — 2026-10-15
+
+**REUSE / FIX** the existing Reality restart test and its original read producer.
+Main `bd89756` Core run `38683486516`, Windows job `116253006935`, retains
+**1 failed, 4918 passed, 60 skipped, 4 warnings** (1483.70 s): the added delayed
+observation case timed out waiting five seconds for its fault-injection point.
+Multi-Arch, Desktop and Security passed. This is not the previous final-session
+assertion failure; no complete Windows worker trace establishes its OS cause.
+Issues #4/#8 remain open.
+
+A controlled delay of only the first independent read's worker-result return
+reproduces the same original five-second TimeoutError. The test now awaits
+either its owned producer or the actual fault-hold event. Producer errors and
+cancellation propagate immediately; finishing without entering the fault is a
+failure. This removes a competing preparation deadline, not a Runtime timeout
+or retry check: original Work/reconciliation bounds and CI's 60-second test
+bound remain unchanged. All original WAITING/no-MATCH/one-effect, fresh-read and
+final COMPLETED/COMMITTED/MATCH assertions remain. The same controlled single
+delay passes after correction. An initial broader probe delayed every fresh
+read and correctly failed the final completion assertion; that record is kept
+and the correction does not admit repeated slow reads as success.
+
+Final Reality/Node/Workflow/Agent/Artifact selection: **368 passed** (108.15 s).
+Python 3.10 focused restart/producer-error/cancellation contracts: **8 passed**
+(32.32 s). The initial focused run had **8 passed, 1 warning**; the new negative
+fixture's empty-regex warning was corrected without changing production code.
+No Kernel, component lock, production execution or authorization changes.
+Exact source and resulting-main cross-platform CI remain required.
