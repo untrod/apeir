@@ -492,7 +492,9 @@ class TestDesktopApiContract:
 
         r1 = handle_devices_list()
         assert r1["ok"] is True
-        assert r1["data"]["total"] >= 1  # Local device always present
+        assert r1["data"]["total"] == len(r1["data"]["devices"])
+        assert all(device["device_id"] != "local" for device in r1["data"]["devices"])
+        assert r1["data"]["liveness_status"] == "UNKNOWN"
 
         r2 = handle_devices_scan()
         assert r2["ok"] is True

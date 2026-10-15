@@ -1161,6 +1161,107 @@ and component-lock contracts (**3 passed**) pass. These are software simulation
 contracts, not physical or native Windows installation qualification. Kernel and
 component lock remain unchanged; source and resulting-main CI are separate gates.
 
+### Truthful legacy Device projection — 2026-10-15
+
+**REUSE / FIX** the configured Operations DeviceRegistry and existing Desktop
+compatibility routes. The legacy list and scan called absent Connectivity
+helpers and fabricated a local online Device on fallback. Actual service-bearer
+HTTP reached this result; anonymous requests were rejected. Current Operations
+already read separate canonical Nodes and Devices; the exported legacy Desktop
+fetch helpers have no current UI callers. This was a fact-projection defect, not
+evidence of unauthorized execution or actual discovery.
+
+The list now preserves the registered stable identity, lifecycle (including
+REVOKED), Node association and simulation metadata without manufacturing a host
+or Node as a Device. Missing current liveness remains UNKNOWN; persisted
+AVAILABLE is not an online observation. Scan reports UNAVAILABLE, no candidates
+and scan_performed=false, without network activity or trust changes. Empty JSON
+bodies now receive the same unavailable result as bodyless requests; nonempty
+targets are refused. Corrupt registry content produces an UNKNOWN error rather
+than a fabricated local host or successful empty list. Original envelope/list
+keys remain; tests requiring a synthetic local Device were corrected to canonical
+facts and explicit liveness uncertainty.
+
+Prerepair contracts: **15 failed**. Final Device/API/Operations/enforcement and
+compatibility selection: **164 passed** (4.97 s); Python 3.10 focused contracts:
+**15 passed** (2.70 s). Full Desktop: **165 passed in 35 files**, lint/typecheck/build
+pass. An initial canonical-snapshot fixture compared JSON arrays with Python
+tuples (**7 failed, 157 passed**); expected transport normalization was corrected
+without changing the production identity/lifecycle assertions. A removed import
+was caught by Ruff and corrected. No registry, discovery protocol, trust source,
+Kernel, component lock, permissions or production liveness qualification added.
+Exact source/main CI remain required; overall product remains PARTIAL.
+
+The Device adapter also uses the same centralized redaction as Operations before
+returning canonical metadata. An additional malformed fake-metadata probe failed
+before this defense; final combined selection has **165 passed** (5.41 s), with
+**16 passed** (2.43 s) on Python 3.10. Earlier 164/15 counts above precede that
+additional negative case. Transport comparisons normalize Python tuples to JSON
+arrays; identity, lifecycle and revocation assertions remain intact. A scanner
+match on an inline deterministic fake bearer fixture was retained and its source
+made explicit through the named fake-token constant; no scanning rule changed.
+This response defense does not claim to erase historical registry content.
+
+
+### Signed Node facts reach the existing Desktop — 2026-10-15
+
+**REUSE / FIX** OperationsPlane's existing signed Relay Controller and the
+existing EntityStore. The legacy node list/detail and setup query read early
+Connectivity SQL/session state, while Operations used the signed Node path.
+Six causal backend probes failed before the adapter correction. List/detail/query
+now use the configured Controller, preserve original public-key identity and
+revocation, report unavailable facts as UNKNOWN, and perform no network discovery
+or trust mutation. Existing compatibility Connectivity classes remain untouched;
+they are not the signed Node trust source. The retained ConnectScreen/SetupWizard wording now accurately
+says registered Nodes, with optional offline continuation and Operations Add Node.
+The current App bootstrap uses OnboardingWizard; no replacement wizard was added.
+
+Four original frontend probes failed: missing entity IDs collapsed multiple Nodes
+under `undefined`, raw online flags were accepted without canonical readiness,
+cached event time hid current revocation, and old responses survived credential
+changes. The existing API adapter now binds exact Node IDs, conservative readiness
+and current configuration generation; unknown capabilities/counters/roles stay
+unknown. Two further activity probes failed because generic Node events promoted
+unseen or revoked Nodes to online. Activity now preserves uncertainty/revocation.
+Two real-store probes also failed: React's useSyncExternalStore did not see a new
+snapshot reference, and reset reused already-mutated default maps. Notification
+now publishes a fresh top-level reference; initial/reset maps are independent.
+Historical Node cache restores no current readiness. No second frontend store,
+Node registry, event system, trust source or execution authority was introduced.
+
+Actual authenticated HTTP list/detail/empty-body query and a real loopback signed
+Node connection cover readiness, absent current resource evidence, and persisted
+revocation after reopening the Controller. One new fixture initially dialed the
+configured ephemeral port 0 instead of start()'s returned URL (**1 failed,
+7 passed**); that is preserved and corrected without changing runtime deadlines.
+The next probe exposed the adapter's insufficient ONLINE-only alias; it now also
+requires current fresh resource facts and a valid connected lease. Final focused
+backend **8 passed** (1.38 s); Node/Device/Control Plane/API/security compatibility
+selection **224 passed** (17.56 s); Python 3.10 Node/Device **24 passed** (3.91 s).
+The first two mistyped frontend/test launch commands collected no tests; corrected
+commands above and the retained causal failures are separate evidence.
+
+Final Desktop lint/typecheck/test/build: **175 passed in 36 files** (47.26 s),
+including an actual React useNodes subscription, reset, activity, cached-revocation
+and pending-response checks. This is source-level frontend/HTTP/loopback software
+qualification. Native APEIR.exe, real remote IdP, WAN/NAT, Windows/Jetson and physical
+Device acceptance remain unqualified; source/main CI and native binary hash checks
+are separate gates. Frozen Kernel, component lock and product PARTIAL are unchanged.
+
+
+Node-page failure delivery is exercised separately from DTO unit tests. Two
+original rendered-page probes failed because an unavailable/pending Controller
+looked like a successful empty directory. The existing NodesPage now shows its
+actual pending read, backend failure and a manual read retry; Controller changes
+hide previous rows before publishing the new response. A full empty REST snapshot
+also originally retained former Nodes (**1 failed, 10 passed**); the existing
+snapshot consumer now replaces membership instead of accumulating old Controllers.
+No command or network discovery is triggered by these read controls. Final source
+Desktop lint/typecheck/test/build has **179 passed in 37 files** (51.70 s), including
+actual rendered loading/error/retry and Controller-switch flows. The earlier
+175/177 counts describe preceding candidates. Native Windows UI and all legacy
+cross-Controller event/cache paths remain separate qualification limits.
+
 ### Observation fault-hold producer lifecycle — 2026-10-15
 
 **REUSE / FIX** the existing Reality restart test and its original read producer.
@@ -1272,3 +1373,16 @@ physical or native installation qualification. Exact-source CI and resulting-mai
 acceptance remain required; this does not establish the cause of Issues #4/#8 or
 claim exhaustive handshake/replay qualification. Kernel and component lock stay
 unchanged.
+
+
+The shared-store correction also exposed an existing Chat auto-scroll dependency
+on a newly allocated message array: an unrelated Node snapshot caused one extra
+scroll without new content (**1 failed** controlled subscriber probe). Chat now
+tracks the latest message identity/content/card count and loading state instead;
+real new/updated messages still scroll, while a Node refresh makes zero additional
+scroll calls and zero model/network requests in that fixture. An initial fixture
+removed its scroll stub before unmounting (**1 failed / 1 cleanup error**); that
+record is retained separately and the corrected cleanup reproduces the same
+single assertion failure. Final source Desktop lint/typecheck/test/build:
+**180 passed in 38 files** (44.80 s). These are observed UI callback/correctness
+contracts, not measured task latency, Token savings or native UI qualification.
