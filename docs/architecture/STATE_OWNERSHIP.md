@@ -133,6 +133,12 @@ Relay I/O lane. Cancellation drains the original writer before releasing its
 owner; it neither repeats the operation nor fabricates a response. Signatures,
 resource freshness and execution authorization remain separate checks.
 
+Registration acknowledgements require the expected Controller source and exact
+Node target in addition to the configured signing key, before publishing a
+session ID or collecting host reports. The same peer binding already applies
+to ordinary messages; a valid signature alone does not establish that a frame
+belongs to this Node's registration.
+
 An unavailable Node host probe cannot discard an already recorded Work result.
 The existing authenticated Relay may reconcile the original journal and signed
 assignment without a fresh host report. That mode rejects new execution and
