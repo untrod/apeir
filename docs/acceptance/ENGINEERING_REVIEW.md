@@ -1492,3 +1492,34 @@ record is retained separately and the corrected cleanup reproduces the same
 single assertion failure. Final source Desktop lint/typecheck/test/build:
 **180 passed in 38 files** (44.80 s). These are observed UI callback/correctness
 contracts, not measured task latency, Token savings or native UI qualification.
+
+
+### Automation integration with canonical Node facts — 2026-10-15
+
+The existing consumer candidate was normally merged with accepted main `c43f942`;
+only independent API-contract and acceptance text required conflict resolution,
+and both records were retained. Current source `13190ae` has **173 passed**
+Automation/Workflow/Node-and-Device projection contracts (173.11 s), and Desktop
+lint/typecheck/test/build has **219 passed in 40 files**. An initial local command
+named a nonexistent `tests/workflow` directory and collected no tests; the
+corrected command uses the existing Workflow test files. It is not counted as a
+product failure or a successful regression. All 12 repository-standard checks
+pass, with **0 HIGH / 3 known MEDIUM**, and **3 component-lock contracts**.
+
+A fresh built source-browser run against actual Runtime HTTP on that source
+again exercised approval, denial, cancellation and response loss: final effect
+counts **1 / 0 / 0 / 1**, with the exact original run and Work preserved during
+reconciliation and resume. Logout blocks creation; the 390-pixel viewport has no
+horizontal overflow and no page errors or model calls occur. Source-browser
+screenshots and original persisted histories are retained privately. The local
+single-case client monotonic times were 2.118 / 2.412 / 1.660 / 9.549 seconds;
+these differing scenarios are not a performance comparison. The identity
+provider is a deterministic signed test fixture and the device is simulated.
+
+Separately, main `1570e3b` passed all Core, Multi-Arch, Desktop and Security
+workflows: Core Windows **4946 passed / 60 skipped**, Linux 3.12 **4959 / 47**,
+Linux 3.10 and macOS each **4948 / 58**; Multi-Arch Windows **4636 / 60 / 272
+deselected**, Linux amd64 and ARM64 each **4637 / 59 / 272 deselected**. This is
+that exact merged Node durability baseline, not qualification of this unmerged
+Automation candidate or resolution of Issues #4/#8. Source/main CI remains
+required for this candidate. No Kernel or component-lock changes.
