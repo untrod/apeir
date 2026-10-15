@@ -119,6 +119,20 @@ authorized read on continuation; it does not replay the mutation. Missing or
 changed evidence remains fail-closed. Resource readiness, result delivery and
 effect verification are distinct conditions with unchanged runtime deadlines.
 
+Node control acknowledgements follow durable publication. Lease acquisition,
+release/expiry and pre-start cancellation stage their update before publishing
+in-memory state; a failed write cannot become a successful acknowledgement.
+Subsequent control/execution requests reconcile the existing journal first,
+including a commit whose response was lost. An EXECUTING record remains uncertain;
+it is not permission to repeat an effect. Malformed journal records and loss of
+previously observed Work IDs fail closed rather than becoming empty state.
+This is the existing single-owner Node journal, not a multi-writer database or
+proof against complete journal erasure before a fresh process starts.
+Blocking Node control writes and Artifact ingestion use the existing ordered
+Relay I/O lane. Cancellation drains the original writer before releasing its
+owner; it neither repeats the operation nor fabricates a response. Signatures,
+resource freshness and execution authorization remain separate checks.
+
 An unavailable Node host probe cannot discard an already recorded Work result.
 The existing authenticated Relay may reconcile the original journal and signed
 assignment without a fresh host report. That mode rejects new execution and
