@@ -355,6 +355,7 @@ def handle_devices_list() -> dict[str, Any]:
     try:
         from nous_runtime.control_plane.operations import get_operations
         from nous_runtime.reality.registry import DeviceRegistry
+        from nous_runtime.core.redaction import redact_sensitive_data
 
         devices = [
             {
@@ -368,14 +369,16 @@ def handle_devices_list() -> dict[str, Any]:
             for device in DeviceRegistry(get_operations().device_state).list()
         ]
         return ok(
-            {
-                "devices": devices,
-                "total": len(devices),
-                # Persisted lifecycle is not a current connectivity observation.
-                "online": 0,
-                "liveness_status": "UNKNOWN",
-                "source": "reality.device_registry",
-            }
+            redact_sensitive_data(
+                {
+                    "devices": devices,
+                    "total": len(devices),
+                    # Persisted lifecycle is not a current connectivity observation.
+                    "online": 0,
+                    "liveness_status": "UNKNOWN",
+                    "source": "reality.device_registry",
+                }
+            )
         )
     except Exception:
         return err(

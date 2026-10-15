@@ -1191,3 +1191,13 @@ without changing the production identity/lifecycle assertions. A removed import
 was caught by Ruff and corrected. No registry, discovery protocol, trust source,
 Kernel, component lock, permissions or production liveness qualification added.
 Exact source/main CI remain required; overall product remains PARTIAL.
+
+The Device adapter also uses the same centralized redaction as Operations before
+returning canonical metadata. An additional malformed fake-metadata probe failed
+before this defense; final combined selection has **165 passed** (5.41 s), with
+**16 passed** (2.43 s) on Python 3.10. Earlier 164/15 counts above precede that
+additional negative case. Transport comparisons normalize Python tuples to JSON
+arrays; identity, lifecycle and revocation assertions remain intact. A scanner
+match on an inline deterministic fake bearer fixture was retained and its source
+made explicit through the named fake-token constant; no scanning rule changed.
+This response defense does not claim to erase historical registry content.

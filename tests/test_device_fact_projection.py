@@ -12,6 +12,8 @@ from nous_runtime.control_plane import operations
 from nous_runtime.governance import ExecutionAuthorizationGate, GovernanceStore
 from nous_runtime.reality import Device, DeviceLifecycle, DeviceRegistry
 
+FAKE_SERVICE_TOKEN = "fake-device-projection-service"
+
 
 @pytest.fixture
 def device_plane(tmp_path, monkeypatch):
@@ -56,7 +58,7 @@ def test_device_projection_preserves_original_identity_and_lifecycle(
     assert result["ok"], result
     assert result["data"]["total"] == 1
     (view,) = result["data"]["devices"]
-    for key, value in original.to_dict().items():
+    for key, value in json.loads(json.dumps(original.to_dict())).items():
         assert view[key] == value
     assert view["type"] == original.device_type
     assert view["capabilities"] == list(original.capability_ids)
@@ -118,7 +120,7 @@ def test_actual_http_device_facts_and_service_auth(
 ):
     from nous_runtime.api.server import RuntimeAPIHandler, RuntimeHTTPServer
 
-    monkeypatch.setenv("NOUS_API_TOKEN", "fake-device-projection-service")
+    monkeypatch.setenv("NOUS_API_TOKEN", FAKE_SERVICE_TOKEN)
     server = RuntimeHTTPServer(("127.0.0.1", 0), RuntimeAPIHandler)
     worker = Thread(target=server.serve_forever)
     worker.start()
@@ -126,7 +128,7 @@ def test_actual_http_device_facts_and_service_auth(
     def request(authenticated):
         headers = {"Content-Type": "application/json"}
         if authenticated:
-            headers["Authorization"] = "Bearer fake-device-projection-service"
+            headers["Authorization"] = "Bearer " + FAKE_SERVICE_TOKEN
         req = Request(
             f"http://127.0.0.1:{server.server_port}" + path,
             method=method,
@@ -154,3 +156,22 @@ def test_actual_http_device_facts_and_service_auth(
         server.server_close()
         worker.join(timeout=5)
         assert not worker.is_alive()
+
+
+def test_device_metadata_uses_existing_central_redaction(device_plane):
+    from nous_runtime.core.redaction import REDACTED
+
+    _, registry = device_plane
+    registry.register(
+        Device(
+            "device-metadata-fixture",
+            "simulated",
+            "stable-metadata-fixture",
+            "sensor",
+            metadata={"password": "fake-protected-device-field", "label": "safe label"},
+        )
+    )
+    (view,) = handle_devices_list()["data"]["devices"]
+    assert view["metadata"]["password"] == REDACTED
+    assert view["metadata"]["label"] == "safe label"
+    assert "fake-protected-device-field" not in json.dumps(view)
