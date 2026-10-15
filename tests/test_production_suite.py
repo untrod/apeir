@@ -86,8 +86,9 @@ class TestDesktopApiEndpoints:
         data = result["data"]
         assert "devices" in data
         assert "online" in data
-        # Local device should always be present
-        assert data["total"] >= 1
+        assert data["total"] == len(data["devices"])
+        assert all(device["device_id"] != "local" for device in data["devices"])
+        assert data["liveness_status"] == "UNKNOWN"
 
     def test_devices_scan_endpoint(self):
         from nous_runtime.api.desktop_routes import handle_devices_scan

@@ -32,7 +32,7 @@ const STEP_ORDER: StepId[] = ["welcome", "node", "provider", "local_model", "hea
 
 const STEP_LABELS: Record<StepId, string> = {
   welcome: "Welcome",
-  node: "Primary Node",
+  node: "Registered Nodes",
   provider: "Provider & Model",
   local_model: "Local Model",
   health_check: "Health Check",
@@ -198,10 +198,10 @@ function WelcomeStep({ onNext }: { onNext: (data: Record<string, string>) => voi
   return (
     <div>
       <h2 style={{ fontSize: typo.xl, fontWeight: typo.bold, color: colors.text, margin: `0 0 ${space.sm} 0` }}>
-        Welcome to Nous
+        Welcome to APEIR
       </h2>
       <p style={{ fontSize: typo.base, color: colors.textSecondary, lineHeight: typo.relaxed, margin: `0 0 ${space.xl} 0` }}>
-        Nous is a chat-first AI control plane. Plan, execute, and verify tasks across your nodes — all from one conversation.
+        APEIR is an execution, governance and verification workspace. Start offline, then connect models and trusted Nodes when needed.
       </p>
       <label style={{ fontSize: typo.sm, fontWeight: typo.medium, color: colors.text, display: "block", marginBottom: space.xs }}>
         What should we call this workspace?
@@ -234,7 +234,7 @@ function NodeStep({ onNext, onError }: { onNext: (data: Record<string, string>) 
       const result = await scanNodes();
       setNodesFound(result?.nodes_found || 0);
       if (result?.nodes_found === 0) {
-        onError("No nodes found on the network. Ensure devices are on the same LAN or connect manually.");
+        onError("No registered Nodes. You can continue offline or add a Node in Operations.");
       }
     } catch (err) {
       onError(err instanceof Error ? err.message : "Scan failed");
@@ -246,18 +246,18 @@ function NodeStep({ onNext, onError }: { onNext: (data: Record<string, string>) 
   return (
     <div>
       <h2 style={{ fontSize: typo.xl, fontWeight: typo.bold, color: colors.text, margin: `0 0 ${space.sm} 0` }}>
-        Connect Your Primary Node
+        Your Registered Nodes
       </h2>
       <p style={{ fontSize: typo.base, color: colors.textSecondary, lineHeight: typo.relaxed, margin: `0 0 ${space.xl} 0` }}>
-        The Primary node hosts the APEIR Runtime. Workers share compute. Scan your local network to discover devices.
+        Query the current Controller’s registered Nodes. Add Node in Operations creates a one-time invitation. Pairing establishes identity trust, not execution permission. No network scan is performed.
       </p>
       <button onClick={handleScan} disabled={scanning}
         style={{ ...btnPrimary, width: "100%", justifyContent: "center", marginBottom: space.md }}>
-        {scanning ? "Scanning..." : "Scan Network"}
+        {scanning ? "Checking..." : "Check registered Nodes"}
       </button>
       {nodesFound > 0 && (
         <div style={{ padding: space.md, background: colors.successSoft, color: colors.success, borderRadius: radius.md, marginBottom: space.md, fontSize: typo.sm }}>
-          Found {nodesFound} device{nodesFound > 1 ? "s" : ""} on the network.
+          {nodesFound} registered Node{nodesFound > 1 ? "s" : ""}. Connection and trust are separate; inspect current state in Operations.
         </div>
       )}
       <button onClick={() => onNext({})} style={{ ...btnPrimary, width: "100%", justifyContent: "center", background: colors.accent }}>

@@ -390,81 +390,87 @@ def handle_list_traces(limit: int = 20, session_id: str = "") -> dict[str, Any]:
 # Nodes API
 
 
-def handle_list_nodes(status: str = "") -> dict[str, Any]:
-    """List registered nodes with optional status filter."""
-    try:
-        from nous_runtime.connectivity.control_plane.node_registry import NodeRegistry
-        from nous_runtime.connectivity.control_plane.session_registry import (
-            SessionRegistry,
+def _canonical_node_views() -> list[dict[str, Any]]:
+    """Read the same signed Relay owner as Operations, never legacy SQL trust."""
+    from nous_runtime.control_plane.operations import get_operations
+
+    records = get_operations().controller().controller_status()["nodes"]
+    result = []
+    for node in records:
+        platform = node["platform"]
+        state = str(node["connectivity_state"]).lower()
+        trusted = node["trust_status"] == "TRUSTED"
+        result.append(
+            {
+                **node,
+                "id": node["node_id"],
+                "name": node["node_name"] or node["node_id"],
+                "platform_facts": platform,
+                "platform": platform["os"],
+                "arch": platform["arch"],
+                "online": (
+                    trusted
+                    and state == "online"
+                    and node["connected"] is True
+                    and node["connectivity_lease_valid"] is True
+                    and node["resource_report_current"] is True
+                    and node["resource_report_fresh"] is True
+                ),
+                "last_seen": node["last_observed_at"],
+                "status": state if trusted else "revoked",
+                "source": "node_runtime.controller-status",
+            }
         )
+    return result
 
-        nodes = NodeRegistry.list_all()
-        sessions = {s.node_id: s.to_dict() for s in SessionRegistry().list_active()}
 
-        result = []
-        for node in nodes:
-            node_id = node.get("node_id", "")
-            session = sessions.get(node_id, {})
-            result.append(
-                {
-                    "node_id": node_id,
-                    "node_name": node.get("node_name", ""),
-                    "platform": node.get("platform_os", ""),
-                    "arch": node.get("platform_arch", ""),
-                    "capabilities": node.get("capabilities", []),
-                    "online": session.get("status") == "active",
-                    "last_seen": session.get(
-                        "last_heartbeat", node.get("registered_at", "")
-                    ),
-                    "status": "online"
-                    if session.get("status") == "active"
-                    else "offline",
-                }
-            )
-
+def handle_list_nodes(status: str = "") -> dict[str, Any]:
+    """Project registered signed-Relay Nodes; discovery never establishes trust."""
+    try:
+        nodes = _canonical_node_views()
         if status:
-            result = [n for n in result if n["status"] == status]
-
-        return ok_response(result)
-    except ImportError:
-        return ok_response([])
-    except Exception as e:
-        return err_response("NOUS_INTERNAL_ERROR", str(e))
+            nodes = [node for node in nodes if node["status"] == status.casefold()]
+        return ok_response(nodes)
+    except Exception:
+        return err_response(
+            "NOUS_NODE_FACTS_UNAVAILABLE",
+            "Canonical Controller Node facts are unavailable",
+            {"status": "UNKNOWN"},
+        )
 
 
 def handle_get_node(node_id: str) -> dict[str, Any]:
-    """Get node details by ID."""
+    """Return the exact same original identity and state as the Node list."""
     try:
-        from nous_runtime.connectivity.control_plane.node_registry import NodeRegistry
-
-        node = NodeRegistry.get(node_id)
-        if node is None:
-            return err_response("NOT_FOUND", f"Node '{node_id}' not found")
-        return ok_response(node)
-    except ImportError:
-        return err_response("NOT_AVAILABLE", "Node registry not available")
-    except Exception as e:
-        return err_response("NOUS_INTERNAL_ERROR", str(e))
-
-
-def handle_scan_nodes() -> dict[str, Any]:
-    """Scan network for available nodes."""
-    try:
-        from nous_runtime.connectivity.control_plane.gateway import ControlPlaneGateway
-
-        gateway = ControlPlaneGateway()
-        status = gateway.get_status()
-        return ok_response(
-            {
-                "nodes_found": status.get("known_nodes", 0),
-                "nodes_online": status.get("connected_nodes", 0),
-                "status": status,
-            }
+        for node in _canonical_node_views():
+            if node["node_id"] == node_id:
+                return ok_response(node)
+        return err_response("NOT_FOUND", "Node is not registered in this Controller")
+    except Exception:
+        return err_response(
+            "NOUS_NODE_FACTS_UNAVAILABLE",
+            "Canonical Controller Node facts are unavailable",
+            {"status": "UNKNOWN"},
         )
-    except ImportError:
-        return err_response("NOT_AVAILABLE", "Control plane not available")
-    except Exception as e:
-        return err_response("NOUS_INTERNAL_ERROR", str(e))
+
+
+def handle_scan_nodes(body: dict | None = None) -> dict[str, Any]:
+    """Compatibility name: query registered Nodes, without network discovery."""
+    if body is not None and (not isinstance(body, dict) or body):
+        return err_response("NOUS_INVALID_REQUEST", "Node query accepts no targets")
+    listed = handle_list_nodes()
+    if not listed["ok"]:
+        return listed
+    nodes = listed["data"]
+    return ok_response(
+        {
+            "nodes_found": len(nodes),
+            "nodes_online": sum(node["online"] for node in nodes),
+            "scan_performed": False,
+            "source": "node_runtime.controller-status",
+            "status": "REGISTERED_NODES_ONLY",
+        }
+    )
 
 
 # Artifacts API
