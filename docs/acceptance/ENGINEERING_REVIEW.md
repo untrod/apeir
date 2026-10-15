@@ -1201,3 +1201,48 @@ arrays; identity, lifecycle and revocation assertions remain intact. A scanner
 match on an inline deterministic fake bearer fixture was retained and its source
 made explicit through the named fake-token constant; no scanning rule changed.
 This response defense does not claim to erase historical registry content.
+
+
+### Signed Node facts reach the existing Desktop — 2026-10-15
+
+**REUSE / FIX** OperationsPlane's existing signed Relay Controller and the
+existing EntityStore. The legacy node list/detail and setup query read early
+Connectivity SQL/session state, while Operations used the signed Node path.
+Six causal backend probes failed before the adapter correction. List/detail/query
+now use the configured Controller, preserve original public-key identity and
+revocation, report unavailable facts as UNKNOWN, and perform no network discovery
+or trust mutation. Existing compatibility Connectivity classes remain untouched;
+they are not the signed Node trust source. The first-run wording now accurately
+says registered Nodes, with optional offline continuation and Operations Add Node.
+
+Four original frontend probes failed: missing entity IDs collapsed multiple Nodes
+under `undefined`, raw online flags were accepted without canonical readiness,
+cached event time hid current revocation, and old responses survived credential
+changes. The existing API adapter now binds exact Node IDs, conservative readiness
+and current configuration generation; unknown capabilities/counters/roles stay
+unknown. Two further activity probes failed because generic Node events promoted
+unseen or revoked Nodes to online. Activity now preserves uncertainty/revocation.
+Two real-store probes also failed: React's useSyncExternalStore did not see a new
+snapshot reference, and reset reused already-mutated default maps. Notification
+now publishes a fresh top-level reference; initial/reset maps are independent.
+Historical Node cache restores no current readiness. No second frontend store,
+Node registry, event system, trust source or execution authority was introduced.
+
+Actual authenticated HTTP list/detail/empty-body query and a real loopback signed
+Node connection cover readiness, absent current resource evidence, and persisted
+revocation after reopening the Controller. One new fixture initially dialed the
+configured ephemeral port 0 instead of start()'s returned URL (**1 failed,
+7 passed**); that is preserved and corrected without changing runtime deadlines.
+The next probe exposed the adapter's insufficient ONLINE-only alias; it now also
+requires current fresh resource facts and a valid connected lease. Final focused
+backend **8 passed** (1.38 s); Node/Device/Control Plane/API/security compatibility
+selection **224 passed** (17.56 s); Python 3.10 Node/Device **24 passed** (3.91 s).
+The first two mistyped frontend/test launch commands collected no tests; corrected
+commands above and the retained causal failures are separate evidence.
+
+Final Desktop lint/typecheck/test/build: **175 passed in 36 files** (47.26 s),
+including an actual React useNodes subscription, reset, activity, cached-revocation
+and pending-response checks. This is source-level frontend/HTTP/loopback software
+qualification. Native APEIR.exe, real remote IdP, WAN/NAT, Windows/Jetson and physical
+Device acceptance remain unqualified; source/main CI and native binary hash checks
+are separate gates. Frozen Kernel, component lock and product PARTIAL are unchanged.

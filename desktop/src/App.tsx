@@ -422,17 +422,18 @@ function NodesPage({ onNodeClick }: { onNodeClick: (nodeId: string) => void }) {
   const onlineCount = nodes.filter((n) => n.online).length;
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: colors.bg }}>
-      <PageHeader title="Nodes" subtitle={`${nodes.length} registered · ${onlineCount} online`} />
+      <PageHeader title="Nodes" subtitle={`${nodes.length} registered · ${onlineCount} ready`} />
       <div style={{ flex: 1, overflowY: "auto", padding: space.xl }}>
         {nodes.length === 0 ? <EmptyView message="No nodes registered." /> :
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: space.lg }}>
             {nodes.map((node) => (
               <RuntimeCard key={node.id} variant="node" title={node.name}
-                status={node.online ? "online" : "offline"}
+                status={node.status || "unknown"}
                 subtitle={`${node.platform} · ${node.arch} · ${node.role}`}
                 detail={{ node_id: node.id, platform: node.platform, arch: node.arch, role: node.role,
-                  last_seen: new Date(node.last_seen).toLocaleString(), capabilities: String(node.capabilities.length),
-                  active_tasks: String(node.active_task_count), latency: node.network_latency_ms ? `${node.network_latency_ms}ms` : "—" }}
+                  trust: node.trust_status || "UNKNOWN", connection: node.connectivity_state || "UNKNOWN",
+                  last_seen: node.last_seen ? new Date(node.last_seen).toLocaleString() : "UNKNOWN", capabilities: String(node.capabilities.length),
+                  active_tasks: node.active_task_count === null ? "UNKNOWN" : String(node.active_task_count), latency: node.network_latency_ms ? `${node.network_latency_ms}ms` : "—" }}
                 onClick={() => onNodeClick(node.id)} />
             ))}
           </div>}

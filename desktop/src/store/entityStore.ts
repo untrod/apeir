@@ -112,7 +112,7 @@ function isNewer(a: string | undefined, b: string): boolean {
 type Listener = () => void;
 
 class EntityStoreImpl {
-  private state: EntityStoreState = { ...EMPTY_STATE };
+  private state: EntityStoreState = structuredClone(EMPTY_STATE);
   private listeners = new Set<Listener>();
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private usageReadSequence = 0;
@@ -127,6 +127,8 @@ class EntityStoreImpl {
 
   /** Notify all React hooks */
   private notify(): void {
+    // useSyncExternalStore compares snapshot identity before notifying views.
+    this.state = { ...this.state };
     this.scheduleSave();
     for (const fn of this.listeners) fn();
   }
@@ -135,7 +137,15 @@ class EntityStoreImpl {
 
   async hydrate(): Promise<void> {
     const cached = await loadCache();
-    if (cached) this.state = { ...EMPTY_STATE, ...cached, usage_accounting: EMPTY_STATE.usage_accounting };
+    if (cached) {
+      this.state = { ...structuredClone(EMPTY_STATE), ...cached, usage_accounting: structuredClone(EMPTY_STATE.usage_accounting) };
+      // Offline cache is historical data, never proof of current Node readiness.
+      this.state.nodes = Object.fromEntries(Object.entries(this.state.nodes).filter(([id, node]) => id !== "undefined" && node.id).map(([id, node]) => [id, {
+        ...node, name: node.name || id, capabilities: node.capabilities || [], online: false,
+        trust_status: node.trust_status === "REVOKED" ? "REVOKED" : "UNKNOWN",
+        connectivity_state: "UNKNOWN", status: node.trust_status === "REVOKED" ? "revoked" : "unknown",
+      }]));
+    }
     this.state.hydrated = true;
     this.notify();
   }
@@ -253,13 +263,19 @@ class EntityStoreImpl {
     if (event_type.startsWith("node.")) {
       const nodeId = payload.node_id as string;
       if (!nodeId) return;
-      const existing = this.state.nodes[nodeId] || {} as Node;
-      const online = event_type === "node.online" ? true : event_type === "node.offline" ? false : existing.online;
+      const existing = this.state.nodes[nodeId] || {
+        id: nodeId, name: nodeId, role: "unknown", platform: "UNKNOWN", arch: "UNKNOWN",
+        online: false, status: "unknown", last_seen: "", capabilities: [],
+        active_task_count: null, total_task_count: null, version: "", paired_at: "",
+        schema_version: "1.0.0", created_at: event.timestamp, updated_at: event.timestamp,
+      } as Node;
+      // Generic activity cannot establish trust, fresh resources or readiness.
+      const online = existing.trust_status !== "REVOKED" && event_type !== "node.offline" && existing.online;
       this.state.nodes[nodeId] = {
         ...existing,
         id: nodeId,
         online,
-        last_seen: event.timestamp,
+        status: event_type === "node.offline" && existing.trust_status !== "REVOKED" ? "offline" : existing.status,
         updated_at: event.timestamp,
         schema_version: "1.0.0",
         created_at: existing.created_at || event.timestamp,
@@ -401,11 +417,11 @@ class EntityStoreImpl {
   }
 
   upsertNodes(nodes: Node[]): void {
+    delete this.state.nodes.undefined;
     for (const n of nodes) {
-      const existing = this.state.nodes[n.id];
-      if (!existing || isNewer(existing.updated_at, n.updated_at)) {
-        this.state.nodes[n.id] = n;
-      }
+      if (!n.id) continue;
+      // Current Controller facts override cached event times, including revocation.
+      this.state.nodes[n.id] = n;
     }
     this.notify();
   }
@@ -505,7 +521,7 @@ class EntityStoreImpl {
 
   clearStore(): void {
     this.usageReadSequence++;
-    this.state = { ...EMPTY_STATE };
+    this.state = structuredClone(EMPTY_STATE);
     this.notify();
   }
 }
