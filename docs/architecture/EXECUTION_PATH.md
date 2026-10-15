@@ -134,8 +134,13 @@ mutation handler. History verifies original CAS references and the committed
 Work's semantic binding to the original Workflow definition, Governance request,
 Capability, Device, input, signed receipt and independent Observation. The exact
 original CAS EffectVerification must match the Work, and the existing v1 verifier
-must reproduce its semantic fields from that receipt and Observation. Historical
-signature checks omit transport clock freshness; later grant revocation does not
+must reproduce its semantic fields from that receipt and Observation. Completed
+runs must also retain every original definition step, its completed
+state, exact checkpoint-bound output and COMMITTED Work. Missing or contradictory
+outputs fail closed instead of disappearing from the history projection; history
+does not reconstruct them or start another Work. Honest unstarted, approval-waiting
+and cancelled runs remain readable as partial records.
+Historical signature checks omit transport clock freshness; later grant revocation does not
 invalidate lawful recorded evidence. History opens no transport and performs no
 new execution admission, provider call or effect. These local integrity checks
 do not resist a host owner rewriting all stores and signing keys. MISMATCH and

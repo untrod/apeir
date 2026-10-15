@@ -1151,3 +1151,31 @@ PTY or native Windows qualification. Existing Ruff/format/compile/documentation/
 235 links/hygiene/version/security checks pass; scanner retains **0 HIGH / 3 known
 MEDIUM**, lock contracts **3 passed**. Kernel and component lock are unchanged.
 Required source and resulting-main CI remain separate acceptance gates.
+
+### Automation complete evidence and original continuation — 2026-10-15
+
+**REUSE / FIX** existing Workflow definition/checkpoint validation, original
+Distributed Work and signed evidence, and the Console's current-human action path.
+A completed historical run previously remained completed when its original
+mutation output was missing. It now requires every original step, matching
+checkpoint/output binding and committed original Work before presenting completion;
+incomplete evidence is rejected without reconstructing output or executing again.
+Honest unstarted, approval-waiting and cancelled records remain readable.
+
+A separate actual response-loss probe showed an interface dead end: reconciliation
+committed the original Work/MATCH, but the failed Workflow still needed its original
+resume. The Console now exposes that continuation only for uncancelled, fully
+committed, output-bound original Work with mutation MATCH and no uncertainty. It
+keeps replacement triggers disabled and never manufactures Workflow completion.
+The actual backend sequence preserves the original run/Work IDs and effect count1;
+a trap forbids another mutation during either recovery phase.
+
+Original output-integrity contracts: **8 failed, 2 passed**; final complete consumer
+selection: **92 passed** (165.74 s), with the subsequently added full recovery
+sequence separately **1 passed** (7.40 s). Python 3.10 relevant overlap:
+**17 passed** (19.82 s). Original UI continuation contract: **1 failed, 18 passed**;
+final Desktop: **192 passed in 37 files** (45.21 s), lint/typecheck/build pass.
+Existing build warnings and original failure logs remain retained. These are
+runtime-service simulations, not a vendor account, deployed IdP, physical device,
+background Cron, Recorder, production strong sandbox or native installation.
+Kernel and component lock are unchanged; exact source/main CI remain required.

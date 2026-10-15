@@ -9,6 +9,16 @@ import {
 type Human = { subject_id: string; expires_at: number };
 type Approval = Record<string, unknown>;
 const terminal = (run: AutomationRun) => ["completed", "cancelled", "failed", "compensation_failed"].includes(run.state);
+const reconciledContinuation = (run: AutomationRun) => run.state === "failed"
+  && !run.cancellation_requested && !run.reconciliation_required
+  && run.works.length > 0 && run.works.every(work => work.state === "COMMITTED")
+  && run.works.some(work => {
+    const policy = work.execution_policy as Record<string, unknown> | undefined;
+    const verification = work.effect_verification as Record<string, unknown> | undefined;
+    return policy?.require_effect_verification === true && verification?.verdict === "MATCH"
+      && typeof work.work_id === "string" && !!work.work_id
+      && Object.values(run.outputs).some(output => output.work_id === work.work_id);
+  });
 const qualified = (item: AutomationView) => item.adapter === "simulated-reality" && item.qualification === "SIMULATED_TEMPLATE" && item.simulated === true && item.execution_scope === "runtime-service" && item.kernel_traversed === false;
 
 export function AutomationInspector({ human, approvals }: { human: Human | null; approvals: Approval[] }) {
@@ -86,7 +96,7 @@ export function AutomationInspector({ human, approvals }: { human: Human | null;
   }
   const enabled = loggedIn && !busy;
   const pendingKey = outstanding.current.get(selected);
-  const activeRun = history?.history.some(run => !terminal(run) || run.reconciliation_required);
+  const activeRun = history?.history.some(run => !terminal(run) || run.reconciliation_required || reconciledContinuation(run));
   return <section aria-label="Automation inspector">
     <h2>Automations</h2>
     <p>SIMULATED · execution_scope=runtime-service · kernel_traversed=false. Structured simulated firmware only; physical hardware remains unqualified.</p>
@@ -134,7 +144,7 @@ export function AutomationInspector({ human, approvals }: { human: Human | null;
             guard();
             await automationAction("resume", current.id, { run_id: run.run_id }, guard);
           }, current.id)}>{decision === "approve" ? "Approve Once" : "Deny"}</button>)}</div>)}
-          <button disabled={!enabled || terminal(run) || run.cancellation_requested || run.reconciliation_required} onClick={() => void perform(guard => automationAction("resume", current.id, { run_id: run.run_id }, guard), current.id)}>Resume original run</button>
+          <button disabled={!enabled || (terminal(run) && !reconciledContinuation(run)) || run.cancellation_requested || run.reconciliation_required} onClick={() => void perform(guard => automationAction("resume", current.id, { run_id: run.run_id }, guard), current.id)}>Resume original run</button>
           <button disabled={!enabled || !run.reconciliation_required} onClick={() => void perform(guard => automationAction("reconcile", current.id, { run_id: run.run_id }, guard), current.id)}>Reconcile original run</button>
           <button disabled={!enabled || terminal(run) || run.cancellation_requested} onClick={() => void perform(guard => automationAction("cancel", current.id, { run_id: run.run_id }, guard), current.id)}>Cancel original run</button>
           <details><summary>Original Workflow / Work evidence</summary><pre>{JSON.stringify(run, null, 2)}</pre></details>

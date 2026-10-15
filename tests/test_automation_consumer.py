@@ -1224,3 +1224,174 @@ def test_history_retains_old_signed_evidence_without_transport_clock_freshness(
     assert result["works"] == completed["works"]
     assert result["effect_counts"] == completed["effect_counts"]
     assert all(path.read_bytes() == value for path, value in snapshots.items())
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        "missing-output",
+        "non-dict-output",
+        "missing-work-id",
+        "extra-output",
+        "different-work-id",
+        "changed-output",
+        "missing-checkpoint",
+        "changed-checkpoint",
+        "changed-step-state",
+        "uncommitted-work",
+    ],
+)
+def test_completed_history_requires_every_original_step_output_and_checkpoint(
+    consumer, monkeypatch, changed
+):
+    from nous_runtime.reality.preview import _DemoComponents
+
+    binding, pending = prepare(consumer)
+    approve(consumer, pending)
+    completed = consumer.resume(binding["id"], pending["run_id"])
+    work_id = completed["outputs"]["mutate"]["work_id"]
+    with consumer.store._db() as db:
+        row = db.execute(
+            "SELECT run_json FROM workflow_runs WHERE run_id=?", (pending["run_id"],)
+        ).fetchone()
+        run = json.loads(row[0])
+        if changed == "missing-output":
+            del run["outputs"]["mutate"]
+        elif changed == "non-dict-output":
+            run["outputs"]["mutate"] = "COMMITTED"
+        elif changed == "missing-work-id":
+            del run["outputs"]["mutate"]["work_id"]
+        elif changed == "extra-output":
+            run["outputs"]["unregistered"] = deepcopy(run["outputs"]["mutate"])
+        elif changed == "different-work-id":
+            run["outputs"]["mutate"]["work_id"] = run["outputs"]["inspect"]["work_id"]
+        elif changed == "changed-output":
+            run["outputs"]["mutate"]["effect_verification"]["verdict"] = "UNKNOWN"
+        elif changed == "changed-step-state":
+            run["step_states"]["mutate"] = "unknown"
+        elif changed == "missing-checkpoint":
+            db.execute(
+                "DELETE FROM workflow_checkpoints WHERE run_id=? AND step_id='mutate'",
+                (pending["run_id"],),
+            )
+        elif changed == "changed-checkpoint":
+            row = db.execute(
+                "SELECT checkpoint_json FROM workflow_checkpoints WHERE run_id=? AND step_id='mutate'",
+                (pending["run_id"],),
+            ).fetchone()
+            checkpoint = json.loads(row[0])
+            checkpoint["status"] = "unknown"
+            db.execute(
+                "UPDATE workflow_checkpoints SET checkpoint_json=? WHERE run_id=? AND step_id='mutate'",
+                (json.dumps(checkpoint), pending["run_id"]),
+            )
+        db.execute(
+            "UPDATE workflow_runs SET run_json=? WHERE run_id=?",
+            (json.dumps(run), pending["run_id"]),
+        )
+    if changed == "uncommitted-work":
+        path = consumer.controller_state / "distributed-works.json"
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["works"][work_id]["state"] = "UNKNOWN"
+        path.write_text(json.dumps(document), encoding="utf-8")
+    snapshots = {
+        path: path.read_bytes() for path in consumer.controller_state.rglob("*.json")
+    }
+    monkeypatch.setattr(
+        _DemoComponents, "start", lambda _: pytest.fail("history cannot open transport")
+    )
+    monkeypatch.setattr(
+        consumer.gate,
+        "evaluate_operation",
+        lambda *_: pytest.fail("history cannot admit execution"),
+    )
+    with pytest.raises(WorkflowBindingError):
+        consumer.history(binding["id"])
+    assert all(path.read_bytes() == value for path, value in snapshots.items())
+    assert completed["effect_counts"][work_id] == 1
+
+
+@pytest.mark.parametrize("phase", ["unstarted", "waiting_approval", "cancelled"])
+def test_incomplete_honest_history_is_readable_without_execution(
+    consumer, monkeypatch, phase
+):
+    from nous_runtime.reality.preview import _DemoComponents
+    from nous_runtime.reality.provider import SimulatedDeviceProvider
+
+    binding = consumer.add_simulation(name="Original partial history")
+    if phase == "unstarted":
+        original = consumer.store.claim_automation_run(binding["id"], "original")
+        expected_state = "pending"
+        run_id = original.run_id
+    else:
+        original = consumer.trigger(binding["id"], "original")
+        run_id = original["run_id"]
+        expected_state = phase
+        if phase == "cancelled":
+            consumer.cancel(binding["id"], run_id)
+    snapshots = {
+        path: path.read_bytes() for path in consumer.controller_state.rglob("*.json")
+    }
+    monkeypatch.setattr(
+        _DemoComponents, "start", lambda _: pytest.fail("history cannot open transport")
+    )
+    monkeypatch.setattr(
+        SimulatedDeviceProvider,
+        "apply_operation",
+        lambda *_args, **_kwargs: pytest.fail("history cannot mutate state"),
+    )
+    monkeypatch.setattr(
+        SimulatedDeviceProvider,
+        "read_state",
+        lambda *_args, **_kwargs: pytest.fail("history cannot acquire new Observation"),
+    )
+    result = consumer.history(binding["id"])["history"][0]
+    assert result["run_id"] == run_id
+    assert result["state"] == expected_state
+    assert all(count == 0 for count in result["effect_counts"].values())
+    assert all(path.read_bytes() == value for path, value in snapshots.items())
+
+
+def test_response_loss_reconcile_then_resume_completes_only_the_original_run(
+    consumer, monkeypatch
+):
+    from nous_runtime.reality import SimulationFault
+    from nous_runtime.reality.preview import _DemoComponents, STABLE_ID
+    from nous_runtime.reality.provider import SimulatedDeviceProvider
+
+    binding, pending = prepare(consumer)
+    approve(consumer, pending)
+    initialize = _DemoComponents._initialize
+
+    def lose_response(self, *args, **kwargs):
+        initialize(self, *args, **kwargs)
+        self.response_loss = True
+        self.provider.inject_fault(STABLE_ID, SimulationFault.EFFECT_THEN_RESPONSE_LOST)
+
+    monkeypatch.setattr(_DemoComponents, "_initialize", lose_response)
+    uncertain = consumer.resume(binding["id"], pending["run_id"])
+    work_id = pending["outputs"]["mutate"]["work_id"]
+    assert uncertain["state"] == "failed"
+    assert uncertain["reconciliation_required"]
+    assert uncertain["effect_counts"][work_id] == 1
+    monkeypatch.setattr(_DemoComponents, "_initialize", initialize)
+    monkeypatch.setattr(
+        SimulatedDeviceProvider,
+        "apply_operation",
+        lambda *_args, **_kwargs: pytest.fail(
+            "recovery cannot execute the side effect again"
+        ),
+    )
+    original_works = {work["work_id"] for work in uncertain["works"]}
+    reconciled = consumer.reconcile(binding["id"], pending["run_id"])
+    assert reconciled["state"] == "failed"
+    assert not reconciled["reconciliation_required"]
+    assert all(work["state"] == "COMMITTED" for work in reconciled["works"])
+    assert reconciled["works"][-1]["effect_verification"]["verdict"] == "MATCH"
+    completed = consumer.resume(binding["id"], pending["run_id"])
+    assert completed["state"] == "completed"
+    assert completed["run_id"] == pending["run_id"]
+    assert completed["outputs"]["mutate"]["work_id"] == work_id
+    assert {work["work_id"] for work in completed["works"]} == original_works
+    assert completed["effect_counts"][work_id] == 1
+    assert len(consumer.history(binding["id"])["history"]) == 1

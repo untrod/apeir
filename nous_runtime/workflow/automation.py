@@ -789,6 +789,30 @@ class AutomationConsumer:
         cas = ContentAddressedArtifactStore(self.controller_state / "artifacts")
         definition = self.store.get_definition(run.workflow_id, run.workflow_version)
         steps = {step.step_id: step for step in definition.steps}
+        if run.state is WorkflowState.COMPLETED:
+            # A completed projection must account for every original step. Do
+            # not reconstruct omitted output from a checkpoint: the omission is
+            # itself inconsistent persisted evidence, not another execution.
+            if set(run.outputs) != set(steps) or set(run.step_states) != set(steps):
+                raise WorkflowBindingError(
+                    "Completed Automation has incomplete original step evidence"
+                )
+            checkpoints = self.store.checkpoints(run_id)
+            validator = WorkflowRuntime(str(self.root))
+            for step_id, step in steps.items():
+                output = run.outputs[step_id]
+                checkpoint = checkpoints.get(step_id, {})
+                if (
+                    run.step_states[step_id] != "completed"
+                    or checkpoint.get("status") != "completed"
+                    or not isinstance(output, dict)
+                    or not output.get("work_id")
+                    or checkpoint.get("output") != output
+                ):
+                    raise WorkflowBindingError(
+                        "Completed Automation original step output changed"
+                    )
+                validator._validate_checkpoint(run, step, checkpoint)
         relay = None
         for step_id, output in run.outputs.items():
             if not isinstance(output, dict) or not output.get("work_id"):
@@ -797,6 +821,13 @@ class AutomationConsumer:
             if work is None or work.provenance.get("workflow_run_id") != run_id:
                 raise WorkflowBindingError(
                     "Original Automation Work evidence is unavailable or changed"
+                )
+            if (
+                run.state is WorkflowState.COMPLETED
+                and work.state is not DistributedWorkState.COMMITTED
+            ):
+                raise WorkflowBindingError(
+                    "Completed Automation original Work is not committed"
                 )
             for ref in (
                 *work.input_artifacts,

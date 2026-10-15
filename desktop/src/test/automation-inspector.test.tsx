@@ -159,3 +159,51 @@ describe("Automation Desktop original-state consumer", () => {
   });
 
 });
+
+describe("original reconciled Automation continuation", () => {
+  const provenWork = {
+    work_id: "work-original", state: "COMMITTED",
+    execution_policy: { require_effect_verification: true },
+    effect_verification: { verdict: "MATCH" },
+  };
+  it("continues the exact failed Workflow after its original effect was reconciled", async () => {
+    const readWork = { work_id: "work-read", state: "COMMITTED", execution_policy: { require_effect_verification: false }, effect_verification: {} };
+    let original: AutomationRun = { ...run, outputs: { ...run.outputs, inspect: { work_id: "work-read" } }, state: "failed", reconciliation_required: true, works: [readWork, { ...provenWork, state: "RUNNING", effect_verification: { verdict: "UNKNOWN" } }] };
+    const fetcher = vi.fn().mockImplementation(async (url: string, options: RequestInit = {}) => {
+      if (url.endsWith("/nonce")) return ok({ nonce: "bound-human-nonce" });
+      if (url.endsWith("/automations")) return ok({ automations: [item], total: 1 });
+      if (url.includes("/history?")) return ok({ automation_id: item.id, history: [original], total: 1 });
+      if (url.endsWith("/action")) {
+        const body = JSON.parse(String(options.body));
+        if (body.action === "reconcile") original = { ...original, reconciliation_required: false, works: [readWork, provenWork] };
+        else if (body.action === "resume") original = { ...original, state: "completed" };
+        else throw new Error("A replacement trigger is forbidden");
+        return ok(original);
+      }
+      throw new Error(`Unexpected request ${url}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<AutomationInspector human={human} approvals={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Reconcile original run" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Resume original run" })).toBeEnabled());
+    expect(screen.getByText("run-original · failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Trigger manual run" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Resume original run" }));
+    await screen.findByText("run-original · completed");
+    expect(mutations(fetcher)).toEqual([
+      { url: expect.stringContaining("/automations/action"), body: { action: "reconcile", automation_id: item.id, run_id: run.run_id } },
+      { url: expect.stringContaining("/automations/action"), body: { action: "resume", automation_id: item.id, run_id: run.run_id } },
+    ]);
+  });
+  it.each(["cancelled", "unknown", "mismatch", "uncommitted", "read-only", "unbound"])("does not resume a failed run with %s evidence", async cause => {
+    const original: AutomationRun = { ...run, state: "failed", works: [provenWork] };
+    if (cause === "cancelled") original.cancellation_requested = true;
+    else if (cause === "unknown") original.reconciliation_required = true;
+    else if (cause === "mismatch") original.works = [{ ...provenWork, effect_verification: { verdict: "MISMATCH" } }];
+    else if (cause === "uncommitted") original.works = [{ ...provenWork, state: "VERIFIED" }];
+    else if (cause === "read-only") original.works = [{ ...provenWork, execution_policy: { require_effect_verification: false } }];
+    else original.works = [{ ...provenWork, work_id: "other-work" }];
+    backend([original]); render(<AutomationInspector human={human} approvals={[]} />);
+    expect(await screen.findByRole("button", { name: "Resume original run" })).toBeDisabled();
+  });
+});
