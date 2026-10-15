@@ -1122,3 +1122,41 @@ PTY or native Windows qualification. Existing Ruff/format/compile/documentation/
 235 links/hygiene/version/security checks pass; scanner retains **0 HIGH / 3 known
 MEDIUM**, lock contracts **3 passed**. Kernel and component lock are unchanged.
 Required source and resulting-main CI remain separate acceptance gates.
+
+### Reality restart observation delivery — 2026-10-15
+
+**REUSE** the original Node journal, signed terminal delivery, Distributed Work
+reconciler, AgentSession/Workflow and independent Reality observation. **FIX**
+the acceptance assumption that fresh connection/resource readiness also proves
+the subsequent read Work has delivered its result. No production execution,
+authorization, retry, isolation or timeout contract changes.
+
+Main `4a5d1858fa71c971c087f73eb19da52ea8d3c165` Windows Core run `38655187548`,
+job `116163146461`, retained **1 failed, 4911 passed, 60 skipped, 4 warnings**
+(1908.58 s). The slow authenticated restart test expected COMPLETED but received
+WAITING; the truncated error identified a separate `observe_` Work. The complete
+Windows error/journal is unavailable, so its actual OS/network cause remains
+unproved and Issues #4/#8 stay open.
+
+A controlled hold of an independently acquired read's terminal upload reproduces
+the same premature completion assertion (**1 failed**, 17.25 s). The unchanged
+runtime correctly leaves the original mutation VERIFIED with one effect and no
+MATCH while the original Workflow waits for that read. Acceptance now permits
+exactly one continuation after the paused read's original ID, Capability, target,
+Node, Workflow, acquisition and input Artifact bindings are checked and its signed
+terminal result is canonically reconciled. The next independent read is fresh;
+the revoked mutation is never executed again. No result means WAITING, no MATCH
+and no continuation. The original final COMPLETED/COMMITTED/MATCH/one-effect
+assertions and all runtime deadlines remain unchanged.
+
+Final restart/observation/original response-loss selection: **6 passed** on Python
+3.12 (35.02 s) and Python 3.10 (35.52 s). Reality, Node, Workflow safety/runtime,
+AgentSession coordination and Artifact CAS regression: **410 passed** (117.55 s).
+An initial new-test observer saw the
+intermediate OBSERVING state between saving the error and saving WAITING; its
+**1 failed, 4 passed** record is retained separately. The corrected observer checks
+state and error from one current AgentSession. Ruff, changed-file formatting,
+compile, documentation/235 links/comments, security (**0 HIGH / 3 known MEDIUM**)
+and component-lock contracts (**3 passed**) pass. These are software simulation
+contracts, not physical or native Windows installation qualification. Kernel and
+component lock remain unchanged; source and resulting-main CI are separate gates.
