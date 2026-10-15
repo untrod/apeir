@@ -1200,3 +1200,22 @@ qualification. One initial test command used the wrong directory and selected no
 matching test; the corrected causal invocation above is retained separately.
 Kernel, component lock, default limits and all backend authority owners remain
 unchanged. Source/main CI and actual source-browser acceptance are separate gates.
+
+Actual source-browser follow-through on clean `0bb053f830a7b8838791e57efd0ce46e7d973b77`
+uses the built App against real Runtime HTTP, a cryptographic fake IdP and simulated
+Reality. Approve Once, Deny, Cancel and response-loss→reconcile→original resume
+reach completed/failed/cancelled/completed with effect counts **1/0/0/1**; recovery
+preserves the exact original run/Work. Browser has zero page errors, no inference
+requests, no 390px horizontal overflow, and logout disables further management.
+The optional favicon request returns 404; the existing psutil/Tauri warnings remain.
+Client monotonic wall times including UI/screenshot work are **2.45/1.89/1.78/9.11 s**,
+one sample per different scenario, not a benchmark distribution or improvement claim.
+These are source-browser records, not installed APEIR.exe or remote identity.
+
+The independent installed wheel from clean `516ad9cefac587ed34ba4fd1feff9fb09ce904ff`
+again completes **18 separate CLI processes** outside the checkout with no
+PYTHONPATH: original approval COMMITTED/MATCH/effect1, same-trigger duplicate1,
+Deny/Cancel0 and late approval rejected. Wheel SHA-256:
+`4592f5e6b731d5b4a708385f71968875d3aa9805cc14c4530d79624810424c06`.
+This wheel qualifies the local simulated CLI contract, not native component hashes,
+signed distribution, arbitrary workloads, live model accounts or physical hardware.
