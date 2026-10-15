@@ -201,6 +201,8 @@ def test_uncertain_at_most_once_result_becomes_unknown_without_replay(
         "binding": request["binding"],
         "delivery_semantics": "at_most_once",
     }
+    # Reconciliation consumes original durable evidence, not an in-memory seed.
+    node.workloads_path.write_text(json.dumps(node._workloads), encoding="utf-8")
     payload = node.execute_workload(
         "work-uncertain",
         request["capability"],
