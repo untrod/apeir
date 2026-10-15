@@ -416,8 +416,9 @@ class EntityStoreImpl {
     this.notify();
   }
 
+  /** Compatibility name: callers supply the complete current REST Node snapshot. */
   upsertNodes(nodes: Node[]): void {
-    delete this.state.nodes.undefined;
+    this.state.nodes = {};
     for (const n of nodes) {
       if (!n.id) continue;
       // Current Controller facts override cached event times, including revocation.

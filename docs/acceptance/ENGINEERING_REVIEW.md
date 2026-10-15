@@ -1212,8 +1212,9 @@ Six causal backend probes failed before the adapter correction. List/detail/quer
 now use the configured Controller, preserve original public-key identity and
 revocation, report unavailable facts as UNKNOWN, and perform no network discovery
 or trust mutation. Existing compatibility Connectivity classes remain untouched;
-they are not the signed Node trust source. The first-run wording now accurately
+they are not the signed Node trust source. The retained ConnectScreen/SetupWizard wording now accurately
 says registered Nodes, with optional offline continuation and Operations Add Node.
+The current App bootstrap uses OnboardingWizard; no replacement wizard was added.
 
 Four original frontend probes failed: missing entity IDs collapsed multiple Nodes
 under `undefined`, raw online flags were accepted without canonical readiness,
@@ -1246,3 +1247,17 @@ and pending-response checks. This is source-level frontend/HTTP/loopback softwar
 qualification. Native APEIR.exe, real remote IdP, WAN/NAT, Windows/Jetson and physical
 Device acceptance remain unqualified; source/main CI and native binary hash checks
 are separate gates. Frozen Kernel, component lock and product PARTIAL are unchanged.
+
+
+Node-page failure delivery is exercised separately from DTO unit tests. Two
+original rendered-page probes failed because an unavailable/pending Controller
+looked like a successful empty directory. The existing NodesPage now shows its
+actual pending read, backend failure and a manual read retry; Controller changes
+hide previous rows before publishing the new response. A full empty REST snapshot
+also originally retained former Nodes (**1 failed, 10 passed**); the existing
+snapshot consumer now replaces membership instead of accumulating old Controllers.
+No command or network discovery is triggered by these read controls. Final source
+Desktop lint/typecheck/test/build has **179 passed in 37 files** (51.70 s), including
+actual rendered loading/error/retry and Controller-switch flows. The earlier
+175/177 counts describe preceding candidates. Native Windows UI and all legacy
+cross-Controller event/cache paths remain separate qualification limits.

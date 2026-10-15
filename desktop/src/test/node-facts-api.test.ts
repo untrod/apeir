@@ -108,3 +108,15 @@ describe("persisted Node cache is historical evidence", () => {
     expect(node.trust_status).toBe(trust === "REVOKED" ? "REVOKED" : "UNKNOWN");
   });
 });
+
+describe("current Controller snapshot membership", () => {
+  afterEach(() => { vi.unstubAllGlobals(); sessionStorage.clear(); entityStore.clearStore(); });
+  it("removes former Nodes when the complete current snapshot is empty", async () => {
+    setConfig({ url: "http://127.0.0.1:8770", token: "fake-node-fact-service" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply([row("node-former-controller")])));
+    entityStore.upsertNodes(await fetchNodes());
+    expect(entityStore.getState().nodes["node-former-controller"]).toBeDefined();
+    entityStore.upsertNodes([]);
+    expect(entityStore.getState().nodes).toEqual({});
+  });
+});

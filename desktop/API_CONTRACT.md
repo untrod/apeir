@@ -400,3 +400,12 @@ alone cannot promote readiness or revive REVOKED trust. Persisted Node cache is
 historical and restores no current online claim. In-flight reads check the current
 Controller URL and configuration generation before publication. This does not
 qualify real WAN/Windows/Jetson, native UI or all legacy multi-Controller caches.
+
+
+The existing legacy Nodes page distinguishes loading, backend UNKNOWN/unavailable,
+and an actually empty successful directory, with explicit read retry. A connection
+configuration change hides the previous rows until the current response arrives.
+Its REST snapshot replaces Node membership, including an empty current snapshot;
+old entity or activity timestamps cannot retain a former Controller's Node set.
+The retained ConnectScreen/SetupWizard uses registered-node wording; App's current
+OnboardingWizard remains the bootstrap entry, not a second newly added workflow.
