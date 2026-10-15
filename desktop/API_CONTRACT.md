@@ -58,8 +58,8 @@ Auth: Bearer token via `Authorization` header. Public: `/api/v1/health`, `/api/v
 |--------|------|---------|----------|
 | GET | `/tasks` | `?state=&limit=` | `{ tasks: TaskView[], total, running }` |
 | POST | `/tasks/action` | `{ action, task_id }` | `{ ok: true }` |
-| GET | `/devices` | — | `{ devices, total, online }` |
-| POST | `/devices/scan` | — | `{ discovered, timestamp }` |
+| GET | `/devices` | — | `{ devices, total, online, liveness_status, source }` |
+| POST | `/devices/scan` | absent or `{}` | `{ discovered: [], timestamp, status: "UNAVAILABLE", scan_performed: false, reason }` |
 | GET | `/automations` | — | `{ automations, total }` |
 | POST | `/automations/add` | `{ name, trigger, schedule?, action }` | `Automation` |
 | POST | `/automations/action` | `{ action, automation_id }` | `{ ok: true }` |
@@ -73,6 +73,16 @@ Auth: Bearer token via `Authorization` header. Public: `/api/v1/health`, `/api/v
 | GET | `/workspace` | — | `WorkspaceEntry` |
 | GET | `/health/dashboard` | — | `HealthDashboard` |
 | GET | `/service/status` | — | `ServiceStatus` |
+
+Device compatibility views use the same configured Reality DeviceRegistry as
+Operations, preserving stable identity, lifecycle, Node association and simulation
+metadata. Nodes and the local host are not manufactured as Devices. Persisted
+AVAILABLE/TRUSTED state is not a fresh liveness observation: `online` counts zero
+confirmed online records and `liveness_status` remains UNKNOWN, not proof that
+every device is offline. Corrupt/unavailable state returns an explicit UNKNOWN
+error. Discovery is currently UNAVAILABLE: the scan route performs no network
+probe, pairing or trust change and refuses nonempty request bodies. Use existing
+explicit Node pairing and qualified managed Device providers.
 
 ### 1.4 Inspector (`/api/inspector/`)
 
@@ -327,7 +337,7 @@ interface EntityBase {
 - **Approval**: `{ id, request_id, capability_id, task_id?, status, requester, risk_level, reason, resolved_at?, resolved_by? }`
 - **Artifact**: `{ id, task_id?, name, kind, mime_type, size_bytes, content_hash, url, preview_url?, version, verified }`
 - **Verification**: `{ id, task_id?, capability_id, status, stages[], evidence, repaired_by? }`
-- **Node**: `{ id, name, role, platform, arch, online, last_seen, capabilities[], active_task_count, total_task_count, network_latency_ms?, version, paired_at }`
+- **Node**: `{ id, node_id, name, role, platform, arch, online, status, trust_status, connectivity_state, last_seen, capabilities[], active_task_count, total_task_count, network_latency_ms?, version, paired_at }`
 - **Model**: `{ id, display_name, provider_id, provider_kind, state, health, capabilities[], probes[], calibration?, cost_per_1k_tokens_usd, avg_latency_ms, token_limit, recoverable }`
 - **Evidence**: `{ id, task_id, verification_id?, kind, content_hash, signature, attested_by, chain_index }`
 - **UsageRecord**: `{ id, model_id, task_id?, conversation_id?, tokens_in, tokens_out, cost_usd, period_start, period_end }`
@@ -358,6 +368,44 @@ interface EntityBase {
 1. **No frontend → Model Provider direct calls.** All model access goes through Runtime API.
 2. **No fake Task success.** Task status only changes via Runtime Events from backend.
 3. **Approval gates execution.** UI buttons call approval API; backend enforces the gate.
-4. **Secrets never in frontend Store/logs/cache.** API keys stored encrypted on Primary node only.
+4. **Secrets never in frontend Store/logs/cache.** Use the existing Credential Governance boundary; do not infer production encrypted-storage or identity qualification from a software reference.
 5. **No parallel frontend state machine.** EntityStore mirrors backend; never originates state.
-6. **Backend compatibility.** All changes are additive; no breaking changes to existing Runtime endpoints.
+6. **Backend compatibility.** Preserve valid contracts; document security corrections that reject unsafe or misleading previous behavior.
+
+
+### Registered Node compatibility views
+
+`GET /api/v1/nodes` and its detail route project the active OperationsPlane's
+signed Node Relay Controller, including exact Node/public-key identity, trust,
+connection and resource-report facts. They do not consult the early Connectivity
+SQL registry/session cache. Legacy Connectivity classes and control endpoints
+remain compatibility-only; they neither establish nor alter signed Relay trust.
+Use Operations Add Node/one-time invitation and its governed revoke action for
+current Nodes. No list, detail or query provisions an identity or grants execution.
+
+`POST /api/v1/nodes/scan` is retained as a compatibility name for a registered-node
+query. Bodyless or empty-object requests return counts, `scan_performed=false`
+and `source=node_runtime.controller-status`. No LAN scan, port probe, discovery,
+trust registration or router/DNS change occurs. Nonempty targets are refused;
+unprovisioned/corrupt Controller facts return UNKNOWN errors, never legacy or
+fabricated online fallback. First launch calls this a registered-node check.
+
+The Desktop maps raw string capability declarations into existing entity records;
+their availability remains unknown, not permission. Unobserved roles, versions,
+pairing times and counters remain unknown/empty/null. Its conservative `online`
+alias means trusted, connected, lease-valid ONLINE with fresh current resource
+facts; the legacy page counts these as **ready**, while displaying connection
+and trust separately. Current REST facts override cached event times; activity
+alone cannot promote readiness or revive REVOKED trust. Persisted Node cache is
+historical and restores no current online claim. In-flight reads check the current
+Controller URL and configuration generation before publication. This does not
+qualify real WAN/Windows/Jetson, native UI or all legacy multi-Controller caches.
+
+
+The existing legacy Nodes page distinguishes loading, backend UNKNOWN/unavailable,
+and an actually empty successful directory, with explicit read retry. A connection
+configuration change hides the previous rows until the current response arrives.
+Its REST snapshot replaces Node membership, including an empty current snapshot;
+old entity or activity timestamps cannot retain a former Controller's Node set.
+The retained ConnectScreen/SetupWizard uses registered-node wording; App's current
+OnboardingWizard remains the bootstrap entry, not a second newly added workflow.

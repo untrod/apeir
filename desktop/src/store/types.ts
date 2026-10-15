@@ -200,12 +200,12 @@ export interface Verification extends EntityBase {
 // Node
 
 
-export type NodeRole = "primary" | "worker" | "standby";
+export type NodeRole = "primary" | "worker" | "standby" | "unknown";
 
 export interface NodeCapability {
   name: string;
   version: string;
-  status: "available" | "busy" | "offline";
+  status: "available" | "busy" | "offline" | "unknown";
 }
 
 export interface Node extends EntityBase {
@@ -217,11 +217,14 @@ export interface Node extends EntityBase {
   online: boolean;
   last_seen: Timestamp;
   capabilities: NodeCapability[];
-  active_task_count: number;
-  total_task_count: number;
+  active_task_count: number | null;
+  total_task_count: number | null;
   network_latency_ms?: number;
   version: string;
   paired_at: Timestamp;
+  trust_status?: string;
+  connectivity_state?: string;
+  status?: string;
 }
 
 
