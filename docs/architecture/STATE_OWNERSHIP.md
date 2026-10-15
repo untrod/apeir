@@ -108,6 +108,17 @@ project it; do not manufacture a terminal state or resubmit an Operation merely
 because a wait deadline elapsed. Tests of denial must retain FAILED, zero-effect,
 unchanged-resource and audit assertions after that real projection.
 
+A fresh authenticated resource report also does not mean that an independent
+read Work's signed terminal result has been delivered. Reality recovery may
+verify the original mutation receipt, then pause while a separate observation
+Work exceeds its bounded wait. The mutation remains VERIFIED, not COMMITTED;
+no missing Observation implies MATCH. Acceptance continuation waits for that
+exact read's terminal evidence and uses the canonical reconciler before resuming
+the same Workflow once. The existing finalizer acquires a fresh independently
+authorized read on continuation; it does not replay the mutation. Missing or
+changed evidence remains fail-closed. Resource readiness, result delivery and
+effect verification are distinct conditions with unchanged runtime deadlines.
+
 An unavailable Node host probe cannot discard an already recorded Work result.
 The existing authenticated Relay may reconcile the original journal and signed
 assignment without a fresh host report. That mode rejects new execution and
