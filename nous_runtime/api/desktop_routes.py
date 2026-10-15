@@ -595,7 +595,9 @@ def handle_automations_action(
             if action in {"enable", "disable"}:
                 return ok(
                     service.store.set_automation_enabled(
-                        automation_id, action == "enable"
+                        automation_id,
+                        action == "enable",
+                        before_publish=service.before_consume,
                     )
                 )
             if action == "trigger":

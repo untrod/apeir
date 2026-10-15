@@ -8,7 +8,7 @@ import hashlib
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from nous_runtime.core.redaction import redact_sensitive_data
 from nous_runtime.locking import file_lock
@@ -236,8 +236,13 @@ class WorkflowStore:
         return [self._automation(row) for row in rows]
 
     def set_automation_enabled(
-        self, automation_id: str, enabled: bool
+        self,
+        automation_id: str,
+        enabled: bool,
+        *,
+        before_publish: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
+        """Update configuration, optionally rechecking authority after writer admission."""
         with self._db() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
@@ -246,7 +251,12 @@ class WorkflowStore:
             ).fetchone()
             if row is None:
                 raise KeyError(automation_id)
-            self._automation(row)
+            binding = self._automation(row)
+            self._validate_automation_definition(connection, binding)
+            # Trusted callbacks only revalidate authority. Keep the Workflow
+            # writer held so another connection cannot replace the binding.
+            if before_publish is not None:
+                before_publish()
             connection.execute(
                 "UPDATE workflow_automations SET enabled=? WHERE automation_id=?",
                 (int(enabled), automation_id),

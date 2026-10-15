@@ -6,9 +6,10 @@ from dataclasses import replace
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import json
+import sqlite3
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
-from threading import Thread, Event
+from threading import Thread, Event, local
 
 import pytest
 
@@ -26,7 +27,7 @@ from nous_runtime.governance import (
 from nous_runtime.governance.broker import ApprovalBroker
 from nous_runtime.governance.cli import _build_context
 from nous_runtime.workflow.automation import AutomationConsumer
-from nous_runtime.workflow.store import WorkflowBindingError
+from nous_runtime.workflow.store import WorkflowBindingError, WorkflowStore
 from tests.control_plane.test_human_sessions import (
     human_env as human_env_fixture,
     login,
@@ -637,6 +638,198 @@ def test_live_http_management_nonce_history_and_original_approval_chain(
         server.shutdown()
         thread.join(timeout=5)
         server.server_close()
+
+
+@pytest.fixture
+def automation_http(consumer, human_env, monkeypatch):
+    """Use the public HTTP route with real fake-OIDC sessions and bound nonces."""
+    from nous_runtime.api.server import RuntimeHTTPServer, RuntimeAPIHandler
+    from nous_runtime.control_plane import human_sessions
+    from nous_runtime.control_plane.human_sessions import HumanSessionAuth
+    from nous_runtime.governance.permission import PermissionEngine, PermissionRule
+
+    _, fixture_auth, client, _ = human_env
+    auth = HumanSessionAuth(
+        consumer.gate.store,
+        fixture_auth.provider,
+        permissions=PermissionEngine(
+            (
+                PermissionRule("oidc:*:alice", "governance.approve", "*"),
+                PermissionRule("oidc:*:alice", "control.*", "*"),
+            )
+        ),
+    )
+    monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(consumer.root))
+    monkeypatch.setenv("NOUS_API_TOKEN", FAKE_SERVICE_TOKEN)
+    monkeypatch.setattr("nous_runtime.governance.gate._gate_instance", consumer.gate)
+    monkeypatch.setattr(human_sessions, "_configured_auth", auth)
+    issued, context = login(auth, client)
+    server = RuntimeHTTPServer(("127.0.0.1", 0), RuntimeAPIHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    def request(body, nonce):
+        req = Request(
+            f"http://127.0.0.1:{server.server_port}/api/v1/automations/action",
+            data=json.dumps(body).encode(),
+            method="POST",
+            headers={
+                "Cookie": "apeir_human=" + issued.session_cookie,
+                "Content-Type": "application/json",
+                "X-Control-Nonce": nonce,
+            },
+        )
+        try:
+            response = urlopen(req, timeout=15)
+        except HTTPError as exc:
+            response = exc
+        with response:
+            return json.load(response)
+
+    try:
+        yield auth, context, request
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+@pytest.mark.parametrize("action", ["enable", "disable"])
+@pytest.mark.parametrize("revocation", ["session", "permission", "none"])
+def test_http_toggle_revalidates_after_workflow_writer_admission(
+    consumer, automation_http, monkeypatch, action, revocation
+):
+    from nous_runtime.governance.permission import PermissionRule
+
+    auth, context, request = automation_http
+    binding = consumer.add_simulation(name="Original toggle configuration")
+    before_enabled = action == "disable"
+    consumer.store.set_automation_enabled(binding["id"], before_enabled)
+    original = consumer.store.get_automation(binding["id"])
+    body = {"action": action, "automation_id": binding["id"]}
+    nonce = auth.nonce(context, "POST", "/api/v1/automations/action", body)["nonce"]
+    writer_attempt = Event()
+    blockers = []
+    scoped = local()
+    connect = WorkflowStore._connect
+    toggle = WorkflowStore.set_automation_enabled
+
+    def traced_connect(self):
+        connection = connect(self)
+        if getattr(scoped, "toggle", False):
+            connection.set_trace_callback(
+                lambda sql: writer_attempt.set() if sql == "BEGIN IMMEDIATE" else None
+            )
+        return connection
+
+    def held_toggle(self, *args, **kwargs):
+        # Install actual writer contention after the public route's admissions.
+        blocker = sqlite3.connect(self.path, check_same_thread=False)
+        blocker.execute("BEGIN IMMEDIATE")
+        blockers.append(blocker)
+        scoped.toggle = True
+        try:
+            return toggle(self, *args, **kwargs)
+        finally:
+            scoped.toggle = False
+
+    monkeypatch.setattr(WorkflowStore, "_connect", traced_connect)
+    monkeypatch.setattr(WorkflowStore, "set_automation_enabled", held_toggle)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(request, body, nonce)
+        try:
+            assert writer_attempt.wait(timeout=10)
+            assert not future.done()
+            assert consumer.store.get_automation(binding["id"]) == original
+            with consumer.gate.store.operation_transaction() as db:
+                rows = db.execute(
+                    "SELECT consumed FROM governance_human_nonces"
+                ).fetchall()
+                assert len(rows) == 1 and rows[0][0] == 1
+            if revocation == "session":
+                auth.logout(context)
+            elif revocation == "permission":
+                auth.permissions.add(
+                    PermissionRule(
+                        "oidc:*:alice",
+                        "control.automation.manage",
+                        consumer.resource_id,
+                        effect="deny",
+                    )
+                )
+            if revocation != "none":
+                with pytest.raises(PermissionError):
+                    consumer.admit_management(context, audit=False)
+            else:
+                consumer.admit_management(context, audit=False)
+            assert not future.done()
+            assert consumer.store.get_automation(binding["id"]) == original
+        finally:
+            for blocker in blockers:
+                blocker.rollback()
+                blocker.close()
+        result = future.result(timeout=15)
+    if revocation == "none":
+        assert result["ok"], result
+        expected = {**original, "enabled": not before_enabled}
+        assert result["data"] == expected
+    else:
+        assert result["error"]["code"] == "NOUS_FORBIDDEN", result
+        expected = original
+    restarted = AutomationConsumer(consumer.root, gate=consumer.gate)
+    assert restarted.store.get_automation(binding["id"]) == expected
+    assert restarted.store.automation_history(binding["id"]) == []
+    with consumer.gate.store.operation_transaction() as db:
+        assert db.execute("SELECT COUNT(*) FROM governance_leases").fetchone()[0] == 0
+    replay = request(body, nonce)
+    assert replay["error"]["code"] == (
+        "NOUS_UNAUTHENTICATED" if revocation == "session" else "NOUS_CONTROL_REPLAY"
+    )
+
+
+@pytest.mark.parametrize("definition", ["changed", "removed"])
+def test_toggle_rejects_changed_or_removed_original_definition(consumer, definition):
+    binding = consumer.add_simulation(name="Original immutable definition")
+    original = consumer.store.get_automation(binding["id"])
+    with consumer.store._db() as db:
+        if definition == "removed":
+            db.execute(
+                "DELETE FROM workflow_definitions WHERE workflow_id=? AND version=?",
+                (binding["workflow_id"], binding["version"]),
+            )
+        else:
+            row = db.execute(
+                "SELECT definition_json FROM workflow_definitions WHERE workflow_id=? AND version=?",
+                (binding["workflow_id"], binding["version"]),
+            ).fetchone()
+            changed = json.loads(row[0])
+            changed["steps"][0]["params"]["changed"] = True
+            db.execute(
+                "UPDATE workflow_definitions SET definition_json=? WHERE workflow_id=? AND version=?",
+                (json.dumps(changed), binding["workflow_id"], binding["version"]),
+            )
+    with pytest.raises(WorkflowBindingError):
+        consumer.store.set_automation_enabled(
+            binding["id"],
+            False,
+            before_publish=lambda: pytest.fail("invalid binding cannot be published"),
+        )
+    assert WorkflowStore(consumer.root).get_automation(binding["id"]) == original
+
+
+def test_trusted_local_toggle_remains_configuration_only(consumer):
+    binding = consumer.add_simulation(name="Trusted local configuration")
+    for enabled in (False, True):
+        expected = {**binding, "enabled": enabled}
+        assert consumer.store.set_automation_enabled(binding["id"], enabled) == expected
+        assert WorkflowStore(consumer.root).get_automation(binding["id"]) == expected
+    with pytest.raises(KeyError):
+        consumer.store.set_automation_enabled(
+            "missing-automation",
+            True,
+            before_publish=lambda: pytest.fail("missing binding cannot be published"),
+        )
+    assert consumer.store.automation_history(binding["id"]) == []
 
 
 def test_cancellation_at_node_admission_blocks_effect_and_survives_restart(

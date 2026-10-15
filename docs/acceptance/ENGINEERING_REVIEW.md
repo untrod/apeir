@@ -1257,3 +1257,24 @@ compile, documentation/235 links/comments, security (**0 HIGH / 3 known MEDIUM**
 and component-lock contracts (**3 passed**) pass. These are software simulation
 contracts, not physical or native Windows installation qualification. Kernel and
 component lock remain unchanged; source and resulting-main CI are separate gates.
+
+### Automation configuration publication admission — 2026-10-15
+
+**REUSE / FIX** the existing Workflow writer, immutable Automation definition and
+current human management check. Structured enable/disable now revalidates the
+original definition and current session/permission after writer admission and
+immediately before configuration publication. Four controlled HTTP cases on
+`ac26e44` retained a configuration update after authority was withdrawn during
+writer contention; no Workflow run, grant or execution authority was produced.
+The correction retains trusted-local configuration compatibility and the
+independent authorization checks on actual Work consumption.
+
+Final focused contracts: **9 passed** (4.05 s), including lawful publication,
+revoked session/permission, consumed nonce replay, unchanged state after restart
+and missing/changed definitions. Automation/HumanSession/routes: **168 passed**
+(164.12 s); Workflow/API enforcement: **52 passed** (1.77 s). Counts overlap.
+Original probes and initial fixture failures remain retained. The existing
+Workflow writer excludes concurrent definition replacement; separate Governance
+revocation and Workflow commit are not claimed to be one atomic transaction.
+No Kernel, component lock, execution permission or default resource limit changes.
+Source and resulting-main CI remain required; overall product stays PARTIAL.
