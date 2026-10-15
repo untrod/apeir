@@ -1160,3 +1160,30 @@ compile, documentation/235 links/comments, security (**0 HIGH / 3 known MEDIUM**
 and component-lock contracts (**3 passed**) pass. These are software simulation
 contracts, not physical or native Windows installation qualification. Kernel and
 component lock remain unchanged; source and resulting-main CI are separate gates.
+
+### Artifact validation vocabulary measurement — 2026-10-15
+
+**REUSE / FIX** the canonical ArtifactType Enum and existing CAS validation. An
+owned Linux warm-filesystem baseline found metadata reads scaling from 0.027 ms
+p50 at one record to 12.52 ms at 1000 records. The candidate derives one immutable
+type-value set from the same Enum instead of allocating that same set for every
+validated record. Every read still reloads the actual index, validates every
+record and performs the same content checks. No index/stat/permission cache,
+fsync, locking, GC, redaction or integrity rule changes.
+
+Three alternating child processes per variant each measure 100 reads against
+the exact same unchanged 1000-record index (595 KiB rounded; actual 593893 bytes).
+All 300 samples per operation/variant are retained:
+
+| Operation | Before p50 / p95 / p99 (ms) | Candidate p50 / p95 / p99 (ms) | CPU seconds before / candidate |
+| --- | --- | --- | --- |
+| metadata get | 13.08 / 17.87 / 20.52 | 8.87 / 11.35 / 15.57 | 4.083 / 2.768 |
+| resolve + content verification | 25.49 / 34.25 / 38.93 | 17.68 / 23.54 / 101.49 | 7.971 / 6.047 |
+
+This exploratory single-host microbenchmark supports reduced median/CPU overhead,
+not guaranteed tail latency: the slower candidate resolve p99 remains recorded.
+It is not a Windows failure explanation, end-to-end or Token-cost improvement.
+Artifact/Node/Governance/Reality contracts: **580 passed** (130.19 s); focused
+Artifact contracts: **31 passed** on Python 3.12 (1.80 s), **31 passed** on Python
+3.10 (1.47 s), overlapping the combined selection. Kernel and component lock
+are unchanged; exact source/main CI remain required.
