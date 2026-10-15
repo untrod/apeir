@@ -1247,3 +1247,28 @@ Relay I/O contracts: **69 passed** (5.41 s). No default PID, isolation, identity
 authorization, frozen Kernel or component-lock change. Standard repository checks
 and exact new-source/resulting-main CI remain distinct evidence from the earlier
 source and diagnostics above; none upgrades physical or native release status.
+
+### Node registration peer binding — 2026-10-15
+
+**REUSE / FIX** the existing configured Controller signing key, Node identity,
+NodeProtocolEnvelope and ReplayWindow. Ordinary session messages already enforce
+the expected Controller source and exact Node target. The registration helper
+verified the signature but omitted those peer checks before saving the session
+and collecting host reports. Two controlled loopback probes with a correctly
+signed but differently addressed ACK reached the forbidden host probe (**2 failed**).
+
+The same source/target checks now apply before registration replay acceptance,
+session publication and host reporting. No identity/key/trust-root, authority,
+Work, timeout, replay-window or automatic retry changes. Negative cases exercise
+both absent and retained original session records; neither can be replaced by
+foreign session data. Existing valid registration, signed execution, Artifact,
+lease, cancellation and reconnect contracts remain exercised.
+
+Node/Reality/Artifact/AgentSession/Governance operation regression before adding
+the two retained-session variants: **422 passed** (131.17 s). Final protocol
+selection including those variants: **18 passed** on Python 3.12 (0.90 s) and
+Python 3.10 (0.92 s). These are controlled software protocol tests, not remote IdP,
+physical or native installation qualification. Exact-source CI and resulting-main
+acceptance remain required; this does not establish the cause of Issues #4/#8 or
+claim exhaustive handshake/replay qualification. Kernel and component lock stay
+unchanged.
