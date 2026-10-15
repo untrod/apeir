@@ -1140,3 +1140,24 @@ PTY or native Windows qualification. Existing Ruff/format/compile/documentation/
 235 links/hygiene/version/security checks pass; scanner retains **0 HIGH / 3 known
 MEDIUM**, lock contracts **3 passed**. Kernel and component lock are unchanged.
 Required source and resulting-main CI remain separate acceptance gates.
+
+### Current-human Skill lifecycle revalidation — 2026-10-15
+
+**REUSE / FIX** the existing Skill Registry, Extension writer fence, Governance
+human session boundary and Operations API. Six owned-fixture probes showed that
+revocation after initial admission could still change enabled state or return
+instructions. Enable/disable now revalidate the exact reviewed identity, version,
+digest and current human permission inside the existing publication fences.
+Instruction acquisition rechecks current content, enabled/revoked state and human
+permission before disclosure. Installation and instruction loading grant no
+execution authority; no script is executed by these lifecycle operations.
+
+Original causal contracts: **6 failed**; repaired: **6 passed**. Repository
+lifecycle selection: **22 passed**; related Python 3.12 contracts: **391 passed,
+17 skipped** (60.82 s); Python 3.10: **110 passed** (22.19 s). Counts overlap.
+An initial additional package fixture used a nonmatching directory name; that
+failure is retained separately and corrected without weakening assertions.
+Ruff, changed formatting, compile, diff and existing 235-file links pass. No
+OS-owner race immunity, deployed IdP, native Desktop, executable Skill, hardware
+or production qualification is claimed. Kernel and component lock are unchanged;
+source and resulting-main CI remain separate integration gates.

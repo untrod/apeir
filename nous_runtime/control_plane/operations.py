@@ -597,6 +597,24 @@ class OperationsPlane:
                 )
                 if not result["ok"]:
                     raise PermissionError(result["error"])
+                loaded = result["skill"]
+                if (
+                    loaded.get("provider") != row["provider"]
+                    or loaded.get("skill_id") != row["skill_id"]
+                    or loaded.get("digest") != row["digest"]
+                    or loaded.get("version") != row["version"]
+                    or loaded.get("metadata", {}).get("extension_id")
+                    != row["extension_id"]
+                ):
+                    raise PermissionError("Skill content changed; review it again")
+                # Instruction acquisition can wait or race with an update,
+                # disable/revocation or current human permission change. Check
+                # the original review and live authority again before disclosure.
+                current = registry.load(qualified)
+                registry._require_reviewed_record(
+                    current, row["digest"], row["version"], row["extension_id"]
+                )
+                revalidate()
             elif action == "remove":
                 if row["provider"] != "installed":
                     raise PermissionError("Only installed Skills can be removed")
@@ -610,7 +628,13 @@ class OperationsPlane:
                     "skill_id": row["skill_id"],
                 }
             else:
-                result = getattr(registry, action)(qualified).to_dict()
+                result = getattr(registry, action)(
+                    qualified,
+                    expected_digest=row["digest"],
+                    expected_version=row["version"],
+                    expected_extension_id=row["extension_id"],
+                    before_publish=revalidate,
+                ).to_dict()
         with self.gate.store.operation_transaction() as db:
             self.gate.store.append_operation_audit(
                 db,

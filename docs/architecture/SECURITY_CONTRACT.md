@@ -614,6 +614,17 @@ prevents loading. Install/enable/load never executes scripts or issues execution
 grants. Human identity, package digest and artifact references use the existing
 Governance audit. Actual Operations still require existing Work authorization.
 
+Enable/disable recheck current human identity and permission inside the existing
+Skill state publication lock. Installed content additionally uses the existing
+Extension writer fence in the same state-to-Extension order as removal. The
+original reviewed Extension ID, version and digest must still match; a stale
+review cannot toggle a replacement version. Instruction loading rechecks both
+the original reviewed content and live enabled/verified state after acquisition,
+then current human authority before disclosure. Revoked or expired authority,
+disabled/revoked content, changed versions and corrupt evidence fail closed.
+These checks govern Registry publication and instruction delivery; they do not
+claim protection from an operating-system owner rewriting arbitrary files.
+
 Skill identity and authority fields come from the verified canonical manifest,
 not package-defined display metadata. Uninstall binds the original reviewed
 Skill ID, Extension ID, version and content digest. The existing Extension writer

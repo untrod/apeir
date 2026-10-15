@@ -9,6 +9,7 @@ import re
 import shutil
 import tempfile
 import zipfile
+from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -449,11 +450,41 @@ class SkillRegistry:
             ContentAddressedArtifactStore(self.artifact_root).unpin(artifact_ref)
         return True
 
-    def enable(self, skill_id: str) -> SkillRecord:
-        return self._set_enabled(skill_id, True)
+    def enable(
+        self,
+        skill_id: str,
+        *,
+        expected_digest: str = "",
+        expected_version: str = "",
+        expected_extension_id: str = "",
+        before_publish: Callable[[], None] | None = None,
+    ) -> SkillRecord:
+        return self._set_enabled(
+            skill_id,
+            True,
+            expected_digest=expected_digest,
+            expected_version=expected_version,
+            expected_extension_id=expected_extension_id,
+            before_publish=before_publish,
+        )
 
-    def disable(self, skill_id: str) -> SkillRecord:
-        return self._set_enabled(skill_id, False)
+    def disable(
+        self,
+        skill_id: str,
+        *,
+        expected_digest: str = "",
+        expected_version: str = "",
+        expected_extension_id: str = "",
+        before_publish: Callable[[], None] | None = None,
+    ) -> SkillRecord:
+        return self._set_enabled(
+            skill_id,
+            False,
+            expected_digest=expected_digest,
+            expected_version=expected_version,
+            expected_extension_id=expected_extension_id,
+            before_publish=before_publish,
+        )
 
     def add_catalog(
         self,
@@ -668,13 +699,69 @@ class SkillRegistry:
         enabled = self._state().get("enabled") or {}
         return replace(record, enabled=bool(enabled.get(record.skill_id, True)))
 
-    def _set_enabled(self, skill_id: str, enabled: bool) -> SkillRecord:
+    def _set_enabled(
+        self,
+        skill_id: str,
+        enabled: bool,
+        *,
+        expected_digest: str,
+        expected_version: str,
+        expected_extension_id: str,
+        before_publish: Callable[[], None] | None,
+    ) -> SkillRecord:
         with file_lock(self.state_path.with_suffix(".lock")):
             record = self.resolve(skill_id, include_disabled=True)
-            state = self._state()
-            state.setdefault("enabled", {})[record.skill_id] = enabled
-            self._write_state(state)
+            # Use the existing state -> Extension writer order, shared with
+            # installed package removal/acquisition. The reviewed installed
+            # version cannot be replaced or revoked by another Registry writer
+            # between verification and enabled-state publication.
+            fence = (
+                self.extensions._writer_lock()
+                if record.provider == "installed"
+                else nullcontext()
+            )
+            with fence:
+                record = self.resolve(skill_id, include_disabled=True)
+                self._require_reviewed_record(
+                    record,
+                    expected_digest,
+                    expected_version,
+                    expected_extension_id,
+                )
+                if before_publish is not None:
+                    before_publish()
+                # Trusted same-thread callbacks may update Registry state.
+                # Reload rather than overwriting their current publication.
+                record = self.resolve(skill_id, include_disabled=True)
+                self._require_reviewed_record(
+                    record,
+                    expected_digest,
+                    expected_version,
+                    expected_extension_id,
+                )
+                if before_publish is not None:
+                    before_publish()
+                state = self._state()
+                state.setdefault("enabled", {})[record.skill_id] = enabled
+                self._write_state(state)
         return replace(record, enabled=enabled)
+
+    @staticmethod
+    def _require_reviewed_record(
+        record: SkillRecord,
+        expected_digest: str,
+        expected_version: str,
+        expected_extension_id: str,
+    ) -> None:
+        if (
+            (expected_digest and record.digest != expected_digest)
+            or (expected_version and record.version != expected_version)
+            or (
+                expected_extension_id
+                and record.metadata.get("extension_id") != expected_extension_id
+            )
+        ):
+            raise PermissionError("Skill content changed; review it again")
 
     def _read_catalog(
         self, source: str, *, allow_remote: bool = False
