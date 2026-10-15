@@ -2353,6 +2353,10 @@ class NodeRelayClient:
         envelope = NodeProtocolEnvelope.from_json(raw)
         if not envelope.verify(self.server_public_key):
             raise NodeProtocolError("control-plane signature verification failed")
+        if envelope.source != CONTROL_PLANE_ID:
+            raise NodeProtocolError("unexpected message source")
+        if envelope.target != self.service.identity.node_id:
+            raise NodeProtocolError("message addressed to another node")
         self._replay.accept(envelope)
         return envelope
 
