@@ -7,7 +7,7 @@
  * Base URL: http://localhost:8770 (configurable)
  */
 
-import type { Conversation, Message, UsageAccountingSummary } from "../store/types";
+import type { Conversation, Message, Node, UsageAccountingSummary } from "../store/types";
 import { isUsageAccountingSummary } from "./usageAccounting";
 
 export interface RuntimeConfig {
@@ -144,6 +144,9 @@ export interface DeviceView {
   type: string;
   status: string;
   hardware?: string;
+  lifecycle?: string;
+  node_id?: string;
+  liveness_status?: "UNKNOWN";
   address?: string;
   capabilities?: string[];
 }
@@ -405,10 +408,10 @@ export const fetchTaskTimeline = (taskId: string) =>
 
 // Devices
 export const fetchDevices = () =>
-  api<{ devices: DeviceView[]; total: number; online: number }>("/api/v1/devices");
+  api<{ devices: DeviceView[]; total: number; online: number; liveness_status: "UNKNOWN"; source: "reality.device_registry" }>("/api/v1/devices");
 
 export const scanDevices = () =>
-  api<{ discovered: DeviceView[]; timestamp: number }>("/api/v1/devices/scan", { method: "POST" });
+  api<{ discovered: DeviceView[]; timestamp: number; status: "UNAVAILABLE"; scan_performed: false; reason: string }>("/api/v1/devices/scan", { method: "POST" });
 
 // Automations
 export const fetchAutomations = () =>
@@ -788,18 +791,49 @@ export interface NodeView {
   online: boolean;
   last_seen: string;
   status: string;
+  trust_status: string;
+  connected: boolean;
+  connectivity_state: string;
+  connectivity_lease_valid: boolean;
+  resource_report_fresh: boolean;
+  source: string;
 }
 
-export const fetchNodes = (status = "") => {
-  const params = status ? `?status=${status}` : "";
-  return api<NodeView[]>(`/api/v1/nodes${params}`);
+function nodeEntity(node: NodeView): Node {
+  if (!node.node_id || node.source !== "node_runtime.controller-status" || !Array.isArray(node.capabilities) || node.capabilities.some(value => typeof value !== "string")) {
+    throw new Error("Canonical Node facts are unavailable or incomplete.");
+  }
+  return {
+    ...node, id: node.node_id, name: node.node_name || node.node_id,
+    role: "unknown", platform: node.platform || "UNKNOWN", arch: node.arch || "UNKNOWN",
+    online: node.trust_status === "TRUSTED" && node.connected === true && node.connectivity_state === "ONLINE" && node.connectivity_lease_valid === true && node.resource_report_fresh === true,
+    status: node.trust_status === "REVOKED" ? "revoked" : node.connectivity_state.toLowerCase(),
+    capabilities: node.capabilities.map(name => ({ name, version: "", status: "unknown" })),
+    active_task_count: null, total_task_count: null, version: "", paired_at: "",
+    schema_version: "1.0.0", created_at: "", updated_at: "",
+  };
+}
+
+async function nodeFacts<T>(path: string, options?: RequestInit): Promise<T> {
+  const version = getRuntimeConfigVersion();
+  const controller = getConfig().url;
+  const result = await api<T>(path, options);
+  if (getConfig().url !== controller || getRuntimeConfigVersion() !== version) {
+    throw new Error("Controller configuration changed; reload registered Nodes.");
+  }
+  return result;
+}
+
+export const fetchNodes = async (status = ""): Promise<Node[]> => {
+  const params = status ? `?status=${encodeURIComponent(status)}` : "";
+  return (await nodeFacts<NodeView[]>(`/api/v1/nodes${params}`)).map(nodeEntity);
 };
 
-export const fetchNode = (nodeId: string) =>
-  api<NodeView>(`/api/v1/nodes/${nodeId}`);
+export const fetchNode = async (nodeId: string): Promise<Node> =>
+  nodeEntity(await nodeFacts<NodeView>(`/api/v1/nodes/${encodeURIComponent(nodeId)}`));
 
 export const scanNodes = () =>
-  api<{ nodes_found: number; nodes_online: number }>("/api/v1/nodes/scan", { method: "POST" });
+  nodeFacts<{ nodes_found: number; nodes_online: number; scan_performed: false; source: string; status: string }>("/api/v1/nodes/scan", { method: "POST" });
 
 // New: Approvals API
 
