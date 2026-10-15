@@ -382,11 +382,9 @@ class NodeRuntimeService:
             raise ValueError("durable workload state is invalid") from exc
         if not isinstance(value, dict):
             raise ValueError("durable workload state must be an object")
-        return {
-            key: item
-            for key, item in value.items()
-            if isinstance(key, str) and isinstance(item, dict)
-        }
+        if any(not isinstance(item, dict) for item in value.values()):
+            raise ValueError("durable workload record is invalid")
+        return value
 
     def _load_leases(self) -> dict[str, dict[str, Any]]:
         if not self.leases_path.is_file():
@@ -397,11 +395,22 @@ class NodeRuntimeService:
             raise ValueError("durable lease state is invalid") from exc
         if not isinstance(value, dict):
             raise ValueError("durable lease state must be an object")
-        return {
-            key: item
-            for key, item in value.items()
-            if isinstance(key, str) and isinstance(item, dict)
-        }
+        if any(not isinstance(item, dict) for item in value.values()):
+            raise ValueError("durable lease record is invalid")
+        return value
+
+    def _refresh_workloads(self) -> None:
+        # The journal is authoritative even when its last commit lost its response.
+        # Recorded Work IDs are never removed: absence must not permit replay.
+        loaded = self._load_workloads()
+        if self._workloads.keys() - loaded.keys():
+            raise ValueError("durable workload state lost recorded entries")
+        self._workloads = loaded
+
+    def _refresh_leases(self) -> None:
+        if self._leases and not self.leases_path.is_file():
+            raise ValueError("durable lease state lost recorded entries")
+        self._leases = self._load_leases()
 
     def acquire_lease(
         self, lease_id: str, resource_id: str, ttl_seconds: float
@@ -415,6 +424,7 @@ class NodeRuntimeService:
             raise ValueError("ttl_seconds must be in the range 0 < ttl <= 86400")
         now = time.time()
         with self._state_lock:
+            self._refresh_leases()
             self._expire_leases(now)
             existing = self._leases.get(lease_id)
             if existing is not None:
@@ -439,8 +449,9 @@ class NodeRuntimeService:
                 "expires_at_epoch": now + float(ttl_seconds),
                 "ttl_seconds": float(ttl_seconds),
             }
-            self._leases[lease_id] = lease
-            _atomic_write_json(self.leases_path, self._leases)
+            staged = {**self._leases, lease_id: lease}
+            _atomic_write_json(self.leases_path, staged)
+            self._leases = staged
             self._emit("node.lease.acquired", lease)
             return dict(lease)
 
@@ -449,6 +460,7 @@ class NodeRuntimeService:
         _safe_runtime_id(lease_id, "lease_id")
         _safe_runtime_id(resource_id, "resource_id")
         with self._state_lock:
+            self._refresh_leases()
             lease = self._leases.get(lease_id)
             if lease is None:
                 return {
@@ -461,8 +473,11 @@ class NodeRuntimeService:
             if lease.get("resource_id") != resource_id:
                 raise ValueError("lease resource does not match")
             released = {**lease, "state": "RELEASED", "released_at": _utc_now()}
-            self._leases.pop(lease_id, None)
-            _atomic_write_json(self.leases_path, self._leases)
+            staged = {
+                key: value for key, value in self._leases.items() if key != lease_id
+            }
+            _atomic_write_json(self.leases_path, staged)
+            self._leases = staged
             self._emit("node.lease.released", released)
             return released
 
@@ -474,9 +489,11 @@ class NodeRuntimeService:
             if float(lease.get("expires_at_epoch", 0)) <= current
         ]
         if expired:
-            for lease_id in expired:
-                self._leases.pop(lease_id, None)
-            _atomic_write_json(self.leases_path, self._leases)
+            staged = {
+                key: value for key, value in self._leases.items() if key not in expired
+            }
+            _atomic_write_json(self.leases_path, staged)
+            self._leases = staged
 
     def _next_fencing_token(self) -> int:
         value: dict[str, Any] = {}
@@ -573,6 +590,7 @@ class NodeRuntimeService:
         """Persist a pre-start cancellation or truthfully report a terminal workload."""
         _safe_runtime_id(workload_id, "workload_id")
         with self._state_lock:
+            self._refresh_workloads()
             existing = self._workloads.get(workload_id)
             if existing is not None:
                 if existing.get("state") == "EXECUTING":
@@ -592,8 +610,9 @@ class NodeRuntimeService:
                 "finished_at": now,
                 "stop_result": "CANCELLED_BEFORE_START",
             }
-            self._workloads[workload_id] = result
-            _atomic_write_json(self.workloads_path, self._workloads)
+            staged = {**self._workloads, workload_id: result}
+            _atomic_write_json(self.workloads_path, staged)
+            self._workloads = staged
             self._emit("node.workload.cancelled", result)
             return dict(result)
 
@@ -772,6 +791,7 @@ class NodeRuntimeService:
             capability, arguments or {}, delivery_semantics, binding or {}
         )
         with self._state_lock:
+            self._refresh_workloads()
             if workload_id in self._workloads:
                 existing = self._workloads[workload_id]
                 if delivery_semantics == "at_most_once" and not existing.get(
