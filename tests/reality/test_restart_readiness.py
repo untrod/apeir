@@ -106,6 +106,25 @@ def test_revoked_effect_recovery_survives_slow_authenticated_restart(
     assert registrations == 2
 
 
+async def _await_original_observation_hold(entered, resumption):
+    """Follow the owned producer, not a second deadline covering its preparation."""
+    reached = asyncio.create_task(entered.wait())
+    try:
+        await asyncio.wait({reached, resumption}, return_when=asyncio.FIRST_COMPLETED)
+        if not entered.is_set():
+            # Surface its original failure/cancellation. A successful return
+            # before the fault was injected is also an invalid acceptance run.
+            result = await resumption
+            pytest.fail(
+                "Original resumption finished without the observation hold: "
+                f"state={result.state}, error={result.error}"
+            )
+    finally:
+        reached.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reached
+
+
 @pytest.mark.parametrize("deliver_result", [True, False], ids=["delayed", "missing"])
 def test_delayed_observation_after_restart_requires_original_read_evidence(
     tmp_path, monkeypatch, deliver_result
@@ -155,7 +174,7 @@ def test_delayed_observation_after_restart_requires_original_read_evidence(
                 resume_after_terminal_observation_delivery(restored, paused.session_id)
             )
             try:
-                await asyncio.wait_for(entered.wait(), timeout=5)
+                await _await_original_observation_hold(entered, resumption)
                 acquisition_id = held["workload_id"]
 
                 def waiting_on_original_read():
@@ -209,5 +228,34 @@ def test_delayed_observation_after_restart_requires_original_read_evidence(
                 release.set()
                 with contextlib.suppress(asyncio.CancelledError):
                     await resumption
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("outcome", ["error", "cancelled", "no-hold"])
+def test_observation_hold_propagates_producer_failure(outcome):
+    async def scenario():
+        entered = asyncio.Event()
+
+        async def producer():
+            if outcome == "error":
+                raise RuntimeError("original read producer failed")
+            if outcome == "cancelled":
+                raise asyncio.CancelledError
+            from types import SimpleNamespace
+
+            return SimpleNamespace(state="WAITING", error="original read unavailable")
+
+        task = asyncio.create_task(producer())
+        expected = {
+            "error": (RuntimeError, "original read producer failed"),
+            "cancelled": (asyncio.CancelledError, None),
+            "no-hold": (pytest.fail.Exception, "finished without the observation hold"),
+        }[outcome]
+        with pytest.raises(expected[0], match=expected[1]):
+            await _await_original_observation_hold(entered, task)
+        assert task.done()
+        assert not entered.is_set()
+        assert not [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
 
     asyncio.run(scenario())

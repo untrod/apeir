@@ -478,3 +478,244 @@ def test_main_node_status_and_list_show_durable_local_node(tmp_path: Path):
     entries = json.loads(listed.output)
     assert entries[0]["node_id"] == service.identity.node_id
     assert entries[0]["is_online"] is True
+
+
+@pytest.mark.parametrize("kind", ["acquire", "release", "expire", "stop"])
+def test_failed_control_publication_preserves_durable_projection(
+    tmp_path, monkeypatch, kind
+):
+    service = NodeRuntimeService(NodeRuntimeConfig(tmp_path / "node"))
+    clock = [1000.0]
+    monkeypatch.setattr(node_service.time, "time", lambda: clock[0])
+    if kind in {"release", "expire"}:
+        service.acquire_lease("lease-original", "cpu:0", 1 if kind == "expire" else 60)
+    if kind == "expire":
+        clock[0] += 2
+    target = service.workloads_path if kind == "stop" else service.leases_path
+    before_bytes = target.read_bytes() if target.exists() else None
+    original_state = json.loads(
+        json.dumps(service._workloads if kind == "stop" else service._leases)
+    )
+    write = node_service._atomic_write_json
+    attempted = []
+
+    def failed_write(path, value):
+        if path == target:
+            attempted.append(path)
+            raise OSError("controlled control publication failure")
+        return write(path, value)
+
+    def operation():
+        if kind == "release":
+            return service.release_lease("lease-original", "cpu:0")
+        if kind == "stop":
+            return service.stop_workload("work-original")
+        return service.acquire_lease("lease-new", "cpu:0", 60)
+
+    monkeypatch.setattr(node_service, "_atomic_write_json", failed_write)
+    with pytest.raises(OSError, match="control publication failure"):
+        operation()
+    assert attempted == [target]
+    current = service._workloads if kind == "stop" else service._leases
+    assert current == original_state
+    assert (target.read_bytes() if target.exists() else None) == before_bytes
+    restarted = NodeRuntimeService(NodeRuntimeConfig(service.state_dir))
+    assert (
+        restarted._workloads if kind == "stop" else restarted._leases
+    ) == original_state
+
+    monkeypatch.setattr(node_service, "_atomic_write_json", write)
+    result = operation()
+    if kind == "acquire":
+        # An unacknowledged consumed counter must not be reused after write failure.
+        assert result["fencing_token"] == 2
+    elif kind == "expire":
+        assert result["fencing_token"] == 2
+        assert "lease-original" not in service._leases
+    elif kind == "release":
+        assert result["state"] == "RELEASED"
+    else:
+        assert result["state"] == "CANCELLED"
+    persisted = json.loads(target.read_text())
+    assert persisted == (service._workloads if kind == "stop" else service._leases)
+
+
+@pytest.mark.parametrize("kind", ["lease", "stop"])
+def test_control_commit_response_loss_reconciles_persisted_state(
+    tmp_path, monkeypatch, kind
+):
+    service = NodeRuntimeService(NodeRuntimeConfig(tmp_path / "node"))
+    path = service.leases_path if kind == "lease" else service.workloads_path
+    write = node_service._atomic_write_json
+
+    def commit_then_lose_response(target, value):
+        write(target, value)
+        if target == path:
+            raise OSError("controlled lost publication response")
+
+    monkeypatch.setattr(node_service, "_atomic_write_json", commit_then_lose_response)
+    with pytest.raises(OSError, match="lost publication response"):
+        if kind == "lease":
+            service.acquire_lease("lease-original", "cpu:0", 60)
+        else:
+            service.stop_workload("work-original")
+    persisted = path.read_bytes()
+    monkeypatch.setattr(node_service, "_atomic_write_json", write)
+    if kind == "lease":
+        result = service.acquire_lease("lease-original", "cpu:0", 60)
+        assert result["fencing_token"] == 1
+        assert json.loads(service.lease_counter_path.read_text())["counter"] == 1
+    else:
+        effects = []
+        service._handlers["system.echo"] = lambda args: effects.append(args) or {}
+        result = service.execute_workload(
+            "work-original", "system.echo", {"message": "original"}
+        )
+        assert result["state"] == "CANCELLED"
+        assert effects == []
+    assert path.read_bytes() == persisted
+
+
+def test_execution_marker_is_not_published_before_its_journal_commit(
+    tmp_path, monkeypatch
+):
+    from tests.node_runtime.test_relay_reconciliation import _binding
+
+    service = NodeRuntimeService(NodeRuntimeConfig(tmp_path / "node"))
+    effects = []
+    service._handlers["system.echo"] = lambda args: effects.append(args) or {}
+    write = node_service._atomic_write_json
+
+    def fail_before_commit(path, value):
+        if path == service.workloads_path:
+            raise OSError("controlled executing publication failure")
+        return write(path, value)
+
+    monkeypatch.setattr(node_service, "_atomic_write_json", fail_before_commit)
+    arguments = {"message": "original"}
+    binding = _binding("work-original")
+    with pytest.raises(OSError, match="executing publication failure"):
+        service.execute_workload(
+            "work-original",
+            "system.echo",
+            arguments,
+            delivery_semantics="at_most_once",
+            binding=binding,
+        )
+    assert effects == []
+    assert service._workloads == {}
+    assert not service.workloads_path.exists()
+    monkeypatch.setattr(node_service, "_atomic_write_json", write)
+    assert (
+        service.execute_workload(
+            "work-original",
+            "system.echo",
+            arguments,
+            delivery_semantics="at_most_once",
+            binding=binding,
+        )["state"]
+        == "COMPLETED"
+    )
+    assert len(effects) == 1
+
+
+@pytest.mark.parametrize("kind", ["workload", "lease"])
+def test_malformed_record_cannot_be_discarded_as_empty_state(tmp_path, kind):
+    service = NodeRuntimeService(NodeRuntimeConfig(tmp_path / "node"))
+    path = service.workloads_path if kind == "workload" else service.leases_path
+    damaged = json.dumps({"original-record": None})
+    path.write_text(damaged, encoding="utf-8")
+    with pytest.raises(ValueError, match="durable.*record"):
+        NodeRuntimeService(NodeRuntimeConfig(service.state_dir))
+    assert path.read_text() == damaged
+
+
+@pytest.mark.parametrize("kind", ["workload", "lease"])
+def test_live_journal_loss_cannot_admit_reexecution(tmp_path, kind):
+    service = NodeRuntimeService(NodeRuntimeConfig(tmp_path / "node"))
+    effects = []
+    service._handlers["system.echo"] = lambda args: effects.append(args) or {}
+    if kind == "workload":
+        service.execute_workload("work-original", "system.echo", {})
+        path = service.workloads_path
+    else:
+        service.acquire_lease("lease-original", "cpu:0", 60)
+        path = service.leases_path
+    persisted = path.read_bytes()
+    path.unlink()
+    with pytest.raises(ValueError, match="durable.*lost recorded entries"):
+        if kind == "workload":
+            service.execute_workload("work-original", "system.echo", {})
+        else:
+            service.acquire_lease("lease-original", "cpu:0", 60)
+    assert len(effects) == (1 if kind == "workload" else 0)
+    path.write_bytes(persisted)
+    if kind == "workload":
+        assert (
+            service.execute_workload("work-original", "system.echo", {})["state"]
+            == "COMPLETED"
+        )
+        assert len(effects) == 1
+    else:
+        assert (
+            service.acquire_lease("lease-original", "cpu:0", 60)["fencing_token"] == 1
+        )
+
+
+@pytest.mark.parametrize("lost_state", ["EXECUTING", "COMPLETED"])
+def test_execution_commit_response_loss_never_replays_effect(
+    tmp_path, monkeypatch, lost_state
+):
+    from tests.node_runtime.test_relay_reconciliation import _binding
+
+    service = NodeRuntimeService(NodeRuntimeConfig(tmp_path / "node"))
+    effects = []
+    service._handlers["system.echo"] = lambda args: effects.append(args) or {}
+    write = node_service._atomic_write_json
+
+    def commit_then_lose_response(path, value):
+        write(path, value)
+        if (
+            path == service.workloads_path
+            and value["work-original"]["state"] == lost_state
+        ):
+            raise OSError("controlled lost execution publication response")
+
+    monkeypatch.setattr(node_service, "_atomic_write_json", commit_then_lose_response)
+    arguments = {"message": "original"}
+    binding = _binding("work-original")
+    with pytest.raises(OSError, match="lost execution publication response"):
+        service.execute_workload(
+            "work-original",
+            "system.echo",
+            arguments,
+            delivery_semantics="at_most_once",
+            binding=binding,
+        )
+    persisted = service.workloads_path.read_bytes()
+    monkeypatch.setattr(node_service, "_atomic_write_json", write)
+    result = service.execute_workload(
+        "work-original",
+        "system.echo",
+        arguments,
+        delivery_semantics="at_most_once",
+        binding=binding,
+    )
+    assert result["state"] == (
+        "RECOVERY_REQUIRED" if lost_state == "EXECUTING" else "COMPLETED"
+    )
+    assert len(effects) == (0 if lost_state == "EXECUTING" else 1)
+    assert service.workloads_path.read_bytes() == persisted
+    restarted = NodeRuntimeService(NodeRuntimeConfig(service.state_dir))
+    restarted._handlers["system.echo"] = lambda args: effects.append(args) or {}
+    assert (
+        restarted.execute_workload(
+            "work-original",
+            "system.echo",
+            arguments,
+            delivery_semantics="at_most_once",
+            binding=binding,
+        )
+        == result
+    )
+    assert len(effects) == (0 if lost_state == "EXECUTING" else 1)

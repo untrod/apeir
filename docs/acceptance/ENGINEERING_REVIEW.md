@@ -1254,3 +1254,90 @@ compile, documentation/235 links/comments, security (**0 HIGH / 3 known MEDIUM**
 and component-lock contracts (**3 passed**) pass. These are software simulation
 contracts, not physical or native Windows installation qualification. Kernel and
 component lock remain unchanged; source and resulting-main CI are separate gates.
+
+### Observation fault-hold producer lifecycle — 2026-10-15
+
+**REUSE / FIX** the existing Reality restart test and its original read producer.
+Main `bd89756` Core run `38683486516`, Windows job `116253006935`, retains
+**1 failed, 4918 passed, 60 skipped, 4 warnings** (1483.70 s): the added delayed
+observation case timed out waiting five seconds for its fault-injection point.
+Multi-Arch, Desktop and Security passed. This is not the previous final-session
+assertion failure; no complete Windows worker trace establishes its OS cause.
+Issues #4/#8 remain open.
+
+A controlled delay of only the first independent read's worker-result return
+reproduces the same original five-second TimeoutError. The test now awaits
+either its owned producer or the actual fault-hold event. Producer errors and
+cancellation propagate immediately; finishing without entering the fault is a
+failure. This removes a competing preparation deadline, not a Runtime timeout
+or retry check: original Work/reconciliation bounds and CI's 60-second test
+bound remain unchanged. All original WAITING/no-MATCH/one-effect, fresh-read and
+final COMPLETED/COMMITTED/MATCH assertions remain. The same controlled single
+delay passes after correction. An initial broader probe delayed every fresh
+read and correctly failed the final completion assertion; that record is kept
+and the correction does not admit repeated slow reads as success.
+
+Final Reality/Node/Workflow/Agent/Artifact selection: **368 passed** (108.15 s).
+Python 3.10 focused restart/producer-error/cancellation contracts: **8 passed**
+(32.32 s). The initial focused run had **8 passed, 1 warning**; the new negative
+fixture's empty-regex warning was corrected without changing production code.
+No Kernel, component lock, production execution or authorization changes.
+Exact source and resulting-main cross-platform CI remain required.
+
+
+### Node control publication and response-loss recovery — 2026-10-15
+
+**REUSE / FIX** the existing signed Node protocol, Node journal, state lock,
+Artifact CAS and Relay ordered blocking-I/O lane. Controlled Artifact, lease
+acquire/release and stop writes originally blocked a queued transport callback
+(**4 failed**); the same hold now permits the callback without changing the
+write, durability, signature, readiness or timeout contract. Cancellation drains
+the original operation before releasing its owner, emits no invented success,
+and preserves the original signed-control idempotency binding on reconciliation.
+
+Four controlled pre-commit failures also reproduced memory publication before
+lease acquire/release/expiry or pre-start cancellation was durably recorded.
+Updates now stage the existing mapping, persist it, then publish it. A failed
+lease publication never reuses a consumed fencing token. A separate boundary
+selection retained **4 failed, 1 passed**: after a commit whose response was lost,
+the same process could issue a replacement lease or execute an already cancelled
+Work; malformed journal records were silently discarded. Current requests now
+reconcile the original persisted journal first. Unknown EXECUTING evidence cannot
+restart an effect; malformed records or lost previously observed Work IDs fail
+closed. This remains single-owner Node storage, not multi-process writer or
+complete journal-erasure protection.
+
+The first expanded Node run retained **1 failed, 236 passed**: an uncertainty
+fixture seeded only a private memory mapping without its purported persisted
+record. It now writes that original journal before reconciliation and retains
+all RECOVERY_REQUIRED/UNKNOWN and no-replay assertions. Production at-most-once
+admission already stages its EXECUTING record before publishing it; new boundary
+checks preserve that contract rather than claiming a new admission mechanism.
+
+Six actual CLI processes in fresh owned directories exercised MATCH, Deny,
+MISMATCH, UNKNOWN, lost response and restart. The actual results were respectively
+COMMITTED/MATCH/1 effect, CREATED/no verdict/0, VERIFIED/MISMATCH/1,
+VERIFIED/UNKNOWN/1, COMMITTED/MATCH/1 and COMMITTED/MATCH/1. Lost response first
+had no Controller receipt and already one effect. These are simulated devices,
+local CLI human attestation and runtime-service scope, not real model, remote IdP,
+Kernel, native Windows or physical hardware qualification. Single-run durations
+(1.269–2.826 s) are observations, not a comparative performance benchmark.
+
+The earlier source `92f2c0c` passed all four Core platforms, including Windows
+**4923 passed, 60 skipped**. Its Multi-Arch run `38766532736` was cancelled by the
+operator while Windows was still progressing at 99%; it is **CANCELLED**, not a
+pass or proof of a hang. Its earlier Artifact/control test failure and a failure
+marker during cancellation are preserved without an unavailable final stack.
+An isolated Windows/Linux two-test diagnostic passed but did not reproduce the
+failure. A separate full-prefix Windows Python 3.11 diagnostic `38775081314`
+passed **4616 tests, 60 skipped, 272 deselected** (2181.62 s), including both marked
+cases. That diagnostic adds stricter failure/trace bounds and is explicitly not
+a replacement for production Multi-Arch acceptance. No observed failure is
+closed merely because a subsequent run passed; Issues #4/#8 remain open.
+
+Final local Node/Reality/Governance/Artifact/Work/AgentSession/Workflow/Gateway
+and usage regression: **980 passed** (144.77 s). Python 3.10 Node service and
+Relay I/O contracts: **69 passed** (5.41 s). No default PID, isolation, identity,
+authorization, frozen Kernel or component-lock change. Standard repository checks
+and exact new-source/resulting-main CI remain distinct evidence from the earlier
+source and diagnostics above; none upgrades physical or native release status.
