@@ -1172,7 +1172,7 @@ record and performs the same content checks. No index/stat/permission cache,
 fsync, locking, GC, redaction or integrity rule changes.
 
 Three alternating child processes per variant each measure 100 reads against
-the exact same unchanged 1000-record index (595 KiB rounded; actual 593893 bytes).
+the exact same unchanged 1000-record index (593893 bytes).
 All 300 samples per operation/variant are retained:
 
 | Operation | Before p50 / p95 / p99 (ms) | Candidate p50 / p95 / p99 (ms) | CPU seconds before / candidate |
