@@ -97,7 +97,7 @@ export function AutomationInspector({ human, approvals }: { human: Human | null;
   const enabled = loggedIn && !busy;
   const pendingKey = outstanding.current.get(selected);
   const activeRun = history?.history.some(run => !terminal(run) || run.reconciliation_required || reconciledContinuation(run));
-  return <section aria-label="Automation inspector">
+  return <section className="operations-automation" aria-label="Automation inspector">
     <h2>Automations</h2>
     <p>SIMULATED · execution_scope=runtime-service · kernel_traversed=false. Structured simulated firmware only; physical hardware remains unqualified.</p>
     <p>Manual or one-shot UTC due intent. Consume a due trigger explicitly below; no background cron or Workflow Recorder.</p>

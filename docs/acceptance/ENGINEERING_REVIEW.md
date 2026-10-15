@@ -1523,3 +1523,26 @@ deselected**, Linux amd64 and ARM64 each **4637 / 59 / 272 deselected**. This is
 that exact merged Node durability baseline, not qualification of this unmerged
 Automation candidate or resolution of Issues #4/#8. Source/main CI remains
 required for this candidate. No Kernel or component-lock changes.
+
+
+The same source-browser screenshot review found that page-level overflow checks
+alone missed four long identifier/control boxes outside the Automation pane at
+390 pixels. A stricter actual-browser bounds check retained **1 assertion
+failure**, with four off-pane boxes. Scoped rules in the existing Operations CSS
+now wrap the form, stack its record contents and wrap full evidence identifiers;
+no backend or mutation logic changes. The unchanged four-scenario browser flow
+then has zero off-pane boxes, no pane/form overflow, and the same **1/0/0/1**
+effect counts with original recovery bindings. Final Desktop lint/typecheck/
+test/build: **219 passed in 40 files**. These are source-browser layout and
+execution checks, not installed Windows screenshots.
+
+The existing public simulation measurement script was also run on exact main
+`c43f942`: **12/12** fresh isolated Controller workspaces reached COMMITTED/MATCH,
+each with one effect. Local observer monotonic nearest-rank p50/p95/p99 were
+**1.625 / 1.737 / 1.737 seconds**. The preview uses the same fixed Work ID in
+separate workspace namespaces; these are not 12 globally unique operation IDs.
+Linux child CPU was 15.008 user + 1.700 system seconds, with `getrusage` child
+maximum RSS 86480 KiB, not aggregate steady-state service memory. An unavailable
+`/usr/bin/time` was a measurement preflight error; the successful wrapper uses
+Python's existing process/resource facilities. No comparison, Token reduction,
+WAN/physical performance or research-experiment PASS is inferred.
