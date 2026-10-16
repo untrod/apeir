@@ -21,7 +21,7 @@ import { OnboardingWizard } from "./components/OnboardingWizard";
 import { entityStore, eventClient } from "./store";
 import {
   useConversations, useTasks, useNodes, useModels,
-  usePendingApprovals, useStoreHydrated,
+  usePendingApprovals, useStoreHydrated, useRuntimeConfigVersion,
 } from "./store";
 import {
   api, testConnection, fetchTasks, fetchNodes, fetchModels, fetchApprovals, fetchConversations,
@@ -417,22 +417,42 @@ function TasksPage({ onTaskClick, onTraceClick }: { onTaskClick: (taskId: string
   );
 }
 
-function NodesPage({ onNodeClick }: { onNodeClick: (nodeId: string) => void }) {
+export function NodesPage({ onNodeClick }: { onNodeClick: (nodeId: string) => void }) {
   const nodes = useNodes();
+  const configVersion = useRuntimeConfigVersion();
+  const [readVersion, setReadVersion] = useState(-1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    fetchNodes().then(rows => {
+      if (active) entityStore.upsertNodes(rows);
+    }).catch(err => {
+      if (active) setError(err instanceof Error ? err.message : "Node facts unavailable");
+    }).finally(() => {
+      if (active) { setLoading(false); setReadVersion(configVersion); }
+    });
+    return () => { active = false; };
+  }, [configVersion, attempt]);
+  const pending = loading || readVersion !== configVersion;
   const onlineCount = nodes.filter((n) => n.online).length;
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: colors.bg }}>
-      <PageHeader title="Nodes" subtitle={`${nodes.length} registered · ${onlineCount} online`} />
+      <PageHeader title="Nodes" subtitle={pending || error ? "Current Controller facts unavailable" : `${nodes.length} registered · ${onlineCount} ready`} />
       <div style={{ flex: 1, overflowY: "auto", padding: space.xl }}>
-        {nodes.length === 0 ? <EmptyView message="No nodes registered." /> :
+        {pending ? <p role="status">Checking current Controller Node facts…</p> : error ? <div role="alert"><p>{error}</p><button onClick={() => setAttempt(value => value + 1)} style={btnSecondary}>Reload Node facts</button></div> : nodes.length === 0 ? <EmptyView message="No nodes registered." /> :
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: space.lg }}>
             {nodes.map((node) => (
               <RuntimeCard key={node.id} variant="node" title={node.name}
-                status={node.online ? "online" : "offline"}
+                status={node.status || "unknown"}
                 subtitle={`${node.platform} · ${node.arch} · ${node.role}`}
                 detail={{ node_id: node.id, platform: node.platform, arch: node.arch, role: node.role,
-                  last_seen: new Date(node.last_seen).toLocaleString(), capabilities: String(node.capabilities.length),
-                  active_tasks: String(node.active_task_count), latency: node.network_latency_ms ? `${node.network_latency_ms}ms` : "—" }}
+                  trust: node.trust_status || "UNKNOWN", connection: node.connectivity_state || "UNKNOWN",
+                  last_seen: node.last_seen ? new Date(node.last_seen).toLocaleString() : "UNKNOWN", capabilities: String(node.capabilities.length),
+                  active_tasks: node.active_task_count === null ? "UNKNOWN" : String(node.active_task_count), latency: node.network_latency_ms ? `${node.network_latency_ms}ms` : "—" }}
                 onClick={() => onNodeClick(node.id)} />
             ))}
           </div>}

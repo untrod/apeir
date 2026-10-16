@@ -17,6 +17,51 @@ Credentials must be referenced through providers, environment variables, or the 
 
 Workspace, API host/port, provider routing, model defaults, node identity, and approval policy should be read from the runtime config registry or compatibility adapters. Desktop must not maintain a conflicting source of truth.
 
+## Context permission policy
+
+`NOUS_PERMISSION_POLICY` is an explicit trusted-host startup setting for the
+existing Governance PermissionEngine. Point it to an owner-only JSON file directly
+under the active authority's `.nous` directory. File discovery, request bodies,
+model proposals and permission-status queries never select or create authority.
+With no setting, the existing gate stays unchanged and selected-file delivery
+remains unconfigured/blocked. Restart Runtime when initially selecting a policy;
+each later check reads the file again. Missing, expired, corrupt, linked,
+foreign-owner or broadly readable/writable policy fails closed. This file-loader
+qualification is POSIX only; it provides no native Windows fallback.
+
+The document accepts `rules` (at most128 existing PermissionRule objects) and an
+optional timezone-aware `expires_at`. Each rule has `subject`, `action`, `resource`,
+optional `effect` (`allow`/`deny`) and scalar `context_equals`. Conditions require
+present, exact-typed facts; an absent key or integer1 cannot satisfy null/true.
+Rules are deny-by-default with explicit deny precedence. A file-backed engine
+does not accept runtime `add` calls. Keep credentials out of policy files.
+
+For one service's file-sharing policy, use its authenticated subject (default
+`api-service`), explicit `context.read`/`product.chat` rules, `workspace.read` for
+the selected Workspace and `context.transfer` for the exact recipient. Scope the
+last two with `context_equals.relative_path` where appropriate. The Workspace
+resource is `workspace:` plus SHA-256 of its resolved absolute path string. The
+recipient resource appends `:provider:` plus SHA-256 of the compact, sorted-key
+JSON `{provider_id,endpoint,transport}` of the actual Gateway recipient. Use the
+configured endpoint/transport, not a model name or a private credential. Direct
+and NKI transports differ; a changed reviewer/fallback recipient needs its own
+explicit policy. Never copy broad wildcard permissions merely to make a demo run.
+
+On a supported POSIX host, after preparing/reviewing that file and its scopes:
+
+```bash
+chmod 600 /path/to/workspace/.nous/permission-policy.json
+NOUS_WORKSPACE_ROOT=/path/to/workspace \
+NOUS_PERMISSION_POLICY=/path/to/workspace/.nous/permission-policy.json \
+  nous runtime-api start
+```
+
+This configuration is policy input, not an execution grant, trusted human
+session, credential lease or effect evidence. Existing Operation approval,
+expiry/revocation, sandbox, budget, delivery and verification checks still apply.
+`GET /api/v1/security/permissions` returns configuration metadata; its compatibility
+descriptions have `granted=null`/UNKNOWN until a real authorization is evaluated.
+
 ## Cost controls
 
 APEIR applies limits before a model request reaches the Kernel. Defaults can be

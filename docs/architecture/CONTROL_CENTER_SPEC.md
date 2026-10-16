@@ -45,7 +45,16 @@ corrupt components are UNKNOWN and degrade health rather than inventing success.
 | `POST /api/v1/control/human/logout` | Revoke the authenticated session; requires a bound nonce. |
 
 Supported mutations are Approve Once, Deny, Interrupt, Reconcile, Revoke and
-Acknowledge. Resume is available only when the controller supplies the original
+Acknowledge. The existing Skills action adapter additionally exposes reviewed
+install, instruction load, enable/disable/remove and explicit remote catalog
+add/refresh/remove. `skill_catalogs` and `skills` are cached owner projections;
+passive polling causes no catalog or package acquisition. Remote catalog actions
+bind `target_id` and `catalog_source` to the exact same source, while remote
+install binds `catalog_source`, `package_source`, version and digest in the
+original human nonce body. Current human administration and separate exact-URL
+`tool.web_fetch` permissions are revalidated before acquisition and publication;
+installation issues no execution authority. See the
+[acquisition contract](SECURITY_CONTRACT.md#skillextension-acquisition-before-publication). Resume is available only when the controller supplies the original
 Workflow handlers. Approval never replans; resumption retains the original Plan,
 Workflow, Work and Operation. A service bearer, model, Node or provider cannot
 establish human approval authority.

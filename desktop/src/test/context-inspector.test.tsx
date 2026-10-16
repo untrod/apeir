@@ -55,6 +55,19 @@ describe("persisted actual-input inspection", () => {
     expect(screen.queryByText(/\$0\.000000/)).not.toBeInTheDocument();
   });
 
+  it("projects selected file read/send/rejection and budget evidence without source contents", async () => {
+    const source = { source_id: "workspace-file:" + "b".repeat(64), source_version: "c".repeat(64), was_read: true, status: "budget_limited" };
+    vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: props.runId, events: [started, { event_type: "context.input.dispatched", payload: { input_sha256: manifest.input_sha256, scope: "gateway-provider-dispatch", provider_receipt_confirmed: false, sources: [source], raw_content: "PRIVATE-SAVED-SOURCE" } }], next_after_sequence: 2 });
+    render(<ContextInspector {...props} />);
+    expect(await screen.findByLabelText("Saved file input provenance")).toHaveTextContent("budget_limited · read: yes");
+    expect(screen.getByLabelText("Saved file input provenance")).toHaveTextContent("provider receipt is not confirmed");
+    expect(screen.queryByText("PRIVATE-SAVED-SOURCE")).not.toBeInTheDocument();
+    vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: props.runId, events: [{ event_type: "context.input.rejected", payload: { sources: [{ ...source, status: "rejected", source_id: "PRIVATE-SOURCE-PATH" }] } }], next_after_sequence: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "Reload evidence" }));
+    await waitFor(() => expect(screen.getByLabelText("Saved file input provenance")).toHaveTextContent("rejected · read: yes"));
+    expect(screen.queryByText("PRIVATE-SOURCE-PATH")).not.toBeInTheDocument();
+  });
+
   it("shows UNKNOWN for absent legacy evidence and missing terminal usage", async () => {
     render(<ContextInspector {...props} />);
     expect(await screen.findByText(/Recorded input tokens: UNKNOWN/)).toBeInTheDocument();

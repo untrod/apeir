@@ -119,11 +119,18 @@ class ConnectorRuntime:
                 ),
                 context,
             )
-            if decision.action_mode != "EXECUTE":
+            if (
+                getattr(decision, "action_mode", None) != "EXECUTE"
+                or getattr(decision, "allowed", None) is not True
+            ):
                 return ConnectorResult(
                     False,
                     error_code="AUTHORIZATION_REQUIRED",
-                    message=str(decision.reason_message or decision.reason_code),
+                    message=str(
+                        getattr(decision, "reason_message", "")
+                        or getattr(decision, "reason_code", "")
+                        or "Connector execution requires explicit authorization."
+                    ),
                 )
         cached = self.store.get_idempotent(
             request.connector_id, request.idempotency_key
