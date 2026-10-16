@@ -1724,3 +1724,105 @@ def test_http_creation_revalidates_after_binding_writer_admission(
     assert replay["error"]["code"] == (
         "NOUS_UNAUTHENTICATED" if revocation == "session" else "NOUS_CONTROL_REPLAY"
     )
+
+
+@pytest.mark.parametrize("revocation", ["session", "expiry", "permission", "none"])
+def test_http_trigger_revalidates_before_original_run_publication(
+    consumer, automation_http, monkeypatch, revocation
+):
+    from nous_runtime.governance.permission import PermissionRule
+
+    auth, context, request = automation_http
+    binding = consumer.add_simulation(name="Original trigger admission")
+    body = {
+        "action": "trigger",
+        "automation_id": binding["id"],
+        "trigger_key": "original-human-trigger",
+    }
+    nonce = auth.nonce(context, "POST", "/api/v1/automations/action", body)["nonce"]
+    writer_attempt = Event()
+    blockers = []
+    scoped = local()
+    connect = WorkflowStore._connect
+    claim = WorkflowStore.claim_automation_run
+
+    def traced_connect(self):
+        connection = connect(self)
+        if getattr(scoped, "claim", False):
+            connection.set_trace_callback(
+                lambda sql: writer_attempt.set() if sql == "BEGIN IMMEDIATE" else None
+            )
+        return connection
+
+    def held_claim(self, *args, **kwargs):
+        # Hold exactly the initial claim, after HTTP/nonce admission. Later
+        # reads of the original run must not create another writer barrier.
+        if blockers:
+            return claim(self, *args, **kwargs)
+        blocker = sqlite3.connect(self.path, check_same_thread=False)
+        blocker.execute("BEGIN IMMEDIATE")
+        blockers.append(blocker)
+        scoped.claim = True
+        try:
+            return claim(self, *args, **kwargs)
+        finally:
+            scoped.claim = False
+
+    monkeypatch.setattr(WorkflowStore, "_connect", traced_connect)
+    monkeypatch.setattr(WorkflowStore, "claim_automation_run", held_claim)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(request, body, nonce)
+        try:
+            assert writer_attempt.wait(timeout=10)
+            assert not future.done()
+            assert consumer.store.list_runs() == []
+            if revocation == "session":
+                auth.logout(context)
+            elif revocation == "expiry":
+                with consumer.gate.store.operation_transaction() as db:
+                    db.execute(
+                        "UPDATE governance_human_sessions SET expires_at=0 WHERE session_id=?",
+                        (context.session_id,),
+                    )
+            elif revocation == "permission":
+                auth.permissions.add(
+                    PermissionRule(
+                        "oidc:*:alice",
+                        "control.automation.manage",
+                        consumer.resource_id,
+                        effect="deny",
+                    )
+                )
+            if revocation != "none":
+                with pytest.raises(PermissionError):
+                    consumer.admit_management(context, audit=False)
+            assert not future.done()
+        finally:
+            for blocker in blockers:
+                blocker.rollback()
+                blocker.close()
+        result = future.result(timeout=15)
+    restarted = AutomationConsumer(consumer.root, gate=consumer.gate)
+    if revocation == "none":
+        assert result["ok"], result
+        assert result["data"]["state"] == "waiting_approval"
+        runs = restarted.store.list_runs()
+        assert len(runs) == 1
+        assert runs[0].run_id == result["data"]["run_id"]
+        assert all(count == 0 for count in result["data"]["effect_counts"].values())
+    else:
+        assert result["error"]["code"] == "NOUS_FORBIDDEN", result
+        assert restarted.store.list_runs() == []
+        assert restarted.store.automation_history(binding["id"]) == []
+    with consumer.gate.store.operation_transaction() as db:
+        assert db.execute("SELECT COUNT(*) FROM governance_leases").fetchone()[0] == 0
+        assert (
+            db.execute("SELECT consumed FROM governance_human_nonces").fetchone()[0]
+            == 1
+        )
+    replay = request(body, nonce)
+    assert replay["error"]["code"] == (
+        "NOUS_UNAUTHENTICATED"
+        if revocation in {"session", "expiry"}
+        else "NOUS_CONTROL_REPLAY"
+    )

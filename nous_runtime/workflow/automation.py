@@ -225,7 +225,9 @@ class AutomationConsumer:
                 )
         # Creation, relation and immutable inputs commit before the original run
         # can start. Repeating a started trigger only projects persisted state.
-        run = self.store.claim_automation_run(automation_id, trigger_key)
+        run = self.store.claim_automation_run(
+            automation_id, trigger_key, before_publish=self.before_consume
+        )
         if run.state is not WorkflowState.PENDING or not binding["enabled"]:
             return self._projection(automation_id, run.run_id)
         return self._consume(automation_id, run.run_id, "start")

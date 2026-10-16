@@ -1737,3 +1737,26 @@ passed; they do not establish the cause of the earlier Windows tamper-probe
 failure or justify closing it from reruns alone. The normal integration of
 Relay source `32f3c7d` requires fresh combined regression and exact-head CI;
 earlier browser/wheel evidence remains explicitly scoped to source `5c28901`.
+
+
+A further HTTP writer-contention probe of the unmerged Automation consumer
+retained **2 failed, 1 passed**: after initial nonce admission, session or
+management-permission revocation prevented execution but still left a new
+PENDING Run when the delayed writer acquired its lock. **REUSE / FIX** the
+existing management callback and Workflow transaction; the callback now runs
+inside first-trigger publication before creating the Run/relation. This changes
+no execution authority and adds no store. Duplicate original-run reads remain
+compatible. Controlled session revocation, persisted expiry, permission denial
+and valid admission retain explicit nonce/replay, restart and zero-effect checks.
+The final writer/creation/toggle/concurrent-trigger/checkpoint selection has
+**15 passed** on Python 3.12 (9.07 s), **15 passed** on Python 3.10 (9.29 s).
+Exact-head CI must qualify the additional runtime change.
+
+Normal integration parent `9d9fff9` was also exercised using actual Runtime HTTP
+and the built source Operations Console: Approve Once, Deny, Cancel and response
+loss/recovery retain the same original Run/Work and effect counts **1/0/0/1**.
+Both successful flows have original receipt, fresh Observation and MATCH. Logout
+disables mutation, no model request occurs, and the 390-pixel form/pane have no
+horizontal overflow or off-pane evidence/control bounds. This uses signed fake
+identity and the explicit simulated template; it is not a deployed human IdP,
+installed APEIR.exe, physical effect or cross-network qualification.

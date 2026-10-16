@@ -655,3 +655,13 @@ remains available while an action waits, and clears private displayed content
 immediately. Client invalidation does not prove server revocation; uncertain
 responses remain explicit and never cause automatic resubmission. Server
 Governance, nonce consumption and fresh authorization remain authoritative.
+
+
+Automation intent publication reuses the same live human/permission check after
+acquiring the Workflow writer transaction, before inserting a new original Run
+and trigger relation. This complements creation/toggle publication and the
+pre/post-transport checks; waiting on SQLite cannot extend a human session or
+permission. A rejected check rolls back the new intent. Existing historical reads
+remain reads, and the optional trusted-host callback creates no permission or
+grant. Governance and Workflow are separate local transactions, not an atomic
+cross-database authority; execution still revalidates its own bound authorization.

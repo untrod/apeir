@@ -270,7 +270,13 @@ class WorkflowStore:
             )
         return self.get_automation(automation_id)
 
-    def claim_automation_run(self, automation_id: str, trigger_key: str) -> WorkflowRun:
+    def claim_automation_run(
+        self,
+        automation_id: str,
+        trigger_key: str,
+        *,
+        before_publish: Callable[[], None] | None = None,
+    ) -> WorkflowRun:
         """Atomically save the original run before a consumer can invoke handlers."""
         with self._db() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -313,6 +319,8 @@ class WorkflowStore:
                 return run
             if not binding["enabled"]:
                 raise ValueError("Automation is disabled")
+            if before_publish is not None:
+                before_publish()
             self._require_unredacted(inputs)
             run = self._create_run(
                 connection,
