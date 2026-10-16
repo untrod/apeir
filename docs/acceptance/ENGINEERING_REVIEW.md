@@ -1407,3 +1407,16 @@ unexplained; no health-I/O, timeout, retry or persistence setting changes here.
 The library export has no current Desktop consumer; these tests do not qualify
 a live enterprise service, credentials, physical effects or complete product
 integration. Exact-source checks and normal PR integration remain required.
+
+
+Connector source `9d80c48` Core run `38857997503` retains **1 failed, 5000 passed,
+47 skipped, 4 warnings** (478.00 s). The wider response-loss regression imported
+a shared Gate fixture that supplied EXECUTE without the contract's `allowed`
+field, so it was denied before reaching the intended effect-once fault. The
+initial targeted selection omitted this separate retry module. The shared
+fixture now returns the existing canonical AuthorizationDecision with explicit
+boolean admission. All nine original test-function ASTs remain unchanged; no
+response-loss, effect-count, retry-budget or timeout assertion was weakened.
+The complete three-module Connector selection and Governance/Workflow regression
+are rerun before publishing the correction. The failed full CI is not relabelled
+as a baseline environment failure or erased.
