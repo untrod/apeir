@@ -41,7 +41,7 @@ registration check, not execution acceptance for all 422 endpoints.
 | Model context/cost: `context/`, `model_runtime/bridges.py`, `model_runtime/gateway.py` | EXTEND | Chat now records a content-free per-iteration input manifest after Agent admission, including rendered-context truncation and preceding file-read provenance. The inspector replays original EventStream Run IDs, retained through Conversation restart, and separates estimates from Provider usage. This covers application Chat Gateway input, not provider receipt, every collaborative invocation or a newly built Context snapshot |
 | Context read admission: `context/security.py` | FIX | Bound caller identity and purpose, canonical persisted Governance decision, workspace-local Agent profile, current private owner and durable audit are required. Unauthenticated, copied, revoked, expired, mismatched and unknown reads deny. This is the public guard contract; complete RuntimePipeline integration remains separate |
 | Chat input controls: `Composer.tsx`, `ChatView.tsx`, `lib/api.ts` | FIX / DEFER | File chips were selected locally but ignored by Chat dispatch; Node target, privacy and per-request budget selections were likewise ignored. Disable these unconnected controls and refuse stale/crafted values before model dispatch. Saved Workspace references and existing governed read remain usable; controlled attachment delivery is not implemented by this fix |
-| Skill/Provider: `skills/`, public SDK, `tests/control_plane/test_skill_center.py` | REUSE / EXTEND | Reviewed local catalog install/load/enable/disable/uninstall with integrity and Governance. Instruction loading is not automatic executable Skill permission; general remote catalogs and real account-backed Providers need qualification |
+| Skill/Provider: `skills/`, public SDK, `tests/control_plane/test_skill_center.py` | REUSE / EXTEND | Reviewed local catalog install/load/enable/disable/uninstall with integrity and Governance. Controlled remote catalog/API/UI software now has owned HTTP/TLS permission, nonce, revocation and rollback cases; instruction loading is not executable Skill permission. Real publisher trust, deployed human identity and account-backed Providers remain unqualified |
 | Pairing/mesh: `node_runtime/relay.py`, `node_runtime/service.py`, `tests/node_runtime/` | REUSE | Persistent stable Ed25519 identity, once invitations, atomic consumption, revoke-preserving trust and signed Relay exist. Real Windows/Jetson/WAN/CGNAT acceptance and timing Issues #4/#8 remain open |
 | Environment: `environments/`, `EnvironmentInspector.tsx` | REUSE / DEFER | Lifecycle/contracts/evidence and governed UI exist. Default strict process isolation is unavailable here; engine presence alone does not qualify the existing OCI control boundary. Python/scientific/embedded/robotics template promises cannot be inferred from a selector |
 | Terminal: `cli/terminal_session.py`, `cli/shell.py` | REUSE / EXTEND | Existing bounded sessions/commands; the workspace fixed-profile execution panel is not a persistent PTY or complete local/remote/container Terminal Studio |
@@ -967,6 +967,42 @@ Final Workflow/Agent contracts pass **64 tests**; the same controlled admission
 delay also passes after correction. Python 3.10 focused contracts pass **3**.
 New source and resulting-main CI remain separate acceptance requirements.
 
+## OCI readiness truth correction — 2026-10-14
+
+**REUSE** the existing OCI Provider and strict ProcessSandbox report; **FIX**
+passive readiness claims; **DEFER** engine and workload qualification. The
+existing probe treated an engine path as available execution and containment.
+Seven controlled cases fail before correction; one existing default-runner
+denial case passes. Resolving an executable now only establishes discovery.
+An exact strong report is required for default control readiness, failed probes
+stay UNKNOWN, and a host-injected runner does not self-certify qualification.
+The probe executes no command and claims no container isolation or engine health.
+The actual default runner, injected reference execution and PID64 controls remain
+unchanged. Final affected Environment, external reference, admission, Governance,
+Control Plane and SDK contracts have **503 passed, 3 skipped** (17.50 s);
+Python 3.10 focused readiness contracts have **12 passed**. These controlled
+contracts do not qualify default Linux OCI, Python/scientific execution, PTY,
+native installation or physical hardware. Source and resulting-main CI remain
+required before acceptance.
+
+## Controlled Skill identity and removal review — 2026-10-14
+
+REUSE the Skill, Extension, Governance, human-session and CAS owners. FIX derived
+Skill identity metadata and bind uninstall to its original reviewed content under
+the existing Extension writer fence. Revoked Extension records retain their
+existing trust state across owner reload and rejected reinstall. Tests cover
+current human scope, content changes before removal, interrupted authority,
+compatible updates/restarts and another installed Skill remaining unchanged.
+The controlled pre-fix run retained **11 failed cases** (including missing bound
+API contracts), plus **3 failed format/alias cases**; the same cases pass after
+correction. Final added regression cases: **15 passed**. Affected Skill, Extension
+and Control Plane regressions: **441 passed, 17 skipped**, also reproduced on
+Python 3.10. Desktop lint/typecheck/build and **168 tests in 35 files** pass;
+repository contracts: **288 passed**. These counts overlap. Owned HTTP/TLS and a
+cryptographic fake identity qualify software boundaries only; production Catalog,
+real IdP, installed Desktop, executable Skill and physical acceptance remain
+unqualified. No Kernel or component-lock change is made.
+
 ## Bounded Automation product consumer — 2026-10-14
 
 **REUSE / EXTEND** existing WorkflowStore, PlanWorkflowBridge, Reality handler,
@@ -1108,6 +1144,29 @@ Kernel and component lock are unchanged. Source and resulting-main cross-platfor
 CI are required before qualification; native Windows hashes and physical/network
 acceptance retain their independent blockers.
 
+
+
+
+### Environment command target binding — 2026-10-14
+
+**REUSE** the existing Environment API, mutation Governance and canonical Runtime
+capability dispatcher. **FIX** command target consistency: the execution arguments
+must retain the same Environment selected by the route and reviewed by Governance.
+A conflicting body target is rejected before policy/approval construction and
+before the handler invokes the dispatcher; an omitted or identical target stays
+compatible. Authentication still precedes this validation. No permission, Provider,
+execution database or host fallback is added.
+
+The original controlled handler/route/actual-loopback-HTTP regression retained
+**15 failed, 3 passed**. Its dispatcher was instrumented with a fake bounded
+result; this proves argument misbinding, not an unauthorized real workload effect.
+The corrected contracts have **18 passed** on Python 3.12 (1.00 s) and Python 3.10
+(1.70 s). Environment/Governance/Control Plane/Runtime-dispatch/terminal regression:
+**509 passed, 2 skipped** (14.08 s). Original strict sandbox, high-risk approval,
+credential and resource boundaries remain unchanged; default OCI control remains
+BLOCKED without qualified strong isolation. This does not qualify actual OCI,
+interactive PTY, native installation, physical devices or a remote human.
+
 ### Original ProcessSession cleanup admission — 2026-10-14
 
 **REUSE** ProcessSessionStore, its original process/helper identity checks and
@@ -1151,6 +1210,121 @@ PTY or native Windows qualification. Existing Ruff/format/compile/documentation/
 235 links/hygiene/version/security checks pass; scanner retains **0 HIGH / 3 known
 MEDIUM**, lock contracts **3 passed**. Kernel and component lock are unchanged.
 Required source and resulting-main CI remain separate acceptance gates.
+
+### Current-human Skill lifecycle revalidation — 2026-10-15
+
+**REUSE / FIX** the existing Skill Registry, Extension writer fence, Governance
+human session boundary and Operations API. Six owned-fixture probes showed that
+revocation after initial admission could still change enabled state or return
+instructions. Enable/disable now revalidate the exact reviewed identity, version,
+digest and current human permission inside the existing publication fences.
+Instruction acquisition rechecks current content, enabled/revoked state and human
+permission before disclosure. Installation and instruction loading grant no
+execution authority; no script is executed by these lifecycle operations.
+
+Original causal contracts: **6 failed**; repaired: **6 passed**. Repository
+lifecycle selection: **22 passed**; related Python 3.12 contracts: **391 passed,
+17 skipped** (60.82 s); Python 3.10: **110 passed** (22.19 s). Counts overlap.
+An initial additional package fixture used a nonmatching directory name; that
+failure is retained separately and corrected without weakening assertions.
+Ruff, changed formatting, compile, diff and existing 235-file links pass. No
+OS-owner race immunity, deployed IdP, native Desktop, executable Skill, hardware
+or production qualification is claimed. Kernel and component lock are unchanged;
+source and resulting-main CI remain separate integration gates.
+
+### Selected input secondary transfer and file alias admission — 2026-10-14
+
+**REUSE** the original ContextBuilder/ContextGuard, WorkspaceGuard, Runtime Run,
+Model Gateway recipient admission and usage ledger. **FIX** two candidate input
+boundaries before publication; no additional authority, model registry or store.
+The primary model's answer can contain selected-source text. Its collaboration
+review previously lacked the selected-input hook, so current transfer revocation,
+reviewer recipient changes, source changes or cancellation did not block that
+secondary request. A private host factory now binds the actual review messages to
+the same original Run, source snapshot and current reviewer permission. Review
+failure stays visible and unapproved; model review grants no execution authority.
+The new input digest describes source-derived candidate text, not proof that the
+entire raw file was sent again or that a remote Provider received it.
+
+Descriptor traversal denied symlinks but did not reject hard-linked input. The
+opened regular file must now have one link both before and after its bounded
+read. Protected/external aliases fail before reading; a link created during the
+read prevents Context publication. Ordinary single-link files retain their path,
+version, secret filtering and permission checks. Unsupported no-follow hosts,
+including the current native Windows path, remain BLOCKED without a fallback.
+
+Original deterministic fake-Provider reviewer regressions: **5 failed**. Owned
+hard-link regressions before correction: **4 failed, 60 deselected** (0.80 s).
+Corrected selected-input and collaboration focus: **102 passed** on Python 3.12
+(13.85 s) and Python 3.10 (15.08 s).
+Context, collaboration, Gateway/facade/accounting, fake NKI, persistent checkpoint
+and Runtime admission regression: **596 passed** (17.38 s). The reviewer negatives
+require no secondary dispatch or budget reservation; lawful review retains its
+ordinary reported usage and original source lineage. One mistyped regression
+path collected no tests and is retained; the corrected named selection ran.
+These are controlled software/HTTP-fixture checks, not live model, native Kernel,
+remote-human, physical or installed Desktop qualification. Existing isolation,
+PID64, Kernel and component lock remain unchanged; source/main CI is still required.
+
+The Gateway also removes the private admission hook from direct/stream adapter
+requests after checking it and fencing dispatch. The original host request retains
+its checks and evidence, while serialized IDs, messages, tools and metadata remain
+unchanged. The original fake-adapter boundary checks had **2 failed, 2 passed**;
+four allowed/denied direct/stream cases now pass within the regression above.
+This minimizes exposure of a host callback; it is not evidence of leaked real
+credentials or an authority exploit by a trusted host adapter. NKI payload and
+original accounting/reconciliation semantics are unchanged.
+
+The same review extended the existing `normalize_workspace_path` owner for
+protected ordinary-file scopes. A benign owned probe established that hard-link
+aliases of protected/external files entered Workbench and Chat read/search,
+preview diffs and pre-approval proposal snapshots/CAS. Original files remained
+unchanged and proposals still required approval; no real secrets or unauthorized
+mutation were exercised. Placing an alias requires filesystem access to its
+source; this is a scope/data-provenance correction, not a demonstrated remote
+link-creation exploit. Static single-link admission now covers those existing
+consumers, without changing explicit unprotected internal callers or adding a
+file authority. Selected input preserves its stronger descriptor checks.
+The new ordinary-surface contracts retained **3 failed, 1 passed** before repair;
+after repair the alias/selected-input selection has **68 passed** (2.39 s).
+Context/Model/Runtime/Chat/Workbench/proposal/API/checkpoint regression has
+**863 passed** (25.99 s); Python 3.10 alias/selected-input regression has
+**103 passed** (15.48 s). One initial private probe compared the enum against an
+incorrect uppercase literal; the corrected probe uses the authoritative enum.
+These checks do not qualify host-owner race resistance or native installation.
+
+### Explicit host permission configuration and truthful status — 2026-10-14
+
+**REUSE** PermissionEngine, PermissionRule, the canonical Gate and its authority's
+private state. **EXTEND** explicit trusted-host policy input, selected solely by
+`NOUS_PERMISSION_POLICY`; discovered files and model/request data cannot configure
+authority. No policy/grant store or approval implementation is added. POSIX
+owner-only regular-file, directory, no-follow, single-link, byte/rule bounds,
+unique-key JSON, secret filtering and optional expiration fail closed. Every
+permission check reloads policy; file removal/revocation/corruption blocks later
+use. Runtime `add` is refused on file-backed policy. Native grants, Approval,
+authorization/credential expiry, sandbox and billing remain separate requirements.
+Windows owner-file loading is unqualified/blocked; trusted host injection remains
+compatible, and selected file descriptor limits are unchanged.
+
+The legacy permission query fabricated static granted flags from a new empty
+engine. It now reads the canonical configuration, returns nullable UNKNOWN grants
+without a subject-bound evaluation, and reports read errors instead of fake
+success. Its four corrected contracts failed on the original handler. Rule
+conditions also require present, exact-typed facts: original absent-null and
+boolean/integer coercion contracts had **3 failed**; their corrected cases pass.
+
+An actual Runtime HTTP service-bearer request now loads an explicitly selected
+owner policy through ordinary Gate construction, without injecting a PermissionEngine,
+and delivers admitted bytes to the owned HTTP Provider fixture exactly once.
+Removing permissions after Provider setup causes zero sends. These **2 passed**
+(2.55 s) preserve the original source/recipient/budget/Run checks. Initial fixture
+errors omitted the known read-only chat Capability declaration and assumed a
+load method; those failed attempts remain, corrected without changing admission.
+Governance/Context/Model/Runtime/Chat/Workbench/proposal/API/checkpoint regression:
+**1107 passed** (31.52 s). Final Python 3.10 policy/input/alias selection has
+**127 passed** (18.31 s), including the exact-type cases. Live vendor,
+remote-human, strong execution, physical and native qualification stay incomplete.
 
 ### Automation complete evidence and original continuation — 2026-10-15
 
@@ -1257,6 +1431,86 @@ compile, documentation/235 links/comments, security (**0 HIGH / 3 known MEDIUM**
 and component-lock contracts (**3 passed**) pass. These are software simulation
 contracts, not physical or native Windows installation qualification. Kernel and
 component lock remain unchanged; source and resulting-main CI are separate gates.
+
+### Artifact validation vocabulary measurement — 2026-10-15
+
+**REUSE / FIX** the canonical ArtifactType Enum and existing CAS validation. An
+owned Linux warm-filesystem baseline found metadata reads scaling from 0.027 ms
+p50 at one record to 12.52 ms at 1000 records. The candidate derives one immutable
+type-value set from the same Enum instead of allocating that same set for every
+validated record. Every read still reloads the actual index, validates every
+record and performs the same content checks. No index/stat/permission cache,
+fsync, locking, GC, redaction or integrity rule changes.
+
+Three alternating child processes per variant each measure 100 reads against
+the exact same unchanged 1000-record index (593893 bytes).
+All 300 samples per operation/variant are retained:
+
+| Operation | Before p50 / p95 / p99 (ms) | Candidate p50 / p95 / p99 (ms) | CPU seconds before / candidate |
+| --- | --- | --- | --- |
+| metadata get | 13.08 / 17.87 / 20.52 | 8.87 / 11.35 / 15.57 | 4.083 / 2.768 |
+| resolve + content verification | 25.49 / 34.25 / 38.93 | 17.68 / 23.54 / 101.49 | 7.971 / 6.047 |
+
+This exploratory single-host microbenchmark supports reduced median/CPU overhead,
+not guaranteed tail latency: the slower candidate resolve p99 remains recorded.
+It is not a Windows failure explanation, end-to-end or Token-cost improvement.
+Artifact/Node/Governance/Reality contracts: **580 passed** (130.19 s); focused
+Artifact contracts: **31 passed** on Python 3.12 (1.80 s), **31 passed** on Python
+3.10 (1.47 s), overlapping the combined selection. Kernel and component lock
+are unchanged; exact source/main CI remain required.
+
+Current-main controlled comparison (2026-10-16) starts from `629b13f` and fixes
+three rounds in order AB/BA/AB, 100 samples per operation in each child process:
+**300 samples per operation/variant**, the same unchanged 1000-record,
+593893-byte index, one-CPU affinity and a warm local Linux filesystem. The host
+is shared, not exclusive. The actual candidate source bytes match the measured
+module SHA-256 `c336f43a64b344527a69d2e69798316c237c3adedaa6d07b056737ac62354977`.
+Only the declaration order of independent constants was aligned to that exact
+measured module; no admission or validation behavior changed.
+
+| Operation | Before p50 / p95 / p99 (ms) | Candidate p50 / p95 / p99 (ms) | CPU seconds before / candidate |
+| --- | --- | --- | --- |
+| metadata get | 12.485 / 16.132 / 27.362 | 9.336 / 12.551 / 15.095 | 3.947 / 2.929 |
+| resolve + content verification | 25.821 / 32.586 / 35.727 | 17.745 / 21.589 / 26.408 | 7.957 / 5.457 |
+
+Peak child RSS was 18820 KiB before and 18788 KiB after. Raw samples, manifest,
+index hashes and source trees remain outside source control. The earlier slower
+101.49 ms p99 is retained above; the new fixed comparison is separate evidence,
+not a replacement favorable rerun. The 300-sample shared-host tail has statistical
+limits and does not establish end-to-end, Windows, network or Token savings.
+After normal dependency integration, Artifact/Node/Governance/Extension writer
+and Skill installation contracts have **565 passed** (28.11 s); focused Artifact
+contracts have **31 passed** on Python 3.12 (0.97 s) and 3.10 (0.99 s). Current
+index reloads, cross-instance graph/pin/GC ownership, corruption rejection,
+redaction, signed results and no-replay behavior remain unchanged. Required
+source and resulting-main CI remain separate gates.
+
+### OCI readiness current-main integration — 2026-10-16
+
+**REUSE / FIX** the original closed-unmerged PR 68 continuation, existing OCI
+Provider, ProcessSandbox admission and Environment status API. Normal dependency
+merges preserve the target-binding implementation from PR 78 rather than adding
+a second fix; after preceding gates the remaining scope is four existing files
+(Provider, readiness tests and canonical documentation). The passive probe
+separates engine discovery from strong control admission, unknown engine health
+and not-run workload qualification. It starts no engine command or workload.
+No default PID64, mount, network, credential, authorization or sandbox change.
+
+Integrated Environment/terminal regression: **149 passed, 3 skipped** (1.56 s).
+Python 3.10 target/readiness contracts: **30 passed** (1.21 s). All 12 existing
+repository-standard checks pass; security retains **0 HIGH / 5 MEDIUM** with
+the reviewed private-IP SSRF fixtures from the Catalog dependency.
+
+An actual service-authenticated loopback HTTP status request on this Linux host
+reports Docker found, `available=false`, `control_admission=blocked`,
+`control_security_grade=resource_only`, `engine_health=unknown`, and
+`workload_qualification=not_run`. No workload or host fallback ran, and the owned
+HTTP thread/server were closed. Initial private driver errors omitted creation
+of the selected workspace and assumed a different Provider ID; those attempts
+remain separate from the corrected check using the canonical Provider ID.
+This is truthful preflight/status qualification, not actual container isolation,
+Python/scientific execution, PTY, native installation or physical acceptance.
+Source and resulting-main CI remain required before integration.
 
 ### Automation configuration publication admission — 2026-10-15
 
@@ -1518,6 +1772,28 @@ single assertion failure. Final source Desktop lint/typecheck/test/build:
 **180 passed in 38 files** (44.80 s). These are observed UI callback/correctness
 contracts, not measured task latency, Token savings or native UI qualification.
 
+
+
+
+Selected-input candidate Core run `38819836324`, Windows job `116713447362`,
+retains **4983 passed, 149 skipped, 4 warnings, 2 errors** (1401.08 s).
+Both errors occur in pytest setup/teardown: its generated node ID embeds the
+65 KiB oversized bytes fixture and exceeds Windows' 32767-character environment
+variable limit before the test body can run. Explicit short parameter IDs retain
+all five original payloads, byte limits and refusal assertions. The 64 collected
+node IDs now have maximum length 138. No new skip, timeout increase or production
+read fallback is introduced. Current source still blocks selected-source delivery
+on hosts without the required safe descriptor operations.
+
+After integrating main `c43f942`, the combined Context/owner-policy/Gateway/Node/
+Reality/Artifact/file-alias/Node-and-Device projection regression has **1184 passed**
+(174.68 s); Desktop lint/typecheck/test/build has **181 passed in 38 files**.
+After the parameter-ID correction, selected-input/integration/owner-policy has
+**119 passed** (15.58 s), and selected-input alone has **64 passed** on Python 3.10
+(2.20 s). The failed Windows run remains evidence; corrected Windows and exact
+source/resulting-main CI are separate outstanding acceptance, not inferred from
+these local passes. No real Provider task, Token saving or Windows-native release
+qualification is claimed.
 
 ### Automation integration with canonical Node facts — 2026-10-15
 
@@ -1935,6 +2211,221 @@ MISMATCH as uncommitted and UNKNOWN as reconciliation-required. The native
 verifier on main `380e657` still fails with the exact missing locked Windows
 `nousd-x86_64-pc-windows-msvc.exe`; component-lock bytes are unchanged.
 
+
+### Unified-main target-binding qualification — 2026-10-16
+
+The renewed audit begins at accepted main
+`629b13f38a2b663b00596782c0e85be6731d2c5a`; its Core, Desktop,
+Multi-Arch and Security workflows all completed successfully. Six remote
+branches, 31 unchanged historical checkpoint tags, open PR 67, open Issues
+1/2/4/8 and no published Releases remain. Re-query before subsequent mutations.
+
+**REUSE** the existing Environment API, authorization route, Capability executor,
+original unmerged target-binding fix and its tests. **FIX** the route/body target
+inconsistency before proposal construction and again before dispatch. An exact
+main reproduction retained **15 failed / 3 passed** (1.31 s), including real
+loopback HTTP with an instrumented dispatcher; no actual external workload was
+executed. This is an argument-binding defect, not physical-effect evidence.
+Normal merge retained the original fix SHA and all main changes. The shared
+fixture now returns the canonical explicit allowed AuthorizationDecision rather
+than an incomplete EXECUTE-only object. All 18 original cases and their
+assertions are retained. Final target checks: **18 passed** on Python 3.12
+and **18 passed** on Python 3.10 (0.83 s each). Environment/Governance/Control
+Plane/Capability/terminal regressions: **572 passed / 6 skipped** (16.02 s).
+An earlier selection named nonexistent test files and collected no tests; that
+invocation is retained separately and is not counted as successful regression.
+
+**EXTEND** the existing external-agent Provider and official MCP SDK boundaries;
+the present production MCP code is a client, while server objects occur only in
+test fixtures. A public scoped APEIR MCP server and qualified Codex App Server
+Harness path are **MISSING**. Official App Server documentation was fetched and
+installed `codex-cli 0.159.0-alpha.3` generated its current JSON schemas; schema
+inspection is not an authenticated engineering task or integration PASS.
+**DEFER** physical Jetson/ESP32, installed native binaries and production release
+until their independent prerequisites are available. Kernel/component lock,
+sandbox requirements, authorization and uncertain-effect recovery are unchanged.
+
+Before any queued branch abandonment, all five remote tips and the OCI local
+continuation were saved in one owner-protected Git Bundle. Bundle verification,
+independent bare-repository restore, exact-ref comparison and full connectivity
+checks passed for all six refs. Raw Git objects and runtime evidence stay outside
+the source tree; existing dirty worktrees were not discarded. Saved diagnostics
+are not automatically accepted product code. Exact-source PR and resulting-main
+CI remain separate gates.
+
+### Saved workspace input current-main integration — 2026-10-16
+
+**REUSE / EXTEND / FIX** the original PR 67, ContextBuilder/ContextGuard,
+WorkspaceGuard, live PermissionEngine, Gateway admission and existing Inspector.
+Normal merges preserve current main and the target-binding candidate; PR 67 is
+dependent on PR 78 and cannot bypass its qualification. No second authority,
+Context store, registry or model execution service is added. Saved selection
+requests separate current read and exact Provider-recipient transfer permission;
+Chat uses the existing authenticated service identity, not human approval power.
+
+Combined Context, owner-policy, model/accounting, file-alias, permission-status,
+Node-protocol and Environment-target regression: **813 passed** (22.52 s).
+Python 3.10 policy/input/alias selection: **127 passed** (17.95 s). Desktop lint,
+typecheck, **220 tests** and build pass against the integrated main UI. All 12
+existing repository-standard checks pass; scanner findings remain 0 HIGH and
+3 known MEDIUM. Windows no-follow source delivery and owner-file ACL admission
+remain explicitly blocked; no host fallback is introduced.
+
+At source `adbb6e3`, an actual sandboxed source Chromium browser selected a saved
+file, called Runtime HTTP using an explicitly configured owner-file read/transfer
+policy and delivered the exact version to an owned fake HTTP Provider once.
+The source path was absent from Provider input; the Inspector showed read/sent
+provenance and opening it made zero extra model calls. The file stayed unchanged,
+page errors were absent and the 390-pixel viewport did not overflow. Servers,
+threads and browser were closed. An initial private driver used a nonexistent
+title selector for the Inspector button; that timeout remains recorded, and the
+correct driver uses its actual accessible button name. No product assertion was
+weakened. Evidence/screenshots remain outside source control. This is software
+HTTP/UI integration with an explicit fake Provider, not native APEIR.exe, NKI,
+real remote-human or paid vendor task acceptance. Exact-source CI and main
+integration are still required.
+
+The first target-binding candidate `c5e82aa` passed Core, Desktop, Security and
+Linux Multi-Arch, but Multi-Arch `38920847961` retained Windows **1 failed,
+4829 passed, 60 skipped, 272 deselected, 4 warnings** (2093.64 s). Its controlled
+two-observation response-loss test timed out awaiting original signed read
+delivery and recorded a Relay heartbeat disconnect. This is not an Environment
+target-binding failure and is not relabelled PASS. The original raw job log is
+retained outside source control.
+
+The injection polled `AgentSessionStore.get` synchronously on the transport
+event loop while coordination used its existing writer lock. A bounded writer
+lock held until a scheduled loop callback reproduces starvation: **1 failed**
+(2.71 s). Polling that same original Session through `asyncio.to_thread` makes
+the callback and store access progress without weakening transport isolation or
+authority. Only test-side durable reads change. Existing 15-second polling and
+60-second outer deadlines, original read IDs, signed-result checks, VERIFIED,
+MATCH/COMMITTED and one-effect assertions remain. The six focused recovery and
+lock-contention cases pass on Python 3.12 (23.26 s) and 3.10 (23.54 s).
+The full Reality regression has **120 passed** (121.69 s); all 12 existing
+repository-standard checks also pass, with 0 HIGH and 3 known MEDIUM scanner
+findings. Target-binding regression remains **18 passed**.
+This proves a blocking source in the injection, not the cause of every Windows
+timeout; Issues 4/8 remain open. Exact updated-source cross-platform CI is still
+required before integration.
+
+### Controlled Catalog current-main integration — 2026-10-16
+
+**REUSE / EXTEND / FIX** the existing Skill/Extension registries, CAS, central
+WebGateway, current human-session/nonce authority and Operations Console.
+Normal dependency merges retain main, PR 78 target admission and PR 67 input
+delivery; those gates must merge first. The UI conflict resolution retains
+Automation navigation, exact reviewed Catalog/package binding and the current
+Controller/session epoch guards. No second downloader, Skill registry, approval
+system or execution authority is introduced.
+
+Skill, Extension, Control Plane and Automation regression: **572 passed,
+17 skipped** (308.54 s). Python 3.10 Skill/Extension and focused Skill Control
+Plane regression: **303 passed, 17 skipped** (42.38 s). Desktop lint/typecheck,
+**223 tests** and build pass. All 12 existing repository checks pass. Scanner
+results are **0 HIGH / 5 MEDIUM**: three existing public Ray image-layout paths
+and two explicit private-IP rejection vectors in `test_remote_catalog.py`.
+The fake addresses test all-private and mixed-public/private DNS denial; no
+credential or actual private deployment address is recorded. Assertions and
+scanner rules are unchanged, and the two additional findings remain visible.
+
+Source `b4ea288` also passed an owned browser/HTTP/TLS acceptance: add Catalog,
+review exact source/version/digest, install, verify CAS, load instructions,
+disable, reject disabled reads, enable and uninstall. Three actual child-server
+TLS acquisitions occurred through the test's explicit DNS/route seam. The
+source Chromium page had no script errors or mobile overflow, and no execution
+Grant was issued. Browser and owned servers/threads were cleaned up. This
+private driver has **1 passed, 2 marker-configuration warnings** (6.59 s), not
+hidden product failures. Fake signed human identity and local TLS do not
+qualify a real IdP, public publisher, installed APEIR.exe or executable Skill.
+Instruction loading remains distinct from execution. Exact-source PR/platform
+and resulting-main CI remain required; overall product status stays PARTIAL.
+
+### Bounded Relay stop and receive backpressure — 2026-10-16
+
+The updated target candidate `f0f43f1` passed Core/Desktop/Security and Linux,
+but Multi-Arch `38927399914` retains Windows **1 failed, 4830 passed,
+60 skipped, 272 deselected, 4 warnings** (1986.70 s). The prior held-observation
+case passed. This failure is the original Artifact/lease/stop test's unchanged
+two-second shutdown bound, waiting for WebSocket close completion.
+
+**REUSE / FIX** the existing Node Relay, protocol flow control, durable sequence
+guard and original Node journal. Two controlled real-loopback tests reproduce
+idle receive waiting beyond stop and a full receive queue hiding the peer's
+close frame: **2 failed** (62.72 s). An independent accepted-main idle probe has
+**1 failed** (2.78 s). No test or production deadline was enlarged. Stop now
+wakes idle receive; closure drains raw frames solely to finish the existing
+handshake. Buffered commands are not decoded, acknowledged or executed, and
+Controller pending Work remains available for original-journal reconciliation.
+
+The first implementation cancelled an already admitted result send; combined
+regression retained **1 failed, 398 passed** (131.55 s) in the existing revocation
+test. That prototype is rejected. Requested stop now preserves an active
+message's original completion/publication; explicit transport cancellation
+retains existing journal ownership and drains durable writes. The unmodified
+revocation/result-denial check passes. Final Node/Reality/target regression:
+**399 passed** (126.25 s); Python 3.10 shutdown/I/O/reconciliation selection:
+**57 passed** (5.96 s). Ten focused original-control, revocation and stop cases
+pass (1.67 s), and eight shutdown cases additionally require clean close code,
+no remaining Relay tasks, no new Node execution and retained pending Work
+(1.42 s). Counts overlap and are not summed.
+
+The ordinary PID64, memory/network/filesystem, identity, signing, replay and
+effect-verification boundaries are unchanged. This proves the controlled stop
+and queue mechanism, not every historical Windows failure or physical/WAN
+qualification. Issues 4/8 remain open. Raw failed CI and prototype logs remain
+outside source control. Updated-source cross-platform CI is required.
+
+### Passive snapshot state creation and unresolved HTTP timing — 2026-10-16
+
+Catalog source `2201afd` Multi-Arch `38928853921` retains Windows **1 failed,
+5004 passed, 131 skipped, 290 deselected, 4 warnings** (2257.29 s). The exact
+package-locator nonce case timed out during its prerequisite full Operations
+HTTP snapshot, before its nonce rejection assertion. This is separate from
+Relay close; neither the nonce assertion nor its five-second request bound is
+removed. The owned HTTP fixture now dumps only thread code locations on timeout,
+without frame locals, to distinguish backend work from transport delay.
+
+**REUSE / FIX** the existing Operations projection and canonical owners. A
+deterministic before-test has **1 failed**: an empty-state snapshot initializes
+Session/Workflow databases and the Distributed Work lock. Passive reads now
+skip absent stores and invoke the original owners when state exists. Empty or
+nonregular persisted files yield component UNKNOWN and degraded health without
+repair. An owner-created Session, Workflow and Work become visible on the same
+projection's next read; no cache or second authority is introduced. The updated
+Operations selection has **30 passed** (2.91 s), including six damaged-state
+cases; Operations/remote-HTTP selection **62 passed** (26.76 s), and composed
+Control Plane/Skill/Extension regression **465 passed, 17 skipped** (51.45 s).
+
+The prespecified shared-Linux cold-empty-workspace comparison uses A15/B15/B15/A15,
+30 samples per variant, warm imports and the same fake health-loader contract;
+HTTP/auth/startup are excluded. Before p50/p95/p99 is
+**9.160/11.373/14.743 ms**, candidate **11.565/16.733/19.643 ms**; aggregate CPU
+is **0.286/0.332 seconds**. Candidate timings are worse in this measurement,
+not an improvement claim. With 30 shared-host samples p99 is the sample maximum,
+not a reliable population-tail estimate. The reproducible change is zero
+execution-state files created by reads, versus three before. Raw samples and
+both source modules remain retained privately. This corrects read-side mutation;
+it does not prove or resolve the Windows HTTP timeout cause. Fresh same-bound
+cross-platform CI remains required; no retry or increased deadline is added.
+
+### Workspace input candidate ARM64 comparator qualification failure
+
+Candidate `df36290` Multi-Arch run `38934932374` failed Linux ARM64 job
+`117087935836`: **1 failed, 4942 passed, 59 skipped, 290 deselected**
+(641.37s); Windows and Linux amd64 passed. The original failure log is retained
+in the private qualification evidence. The existing within-tolerance comparator
+unit test compared two separately timed near-empty tasks. The runner records
+integer milliseconds; the observed 0ms baseline and 1ms candidate correctly
+triggered BLOCK, contradicting the fixture's WARN expectation. Accepted main
+`629b13f` contains this same timing-dependent test.
+
+The comparator unit fixture now supplies explicit 100ms/105ms inputs, retaining
+its WARN/no-regression assertions. A separate explicit 0ms/1ms regression keeps
+the original observed case BLOCK. Production timing, comparator tolerances,
+performance gates, Node assertions and timeouts are unchanged. This is test
+input determinism, not a performance improvement or a Windows recovery fix.
+Exact-source CI remains required before integration.
 
 ### Scoped MCP / original Work submission software qualification
 

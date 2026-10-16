@@ -307,7 +307,43 @@ class OCIContainerProvider:
         return Path(self._engine).stem.casefold() if self._engine else ""
 
     def probe(self) -> dict[str, Any]:
-        available = bool(self._engine)
+        engine_detected = bool(self._engine and resolve_executable(self._engine))
+        control_admission = "blocked" if not engine_detected else "unknown"
+        control_grade = "unknown"
+        limitations = []
+        if not engine_detected:
+            limitations.append("No executable Docker or Podman engine was found.")
+        elif self._runner is _default_runner:
+            policy = SandboxPolicy(
+                executable=resolve_executable(self._engine) or "",
+                working_dir=str(Path.cwd().resolve()),
+                network_allowed=False,
+                isolation_level="strict",
+                require_strong_isolation=True,
+                max_processes=64,
+            )
+            try:
+                security = ProcessSandbox(policy).security_report()
+                control_grade = str(security.get("grade") or "unknown")
+                control_admission = (
+                    "ready" if security.get("strong") is True else "blocked"
+                )
+            except Exception:
+                # A probe failure supplies neither admission nor safe containment.
+                control_admission = "unknown"
+            if control_admission != "ready":
+                limitations.extend(
+                    [
+                        "The default engine control runner lacks qualified strong isolation.",
+                        "No ordinary host-process fallback is permitted.",
+                    ]
+                )
+        else:
+            limitations.append("An injected runner requires separate qualification.")
+        limitations.append(
+            "Engine health and container containment have not been exercised by this probe."
+        )
+        available = engine_detected and control_admission == "ready"
         return {
             "provider_id": self.provider_id,
             "contract_version": self.contract_version,
@@ -315,9 +351,14 @@ class OCIContainerProvider:
             "environment_type": EnvironmentType.OCI_CONTAINER.value,
             "engine": self.engine_name,
             "engine_path": self._engine,
-            "evidence_level": "static" if not available else "middleware",
-            "hard_network_isolation": available,
-            "filesystem_namespace_isolation": available,
+            "engine_detected": engine_detected,
+            "control_admission": control_admission,
+            "control_security_grade": control_grade,
+            "engine_health": "unknown",
+            "workload_qualification": "not_run",
+            "evidence_level": "static",
+            "hard_network_isolation": False,
+            "filesystem_namespace_isolation": False,
             "default_security": {
                 "network": "none",
                 "host_filesystem": "none",
@@ -327,9 +368,7 @@ class OCIContainerProvider:
                 "host_pid": False,
                 "host_network": False,
             },
-            "limitations": []
-            if available
-            else ["No Docker or Podman engine is installed on this host."],
+            "limitations": limitations,
         }
 
     def _require_engine(self) -> None:

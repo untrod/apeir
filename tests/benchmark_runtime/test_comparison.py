@@ -58,9 +58,21 @@ def test_comparator_treats_latency_as_lower_is_better() -> None:
 
 def test_comparator_warns_when_within_tolerance() -> None:
     baseline = BenchmarkBaseline.from_run(make_run())
-    current = make_run()
+    baseline = replace(baseline, metrics={**baseline.metrics, "latency_p95_ms": 100})
+    current = replace(make_run(), metrics={**baseline.metrics, "latency_p95_ms": 105})
 
     comparison = BenchmarkComparator().compare(baseline, current)
 
     assert comparison.status is BenchmarkGateStatus.WARN
     assert not comparison.regressions
+
+
+def test_zero_latency_baseline_does_not_hide_a_measured_regression() -> None:
+    baseline = BenchmarkBaseline.from_run(make_run())
+    baseline = replace(baseline, metrics={**baseline.metrics, "latency_p95_ms": 0})
+    current = replace(make_run(), metrics={**baseline.metrics, "latency_p95_ms": 1})
+
+    comparison = BenchmarkComparator().compare(baseline, current)
+
+    assert comparison.status is BenchmarkGateStatus.BLOCK
+    assert comparison.regressions == ("latency_p95_ms",)

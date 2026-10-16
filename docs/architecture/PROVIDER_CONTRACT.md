@@ -154,6 +154,17 @@ qualify real vendor usage, Windows component-lock bytes, hardware or a release.
 
 ## Environment resource admission
 
+OCI readiness separates engine discovery from default control admission. The
+passive probe resolves an executable and checks the existing strict sandbox;
+it runs no engine command. Without an exact strong-control report, default
+execution remains unavailable and no host fallback is offered. An injected
+runner needs its own qualification and cannot make this probe report success.
+Existing direct reference-runner calls remain subject to their separately
+exercised host admission contracts. Engine health stays UNKNOWN and workload
+qualification stays NOT_RUN; passive discovery asserts neither container
+network nor filesystem containment. A ready control preflight is preparation,
+not execution or physical acceptance. Default PID64 and Kernel stay unchanged.
+
 Audit baseline: `a5eee6f6656f1654f0d44a13f405af7bb78d60df`.
 This is numeric admission hardening of the existing Environment contract, not
 a new resource authority or production Ray profile.
@@ -717,3 +728,57 @@ revalidate admission immediately before task dispatch, integrate complete Work/
 Workflow and independent effect verification, and qualify health/errors,
 cancellation, cleanup, recovery, credentials/identity and conformance. A prior
 approval, startup success or profile name alone cannot satisfy that Gate.
+
+
+## Selected saved-file input admission
+
+Saved Workspace input extends ContextBuilder, ContextGuard, WorkspaceGuard and
+the configured canonical PermissionEngine. The public Chat/Runtime field
+`workspace_file_refs` accepts at most eight distinct `{path, sha256}` saved text
+references within the resolved host Workspace. Reads are bounded to 64 KiB per
+file and 128 KiB total. Binary/private/secret sources, traversal, symlinks and
+hard-linked files are refused. The opened file must have exactly one link before
+and after reading, so a harmless alias cannot admit protected or external data.
+Every path component uses no-follow descriptors; unsupported hosts deny delivery.
+There is no native Windows fallback, upload or OS-wide read authority.
+
+Selection creates no Work or permission. The existing original Runtime request
+and Run bind the actor, context, Workspace, purpose and source version. Explicit
+collection failure blocks dispatch even when an ordinary Context provider error
+would be omitted. Whole-item Context budgets may omit a selected source with
+recorded budget provenance; required objective/governance items stay whole.
+
+A private, nonserialized ModelRequest hook verifies the actual messages/tools
+digest, current original Run and Governance/ContextGuard, exact saved bytes and
+independent `context.transfer` permission for the actual Provider ID, endpoint and
+transport. Gateway calls it under its existing scheduler lease after setup,
+immediately before every adapter invocation/stream or actual NKI submission.
+After admission and dispatch accounting, the Gateway removes its private hook
+from the request passed to direct/stream adapters. The original host request
+retains it for fresh checks and evidence; adapter input IDs, messages, tools and
+metadata stay the same. NKI continues to receive only its bound operation payload.
+Retry/fallback targets receive fresh admission, including per-capability endpoint
+changes. Request copies retain the hook; serialized input requires fresh host
+admission. Billing reconciliation of an original NKI receipt is not a new
+selected-source transfer or dispatch claim. Kernel and its authority remain
+unchanged. A read permission never grants Provider transfer authority.
+
+Collaboration review retains the same admission for a source-derived candidate.
+Its private host factory binds the newly rendered review messages to the original
+Run, identity, Workspace and saved source versions; the actual reviewer recipient
+must have current transfer permission. A changed version, revocation or cancelled
+Run blocks reviewer dispatch and records the existing failed/unapproved review
+result. Review keeps its ordinary Gateway accounting and does not acquire authority
+from the main model's response. The review input digest describes the candidate
+text actually submitted at that Gateway boundary; source provenance records its
+authorized origin, not a claim that the review transmits the entire saved file.
+
+The existing input Inspector and Gateway/accounting response metadata project
+content-free source versions, digests and selected/read/sent/rejected/budget
+states. Sent records entry into the Gateway Provider boundary; Provider receipt
+and provider-specific formatting remain unproven. Revocation blocks subsequent
+dispatch but cannot retract an earlier send. Tests exercise the Runtime HTTP API
+through an isolated OpenAI-compatible HTTP fixture plus retry, fallback, stream,
+NKI contract and source/authority/lifecycle negatives, including source-derived
+review admission and billing. These use fake credentials
+and do not qualify a real model account, remote Provider or installed Desktop.

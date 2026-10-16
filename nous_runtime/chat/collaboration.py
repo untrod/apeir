@@ -23,6 +23,7 @@ from nous_runtime.model_runtime.models import ModelRole, RoutingMode
 
 
 EventEmitter = Callable[[str, dict[str, Any]], None]
+InputAdmissionFactory = Callable[[tuple[Mapping[str, Any], ...]], Any]
 
 
 @dataclass(frozen=True)
@@ -348,6 +349,7 @@ class ChatCollaborationCoordinator:
         trace_id: str,
         preferred_model: str = "",
         emit: EventEmitter | None = None,
+        input_admission_factory: InputAdmissionFactory | None = None,
     ) -> dict[str, Any]:
         notify = emit or (lambda _event, _payload: None)
         notify("review.started", {"strategy": "independent_role"})
@@ -360,6 +362,7 @@ class ChatCollaborationCoordinator:
             session_id=session_id,
             trace_id=trace_id,
             preferred_model=preferred_model,
+            input_admission_factory=input_admission_factory,
             messages=(
                 {
                     "role": "system",
@@ -439,6 +442,7 @@ class ChatCollaborationCoordinator:
         trace_id: str,
         preferred_model: str,
         messages: tuple[Mapping[str, Any], ...],
+        input_admission_factory: InputAdmissionFactory | None = None,
     ) -> GatewayResponse:
         return self.facade.try_invoke_sync(
             GatewayRequest(
@@ -451,6 +455,11 @@ class ChatCollaborationCoordinator:
                     priority=60 if role is ModelRole.PLANNER else 50,
                 ),
                 messages=messages,
+                _input_admission=(
+                    input_admission_factory(messages)
+                    if input_admission_factory is not None
+                    else None
+                ),
                 role=role,
                 preferred_models=(preferred_model,) if preferred_model else (),
                 routing_mode=(
@@ -461,7 +470,17 @@ class ChatCollaborationCoordinator:
                     trace_id=trace_id,
                     correlation_id=task_id,
                 ),
-                metadata={"collaboration_role": agent_id},
+                metadata={
+                    "collaboration_role": agent_id,
+                    **(
+                        {
+                            "requires_selected_input_admission": True,
+                            "context_input_kind": "selected_source_derived_review",
+                        }
+                        if input_admission_factory is not None
+                        else {}
+                    ),
+                },
             )
         )
 

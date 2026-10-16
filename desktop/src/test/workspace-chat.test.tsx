@@ -49,10 +49,10 @@ describe("workspace collaboration through the existing Chat Runtime", () => {
     expect(screen.getByLabelText("Selected workspace reference")).toHaveTextContent("File content is not automatically sent");
     fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
     await waitFor(() => expect(runPrompt).toHaveBeenCalledTimes(1));
-    const [prompt, , , mode] = vi.mocked(runPrompt).mock.calls[0];
-    expect(mode).toBe("read_only"); expect(prompt).toContain('"path":"src/a.py"'); expect(prompt).toContain('"sha256":"' + "a".repeat(64) + '"');
-    expect(prompt).toContain("metadata only; this grants no permission");
-    expect(prompt).not.toContain('"content"');
+    const [prompt, , , mode, , , refs] = vi.mocked(runPrompt).mock.calls[0];
+    expect(mode).toBe("read_only"); expect(prompt).toBe("Explain the selected file");
+    expect(refs).toEqual([{ path: "src/a.py", sha256: "a".repeat(64) }]);
+    expect(JSON.stringify(refs)).not.toContain('"content"');
     await screen.findByText("Reference received");
   });
 

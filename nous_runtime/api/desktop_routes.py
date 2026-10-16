@@ -714,74 +714,89 @@ def handle_knowledge_add(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def handle_security_permissions() -> dict[str, Any]:
-    """List permission status from governance layer."""
+    """Inspect canonical configuration without inventing an authorization."""
     try:
+        from nous_runtime.governance import get_gate
         from nous_runtime.governance.permission import PermissionEngine
 
-        engine = PermissionEngine()
-        rules = engine.list_rules() if hasattr(engine, "list_rules") else []
+        gate = get_gate()
+        engine = gate.permission_engine
+        state = (
+            "unconfigured"
+            if engine is None
+            else "configured"
+            if isinstance(engine, PermissionEngine)
+            else "unknown"
+        )
         return ok(
             {
-                "permissions": [
-                    {
-                        "id": getattr(r, "permission_id", str(r)),
-                        "name": getattr(r, "name", str(r)),
-                        "description": getattr(r, "description", ""),
-                        "granted": getattr(r, "granted", True),
-                        "risk": getattr(r, "risk_level", "medium"),
-                    }
-                    for r in rules
-                ]
-                if rules
-                else _default_permissions(),
+                "permissions": _default_permissions(),
+                "configuration_state": state,
+                "configuration": engine.configuration_status()
+                if isinstance(engine, PermissionEngine)
+                else None,
+                "permissions_evaluated": False,
+                "reason": (
+                    "Authorization requires the current subject, action, resource and context. "
+                    "Selected-file delivery requires a trusted host-configured canonical PermissionEngine."
+                ),
             }
         )
-    except Exception:
-        return ok({"permissions": _default_permissions()})
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        from nous_runtime.core.redaction import redact_sensitive_text
+
+        return err("SECURITY_PERMISSION_READ_ERROR", redact_sensitive_text(str(exc)))
 
 
 def _default_permissions() -> list[dict]:
+    """Compatibility descriptions only; no request has been evaluated here."""
     return [
         {
             "id": "model_access",
             "name": "Model Access",
             "description": "Allow AI models to process your requests",
-            "granted": True,
+            "granted": None,
+            "evaluation_state": "UNKNOWN",
             "risk": "low",
         },
         {
             "id": "file_access",
             "name": "File Access",
             "description": "Allow reading and writing files in workspace",
-            "granted": True,
+            "granted": None,
+            "evaluation_state": "UNKNOWN",
             "risk": "medium",
         },
         {
             "id": "network_access",
             "name": "Network Access",
             "description": "Allow connecting to external services",
-            "granted": True,
+            "granted": None,
+            "evaluation_state": "UNKNOWN",
             "risk": "medium",
         },
         {
             "id": "code_execution",
             "name": "Code Execution",
             "description": "Allow executing generated code",
-            "granted": False,
+            "granted": None,
+            "evaluation_state": "UNKNOWN",
             "risk": "high",
         },
         {
             "id": "system_commands",
             "name": "System Commands",
             "description": "Allow running system shell commands",
-            "granted": False,
+            "granted": None,
+            "evaluation_state": "UNKNOWN",
             "risk": "high",
         },
         {
             "id": "device_control",
             "name": "Device Control",
             "description": "Allow controlling connected devices",
-            "granted": False,
+            "granted": None,
+            "evaluation_state": "UNKNOWN",
             "risk": "high",
         },
     ]

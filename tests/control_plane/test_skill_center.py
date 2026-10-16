@@ -1,6 +1,7 @@
 """Skill UI actions use the existing human authority and canonical registry."""
 
 import json
+from contextlib import contextmanager
 
 import pytest
 
@@ -8,6 +9,7 @@ from nous_runtime.api.routes import route_server
 from nous_runtime.artifact import ContentAddressedArtifactStore
 from nous_runtime.governance.permission import PermissionRule
 from nous_runtime.skills import SkillRegistry
+from nous_runtime.skills import registry as registry_module
 from tests.control_plane.test_operations import (
     plane as plane_fixture,
     human_env as human_env_fixture,
@@ -162,3 +164,174 @@ def test_passive_snapshot_never_fetches_remote_catalog(plane, monkeypatch):
     assert snapshot["skill_diagnostics"] and "instructions" not in json.dumps(
         snapshot["skills"]
     )
+
+
+def _revoke_skill_human(view, auth, fault, action):
+    if fault == "permission":
+        auth.permissions.add(
+            PermissionRule(
+                "oidc:*:alice", "control." + action, "skill:code-helper", effect="deny"
+            )
+        )
+    else:
+        with view.gate.store.operation_transaction() as db:
+            db.execute("UPDATE governance_human_sessions SET status='REVOKED'")
+
+
+@pytest.mark.parametrize("action", ["enable", "disable"])
+@pytest.mark.parametrize("fault", ["permission", "session"])
+def test_current_authority_rechecked_inside_skill_enabled_publication_fence(
+    skill_plane, monkeypatch, action, fault
+):
+    view, auth, context, entry, _ = skill_plane
+    view.action(body(entry, "install"), context)
+    registry = SkillRegistry(view.root)
+    if action == "enable":
+        registry.disable("installed:code-helper")
+    installed = next(row for row in view.skills()[0] if row["provider"] == "installed")
+    previous = registry.state_path.read_bytes()
+    original_lock = registry_module.file_lock
+    intervened = False
+
+    @contextmanager
+    def intervening_lock(path):
+        nonlocal intervened
+        with original_lock(path):
+            if path == registry.state_path.with_suffix(".lock") and not intervened:
+                intervened = True
+                _revoke_skill_human(view, auth, fault, "skill_manage")
+            yield
+
+    monkeypatch.setattr(registry_module, "file_lock", intervening_lock)
+    with pytest.raises(PermissionError):
+        view.action(body(installed, action), context)
+    assert intervened
+    assert registry.state_path.read_bytes() == previous
+    current = SkillRegistry(view.root).resolve(
+        "installed:code-helper", include_disabled=True
+    )
+    assert current.enabled == installed["enabled"]
+    assert current.digest == installed["digest"]
+    assert not view.gate.store.list_active_leases()
+
+
+@pytest.mark.parametrize("fault", ["permission", "session"])
+def test_current_authority_rechecked_after_skill_instruction_acquisition(
+    skill_plane, monkeypatch, fault
+):
+    view, auth, context, entry, _ = skill_plane
+    view.action(body(entry, "install"), context)
+    installed = next(row for row in view.skills()[0] if row["provider"] == "installed")
+    original_load = SkillRegistry.load
+
+    def intervening_load(registry, *args, **kwargs):
+        _revoke_skill_human(view, auth, fault, "skill_load")
+        return original_load(registry, *args, **kwargs)
+
+    monkeypatch.setattr(SkillRegistry, "load", intervening_load)
+    with pytest.raises(PermissionError):
+        view.action(body(installed, "load"), context)
+    assert not view.gate.store.list_active_leases()
+
+
+@pytest.mark.parametrize("action", ["enable", "disable"])
+@pytest.mark.parametrize("fault", ["version", "digest", "corrupt"])
+def test_stale_skill_review_cannot_toggle_changed_or_corrupt_installed_content(
+    skill_plane, monkeypatch, tmp_path, action, fault
+):
+    view, _, context, entry, _ = skill_plane
+    view.action(body(entry, "install"), context)
+    registry = SkillRegistry(view.root)
+    if action == "enable":
+        registry.disable("installed:code-helper")
+    installed = next(row for row in view.skills()[0] if row["provider"] == "installed")
+    previous = registry.state_path.read_bytes()
+    source = make_skill(
+        tmp_path / "new-reviewed-content" / "code-helper",
+        version="1.2.4" if fault == "version" else installed["version"],
+    )
+    if fault == "digest":
+        with (source / "SKILL.md").open("a", encoding="utf-8") as stream:
+            stream.write("\nChanged reviewed instructions.\n")
+    original_lock = registry_module.file_lock
+    intervened = False
+
+    @contextmanager
+    def intervening_lock(path):
+        nonlocal intervened
+        with original_lock(path):
+            if path == registry.state_path.with_suffix(".lock") and not intervened:
+                intervened = True
+                if fault == "corrupt":
+                    package = registry.extensions.package_path(
+                        installed["extension_id"]
+                    )
+                    with (package / "SKILL.md").open("a", encoding="utf-8") as stream:
+                        stream.write("\nUnpublished corrupt content.\n")
+                else:
+                    registry.install(source)
+            yield
+
+    monkeypatch.setattr(registry_module, "file_lock", intervening_lock)
+    with pytest.raises((PermissionError, KeyError)):
+        view.action(body(installed, action), context)
+    assert intervened
+    assert registry.state_path.read_bytes() == previous
+    if fault != "corrupt":
+        current = SkillRegistry(view.root).resolve(
+            "installed:code-helper", include_disabled=True
+        )
+        assert current.digest != installed["digest"]
+        assert current.enabled == installed["enabled"]
+    assert not view.gate.store.list_active_leases()
+
+
+@pytest.mark.parametrize(
+    "fault", ["version", "digest", "disabled", "corrupt", "revoked"]
+)
+def test_instruction_delivery_refuses_content_invalidated_during_read(
+    skill_plane, monkeypatch, tmp_path, fault
+):
+    view, _, context, entry, _ = skill_plane
+    view.action(body(entry, "install"), context)
+    registry = SkillRegistry(view.root)
+    installed = next(row for row in view.skills()[0] if row["provider"] == "installed")
+    source = make_skill(
+        tmp_path / "changed-instructions" / "code-helper",
+        version="1.2.4" if fault == "version" else installed["version"],
+    )
+    if fault == "digest":
+        with (source / "SKILL.md").open("a", encoding="utf-8") as stream:
+            stream.write("\nChanged instructions.\n")
+    original_load = SkillRegistry.load
+    intervened = False
+
+    def intervening_load(owner, *args, **kwargs):
+        nonlocal intervened
+        acquired = original_load(owner, *args, **kwargs)
+        if not intervened:
+            intervened = True
+            if fault in {"version", "digest"}:
+                registry.install(source)
+            elif fault == "disabled":
+                registry.disable("installed:code-helper")
+            elif fault == "corrupt":
+                package = registry.extensions.package_path(installed["extension_id"])
+                with (package / "SKILL.md").open("a", encoding="utf-8") as stream:
+                    stream.write("\nUnpublished corrupt content.\n")
+            else:
+                manifest = registry.extensions.verify(installed["extension_id"])
+                registry.extensions.record_revocation(
+                    installed["extension_id"],
+                    {
+                        "normalized_digest": manifest.provenance.digest,
+                        "granted_capabilities": [],
+                    },
+                )
+        return acquired
+
+    monkeypatch.setattr(SkillRegistry, "load", intervening_load)
+    with pytest.raises((PermissionError, KeyError)):
+        view.action(body(installed, "load"), context)
+    assert intervened
+    assert not view.gate.store.list_active_leases()
