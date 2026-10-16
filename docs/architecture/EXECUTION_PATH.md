@@ -65,7 +65,12 @@ The existing Connector compatibility path honors its declared additional retry
 budget. Non-idempotent calls have zero retries, including temporary errors after
 an effect; an error response cannot authorize another invocation. Explicitly
 idempotent calls keep their bounded retries. This does not turn Connector
-metadata or a cached result into independent EffectVerification.
+metadata or a cached result into independent EffectVerification. Its exported
+Connector library admits a write only when the existing Governance decision has
+both `action_mode=EXECUTE` and boolean `allowed=True`. Missing, inconsistent or
+unknown decisions do not invoke the adapter or create a cached success. This
+library boundary does not establish a connected Desktop integration, Kernel
+traversal or an independently verified effect.
 
 This second path is real and governed, but it does **not** traverse the Rust
 Kernel. Responses and UI status must report `execution_scope=runtime-service`
