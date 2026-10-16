@@ -426,6 +426,8 @@ def test_operation_failure_disconnect_never_commit_or_reexecute(tmp_path, fault)
             sim.provider.inject_fault(STABLE, fault)
             waiting = await sim.execute()
             assert waiting.state is AgentSessionState.WAITING
+            await wait_for(lambda: WORK_ID in sim.server.results)
+            sim.server.reconcile_work(WORK_ID)
             assert sim.work().state is DistributedWorkState.FAILED
             assert sim.provider.execution_count(WORK_ID) == 0
             if fault is SimulationFault.DEVICE_DISCONNECT:
@@ -443,6 +445,56 @@ def test_operation_failure_disconnect_never_commit_or_reexecute(tmp_path, fault)
             assert sim.provider.execution_count(WORK_ID) == 0
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "fault", [SimulationFault.OPERATION_FAILURE, SimulationFault.DEVICE_DISCONNECT]
+)
+def test_failed_device_waits_for_original_signed_terminal_projection(
+    tmp_path, monkeypatch, fault
+):
+    held = {}
+    handle = NodeRelayServer._handle_message
+    execute = Simulation.execute
+
+    async def hold_failed_result(self, websocket, node_id, envelope):
+        if (
+            envelope.message_type == "WORKLOAD_STATUS"
+            and envelope.payload.get("workload_id") == WORK_ID
+            and envelope.payload.get("state") == "FAILED"
+            and not held.get("captured")
+        ):
+            held["captured"] = True
+            held["entered"].set()
+            await held["release"].wait()
+        return await handle(self, websocket, node_id, envelope)
+
+    async def execute_before_delivery(self, **kwargs):
+        held["entered"], held["release"] = asyncio.Event(), asyncio.Event()
+        pending = asyncio.create_task(execute(self, **{**kwargs, "wait_timeout": 0.05}))
+        try:
+            await wait_for(held["entered"].is_set)
+            waiting = await pending
+            assert waiting.state is AgentSessionState.WAITING
+            assert self.work().state is DistributedWorkState.RUNNING
+            original = next(
+                item
+                for item in self.node.run_once()["workloads"]
+                if item["workload_id"] == WORK_ID
+            )
+            assert original["state"] == "FAILED"
+            assert WORK_ID not in self.server.results
+            assert self.provider.execution_count(WORK_ID) == 0
+            return waiting
+        finally:
+            held["release"].set()
+            await pending
+
+    monkeypatch.setattr(NodeRelayServer, "_handle_message", hold_failed_result)
+    monkeypatch.setattr(Simulation, "execute", execute_before_delivery)
+    # Exercise the unchanged original assertions, after releasing delivery but
+    # before yielding to its Controller. The fix must follow terminal evidence.
+    test_operation_failure_disconnect_never_commit_or_reexecute(tmp_path, fault)
 
 
 @pytest.mark.parametrize(
