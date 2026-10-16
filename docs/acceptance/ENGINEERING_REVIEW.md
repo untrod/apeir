@@ -2111,6 +2111,38 @@ the source tree; existing dirty worktrees were not discarded. Saved diagnostics
 are not automatically accepted product code. Exact-source PR and resulting-main
 CI remain separate gates.
 
+### Saved workspace input current-main integration — 2026-10-16
+
+**REUSE / EXTEND / FIX** the original PR 67, ContextBuilder/ContextGuard,
+WorkspaceGuard, live PermissionEngine, Gateway admission and existing Inspector.
+Normal merges preserve current main and the target-binding candidate; PR 67 is
+dependent on PR 78 and cannot bypass its qualification. No second authority,
+Context store, registry or model execution service is added. Saved selection
+requests separate current read and exact Provider-recipient transfer permission;
+Chat uses the existing authenticated service identity, not human approval power.
+
+Combined Context, owner-policy, model/accounting, file-alias, permission-status,
+Node-protocol and Environment-target regression: **813 passed** (22.52 s).
+Python 3.10 policy/input/alias selection: **127 passed** (17.95 s). Desktop lint,
+typecheck, **220 tests** and build pass against the integrated main UI. All 12
+existing repository-standard checks pass; scanner findings remain 0 HIGH and
+3 known MEDIUM. Windows no-follow source delivery and owner-file ACL admission
+remain explicitly blocked; no host fallback is introduced.
+
+At source `adbb6e3`, an actual sandboxed source Chromium browser selected a saved
+file, called Runtime HTTP using an explicitly configured owner-file read/transfer
+policy and delivered the exact version to an owned fake HTTP Provider once.
+The source path was absent from Provider input; the Inspector showed read/sent
+provenance and opening it made zero extra model calls. The file stayed unchanged,
+page errors were absent and the 390-pixel viewport did not overflow. Servers,
+threads and browser were closed. An initial private driver used a nonexistent
+title selector for the Inspector button; that timeout remains recorded, and the
+correct driver uses its actual accessible button name. No product assertion was
+weakened. Evidence/screenshots remain outside source control. This is software
+HTTP/UI integration with an explicit fake Provider, not native APEIR.exe, NKI,
+real remote-human or paid vendor task acceptance. Exact-source CI and main
+integration are still required.
+
 The first target-binding candidate `c5e82aa` passed Core, Desktop, Security and
 Linux Multi-Arch, but Multi-Arch `38920847961` retained Windows **1 failed,
 4829 passed, 60 skipped, 272 deselected, 4 warnings** (2093.64 s). Its controlled
