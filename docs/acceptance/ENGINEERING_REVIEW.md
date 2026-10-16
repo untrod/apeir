@@ -2201,3 +2201,22 @@ effect-verification boundaries are unchanged. This proves the controlled stop
 and queue mechanism, not every historical Windows failure or physical/WAN
 qualification. Issues 4/8 remain open. Raw failed CI and prototype logs remain
 outside source control. Updated-source cross-platform CI is required.
+
+
+### Workspace input candidate ARM64 comparator qualification failure
+
+Candidate `df36290` Multi-Arch run `38934932374` failed Linux ARM64 job
+`117087935836`: **1 failed, 4942 passed, 59 skipped, 290 deselected**
+(641.37s); Windows and Linux amd64 passed. The original failure log is retained
+in the private qualification evidence. The existing within-tolerance comparator
+unit test compared two separately timed near-empty tasks. The runner records
+integer milliseconds; the observed 0ms baseline and 1ms candidate correctly
+triggered BLOCK, contradicting the fixture's WARN expectation. Accepted main
+`629b13f` contains this same timing-dependent test.
+
+The comparator unit fixture now supplies explicit 100ms/105ms inputs, retaining
+its WARN/no-regression assertions. A separate explicit 0ms/1ms regression keeps
+the original observed case BLOCK. Production timing, comparator tolerances,
+performance gates, Node assertions and timeouts are unchanged. This is test
+input determinism, not a performance improvement or a Windows recovery fix.
+Exact-source CI remains required before integration.
