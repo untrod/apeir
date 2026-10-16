@@ -2272,3 +2272,36 @@ effect-verification boundaries are unchanged. This proves the controlled stop
 and queue mechanism, not every historical Windows failure or physical/WAN
 qualification. Issues 4/8 remain open. Raw failed CI and prototype logs remain
 outside source control. Updated-source cross-platform CI is required.
+
+### Passive snapshot state creation and unresolved HTTP timing — 2026-10-16
+
+Catalog source `2201afd` Multi-Arch `38928853921` retains Windows **1 failed,
+5004 passed, 131 skipped, 290 deselected, 4 warnings** (2257.29 s). The exact
+package-locator nonce case timed out during its prerequisite full Operations
+HTTP snapshot, before its nonce rejection assertion. This is separate from
+Relay close; neither the nonce assertion nor its five-second request bound is
+removed. The owned HTTP fixture now dumps only thread code locations on timeout,
+without frame locals, to distinguish backend work from transport delay.
+
+**REUSE / FIX** the existing Operations projection and canonical owners. A
+deterministic before-test has **1 failed**: an empty-state snapshot initializes
+Session/Workflow databases and the Distributed Work lock. Passive reads now
+skip absent stores and invoke the original owners when state exists. Empty or
+nonregular persisted files yield component UNKNOWN and degraded health without
+repair. An owner-created Session, Workflow and Work become visible on the same
+projection's next read; no cache or second authority is introduced. The updated
+Operations selection has **30 passed** (2.91 s), including six damaged-state
+cases; Operations/remote-HTTP selection **62 passed** (26.76 s), and composed
+Control Plane/Skill/Extension regression **465 passed, 17 skipped** (51.45 s).
+
+The prespecified shared-Linux cold-empty-workspace comparison uses A15/B15/B15/A15,
+30 samples per variant, warm imports and the same fake health-loader contract;
+HTTP/auth/startup are excluded. Before p50/p95/p99 is
+**9.160/11.373/14.743 ms**, candidate **11.565/16.733/19.643 ms**; aggregate CPU
+is **0.286/0.332 seconds**. Candidate timings are worse in this measurement,
+not an improvement claim. With 30 shared-host samples p99 is the sample maximum,
+not a reliable population-tail estimate. The reproducible change is zero
+execution-state files created by reads, versus three before. Raw samples and
+both source modules remain retained privately. This corrects read-side mutation;
+it does not prove or resolve the Windows HTTP timeout cause. Fresh same-bound
+cross-platform CI remains required; no retry or increased deadline is added.
