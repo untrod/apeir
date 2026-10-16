@@ -154,6 +154,17 @@ qualify real vendor usage, Windows component-lock bytes, hardware or a release.
 
 ## Environment resource admission
 
+OCI readiness separates engine discovery from default control admission. The
+passive probe resolves an executable and checks the existing strict sandbox;
+it runs no engine command. Without an exact strong-control report, default
+execution remains unavailable and no host fallback is offered. An injected
+runner needs its own qualification and cannot make this probe report success.
+Existing direct reference-runner calls remain subject to their separately
+exercised host admission contracts. Engine health stays UNKNOWN and workload
+qualification stays NOT_RUN; passive discovery asserts neither container
+network nor filesystem containment. A ready control preflight is preparation,
+not execution or physical acceptance. Default PID64 and Kernel stay unchanged.
+
 Audit baseline: `a5eee6f6656f1654f0d44a13f405af7bb78d60df`.
 This is numeric admission hardening of the existing Environment contract, not
 a new resource authority or production Ray profile.

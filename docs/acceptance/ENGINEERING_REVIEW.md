@@ -967,6 +967,24 @@ Final Workflow/Agent contracts pass **64 tests**; the same controlled admission
 delay also passes after correction. Python 3.10 focused contracts pass **3**.
 New source and resulting-main CI remain separate acceptance requirements.
 
+## OCI readiness truth correction — 2026-10-14
+
+**REUSE** the existing OCI Provider and strict ProcessSandbox report; **FIX**
+passive readiness claims; **DEFER** engine and workload qualification. The
+existing probe treated an engine path as available execution and containment.
+Seven controlled cases fail before correction; one existing default-runner
+denial case passes. Resolving an executable now only establishes discovery.
+An exact strong report is required for default control readiness, failed probes
+stay UNKNOWN, and a host-injected runner does not self-certify qualification.
+The probe executes no command and claims no container isolation or engine health.
+The actual default runner, injected reference execution and PID64 controls remain
+unchanged. Final affected Environment, external reference, admission, Governance,
+Control Plane and SDK contracts have **503 passed, 3 skipped** (17.50 s);
+Python 3.10 focused readiness contracts have **12 passed**. These controlled
+contracts do not qualify default Linux OCI, Python/scientific execution, PTY,
+native installation or physical hardware. Source and resulting-main CI remain
+required before acceptance.
+
 ## Controlled Skill identity and removal review — 2026-10-14
 
 REUSE the Skill, Extension, Governance, human-session and CAS owners. FIX derived
@@ -1125,6 +1143,9 @@ the corrected selection above ran successfully, not a hidden product failure.
 Kernel and component lock are unchanged. Source and resulting-main cross-platform
 CI are required before qualification; native Windows hashes and physical/network
 acceptance retain their independent blockers.
+
+
+
 
 ### Environment command target binding — 2026-10-14
 
@@ -1411,6 +1432,86 @@ and component-lock contracts (**3 passed**) pass. These are software simulation
 contracts, not physical or native Windows installation qualification. Kernel and
 component lock remain unchanged; source and resulting-main CI are separate gates.
 
+### Artifact validation vocabulary measurement — 2026-10-15
+
+**REUSE / FIX** the canonical ArtifactType Enum and existing CAS validation. An
+owned Linux warm-filesystem baseline found metadata reads scaling from 0.027 ms
+p50 at one record to 12.52 ms at 1000 records. The candidate derives one immutable
+type-value set from the same Enum instead of allocating that same set for every
+validated record. Every read still reloads the actual index, validates every
+record and performs the same content checks. No index/stat/permission cache,
+fsync, locking, GC, redaction or integrity rule changes.
+
+Three alternating child processes per variant each measure 100 reads against
+the exact same unchanged 1000-record index (593893 bytes).
+All 300 samples per operation/variant are retained:
+
+| Operation | Before p50 / p95 / p99 (ms) | Candidate p50 / p95 / p99 (ms) | CPU seconds before / candidate |
+| --- | --- | --- | --- |
+| metadata get | 13.08 / 17.87 / 20.52 | 8.87 / 11.35 / 15.57 | 4.083 / 2.768 |
+| resolve + content verification | 25.49 / 34.25 / 38.93 | 17.68 / 23.54 / 101.49 | 7.971 / 6.047 |
+
+This exploratory single-host microbenchmark supports reduced median/CPU overhead,
+not guaranteed tail latency: the slower candidate resolve p99 remains recorded.
+It is not a Windows failure explanation, end-to-end or Token-cost improvement.
+Artifact/Node/Governance/Reality contracts: **580 passed** (130.19 s); focused
+Artifact contracts: **31 passed** on Python 3.12 (1.80 s), **31 passed** on Python
+3.10 (1.47 s), overlapping the combined selection. Kernel and component lock
+are unchanged; exact source/main CI remain required.
+
+Current-main controlled comparison (2026-10-16) starts from `629b13f` and fixes
+three rounds in order AB/BA/AB, 100 samples per operation in each child process:
+**300 samples per operation/variant**, the same unchanged 1000-record,
+593893-byte index, one-CPU affinity and a warm local Linux filesystem. The host
+is shared, not exclusive. The actual candidate source bytes match the measured
+module SHA-256 `c336f43a64b344527a69d2e69798316c237c3adedaa6d07b056737ac62354977`.
+Only the declaration order of independent constants was aligned to that exact
+measured module; no admission or validation behavior changed.
+
+| Operation | Before p50 / p95 / p99 (ms) | Candidate p50 / p95 / p99 (ms) | CPU seconds before / candidate |
+| --- | --- | --- | --- |
+| metadata get | 12.485 / 16.132 / 27.362 | 9.336 / 12.551 / 15.095 | 3.947 / 2.929 |
+| resolve + content verification | 25.821 / 32.586 / 35.727 | 17.745 / 21.589 / 26.408 | 7.957 / 5.457 |
+
+Peak child RSS was 18820 KiB before and 18788 KiB after. Raw samples, manifest,
+index hashes and source trees remain outside source control. The earlier slower
+101.49 ms p99 is retained above; the new fixed comparison is separate evidence,
+not a replacement favorable rerun. The 300-sample shared-host tail has statistical
+limits and does not establish end-to-end, Windows, network or Token savings.
+After normal dependency integration, Artifact/Node/Governance/Extension writer
+and Skill installation contracts have **565 passed** (28.11 s); focused Artifact
+contracts have **31 passed** on Python 3.12 (0.97 s) and 3.10 (0.99 s). Current
+index reloads, cross-instance graph/pin/GC ownership, corruption rejection,
+redaction, signed results and no-replay behavior remain unchanged. Required
+source and resulting-main CI remain separate gates.
+
+### OCI readiness current-main integration — 2026-10-16
+
+**REUSE / FIX** the original closed-unmerged PR 68 continuation, existing OCI
+Provider, ProcessSandbox admission and Environment status API. Normal dependency
+merges preserve the target-binding implementation from PR 78 rather than adding
+a second fix; after preceding gates the remaining scope is four existing files
+(Provider, readiness tests and canonical documentation). The passive probe
+separates engine discovery from strong control admission, unknown engine health
+and not-run workload qualification. It starts no engine command or workload.
+No default PID64, mount, network, credential, authorization or sandbox change.
+
+Integrated Environment/terminal regression: **149 passed, 3 skipped** (1.56 s).
+Python 3.10 target/readiness contracts: **30 passed** (1.21 s). All 12 existing
+repository-standard checks pass; security retains **0 HIGH / 5 MEDIUM** with
+the reviewed private-IP SSRF fixtures from the Catalog dependency.
+
+An actual service-authenticated loopback HTTP status request on this Linux host
+reports Docker found, `available=false`, `control_admission=blocked`,
+`control_security_grade=resource_only`, `engine_health=unknown`, and
+`workload_qualification=not_run`. No workload or host fallback ran, and the owned
+HTTP thread/server were closed. Initial private driver errors omitted creation
+of the selected workspace and assumed a different Provider ID; those attempts
+remain separate from the corrected check using the canonical Provider ID.
+This is truthful preflight/status qualification, not actual container isolation,
+Python/scientific execution, PTY, native installation or physical acceptance.
+Source and resulting-main CI remain required before integration.
+
 ### Automation configuration publication admission — 2026-10-15
 
 **REUSE / FIX** the existing Workflow writer, immutable Automation definition and
@@ -1670,6 +1771,8 @@ record is retained separately and the corrected cleanup reproduces the same
 single assertion failure. Final source Desktop lint/typecheck/test/build:
 **180 passed in 38 files** (44.80 s). These are observed UI callback/correctness
 contracts, not measured task latency, Token savings or native UI qualification.
+
+
 
 
 Selected-input candidate Core run `38819836324`, Windows job `116713447362`,

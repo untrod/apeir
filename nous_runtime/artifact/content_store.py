@@ -24,6 +24,7 @@ from nous_runtime.core.redaction import (
 )
 from nous_runtime.locking import file_lock
 
+_ARTIFACT_TYPES = frozenset(item.value for item in ArtifactType)
 _DIGEST = re.compile(r"^sha256:([0-9a-f]{64})$")
 
 
@@ -57,7 +58,7 @@ class ContentArtifact:
 
     def __post_init__(self) -> None:
         _digest_hex(self.digest)
-        if self.artifact_type not in {item.value for item in ArtifactType}:
+        if self.artifact_type not in _ARTIFACT_TYPES:
             raise ArtifactError(f"unsupported artifact type: {self.artifact_type}")
         if not self.name.strip():
             raise ArtifactError("artifact name is required")
@@ -345,7 +346,7 @@ class ContentAddressedArtifactStore:
             if isinstance(artifact_type, ArtifactType)
             else str(artifact_type)
         )
-        if normalized_type not in {item.value for item in ArtifactType}:
+        if normalized_type not in _ARTIFACT_TYPES:
             raise ArtifactError(f"unsupported artifact type: {normalized_type}")
         if not name.strip():
             raise ArtifactError("artifact name is required")
