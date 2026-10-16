@@ -1388,6 +1388,129 @@ single assertion failure. Final source Desktop lint/typecheck/test/build:
 contracts, not measured task latency, Token savings or native UI qualification.
 
 
+### External-provider spool publication and Windows baseline evidence — 2026-10-16
+
+Main `c43f942` Core run `38822457356`, Windows job `116723873694`, retains
+**1 failed, 4970 passed, 60 skipped, 4 warnings** (1539.12 s). The external-provider
+signed Node protocol case returned `ok=false`; its old assertion did not print
+the provider error code. The initial-reports ConnectionClosed warning alone does
+not establish the cause. The unchanged condition now includes redacted error-code
+and content-free phase/memory/result-presence diagnostics for a future failure.
+No assertion, timeout or keepalive setting is relaxed.
+
+**REUSE / FIX** the existing Node journal, signed result admission, Controller
+spool and remote-provider binding checks. A controlled post-publication cleanup
+PermissionError reproduced replacement of a real original signed result with
+`REMOTE_PROVIDER_REQUEST_REJECTED` in two cases (**2 failed**). An earlier fixture
+passed no socket for the existing acknowledgement and had two setup failures;
+its correction reuses the signed RecordingSocket fixture and retains the same
+original-result assertions. Separate before/after-publication I/O probes retained
+**2 failed, 2 passed** after the cleanup correction: publication failure was also
+incorrectly materialized as rejection and could erase its request binding.
+
+Cleanup is now best-effort only after the result is durable. An OSError retains
+the original request and does not invent rejection or no-effect evidence.
+Restart reads the admitted original signed result and retires the original
+request without another pending dispatch. Before-publication failure has no
+published result; after-publication failure preserves its exact bytes. Node
+journal bytes and receipt bindings remain unchanged. Permanent malformed input
+still rejects before dispatch. These are component/storage faults using real
+Node journals and signatures; the broader Reality regression retains independent
+observation/MATCH requirements. The spool response alone is not an effect commit.
+
+Relevant Node/Reality/Artifact/Usage/Gateway/Workflow regressions: **712 passed**
+(137.37 s), before two additional malformed-input cases. Final remote-provider
+and protocol selection: **48 passed** on Python 3.12 (1.87 s), **48 passed** on
+Python 3.10 (1.93 s). Exact-source Windows/ARM64 CI and resulting-main validation
+are still required. The controlled defect matches a possible false-result path,
+not an established cause of the earlier Windows failure or Issues #4/#8.
+
+Main `c43f942` Multi-Arch run `38822457553`, Windows job `116724755654`, separately
+retains **1 failed, 4659 passed, 60 skipped, 272 deselected, 4 warnings** (1740.94 s).
+Its Connector timeout result was correctly `CONNECTOR_TIMEOUT`, but total local
+elapsed time **0.96258 s** exceeded the unchanged **0.5 s** assertion. No production
+or accepted-test change is made for that unexplained timing failure here.
+
+Temporary diagnostic source `195d366` and run `38827287779` use the existing
+Windows diagnostic workflow, retaining the same timeout/elapsed assertions while
+measuring adapter wait, registration, health and result-storage phases. Twenty
+isolated Windows samples pass (elapsed **0.03874–0.08554 s**, maximum health write
+0.06347 s); the adapter had not finished before release in all 20. This does not
+reproduce the full-suite failure, prove absence of a race, or qualify production
+Multi-Arch. The diagnostic branch must not be merged. Its prior recovery traces
+and all failed runs remain available. Kernel and component lock are unchanged.
+
+
+An independently explored local execution-worker drain prototype is **REJECTED**,
+not part of this spool fix. It incorrectly treated the transport task as execution
+owner. Its narrow 71-test selection passed, but the existing wider cancellation/
+reconnect contract retained **1 failed, 950 passed** (135.43 s): transport must
+return cancellation while the admitted handler remains journal-owned EXECUTING,
+then deliver its original completed result on reconnect with one invocation.
+The prototype made that valid contract wait for the held handler and reach its
+watchdog failure. The original test is unchanged, and no worker-drain change is
+included here. The local candidate, initial fixture failures and failed broader
+run are retained privately to prevent its accidental integration. Passing narrow
+probes did not justify overriding the existing authoritative recovery path.
+
+
+The retained-request recovery matrix also injects Node revocation before
+Controller restart. With the publication/cleanup fix alone, its corrected probe
+retained **4 failed, 4 passed**: re-entering execution admission to read a known
+result could replace it with a revoked-node rejection. The earlier probe also
+had two test-wrapper argument errors; those fixture errors are not evidence of
+a production defect. Recovery now validates the persisted Node signature and
+original request/receipt binding before reading already admitted evidence. It
+does not transfer artifacts or queue another execution. Changed retry inputs
+cannot erase or borrow the original result. The same revoked Node still rejects
+a separately submitted new workload, and its persisted REVOKED state survives.
+
+The four I/O boundaries, trusted/revoked Node and original/changed retry matrix
+retain byte-identical original journals and previously published results. Final
+protocol/provider selection: **60 passed** on Python 3.12 (2.62 s), **60 passed**
+on Python 3.10 (2.64 s). Expanded Node, Reality, Artifact, Governance, model,
+AgentSession, Workflow, Usage and Connector regression: **961 passed** (130.14 s).
+Exact-source platform CI must qualify this additional runtime change separately
+from the earlier publication-only source. No Kernel or component lock changed.
+
+Full-suite Connector diagnostic run `38828059028`, source `2393bd7`, retained
+**9 failed, 4680 passed, 60 skipped, 272 deselected, 4 warnings** (1887.40 s).
+Twenty instrumented Connector samples satisfy the unchanged 0.5-second bound
+(elapsed 0.06481–0.21026 s); health storage reaches 0.18288 s. This still does not
+reproduce or resolve the earlier 0.96258-second failure. Eight diagnostic failures
+are cp1252 Unicode output errors with uncaptured stdout. The remaining delayed
+Observation restart case ended WAITING instead of COMPLETED; its original
+assertion and failure remain, with cause unestablished. This diagnostic branch
+is not acceptance and must not merge. No production timeout, Connector assertion
+or effect verification is relaxed.
+
+
+Spool source `32f3c7d` passed four-platform Core `38856754480`, including Windows
+**4994 passed, 60 skipped, 4 warnings** (1515.80 s), but Multi-Arch `38856756820`
+retains Windows **1 failed, 4681 passed, 60 skipped, 272 deselected, 4 warnings**
+(1505.06 s). The delayed Observation restart case returned WAITING on a new
+independent read after its first held read had completed. It did not commit
+without observation. The production spool/Node implementation remains unchanged
+from that source; the failed Windows run is not treated as acceptance.
+
+A controlled second signed-read hold reproduces the same WAITING-versus-COMPLETED
+assertion with the old test driver (**1 failed**). That driver followed only one
+paused acquisition and assumed the next resume must finish synchronously. It
+now follows each distinct exact read's terminal signed evidence before another
+continuation, checking original Workflow, device, Node, capability, Artifact and
+mutation bindings at every pause. Missing read evidence still blocks; repeated
+already-consumed read IDs fail rather than spin. The existing final COMMITTED,
+MATCH, original Workflow and effect-count-one assertions remain, and both held
+observations are excluded from the final fresh verification. The original
+`delayed` and `missing` case IDs are preserved; `delayed-again` adds the second
+controlled pause. Production waits (including three seconds), receipt waits and
+retry settings do not change. The test driver also has the existing CI's
+60-second bound; it does not increase that CI limit. Python 3.10 recovery-driver
+selection: **9 passed** (41.68 s), including missing result and producer-failure
+cases. Fresh exact-head CI remains required. This corrects a demonstrated test
+consumer assumption, not an established root cause of Windows storage latency
+or proof that no runtime race exists. Issues #4/#8 remain open.
+
 ### Connector explicit admission contract — 2026-10-16
 
 **REUSE / FIX** the exported Connector library and existing Governance decision;
@@ -1420,3 +1543,25 @@ response-loss, effect-count, retry-budget or timeout assertion was weakened.
 The complete three-module Connector selection and Governance/Workflow regression
 are rerun before publishing the correction. The failed full CI is not relabelled
 as a baseline environment failure or erased.
+
+
+Automation source `2bc4166` Core `38857348310` retains Windows **1 failed,
+5104 passed, 60 skipped, 4 warnings** (1999.26 s): the device-disconnect test
+asserted Controller FAILED while its original terminal result had not yet
+projected and Work remained RUNNING. Source 443fc72's earlier qualification is
+superseded by this additional test-consumer correction; a cancelled superseded
+run is not a passing result. No production Runtime code changes in this step.
+
+A controlled signed-status hold reuses the original failure/disconnect test
+function and its assertions. Both faults reproduce the same pre-terminal
+assertion (**2 failed**). At that barrier the actual Node journal is FAILED,
+Controller Work is RUNNING, no Controller result exists and effect count is zero.
+After release the original test now waits for that exact result and calls the
+existing Controller reconciliation. FAILED, OFFLINE, zero-effect and no
+re-execution-after-reconnect/resume assertions remain. Four immediate/held
+cases pass on Python 3.12 (1.16 s) and 3.10 (1.17 s). The full Reality suite has
+**118 passed** on Python 3.12 (122.11 s) and **118 passed** on Python 3.10
+(123.76 s), including the repeated independent-read pause correction. Neither
+10-second production waits nor the existing 60-second CI limit changes.
+This demonstrates an asynchronous projection assumption, not the cause of
+Windows delay or a completed performance/physical/network qualification.
