@@ -169,6 +169,10 @@ def test_official_sdk_stdio_calls_actual_runtime_http(runtime):
     from mcp import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
+    import tempfile
+
+    error_log = tempfile.TemporaryFile(mode="w+")
+
     async def scenario():
         params = StdioServerParameters(
             command=sys.executable,
@@ -183,7 +187,7 @@ def test_official_sdk_stdio_calls_actual_runtime_http(runtime):
             env={"PATH": os.environ["PATH"], "APEIR_MCP_API_TOKEN": TOKEN},
             cwd=str(Path(__file__).resolve().parents[2]),
         )
-        async with stdio_client(params) as (reader, writer):
+        async with stdio_client(params, errlog=error_log) as (reader, writer):
             async with ClientSession(reader, writer) as client:
                 initialized = await client.initialize()
                 assert initialized.server_info.name == "APEIR Runtime"
@@ -213,7 +217,12 @@ def test_official_sdk_stdio_calls_actual_runtime_http(runtime):
                     == "NOUS_APPROVAL_REQUIRED"
                 )
 
-    asyncio.run(scenario())
+    try:
+        asyncio.run(scenario())
+        error_log.seek(0)
+        assert TOKEN not in error_log.read()
+    finally:
+        error_log.close()
     assert not runtime["calls"]
 
 
@@ -389,3 +398,54 @@ def test_authenticated_credential_never_becomes_work_input(runtime, monkeypatch)
     assert fake_credential not in json.dumps(result)
     assert fake_credential not in json.dumps(runtime["gate"].store.operation_audit())
     assert not runtime["calls"]
+
+
+def test_cancelled_bridge_closes_transport_without_retry():
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    received = threading.Event()
+    disconnected = threading.Event()
+    calls = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            calls.append(self.path)
+            received.set()
+            self.connection.settimeout(5)
+            try:
+                if self.connection.recv(1) == b"":
+                    disconnected.set()
+            except OSError:
+                pass
+            self.close_connection = True
+
+        def log_message(self, *_):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    try:
+        bridge = create_mcp_server(f"http://127.0.0.1:{server.server_port}", TOKEN)
+
+        async def scenario():
+            call = asyncio.create_task(bridge.call_tool("apeir.nodes.list", {}))
+            try:
+                assert await asyncio.to_thread(received.wait, 5)
+                call.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await call
+                assert await asyncio.to_thread(disconnected.wait, 2)
+            finally:
+                if not call.done():
+                    call.cancel()
+                await asyncio.gather(call, return_exceptions=True)
+
+        asyncio.run(scenario())
+        assert calls == ["/api/v1/mcp/call"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(5)
+        assert not thread.is_alive()

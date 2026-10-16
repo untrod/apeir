@@ -679,7 +679,7 @@ configuration or command argument. The bridge delegates that credential only to
 one host-configured Controller origin:
 
 ```bash
-apeir extension serve-mcp --runtime-url http://127.0.0.1:8765
+apeir extension serve-mcp --runtime-url http://127.0.0.1:8770
 ```
 
 Remote Controller origins require HTTPS and the platform certificate trust

@@ -349,3 +349,18 @@ finally:
             if process.poll() is None:
                 process.terminate()
             process.wait(timeout=5)
+
+
+@pytest.mark.parametrize("key", ["", "x" * 129, "../outside", None])
+def test_invalid_original_submission_is_rejected_before_approval(
+    tmp_path, monkeypatch, key
+):
+    calls = []
+    host = WorkSupervisor(tmp_path, component_factory=components(calls))
+    with server_for(tmp_path, host, monkeypatch) as post:
+        response = post({"objective": "Read original state", "idempotency_key": key})
+        assert (
+            not response["ok"] and response["error"]["code"] == "NOUS_INVALID_REQUEST"
+        )
+        assert post.approvals == []
+        assert not calls

@@ -22,6 +22,7 @@ from nous_runtime.governance.broker import ApprovalBroker
 from nous_runtime.governance.contracts import AuthorizationContext
 from nous_runtime.governance.store import GovernanceStore
 from nous_runtime.project.workspace import default_workspace_path
+from nous_runtime.cli.runtime_api import DEFAULT_RUNTIME_API_PORT
 
 
 extension_app = typer.Typer(
@@ -363,7 +364,9 @@ def remove_extension(
 
 @extension_app.command("serve-mcp")
 def serve_runtime_mcp(
-    runtime_url: str = typer.Option("http://127.0.0.1:8765", "--runtime-url"),
+    runtime_url: str = typer.Option(
+        f"http://127.0.0.1:{DEFAULT_RUNTIME_API_PORT}", "--runtime-url"
+    ),
 ):
     """Serve standard MCP over stdio using a scoped existing Runtime identity."""
     from nous_runtime.extensions.mcp_server import serve_mcp

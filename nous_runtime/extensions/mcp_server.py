@@ -14,9 +14,7 @@ import json
 import os
 import re
 from typing import Literal
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from nous_runtime.api.responses import err_response, ok_response
 from nous_runtime.core.redaction import redact_sensitive_data, register_sensitive_value
@@ -347,13 +345,10 @@ def handle_mcp_call(body, *, authorization_context=None):
         )
 
 
-class _NoRedirect(HTTPRedirectHandler):
-    def redirect_request(self, *_args, **_kwargs):
-        return None
-
-
 def create_mcp_server(runtime_url, token):
     """Build the official stdio server; credentials travel only to one origin."""
+    import anyio
+    import httpx2
     from mcp.server import MCPServer
     from mcp.types import CallToolResult, TextContent, ToolAnnotations
 
@@ -388,9 +383,8 @@ def create_mcp_server(runtime_url, token):
         )
     register_sensitive_value(token)
     endpoint = runtime_url.rstrip("/") + "/api/v1/mcp/call"
-    opener = build_opener(_NoRedirect())
 
-    def forward(tool, arguments):
+    async def forward(tool, arguments):
         if redact_sensitive_data(arguments) != arguments:
             result = err_response(
                 "NOUS_INVALID_REQUEST", "Sensitive material is not ordinary MCP input"
@@ -400,36 +394,50 @@ def create_mcp_server(runtime_url, token):
                 structured_content=result,
                 is_error=True,
             )
-        request = Request(
-            endpoint,
-            data=json.dumps({"tool": tool, "arguments": arguments}).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": "Bearer " + token,
-            },
-        )
         try:
-            try:
-                response = opener.open(request, timeout=10)
-            except HTTPError as exc:
-                response = exc
-            with response:
-                if 300 <= response.status < 400:
-                    raise ValueError(
-                        "Controller redirects are not credential delegation"
-                    )
-                raw = response.read(_MAX_RESPONSE + 1)
-                if len(raw) > _MAX_RESPONSE:
-                    raise ValueError("MCP response exceeds its bound")
-                result = json.loads(raw)
-                if not isinstance(result, dict) or not isinstance(
-                    result.get("ok"), bool
-                ):
-                    raise ValueError("Invalid Runtime response")
-                if not 200 <= response.status < 300 and result["ok"]:
-                    raise ValueError("HTTP failure cannot certify a successful tool")
+            # A per-read timeout alone does not bound a stalled/dripping reply.
+            # Cancellation closes this request; it never cancels or reissues the
+            # original Runtime Work that may already have been admitted.
+            with anyio.fail_after(10):
+                async with httpx2.AsyncClient(
+                    follow_redirects=False, timeout=10, trust_env=True
+                ) as client:
+                    async with client.stream(
+                        "POST",
+                        endpoint,
+                        json={"tool": tool, "arguments": arguments},
+                        headers={
+                            "Authorization": "Bearer " + token,
+                            "Accept-Encoding": "identity",
+                        },
+                    ) as response:
+                        if 300 <= response.status_code < 400:
+                            raise ValueError(
+                                "Controller redirects are not credential delegation"
+                            )
+                        if (
+                            response.headers.get("Content-Encoding", "identity").lower()
+                            != "identity"
+                        ):
+                            raise ValueError(
+                                "Compressed Runtime responses are not admitted"
+                            )
+                        raw = bytearray()
+                        async for chunk in response.aiter_raw(chunk_size=65536):
+                            raw.extend(chunk)
+                            if len(raw) > _MAX_RESPONSE:
+                                raise ValueError("MCP response exceeds its bound")
+                        result = json.loads(raw)
+                        if not isinstance(result, dict) or not isinstance(
+                            result.get("ok"), bool
+                        ):
+                            raise ValueError("Invalid Runtime response")
+                        if not 200 <= response.status_code < 300 and result["ok"]:
+                            raise ValueError(
+                                "HTTP failure cannot certify a successful tool"
+                            )
             result = redact_sensitive_data(result)
-        except (URLError, OSError, ValueError):
+        except (httpx2.HTTPError, TimeoutError, OSError, ValueError, RecursionError):
             result = err_response(
                 "MCP_RESPONSE_UNKNOWN",
                 "Query original Work evidence; this transport never retries a submission",
@@ -449,13 +457,11 @@ def create_mcp_server(runtime_url, token):
 
     @server.tool(name="apeir.nodes.list", annotations=read)
     async def nodes_list():
-        return await asyncio.to_thread(forward, "apeir.nodes.list", {})
+        return await forward("apeir.nodes.list", {})
 
     @server.tool(name="apeir.devices.inspect", annotations=read)
     async def device_inspect(device_id: str):
-        return await asyncio.to_thread(
-            forward, "apeir.devices.inspect", {"device_id": device_id}
-        )
+        return await forward("apeir.devices.inspect", {"device_id": device_id})
 
     @server.tool(
         name="apeir.work.submit",
@@ -464,8 +470,7 @@ def create_mcp_server(runtime_url, token):
         ),
     )
     async def work_submit(objective: str, idempotency_key: str):
-        return await asyncio.to_thread(
-            forward,
+        return await forward(
             "apeir.work.submit",
             {"objective": objective, "idempotency_key": idempotency_key},
         )
@@ -474,17 +479,13 @@ def create_mcp_server(runtime_url, token):
     async def work_status(
         run_id: str, owner: Literal["work-harness", "distributed"] = "work-harness"
     ):
-        return await asyncio.to_thread(
-            forward, "apeir.work.status", {"run_id": run_id, "owner": owner}
-        )
+        return await forward("apeir.work.status", {"run_id": run_id, "owner": owner})
 
     @server.tool(name="apeir.evidence.read", annotations=read)
     async def evidence_read(
         run_id: str, owner: Literal["work-harness", "distributed"] = "work-harness"
     ):
-        return await asyncio.to_thread(
-            forward, "apeir.evidence.read", {"run_id": run_id, "owner": owner}
-        )
+        return await forward("apeir.evidence.read", {"run_id": run_id, "owner": owner})
 
     return server
 

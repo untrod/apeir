@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -330,7 +331,9 @@ def _work_submission(body, *, authorization_context=None, lookup_only=False):
 
         submission_key = body.get("idempotency_key", "")
         if "idempotency_key" in body and (
-            not isinstance(submission_key, str) or not submission_key
+            not isinstance(submission_key, str)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", submission_key)
+            is None
         ):
             return err(
                 "NOUS_INVALID_REQUEST",

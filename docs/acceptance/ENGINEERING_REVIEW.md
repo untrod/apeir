@@ -2484,3 +2484,21 @@ fixture value used in SecretHandle field names (1 failed32 setup errors774 passe
 it is rejected without changing the redactor, legacy fixtures or their assertions.
 Raw failures remain separate from passing results. This is scoped software
 qualification; final composed source CI and actual-provider Gates remain separate.
+
+Composed candidate `08f2416` (including all queued integration dependencies):
+**1195 passed,19 skipped (76.91s)** across Extension/Work/Agent/Governance,
+Control Plane/Skill/Environment/Artifact/benchmark, API freeze and focused Node
+shutdown/reconciliation. Python3.10: **289 passed (24.86s)**. Gateway accounting,
+cost and Context combination: **560 passed (19.60s)**. These overlapping scopes
+are not added into a synthetic total.
+
+A further real-socket cancellation test fails the old blocking-thread bridge
+(**1 failed,7.08s**): cancelling the caller leaves its HTTP request running.
+The bridge now uses the MCP dependency's async HTTP client, a whole-call deadline,
+explicit no-redirect/no-retry and bounded uncompressed responses. Cancellation
+closes its own transport, not the original Runtime Work. The corrected focused
+CLI/MCP/submission set, with invalid keys rejected before requesting approval,
+is **50 passed (17.86s)**. This is correctness/resource ownership, not a measured
+speed improvement. Official Codex direct-MCP qualification against that async
+code: **1 passed (9.66s)**, report `apeir-codex-mcp-direct-duw7n7vt/report.json`,
+no model Turns and clean owned-process exit. Final composed CI remains required.
