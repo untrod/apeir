@@ -125,9 +125,13 @@ async def _await_original_observation_hold(entered, resumption):
             await reached
 
 
-@pytest.mark.parametrize("deliver_result", [True, False], ids=["delayed", "missing"])
+@pytest.mark.parametrize(
+    "deliver_result,held_reads",
+    [(True, 1), (False, 1), (True, 2)],
+    ids=["delayed", "missing", "delayed-again"],
+)
 def test_delayed_observation_after_restart_requires_original_read_evidence(
-    tmp_path, monkeypatch, deliver_result
+    tmp_path, monkeypatch, deliver_result, held_reads
 ):
     async def scenario():
         async with simulation(tmp_path, single_connection=True) as first:
@@ -156,6 +160,8 @@ def test_delayed_observation_after_restart_requires_original_read_evidence(
         entered, release = asyncio.Event(), asyncio.Event()
         original_send = NodeRelayClient._send
         held = {}
+        second_held = {}
+        second_entered, second_release = asyncio.Event(), asyncio.Event()
 
         async def hold_observation(self, websocket, message_type, payload, **kwargs):
             if (
@@ -166,6 +172,16 @@ def test_delayed_observation_after_restart_requires_original_read_evidence(
                 held.update(payload)
                 entered.set()
                 await release.wait()
+            elif (
+                held_reads == 2
+                and message_type == "WORKLOAD_STATUS"
+                and str(payload.get("workload_id", "")).startswith("observe_")
+                and payload["workload_id"] != held.get("workload_id")
+                and not second_held
+            ):
+                second_held.update(payload)
+                second_entered.set()
+                await second_release.wait()
             return await original_send(self, websocket, message_type, payload, **kwargs)
 
         monkeypatch.setattr(NodeRelayClient, "_send", hold_observation)
@@ -214,6 +230,20 @@ def test_delayed_observation_after_restart_requires_original_read_evidence(
                     assert restored.provider.execution_count(WORK_ID) == 1
                     return
                 release.set()
+                if held_reads == 2:
+                    await _await_original_observation_hold(second_entered, resumption)
+                    second_id = second_held["workload_id"]
+                    await wait_for(
+                        lambda: (
+                            restored.coordinator.require(paused.session_id).error
+                            == f"distributed Workflow Work timed out: {second_id}"
+                        )
+                    )
+                    assert restored.work().state is DistributedWorkState.VERIFIED
+                    assert not restored.work().effect_verification
+                    assert second_id not in restored.server.results
+                    assert restored.provider.execution_count(WORK_ID) == 1
+                    second_release.set()
                 result = await resumption
                 assert result.state is AgentSessionState.COMPLETED
                 assert result.workflow_run_id == paused.workflow_run_id
@@ -224,8 +254,13 @@ def test_delayed_observation_after_restart_requires_original_read_evidence(
                 # The existing finalizer acquires a fresh independent read on
                 # continuation. It does not replay the revoked mutation.
                 assert held["output"]["observation_id"] not in observation_ids
+                if second_held:
+                    assert (
+                        second_held["output"]["observation_id"] not in observation_ids
+                    )
             finally:
                 release.set()
+                second_release.set()
                 with contextlib.suppress(asyncio.CancelledError):
                     await resumption
 

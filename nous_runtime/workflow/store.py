@@ -8,7 +8,7 @@ import hashlib
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from nous_runtime.core.redaction import redact_sensitive_data
 from nous_runtime.locking import file_lock
@@ -64,6 +64,15 @@ class WorkflowStore:
                 CREATE TABLE IF NOT EXISTS workflow_checkpoints (
                     run_id TEXT NOT NULL, step_id TEXT NOT NULL, checkpoint_json TEXT NOT NULL,
                     PRIMARY KEY(run_id, step_id)
+                );
+                CREATE TABLE IF NOT EXISTS workflow_automations (
+                    automation_id TEXT PRIMARY KEY, binding_json TEXT NOT NULL,
+                    binding_digest TEXT NOT NULL, enabled INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS workflow_automation_triggers (
+                    automation_id TEXT NOT NULL, trigger_key TEXT NOT NULL,
+                    run_id TEXT NOT NULL UNIQUE,
+                    PRIMARY KEY(automation_id, trigger_key)
                 );
                 """
             )
@@ -136,42 +145,234 @@ class WorkflowStore:
         self._require_unredacted(run.inputs)
         with self._db() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            definition = self._definition_for_run(connection, run)
-            run.definition_digest = self.definition_digest(definition)
-            run.inputs_digest = self.inputs_digest(run.inputs)
-            if run.idempotency_key:
-                row = connection.execute(
-                    "SELECT run_json FROM workflow_runs WHERE workflow_id = ? AND idempotency_key = ?",
-                    (run.workflow_id, run.idempotency_key),
-                ).fetchone()
-                if row:
-                    previous = self._run(json.loads(row[0]))
-                    self._validate_run(
-                        previous,
-                        definition=self._definition_for_run(connection, previous),
-                    )
-                    if (
-                        previous.workflow_version != run.workflow_version
-                        or self.inputs_digest(previous.inputs) != run.inputs_digest
-                        or previous.definition_digest
-                        and previous.definition_digest != run.definition_digest
-                    ):
-                        raise WorkflowBindingError(
-                            "Workflow idempotency binding changed"
-                        )
-                    return previous
+            return self._create_run(connection, run)
+
+    def _create_run(self, connection, run: WorkflowRun) -> WorkflowRun:
+        definition = self._definition_for_run(connection, run)
+        run.definition_digest = self.definition_digest(definition)
+        run.inputs_digest = self.inputs_digest(run.inputs)
+        if run.idempotency_key:
+            row = connection.execute(
+                "SELECT run_json FROM workflow_runs WHERE workflow_id = ? AND idempotency_key = ?",
+                (run.workflow_id, run.idempotency_key),
+            ).fetchone()
+            if row:
+                previous = self._run(json.loads(row[0]))
+                self._validate_run(
+                    previous,
+                    definition=self._definition_for_run(connection, previous),
+                )
+                if (
+                    previous.workflow_version != run.workflow_version
+                    or self.inputs_digest(previous.inputs) != run.inputs_digest
+                    or previous.definition_digest
+                    and previous.definition_digest != run.definition_digest
+                ):
+                    raise WorkflowBindingError("Workflow idempotency binding changed")
+                return previous
+        connection.execute(
+            "INSERT INTO workflow_runs VALUES (?, ?, ?, ?, ?, NULLIF(?, ''))",
+            (
+                run.run_id,
+                run.workflow_id,
+                run.workflow_version,
+                run.state.value,
+                _safe_json(self._run_dict(run), sort_keys=True),
+                run.idempotency_key,
+            ),
+        )
+        return run
+
+    def put_automation(
+        self,
+        binding: dict[str, Any],
+        *,
+        before_publish: Callable[[], None] | None = None,
+    ) -> dict[str, Any]:
+        """Bind a trigger proposal to an immutable original Workflow definition."""
+        self._require_unredacted(binding)
+        with self._db() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._validate_automation_definition(connection, binding)
+            previous = connection.execute(
+                "SELECT * FROM workflow_automations WHERE automation_id=?",
+                (binding["id"],),
+            ).fetchone()
+            if previous and previous["binding_digest"] != binding_digest(binding):
+                raise WorkflowBindingError("Automation binding changed")
+            if before_publish is not None:
+                before_publish()
+            if previous:
+                return self._automation(previous)
             connection.execute(
-                "INSERT INTO workflow_runs VALUES (?, ?, ?, ?, ?, NULLIF(?, ''))",
+                "INSERT INTO workflow_automations VALUES (?, ?, ?, 1)",
                 (
-                    run.run_id,
-                    run.workflow_id,
-                    run.workflow_version,
-                    run.state.value,
-                    _safe_json(self._run_dict(run), sort_keys=True),
-                    run.idempotency_key,
+                    binding["id"],
+                    _safe_json(binding, sort_keys=True),
+                    binding_digest(binding),
                 ),
             )
-        return run
+        return {**binding, "enabled": True}
+
+    @staticmethod
+    def _automation(row) -> dict[str, Any]:
+        value = json.loads(row["binding_json"])
+        if (
+            value.get("id") != row["automation_id"]
+            or binding_digest(value) != row["binding_digest"]
+            or row["enabled"] not in (0, 1)
+        ):
+            raise WorkflowBindingError("Automation persisted binding changed")
+        return {**value, "enabled": bool(row["enabled"])}
+
+    def get_automation(self, automation_id: str) -> dict[str, Any]:
+        with self._db() as connection:
+            row = connection.execute(
+                "SELECT * FROM workflow_automations WHERE automation_id=?",
+                (automation_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(automation_id)
+        return self._automation(row)
+
+    def list_automations(self) -> list[dict[str, Any]]:
+        with self._db() as connection:
+            rows = connection.execute(
+                "SELECT * FROM workflow_automations ORDER BY rowid DESC LIMIT 500"
+            ).fetchall()
+        return [self._automation(row) for row in rows]
+
+    def set_automation_enabled(
+        self,
+        automation_id: str,
+        enabled: bool,
+        *,
+        before_publish: Callable[[], None] | None = None,
+    ) -> dict[str, Any]:
+        """Update configuration, optionally rechecking authority after writer admission."""
+        with self._db() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM workflow_automations WHERE automation_id=?",
+                (automation_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(automation_id)
+            binding = self._automation(row)
+            self._validate_automation_definition(connection, binding)
+            # Trusted callbacks only revalidate authority. Keep the Workflow
+            # writer held so another connection cannot replace the binding.
+            if before_publish is not None:
+                before_publish()
+            connection.execute(
+                "UPDATE workflow_automations SET enabled=? WHERE automation_id=?",
+                (int(enabled), automation_id),
+            )
+        return self.get_automation(automation_id)
+
+    def claim_automation_run(
+        self,
+        automation_id: str,
+        trigger_key: str,
+        *,
+        before_publish: Callable[[], None] | None = None,
+    ) -> WorkflowRun:
+        """Atomically save the original run before a consumer can invoke handlers."""
+        with self._db() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM workflow_automations WHERE automation_id=?",
+                (automation_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(automation_id)
+            binding = self._automation(row)
+            self._validate_automation_definition(connection, binding)
+            inputs = {
+                **binding["inputs"],
+                "_automation_id": automation_id,
+                "_agent_id": "automation:" + automation_id,
+                "_plan_id": binding["plan_id"],
+                "_workflow_id": binding["workflow_id"],
+            }
+            previous = connection.execute(
+                "SELECT run_id FROM workflow_automation_triggers WHERE automation_id=? AND trigger_key=?",
+                (automation_id, trigger_key),
+            ).fetchone()
+            if previous:
+                run = self._require_run(connection, previous[0])
+                self._validate_run(
+                    run, definition=self._definition_for_run(connection, run)
+                )
+                if (
+                    run.workflow_id != binding["workflow_id"]
+                    or run.workflow_version != binding["version"]
+                    or self.inputs_digest(inputs) != self.inputs_digest(run.inputs)
+                    or run.idempotency_key
+                    != "automation:" + automation_id + ":" + binding_digest(trigger_key)
+                    or run.definition_digest != binding["definition_digest"]
+                    or run.inputs_digest != self.inputs_digest(inputs)
+                ):
+                    raise WorkflowBindingError(
+                        "Automation original run binding changed"
+                    )
+                return run
+            if not binding["enabled"]:
+                raise ValueError("Automation is disabled")
+            if before_publish is not None:
+                before_publish()
+            self._require_unredacted(inputs)
+            run = self._create_run(
+                connection,
+                WorkflowRun(
+                    binding["workflow_id"],
+                    binding["version"],
+                    inputs,
+                    idempotency_key="automation:"
+                    + automation_id
+                    + ":"
+                    + binding_digest(trigger_key),
+                ),
+            )
+            connection.execute(
+                "INSERT INTO workflow_automation_triggers VALUES (?, ?, ?)",
+                (automation_id, trigger_key, run.run_id),
+            )
+            return run
+
+    def automation_history(
+        self, automation_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        self.get_automation(automation_id)
+        with self._db() as connection:
+            rows = connection.execute(
+                "SELECT trigger_key, run_id FROM workflow_automation_triggers WHERE automation_id=? ORDER BY rowid DESC LIMIT ?",
+                (automation_id, max(1, min(limit, 500))),
+            ).fetchall()
+            return [
+                {
+                    "trigger_key": row[0],
+                    "run": self._run_dict(self._require_run(connection, row[1])),
+                }
+                for row in rows
+            ]
+
+    def automation_run(self, automation_id: str, run_id: str) -> WorkflowRun:
+        with self._db() as connection:
+            row = connection.execute(
+                "SELECT trigger_key FROM workflow_automation_triggers WHERE automation_id=? AND run_id=?",
+                (automation_id, run_id),
+            ).fetchone()
+        if row is None:
+            raise WorkflowBindingError("Run is not the original Automation trigger")
+        return self.claim_automation_run(automation_id, row[0])
+
+    def _validate_automation_definition(self, connection, binding):
+        definition = self._definition_for_run(
+            connection, WorkflowRun(binding["workflow_id"], binding["version"], {})
+        )
+        if self.definition_digest(definition) != binding["definition_digest"]:
+            raise WorkflowBindingError("Automation Workflow definition changed")
 
     def save_run(self, run: WorkflowRun) -> None:
         with self._db() as connection:

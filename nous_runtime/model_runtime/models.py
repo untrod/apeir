@@ -13,8 +13,10 @@ from nous_runtime.model_runtime.errors import ModelRuntimeError
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace(
-        "+00:00", "Z"
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
     )
 
 
@@ -110,9 +112,7 @@ def _enum_value(value: Enum | str, enum_type: type[Enum], field_name: str) -> An
         return enum_type(str(value))
     except ValueError as exc:
         allowed = ", ".join(item.value for item in enum_type)
-        raise ModelRuntimeError(
-            f"{field_name} must be one of: {allowed}"
-        ) from exc
+        raise ModelRuntimeError(f"{field_name} must be one of: {allowed}") from exc
 
 
 def _enum_set(
@@ -120,10 +120,7 @@ def _enum_set(
     enum_type: type[Enum],
     field_name: str,
 ) -> frozenset[Any]:
-    return frozenset(
-        _enum_value(value, enum_type, field_name)
-        for value in values
-    )
+    return frozenset(_enum_value(value, enum_type, field_name) for value in values)
 
 
 @dataclass(frozen=True)
@@ -227,9 +224,7 @@ class ModelDescriptor:
             self,
             "capabilities",
             frozenset(
-                str(item).strip()
-                for item in self.capabilities
-                if str(item).strip()
+                str(item).strip() for item in self.capabilities if str(item).strip()
             ),
         )
         context_length = int(self.context_length)
@@ -280,7 +275,9 @@ class ModelDescriptor:
     def supports(
         self,
         capabilities: set[str] | frozenset[str] | tuple[str, ...],
-        modalities: set[ModelModality] | frozenset[ModelModality] | tuple[ModelModality, ...],
+        modalities: set[ModelModality]
+        | frozenset[ModelModality]
+        | tuple[ModelModality, ...],
     ) -> bool:
         required_modalities = _enum_set(
             tuple(modalities),
@@ -331,21 +328,13 @@ class ModelDescriptor:
             reasoning_level=str(
                 data.get("reasoning_level") or CapabilityLevel.MEDIUM.value
             ),
-            coding_level=str(
-                data.get("coding_level") or CapabilityLevel.MEDIUM.value
-            ),
-            vision_level=str(
-                data.get("vision_level") or CapabilityLevel.NONE.value
-            ),
+            coding_level=str(data.get("coding_level") or CapabilityLevel.MEDIUM.value),
+            vision_level=str(data.get("vision_level") or CapabilityLevel.NONE.value),
             latency_level=str(
                 data.get("latency_level") or CapabilityLevel.MEDIUM.value
             ),
-            cost_level=str(
-                data.get("cost_level") or CapabilityLevel.MEDIUM.value
-            ),
-            privacy_class=str(
-                data.get("privacy_class") or PrivacyClass.STANDARD.value
-            ),
+            cost_level=str(data.get("cost_level") or CapabilityLevel.MEDIUM.value),
+            privacy_class=str(data.get("privacy_class") or PrivacyClass.STANDARD.value),
             license_info=dict(data.get("license_info") or {}),
             resource_requirements=ResourceRequirements.from_dict(
                 data.get("resource_requirements") or {}
@@ -390,9 +379,7 @@ class ModelInstance:
         if self.max_concurrency < 1:
             raise ModelRuntimeError("max_concurrency must be at least 1")
         if self.memory_mb < 0 or self.vram_mb < 0:
-            raise ModelRuntimeError(
-                "instance memory values must be non-negative"
-            )
+            raise ModelRuntimeError("instance memory values must be non-negative")
         self.metadata = dict(self.metadata)
 
     @property
@@ -429,9 +416,7 @@ class ModelInstance:
             model_id=str(data.get("model_id") or ""),
             node_id=str(data.get("node_id") or ""),
             backend=str(data.get("backend") or ""),
-            state=str(
-                data.get("state") or ModelInstanceState.NOT_LOADED.value
-            ),
+            state=str(data.get("state") or ModelInstanceState.NOT_LOADED.value),
             active_requests=int(data.get("active_requests") or 0),
             max_concurrency=(
                 int(data["max_concurrency"])
@@ -449,6 +434,7 @@ class ModelInstance:
 @dataclass(frozen=True)
 class ModelRequest:
     task_id: str
+    _input_admission: Any = field(default=None, repr=False, compare=False, kw_only=True)
     required_capabilities: frozenset[str] = field(default_factory=frozenset)
     required_modalities: frozenset[ModelModality] = field(
         default_factory=lambda: frozenset({ModelModality.TEXT})
@@ -555,24 +541,16 @@ class ModelRequest:
                 float(self.max_cost_usd),
             )
         if self.min_context_length < 0:
-            raise ModelRuntimeError(
-                "min_context_length must be non-negative"
-            )
+            raise ModelRuntimeError("min_context_length must be non-negative")
         if (
             not math.isfinite(self.quality_target)
             or not 0.0 <= self.quality_target <= 1.0
         ):
-            raise ModelRuntimeError(
-                "quality_target must be between 0.0 and 1.0"
-            )
+            raise ModelRuntimeError("quality_target must be between 0.0 and 1.0")
         if self.max_latency_ms is not None and self.max_latency_ms < 0:
-            raise ModelRuntimeError(
-                "max_latency_ms must be non-negative"
-            )
+            raise ModelRuntimeError("max_latency_ms must be non-negative")
         if self.max_cost_usd is not None and self.max_cost_usd < 0:
-            raise ModelRuntimeError(
-                "max_cost_usd must be non-negative"
-            )
+            raise ModelRuntimeError("max_cost_usd must be non-negative")
         if not math.isfinite(self.timeout_s) or self.timeout_s <= 0:
             raise ModelRuntimeError("timeout_s must be positive")
         object.__setattr__(
@@ -617,20 +595,14 @@ class ModelRequest:
         return cls(
             request_id=str(data.get("request_id") or _identifier("modelreq")),
             task_id=str(data.get("task_id") or ""),
-            required_capabilities=frozenset(
-                data.get("required_capabilities") or ()
-            ),
-            required_modalities=frozenset(
-                data.get("required_modalities") or ("text",)
-            ),
+            required_capabilities=frozenset(data.get("required_capabilities") or ()),
+            required_modalities=frozenset(data.get("required_modalities") or ("text",)),
             messages=tuple(data.get("messages") or ()),
             attachments=tuple(data.get("attachments") or ()),
             role=str(data.get("role") or ModelRole.WORKER.value),
             preferred_models=tuple(data.get("preferred_models") or ()),
             forbidden_models=frozenset(data.get("forbidden_models") or ()),
-            routing_mode=str(
-                data.get("routing_mode") or RoutingMode.AUTO.value
-            ),
+            routing_mode=str(data.get("routing_mode") or RoutingMode.AUTO.value),
             privacy_policy=str(
                 data.get("privacy_policy") or PrivacyClass.STANDARD.value
             ),
@@ -652,9 +624,7 @@ class ModelRequest:
                 else None
             ),
             timeout_s=(
-                float(data["timeout_s"])
-                if data.get("timeout_s") is not None
-                else 60.0
+                float(data["timeout_s"]) if data.get("timeout_s") is not None else 60.0
             ),
             stream=bool(data.get("stream", False)),
             metadata=dict(data.get("metadata") or {}),
@@ -714,14 +684,8 @@ class ModelResponse:
     def __post_init__(self) -> None:
         object.__setattr__(self, "cost_usd", float(self.cost_usd))
         object.__setattr__(self, "latency_ms", int(self.latency_ms))
-        if (
-            not math.isfinite(self.cost_usd)
-            or self.cost_usd < 0
-            or self.latency_ms < 0
-        ):
-            raise ModelRuntimeError(
-                "response cost and latency must be non-negative"
-            )
+        if not math.isfinite(self.cost_usd) or self.cost_usd < 0 or self.latency_ms < 0:
+            raise ModelRuntimeError("response cost and latency must be non-negative")
         object.__setattr__(self, "usage", dict(self.usage))
         object.__setattr__(self, "metadata", dict(self.metadata))
 
@@ -754,15 +718,11 @@ class ModelPackage:
 
     def __post_init__(self) -> None:
         if not self.package_id or not self.model_id:
-            raise ModelRuntimeError(
-                "package_id and model_id are required"
-            )
+            raise ModelRuntimeError("package_id and model_id are required")
         object.__setattr__(self, "disk_mb", int(self.disk_mb))
         object.__setattr__(self, "vram_mb", int(self.vram_mb))
         if self.disk_mb < 0 or self.vram_mb < 0:
-            raise ModelRuntimeError(
-                "package resource values must be non-negative"
-            )
+            raise ModelRuntimeError("package resource values must be non-negative")
         object.__setattr__(
             self,
             "capabilities",

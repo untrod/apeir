@@ -61,8 +61,9 @@ Auth: Bearer token via `Authorization` header. Public: `/api/v1/health`, `/api/v
 | GET | `/devices` | — | `{ devices, total, online, liveness_status, source }` |
 | POST | `/devices/scan` | absent or `{}` | `{ discovered: [], timestamp, status: "UNAVAILABLE", scan_performed: false, reason }` |
 | GET | `/automations` | — | `{ automations, total }` |
-| POST | `/automations/add` | `{ name, trigger, schedule?, action }` | `Automation` |
-| POST | `/automations/action` | `{ action, automation_id }` | `{ ok: true }` |
+| POST | `/automations/add` | Legacy `{ name, trigger, schedule?, action }`; explicit simulation `{ adapter: "simulated-reality", name, trigger: "manual"\|"schedule", due_at?, firmware_version? }` | Legacy UNQUALIFIED config or immutable simulated Workflow binding |
+| POST | `/automations/action` | `{ action, automation_id?, trigger_key?, run_id?, limit? }` | Actual original Workflow/Work state; `run_due` returns bounded runs |
+| GET | `/automations/{automation_id}/history` | `?limit=` | Original trigger/run, Work, receipt/observation/verification and verified CAS evidence |
 | GET | `/knowledge` | `?category=` | `{ items, total }` |
 | POST | `/knowledge/add` | `{ title, category, content }` | `KnowledgeItem` |
 | GET | `/security/permissions` | — | `{ permissions }` |
@@ -73,6 +74,27 @@ Auth: Bearer token via `Authorization` header. Public: `/api/v1/health`, `/api/v
 | GET | `/workspace` | — | `WorkspaceEntry` |
 | GET | `/health/dashboard` | — | `HealthDashboard` |
 | GET | `/service/status` | — | `ServiceStatus` |
+
+The qualified Automation actions are `trigger`, `run_due` (1–10 one-shot due
+proposals), `resume`, `reconcile`, `cancel`, `enable` and `disable`. Execution
+is explicitly simulated; `enabled` grants no authority. A new firmware Work
+pauses for separate trusted human approval. Repeated trigger keys only project
+the original run; `resume` never accepts changed inputs or approval hints.
+`reconcile` observes original effects without entering a mutation handler.
+Management uses the existing live human session/nonce boundary and
+`control.automation.manage`; listing and bound history use
+`control.automation.read`. HTTP admission applies to empty, legacy-only and
+mixed stores alike. Legacy direct local configuration remains compatible and
+UNQUALIFIED; it cannot execute or seed approval.
+The existing Governance human boundary also checks `governance.approve` for
+the workspace. No background timer or recurring Cron is implemented.
+
+The Operations Automation pane is a consumer of this API, including structured
+creation, explicit trigger/due polling, original history, approval, reconciliation
+and cancellation. It binds each mutation to the captured current Controller
+configuration epoch and human session. A lost response retains the original key
+and uses history; it never reports success from a local button state. Legacy
+configuration remains visible as UNQUALIFIED without execution controls.
 
 Device compatibility views use the same configured Reality DeviceRegistry as
 Operations, preserving stable identity, lifecycle, Node association and simulation

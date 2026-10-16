@@ -29,6 +29,32 @@ not M3.4+ Operation policy. Operation policy is governed by the
 [M3.4-A contract](#m34-a-operation-governance-audit), with current human identity
 at the [M3.5 boundary](#m35-remote-human-boundary).
 
+## Ordinary workspace data
+
+Workbench, Chat tools and proposal snapshots reuse the canonical workspace path
+guard with private-state protection enabled. Named `.nous`/`.git` paths and
+regular files with multiple or unknown links are excluded from ordinary data.
+Lists/searches omit refused entries; reads, previews and proposals reject them
+before publishing original bytes or a proposal snapshot. Normal single-link
+files, directories and not-yet-created write targets retain their contracts.
+Trusted internal callers that explicitly omit private-state protection retain
+their existing scope; that compatibility mode grants no model permission.
+
+This shared guard admits a static path, not a defense against a malicious OS
+owner changing the filesystem after validation. Selected model input additionally
+checks descriptor identity/version and link count around its bounded read and
+revalidates source and transfer authority at actual dispatch. Models still receive
+only admitted ordinary data; neither a filename nor a link supplies permission.
+
+The trusted host may explicitly select `NOUS_PERMISSION_POLICY` under its current
+Governance private-state directory. This feeds the existing PermissionEngine;
+file existence is not trust, and model/request data cannot select it. POSIX
+owner-only, single-link and bounded JSON checks precede admission. Rules are
+reloaded for checks; expiration, revocation or invalid state cannot reuse a cached
+allow. Conditions require present, exact-typed facts. Inspection reports
+configuration and UNKNOWN grants, not an authorization or new authority. Native
+Operation approvals, credential leases and execution/effect evidence stay distinct.
+
 ## Signed Node identity and trust persistence
 
 The product connectivity audit at Distribution `edb932c` classifies signed
@@ -571,15 +597,36 @@ existing authority checks; acquisition does not issue a grant.
 
 Skill catalog JSON files are bounded to 1 MiB, matching the existing HTTPS metadata
 fetch limit, to 512 entries and 32 registered sources; nonregular local files are rejected. This bounds metadata reads;
-it does not establish trust in a catalog or enable remote package installation.
-Remote catalogs remain discovery metadata, not authority or executable content.
-The source Operations Console now manages registered local catalogs through the
-existing human session, exact-body nonce and Governance permission checks. Review
-binds the exact skill ID, version, digest and declared capabilities; changed or
-ambiguous entries fail closed. Package paths must remain under the registered
-catalog directory. UI/API callers cannot register arbitrary catalogs or URLs.
-Passive snapshots never fetch remote catalogs. Remote package acquisition remains
-unqualified and is rejected, not delegated to an unrestricted downloader.
+it does not establish trust in a catalog. Remote catalogs remain discovery
+metadata, not authority or executable content. The existing OperationsPlane
+Skills API and Desktop view expose explicit remote catalog add/refresh/remove
+through the current trusted human session, original exact-body nonce and
+Governance permission checks. Catalog administration requires
+`governance.approve` and `control.skill_manage` for `skill-catalog:<exact source>`.
+Acquisition additionally requires an explicit current PermissionEngine decision
+for `tool.web_fetch` on the exact catalog URL. Installing requires the existing
+`skill:<skill ID>` human administration permission and separate current
+`tool.web_fetch` decisions on both the original registered catalog and reviewed
+package URL. No policy or grant is created from a catalog, installation or model.
+
+Review binds the exact catalog URL, package_source, skill ID, version, normalized
+package-tree digest and declared capabilities. Both source URLs remain in the
+original nonce body. Changed or ambiguous entries fail closed. The remote entry
+is reacquired before package acquisition and the cached review, catalog
+membership, current human/session and both URL permissions are checked again
+before publication. Refreshing or removing a catalog during acquisition prevents
+publication under an obsolete review. Local package paths remain under their
+registered catalog directory. Passive list/search/Operations snapshots read
+cached metadata and never fetch remote catalogs.
+
+Remote packages use bounded acquisition-only WebGateway bytes, verified TLS,
+public-address admission, no redirects or retries, a 1 MiB catalog limit and a
+5 MiB archive limit. These transient bytes do not become Research text or raw
+Source/Snapshot/Artifact/Event evidence. The existing inspected source-bundle CAS
+and Extension publication path retain normalized package provenance. ZIP
+transport hash, normalized package-tree digest and CAS bundle digest are distinct.
+Terminal Extension revocation and concurrent index writers share the existing
+publication fence; stale installs/admissions cannot revive a revoked package.
 
 The Registry snapshots bounded content and writes CAS evidence before Extension
 publication. The CAS reference is bound into the existing Extension index/lock;
@@ -593,6 +640,33 @@ prevents loading. Install/enable/load never executes scripts or issues execution
 grants. Human identity, package digest and artifact references use the existing
 Governance audit. Actual Operations still require existing Work authorization.
 
+Enable/disable recheck current human identity and permission inside the existing
+Skill state publication lock. Installed content additionally uses the existing
+Extension writer fence in the same state-to-Extension order as removal. The
+original reviewed Extension ID, version and digest must still match; a stale
+review cannot toggle a replacement version. Instruction loading rechecks both
+the original reviewed content and live enabled/verified state after acquisition,
+then current human authority before disclosure. Revoked or expired authority,
+disabled/revoked content, changed versions and corrupt evidence fail closed.
+These checks govern Registry publication and instruction delivery; they do not
+claim protection from an operating-system owner rewriting arbitrary files.
+
+Skill identity and authority fields come from the verified canonical manifest,
+not package-defined display metadata. Uninstall binds the original reviewed
+Skill ID, Extension ID, version and content digest. The existing Extension writer
+fence rechecks that binding and current human authority immediately before
+removal. A changed installation requires a new review; revoked Extension records
+remain durable tombstones and cannot be removed to restore trust implicitly.
+Ordinary uninstall still removes valid installed references, while immutable
+objects and previously retained CAS evidence remain subject to the documented
+rollback/audit retention behavior.
+Importing another format under the same installed Skill name is an explicit
+identity conflict, not an implicit migration. Publication rejects it under the
+existing writer fence and preserves the original installation. Historical
+same-name imports remain visible with distinct canonical keys and an ambiguity
+diagnostic; loading and management of their shared alias fail closed. No record
+is silently selected, deleted or migrated.
+
 Local software qualification: **17 focused package/authority cases passed**, plus
 **594 affected Skill/Extension/Control Plane/repository/public SDK cases passed,
 17 skipped**; source Desktop lint/typecheck/build and **65 tests in 25 files passed**.
@@ -600,6 +674,18 @@ Sandboxed Chromium using real Runtime HTTP/CAS and a cryptographic fake IdP exer
 review/install/instruction-load/disable/enable/remove, along with live Node pairing
 and revocation. These records qualify local source software, not installed Windows,
 real remote identity, remote packages, device Operations or physical hardware.
+Controlled remote API software qualification additionally exercises **28 actual
+owned HTTP / child-process HTTPS cases**: current canonical URL permission,
+original nonce bindings/replay, service denial, stale catalog/package review,
+post-acquisition human/control/network revocation, failed publication, cached
+reads and owner reload with terminal revocation. Affected regressions have
+**969 passed, 17 skipped**; Desktop lint/typecheck/build and **137 tests in 31 files**
+pass. The initial combined run retained three real destination-rate-limit failures
+from reused fake hostnames; each isolated HTTP fixture now starts a fresh canonical
+limiter with the unchanged default budget. The local TLS routing seam and
+cryptographic fake identity prove only the controlled software path. Real
+publisher/signature trust, production catalogs, deployed human identity, installed
+native Desktop, executable Skills, models and hardware remain unqualified.
 See the [public Skill example](../../examples/hello_skill/README.md) for commands.
 
 ### Signed one-time Node enrollment
@@ -643,3 +729,25 @@ Sandboxed Chromium also exercised actual Runtime HTTP, signed Node CLI processes
 explicit fake-OIDC human nonce decisions, ONLINE resources and live revocation,
 with no mocked Runtime records, page errors or mobile horizontal overflow.
 Those are source-browser/fake-identity records, not installed APEIR.exe or real IdP.
+
+### Current Desktop intent during governed mutations
+
+Generic Operations actions and Automation reuse the existing exact-body human
+mutation helper. The client checks the captured Controller URL, token and
+configuration epoch (including A-to-B-to-A changes), together with its current
+human session, before dispatch and before publishing a response. Explicit
+reconnect, expiry, logout and unmount invalidate pending client intent. Logout
+remains available while an action waits, and clears private displayed content
+immediately. Client invalidation does not prove server revocation; uncertain
+responses remain explicit and never cause automatic resubmission. Server
+Governance, nonce consumption and fresh authorization remain authoritative.
+
+
+Automation intent publication reuses the same live human/permission check after
+acquiring the Workflow writer transaction, before inserting a new original Run
+and trigger relation. This complements creation/toggle publication and the
+pre/post-transport checks; waiting on SQLite cannot extend a human session or
+permission. A rejected check rolls back the new intent. Existing historical reads
+remain reads, and the optional trusted-host callback creates no permission or
+grant. Governance and Workflow are separate local transactions, not an atomic
+cross-database authority; execution still revalidates its own bound authorization.

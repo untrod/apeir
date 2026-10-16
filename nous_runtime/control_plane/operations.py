@@ -69,6 +69,21 @@ class OperationsPlane:
         registry = SkillRegistry(self.root)
         records = registry.list(include_disabled=True, include_catalogs=False)
         records.extend(registry.catalog_records(local_only=True))
+        installed_names: dict[str, int] = {}
+        for item in records:
+            if item.provider == "installed":
+                installed_names[item.skill_id] = (
+                    installed_names.get(item.skill_id, 0) + 1
+                )
+        ambiguous = {name for name, count in installed_names.items() if count > 1}
+        for name in sorted(ambiguous):
+            registry.diagnostics.append(
+                {
+                    "provider": "installed",
+                    "source": name,
+                    "error": "Installed Skill identity is ambiguous; review its imports",
+                }
+            )
         return [
             item.summary()
             | {
@@ -81,10 +96,22 @@ class OperationsPlane:
                         str(item.metadata["catalog_source"]).encode()
                     ).hexdigest()[:16]
                     if item.provider == "catalog"
+                    else ":"
+                    + hashlib.sha256(
+                        str(item.metadata["extension_id"]).encode()
+                    ).hexdigest()[:16]
+                    if item.provider == "installed" and item.skill_id in ambiguous
                     else ""
                 ),
+                "extension_id": str(item.metadata.get("extension_id") or ""),
+                "identity_status": "AMBIGUOUS"
+                if item.provider == "installed" and item.skill_id in ambiguous
+                else "BOUND"
+                if item.provider == "installed"
+                else "DECLARED",
                 "source": item.source,
                 "catalog_source": str(item.metadata.get("catalog_source") or ""),
+                "package_source": item.source if item.provider == "catalog" else "",
                 "compatibility": str(
                     item.metadata.get("compatibility") or "unspecified"
                 ),
@@ -288,6 +315,14 @@ class OperationsPlane:
                 "pairings": pairings,
                 "skills": skills,
                 "skill_diagnostics": skill_diagnostics,
+                "skill_catalogs": load(
+                    "skill_catalogs",
+                    lambda: [
+                        {"source": source, "remote": "://" in source}
+                        for source in SkillRegistry(self.root).catalogs()
+                    ],
+                    [],
+                ),
                 "devices": devices,
                 "approvals": approvals,
                 "grants": grants,
@@ -419,9 +454,82 @@ class OperationsPlane:
             )
         raise PermissionError("Unsupported pairing decision")
 
+    def _authorize_skill_source(self, context, request, source):
+        """Check the current human's configured permission for this exact URL."""
+        self.gate._require_human(context, request)
+        if not human_permission(context, "tool.web_fetch", source):
+            raise PermissionError("Human permission denied for exact Skill source URL")
+
+    def _skill_catalog_action(self, body, context):
+        from nous_runtime.skills.remote import require_remote_url
+
+        action, source = body["action"], body.get("catalog_source")
+        if not isinstance(source, str) or not source or body.get("target_id") != source:
+            raise PermissionError("Confirm the exact Skill catalog source")
+        # API additions and refreshes acquire remote catalogs explicitly. Local
+        # catalog registration retains the existing trusted workspace CLI path.
+        if action != "catalog_remove":
+            require_remote_url(source)
+        registry = SkillRegistry(self.root)
+        if action != "catalog_add" and source not in registry.catalogs():
+            raise KeyError(source)
+        request = GovernanceRequest(
+            operation_id="skill-catalog:" + hashlib.sha256(source.encode()).hexdigest(),
+            work_id="",
+            capability_id="skill.manage",
+            resource_id="skill-catalog:" + source,
+            subject_id="skill-catalog",
+        )
+        self._admit(context, request, "skill_manage")
+
+        def revalidate():
+            self.gate._require_human(context, request)
+            if not human_permission(
+                context, "control.skill_manage", request.resource_id
+            ):
+                raise PermissionError("Human catalog permission expired or revoked")
+
+        def authorize(url):
+            self._authorize_skill_source(context, request, url)
+
+        revalidate()
+        if action == "catalog_remove":
+            result = {
+                "removed": registry.remove_catalog(source, before_publish=revalidate)
+            }
+        else:
+            method = (
+                registry.add_catalog
+                if action == "catalog_add"
+                else registry.refresh_catalog
+            )
+            method(source, before_publish=revalidate, authorize_remote=authorize)
+            result = {"registered": True}
+        with self.gate.store.operation_transaction() as db:
+            self.gate.store.append_operation_audit(
+                db,
+                "skill.catalog.management.completed",
+                {
+                    "action": action,
+                    "catalog_source": source,
+                    "actor_id": context.subject_id,
+                    "human_session_id": context.session_id,
+                    "authorization_context_id": context.context_id,
+                    "execution_performed": False,
+                    "execution_authority_issued": False,
+                },
+            )
+        return {
+            "catalog": result | {"source": source},
+            "authority": "none",
+            "execution_performed": False,
+        }
+
     def skill_action(self, body, context):
         """Human package administration; installed instructions are not authority."""
         action, target = body.get("action"), body.get("target_id")
+        if action in {"catalog_add", "catalog_refresh", "catalog_remove"}:
+            return self._skill_catalog_action(body, context)
         if action not in {"install", "enable", "disable", "remove", "load"}:
             raise PermissionError("Unsupported Skill action")
         row = next(
@@ -429,6 +537,10 @@ class OperationsPlane:
         )
         if row is None:
             raise KeyError(target)
+        if row["identity_status"] == "AMBIGUOUS":
+            raise PermissionError(
+                "Installed Skill identity is ambiguous; review its imports"
+            )
         if body.get("digest") != row["digest"] or body.get("version") != row["version"]:
             raise PermissionError("Skill version or digest changed; review it again")
         request = GovernanceRequest(
@@ -460,12 +572,21 @@ class OperationsPlane:
         if action == "install":
             if row["provider"] != "catalog":
                 raise PermissionError("Install requires a registered catalog entry")
+            if "://" in row["catalog_source"] and (
+                body.get("catalog_source") != row["catalog_source"]
+                or body.get("package_source") != row["package_source"]
+            ):
+                raise PermissionError("Skill source changed; review it again")
             result = registry.install_from_catalog(
                 row["skill_id"],
                 catalog_source=row["catalog_source"],
                 version=row["version"],
                 digest=row["digest"],
                 before_publish=revalidate,
+                authorize_remote=lambda source: self._authorize_skill_source(
+                    context, request, source
+                ),
+                package_source=body.get("package_source", ""),
             ).to_dict()
         else:
             revalidate()
@@ -476,15 +597,44 @@ class OperationsPlane:
                 )
                 if not result["ok"]:
                     raise PermissionError(result["error"])
+                loaded = result["skill"]
+                if (
+                    loaded.get("provider") != row["provider"]
+                    or loaded.get("skill_id") != row["skill_id"]
+                    or loaded.get("digest") != row["digest"]
+                    or loaded.get("version") != row["version"]
+                    or loaded.get("metadata", {}).get("extension_id")
+                    != row["extension_id"]
+                ):
+                    raise PermissionError("Skill content changed; review it again")
+                # Instruction acquisition can wait or race with an update,
+                # disable/revocation or current human permission change. Check
+                # the original review and live authority again before disclosure.
+                current = registry.load(qualified)
+                registry._require_reviewed_record(
+                    current, row["digest"], row["version"], row["extension_id"]
+                )
+                revalidate()
             elif action == "remove":
                 if row["provider"] != "installed":
                     raise PermissionError("Only installed Skills can be removed")
                 result = {
-                    "removed": registry.remove(qualified),
+                    "removed": registry.remove(
+                        qualified,
+                        expected_digest=row["digest"],
+                        expected_version=row["version"],
+                        before_publish=revalidate,
+                    ),
                     "skill_id": row["skill_id"],
                 }
             else:
-                result = getattr(registry, action)(qualified).to_dict()
+                result = getattr(registry, action)(
+                    qualified,
+                    expected_digest=row["digest"],
+                    expected_version=row["version"],
+                    expected_extension_id=row["extension_id"],
+                    before_publish=revalidate,
+                ).to_dict()
         with self.gate.store.operation_transaction() as db:
             self.gate.store.append_operation_audit(
                 db,
@@ -495,6 +645,7 @@ class OperationsPlane:
                     "version": row["version"],
                     "package_digest": row["digest"],
                     "catalog_source": row["catalog_source"],
+                    "package_source": row["package_source"],
                     "artifact_ref": result.get("artifact_ref", ""),
                     "actor_id": context.subject_id,
                     "human_session_id": context.session_id,
@@ -649,6 +800,7 @@ class OperationsPlane:
                 "nodes",
                 "pairings",
                 "skills",
+                "skill_catalogs",
                 "devices",
                 "approvals",
                 "grants",

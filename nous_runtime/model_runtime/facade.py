@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any
 
@@ -181,6 +181,7 @@ class GatewayVerificationRequirements:
 class GatewayRequest:
     operation: GatewayOperation
     execution: GatewayExecutionContext
+    _input_admission: Any = field(default=None, repr=False, compare=False, kw_only=True)
     input: Any = None
     messages: tuple[Mapping[str, Any], ...] = ()
     required_capabilities: frozenset[str] = field(default_factory=frozenset)
@@ -331,6 +332,7 @@ class GatewayRequest:
             metadata["reasoning_effort"] = self.reasoning_effort.value
         return ModelRequest(
             task_id=self.execution.task_id,
+            _input_admission=self._input_admission,
             required_capabilities=capabilities,
             required_modalities=modalities,
             messages=messages,
@@ -462,18 +464,17 @@ class ModelGatewayFacade:
             raise ModelInvocationError("request must be a GatewayRequest")
         model_request = request.to_model_request()
         if stream is not None and model_request.stream is not stream:
-            payload = model_request.to_dict()
-            payload["stream"] = stream
-            model_request = ModelRequest.from_dict(payload)
+            model_request = replace(model_request, stream=stream)
         if request.fallback.allowed:
             return model_request
         if model_request.routing_mode is RoutingMode.LOCKED:
             return model_request
         decision = self.gateway.router.route(model_request)
-        payload = model_request.to_dict()
-        payload["preferred_models"] = [decision.selected_model_id]
-        payload["routing_mode"] = RoutingMode.LOCKED.value
-        return ModelRequest.from_dict(payload)
+        return replace(
+            model_request,
+            preferred_models=(decision.selected_model_id,),
+            routing_mode=RoutingMode.LOCKED,
+        )
 
     def _normalize(
         self,

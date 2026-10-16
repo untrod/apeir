@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
+from contextlib import contextmanager
+from functools import wraps
 import hashlib
 import shutil
 import re
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from nous_runtime.extensions.adapters import ExtensionInspector
 from nous_runtime.extensions.models import ExtensionManifest
@@ -25,6 +29,18 @@ from nous_runtime.extensions.supply_chain import (
 from nous_runtime.locking import file_lock
 
 
+_WRITER_OWNERSHIP = threading.local()
+
+
+def _registry_writer(function: Callable[..., Any]) -> Callable[..., Any]:
+    @wraps(function)
+    def mutate(self, *args, **kwargs):
+        with self._writer_lock():
+            return function(self, *args, **kwargs)
+
+    return mutate
+
+
 class ExtensionRegistry:
     """Install immutable source objects without enabling or executing them."""
 
@@ -34,6 +50,29 @@ class ExtensionRegistry:
         self.index_path = self.root / "registry.json"
         self.lock_path = self.root / "nous.extensions.lock.json"
         self.inspector = inspector or ExtensionInspector()
+
+    @contextmanager
+    def _writer_lock(self) -> Iterator[None]:
+        """Reuse the same file fence for same-thread trusted host callbacks.
+
+        Ownership tracking is not another lock or authorization cache. Different
+        instances share the canonical path; different threads/processes still
+        acquire the existing file lock. PID binding prevents inherited ownership
+        from suppressing lock acquisition after a process fork.
+        """
+        held = getattr(_WRITER_OWNERSHIP, "held", None)
+        if held is None:
+            held = _WRITER_OWNERSHIP.held = set()
+        owner = (os.getpid(), str(self.root))
+        if owner in held:
+            yield
+            return
+        with file_lock(self.root / ".install.lock"):
+            held.add(owner)
+            try:
+                yield
+            finally:
+                held.remove(owner)
 
     def install(
         self,
@@ -45,7 +84,7 @@ class ExtensionRegistry:
         """Publish verified content and optional pre-existing CAS evidence together."""
         if artifact_ref and not re.fullmatch(r"sha256:[0-9a-f]{64}", artifact_ref):
             raise ValueError("invalid extension artifact reference")
-        with file_lock(self.root / ".install.lock"):
+        with self._writer_lock():
             return self._install(
                 source, artifact_ref=artifact_ref, before_publish=before_publish
             )
@@ -126,9 +165,15 @@ class ExtensionRegistry:
             elif current_projection != projection:
                 raise ValueError("Kernel admission projection was modified")
 
+        if before_publish is not None:
+            before_publish()
         index = self._index()
         records = index.setdefault("extensions", {})
         previous = records.get(manifest.extension_id) or {}
+        if previous.get("state") == "revoked":
+            raise PermissionError(
+                "Extension is revoked; explicit authority restoration is required"
+            )
         records[manifest.extension_id] = {
             "version": manifest.version,
             "digest": manifest.provenance.digest,
@@ -144,8 +189,6 @@ class ExtensionRegistry:
             "artifact_ref": artifact_ref,
             **security,
         }
-        if before_publish is not None:
-            before_publish()
         previous_files = {
             path: path.read_bytes() if path.exists() else None
             for path in (self.index_path, self.lock_path)
@@ -224,10 +267,15 @@ class ExtensionRegistry:
         object_root = self.objects / manifest.provenance.digest.removeprefix("sha256:")
         return _read_json(object_root / "kernel-admission-request.json")
 
+    @_registry_writer
     def sign(self, extension_id: str, private_key: str | Path) -> dict[str, str]:
         """Sign an installed extension without persisting the private key."""
 
         manifest = self.verify(extension_id)
+        if (self.get_record(extension_id) or {}).get("state") == "revoked":
+            raise PermissionError(
+                "Extension is revoked; signing cannot restore authority"
+            )
         assert manifest.provenance is not None
         key_path = Path(private_key).expanduser().resolve()
         key_bytes = key_path.read_bytes()
@@ -255,10 +303,28 @@ class ExtensionRegistry:
         self.verify(extension_id)
         return security
 
+    @_registry_writer
     def record_admission(self, extension_id: str, decision: dict[str, Any]) -> None:
         """Persist a validated Kernel decision without expanding its grants."""
+        self._record_admission(extension_id, decision, revoked=False)
 
+    @_registry_writer
+    def record_revocation(self, extension_id: str, decision: dict[str, Any]) -> None:
+        self._record_admission(extension_id, decision, revoked=True)
+
+    def _record_admission(
+        self, extension_id: str, decision: dict[str, Any], *, revoked: bool
+    ) -> None:
         manifest = self.verify(extension_id)
+        if (
+            not revoked
+            and (self.get_record(extension_id) or {}).get("state") == "revoked"
+        ):
+            raise PermissionError(
+                "Extension is revoked; stale admission cannot restore authority"
+            )
+        if revoked and decision.get("granted_capabilities"):
+            raise ValueError("Extension revocation cannot retain capability grants")
         assert manifest.provenance is not None
         if decision.get("normalized_digest") != manifest.provenance.digest:
             raise ValueError("admission digest does not match installed extension")
@@ -280,16 +346,10 @@ class ExtensionRegistry:
                 record["state"] = "authorized"
         else:
             record["authority"] = "none"
-        _write_json(self.index_path, index)
-        self._write_lock(index)
-
-    def record_revocation(self, extension_id: str, decision: dict[str, Any]) -> None:
-        self.record_admission(extension_id, decision)
-        index = self._index()
-        record = index["extensions"][extension_id]
-        record["state"] = "revoked"
-        record["authority"] = "none"
-        record.pop("pending_permission_request", None)
+        if revoked:
+            record["state"] = "revoked"
+            record["authority"] = "none"
+            record.pop("pending_permission_request", None)
         _write_json(self.index_path, index)
         self._write_lock(index)
 
@@ -305,6 +365,7 @@ class ExtensionRegistry:
         path = self.objects / digest / "admission-decision.json"
         return _read_json(path) if path.exists() else None
 
+    @_registry_writer
     def record_permission_request(
         self,
         extension_id: str,
@@ -316,6 +377,10 @@ class ExtensionRegistry:
         self.verify(extension_id)
         index = self._index()
         record = index["extensions"][extension_id]
+        if record.get("state") == "revoked":
+            raise PermissionError(
+                "Extension is revoked; permission requests cannot restore authority"
+            )
         record["pending_permission_request"] = {
             "request_id": request_id,
             "proposal_hash": proposal_hash,
@@ -326,6 +391,7 @@ class ExtensionRegistry:
         _write_json(self.index_path, index)
         self._write_lock(index)
 
+    @_registry_writer
     def clear_permission_request(self, extension_id: str) -> None:
         index = self._index()
         record = (index.get("extensions") or {}).get(extension_id)
@@ -335,6 +401,7 @@ class ExtensionRegistry:
         _write_json(self.index_path, index)
         self._write_lock(index)
 
+    @_registry_writer
     def record_permission_approval(
         self,
         extension_id: str,
@@ -439,6 +506,7 @@ class ExtensionRegistry:
         claim["receipt_id"] = receipt_id
         _write_json(path, claim)
 
+    @_registry_writer
     def record_discovered_tools(
         self,
         extension_id: str,
@@ -526,17 +594,59 @@ class ExtensionRegistry:
         digest = manifest.provenance.digest.removeprefix("sha256:")
         return self.objects / digest / "package"
 
-    def remove(self, extension_id: str) -> bool:
-        with file_lock(self.root / ".install.lock"):
-            return self._remove(extension_id)
+    def remove(
+        self,
+        extension_id: str,
+        *,
+        expected_digest: str = "",
+        expected_version: str = "",
+        expected_skill_id: str = "",
+        before_remove: Callable[[], None] | None = None,
+    ) -> bool:
+        with self._writer_lock():
+            if before_remove is not None:
+                before_remove()
+            return self._remove(
+                extension_id,
+                expected_digest=expected_digest,
+                expected_version=expected_version,
+                expected_skill_id=expected_skill_id,
+            )
 
-    def _remove(self, extension_id: str) -> bool:
+    def _remove(
+        self,
+        extension_id: str,
+        *,
+        expected_digest: str,
+        expected_version: str,
+        expected_skill_id: str,
+    ) -> bool:
         """Remove a registry reference; immutable objects remain for rollback/audit."""
 
         index = self._index()
         records = index.get("extensions") or {}
         if extension_id not in records:
             return False
+        if records[extension_id].get("state") == "revoked":
+            raise PermissionError(
+                "Extension is revoked; removal cannot erase its trust state"
+            )
+        if expected_digest or expected_version or expected_skill_id:
+            manifest = self.verify(extension_id)
+            assert manifest.provenance is not None
+            if (
+                manifest.extension_id != extension_id
+                or (expected_digest and manifest.provenance.digest != expected_digest)
+                or (expected_version and manifest.version != expected_version)
+                or (
+                    expected_skill_id
+                    and (
+                        len(manifest.skills) != 1
+                        or manifest.skills[0].name != expected_skill_id
+                    )
+                )
+            ):
+                raise PermissionError("Extension content changed; review it again")
         del records[extension_id]
         _write_json(self.index_path, index)
         self._write_lock(index)

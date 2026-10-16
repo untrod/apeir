@@ -73,6 +73,17 @@ _TEXT_MIME = (
     "application/xhtml+xml",
     "application/javascript",
 )
+_ACQUISITION_MIME = {
+    "application/json",
+    "application/ld+json",
+    "application/octet-stream",
+    "application/pdf",
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/vnd.apeir.skill-bundle+zip",
+    "text/plain",
+    "text/html",
+}
 
 
 class _EgressRateLimiter:
@@ -186,6 +197,22 @@ class _TransportResponse:
     body: bytes
 
 
+@dataclass(frozen=True)
+class WebBytesResponse:
+    """Untrusted acquisition bytes, without text disclosure or Research storage."""
+
+    response: WebResponse
+    body: bytes = field(default=b"", repr=False)
+    acquisition_only: bool = True
+    content_trust: str = "untrusted"
+
+    def to_dict(self) -> dict[str, Any]:
+        return self.response.to_dict() | {
+            "acquisition_only": self.acquisition_only,
+            "content_trust": self.content_trust,
+        }
+
+
 class _PinnedHTTPConnection(http.client.HTTPConnection):
     def __init__(self, host: str, port: int, resolved_ip: str, timeout: float) -> None:
         self._resolved_ip = resolved_ip
@@ -245,6 +272,27 @@ class WebGateway:
         self._sleeper = sleeper
 
     def fetch(self, request: WebRequest) -> WebResponse:
+        return self._fetch(request)
+
+    def fetch_bytes(self, request: WebRequest) -> WebBytesResponse:
+        """Retain bounded original bytes only after all existing checks pass.
+
+        Admission and subsequent content inspection remain the trusted caller's
+        responsibility. Bytes are untrusted and are not prompt-sanitized input.
+        This path extracts no text and writes no Research Source, Snapshot or
+        Artifact, even when those stores are configured. The caller owns any
+        admitted byte publication. Body bytes stay out of metadata and events.
+        """
+        acquired: list[bytes] = []
+        response = self._fetch(request, retain_bytes=acquired.append)
+        return WebBytesResponse(response, acquired[0] if response.ok else b"")
+
+    def _fetch(
+        self,
+        request: WebRequest,
+        *,
+        retain_bytes: Callable[[bytes], None] | None = None,
+    ) -> WebResponse:
         if not isinstance(request, WebRequest):
             raise TypeError("request must be a WebRequest")
         request.method = str(request.method or "GET").upper()
@@ -262,7 +310,17 @@ class WebGateway:
             headers = self._request_headers(request)
             transport = self._follow_redirects(request, headers, body, deadline)
             elapsed_ms = round((self._clock() - started) * 1000, 3)
-            return self._record_success(request, safe_original, transport, elapsed_ms)
+            if retain_bytes is None:
+                response = self._record_success(
+                    request, safe_original, transport, elapsed_ms
+                )
+            else:
+                response = self._record_success(
+                    request, safe_original, transport, elapsed_ms, acquisition_only=True
+                )
+            if retain_bytes is not None:
+                retain_bytes(transport[1].body)
+            return response
         except WebGatewayError as exc:
             self._emit(
                 request,
@@ -741,6 +799,8 @@ class WebGateway:
         safe_original: str,
         result: tuple[str, _TransportResponse, list[str], str, int],
         elapsed_ms: float,
+        *,
+        acquisition_only: bool = False,
     ) -> WebResponse:
         final_url, transport, redirects, connected_ip, attempt_count = result
         content_encoding = (
@@ -775,6 +835,11 @@ class WebGateway:
             .strip()
             .lower()
         )
+        metadata_content_type = (
+            "application/octet-stream"
+            if acquisition_only and content_type not in _ACQUISITION_MIME
+            else content_type
+        )
         safe_headers = {
             key: (_safe_url(value) if key == "location" else value[:4096])
             for key, value in transport.headers.items()
@@ -786,7 +851,7 @@ class WebGateway:
             {
                 "request_id": request.request_id,
                 "status_code": transport.status_code,
-                "content_type": content_type,
+                "content_type": metadata_content_type,
                 "size_bytes": len(transport.body),
                 "elapsed_ms": elapsed_ms,
             },
@@ -797,12 +862,20 @@ class WebGateway:
                 f"The remote server returned HTTP {transport.status_code}.",
             )
         self._validate_mime(content_type, transport.body, final_url)
-        text = _decode_text(transport.body, transport.headers.get("content-type", ""))
+        text = (
+            ""
+            if acquisition_only
+            else _decode_text(transport.body, transport.headers.get("content-type", ""))
+        )
         scan = self._guard.scan(text, source=_safe_url(final_url)) if text else None
         cleaned = scan.sanitized_content if scan is not None else ""
         digest, retrieved_at = hashlib.sha256(transport.body).hexdigest(), _utc_now()
         source_id = snapshot_id = artifact_id = ""
-        if self._sources is not None and self._snapshots is not None:
+        if (
+            not acquisition_only
+            and self._sources is not None
+            and self._snapshots is not None
+        ):
             source = SourceRecord(
                 url=_safe_url(final_url),
                 title=_extract_title(cleaned),
@@ -895,14 +968,14 @@ class WebGateway:
             status_code=transport.status_code,
             content=cleaned,
             content_hash=digest,
-            content_type=content_type,
+            content_type=metadata_content_type,
             size_bytes=len(transport.body),
             snapshot_id=snapshot_id,
             snapshot_artifact_id=artifact_id,
             source_id=source_id,
             injection_scan_result=scan,
             retrieved_at=retrieved_at,
-            response_headers=safe_headers,
+            response_headers={} if acquisition_only else safe_headers,
             redirect_chain=redirects,
             run_id=request.run_id,
             request_id=request.request_id,
@@ -1096,4 +1169,10 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
-__all__ = ["WebGateway", "WebGatewayError", "WebRequest", "WebResponse"]
+__all__ = [
+    "WebBytesResponse",
+    "WebGateway",
+    "WebGatewayError",
+    "WebRequest",
+    "WebResponse",
+]

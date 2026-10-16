@@ -1,7 +1,8 @@
 /** Real runtime operations; every mutation returns to the existing Governance gate. */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, getConfig, setConfig } from "../lib/api";
+import { api, captureRuntimeConnection, getConfig, humanMutation, setConfig, subscribeRuntimeConfig } from "../lib/api";
 import { DeveloperWorkbench } from "./DeveloperWorkbench";
+import { AutomationInspector } from "./AutomationInspector";
 import { DeveloperPlatform } from "./DeveloperPlatform";
 import { EnvironmentInspector } from "./EnvironmentInspector";
 import { useTheme } from "../theme";
@@ -10,13 +11,13 @@ import "./OperationsConsole.css";
 type Row = Record<string, unknown>;
 type Collection = "agents" | "works" | "workflows" | "nodes" | "pairings" | "skills" | "devices" | "approvals" | "grants" | "credential_leases" | "artifacts" | "evidence" | "activity" | "incidents";
 export type OperationsSnapshot = Record<Exclude<Collection, "pairings" | "skills">, Row[]> & {
-  pairings?: Row[]; skills?: Row[]; skill_diagnostics?: Row[]; controller_public_key?: string;
+  pairings?: Row[]; skills?: Row[]; skill_diagnostics?: Row[]; skill_catalogs?: Row[]; controller_public_key?: string;
   health: { degraded: boolean; components: Row[] };
   controls: { actions: string[] };
 };
-type View = Collection | "environments" | "workspace" | "usage";
+type View = Collection | "environments" | "workspace" | "usage" | "automations";
 type Human = { subject_id: string; expires_at: number };
-const collections: View[] = ["works", "workspace", "usage", "environments", "nodes", "pairings", "devices", "skills", "approvals", "evidence", "incidents", "agents", "workflows", "grants", "credential_leases", "artifacts", "activity"];
+const collections: View[] = ["works", "workspace", "usage", "environments", "automations", "nodes", "pairings", "devices", "skills", "approvals", "evidence", "incidents", "agents", "workflows", "grants", "credential_leases", "artifacts", "activity"];
 const label = (value: string) => value === "usage" ? "Model Lab / Usage" : value.replaceAll("_", " ");
 const text = (row: Row, keys: string[]) => String(keys.map(key => row[key]).find(value => value !== undefined && value !== null) ?? "UNKNOWN");
 const rowId = (row: Row) => text(row, ["skill_key", "request_id", "work_id", "node_id", "device_id", "session_id", "grant_id", "lease_id", "run_id", "digest", "incident_id", "sequence"]);
@@ -37,16 +38,26 @@ function loadLayout(): Layout {
   } catch { return defaultLayout; }
 }
 const translations: Record<string, string> = {
-  workspace: "开发者面板", usage: "模型实验室 / 用量", environments: "开发环境", skills: "技能", "Review package": "审查技能包", "Install reviewed package": "安装已审查包", "Load instructions": "读取说明", "Enable": "启用", "Disable": "禁用", "Uninstall": "卸载",
+  "Conflicting installed Skill identities require a reviewed migration. Management is blocked.": "已安装技能存在身份冲突，需要审查迁移方案。管理操作已阻止。",
+  automations: "自动化", workspace: "开发者面板", usage: "模型实验室 / 用量", environments: "开发环境", skills: "技能", "Review package": "审查技能包", "Install reviewed package": "安装已审查包", "Load instructions": "读取说明", "Enable": "启用", "Disable": "禁用", "Uninstall": "卸载",
   works: "任务", nodes: "节点", pairings: "节点配对", "Add Node": "添加节点", "Create one-time invitation": "创建一次性邀请", "Confirm Controller identity": "确认 Controller 身份", "Trust this Node once": "信任此节点", devices: "设备", approvals: "审批", evidence: "证据", incidents: "事件处置", agents: "智能体", workflows: "工作流", grants: "授权", credential_leases: "凭据租约", artifacts: "工件", activity: "活动",
   "Workspace resources": "工作区资源", "Search records": "搜索记录", "Refresh": "刷新", "Execution & reality": "执行与现实", "Observe state, inspect evidence, govern the next action.": "观察状态、检查证据、治理下一步动作。", "Sign in as human": "以用户身份登录", "Renew human session": "续期用户会话", "Sign out": "退出登录", "Controller connection": "Controller 连接", "Connect": "连接", "Close details": "关闭详情", "Evidence details": "证据详情", "Activity panel": "活动面板", "Hide activity": "收起活动", "Show activity": "展开活动", "No activity recorded.": "暂无活动记录。", "Waiting for authoritative runtime data.": "等待 Runtime 权威数据。", "No matching records.": "没有匹配的记录。", "Approve Once": "批准一次", "Deny": "拒绝", "Interrupt": "中断", "Reconcile": "核对恢复", "Resume original workflow": "恢复原工作流", "Revoke": "撤销", "Trust": "信任", "Connection": "连接状态", "Resize evidence inspector": "调整证据面板宽度", "System health": "系统健康", "Work": "任务", "Nodes": "节点", "Devices": "设备", "Pending approvals": "待审批", "Raw backend record and diagnostics": "后端原始记录与诊断", "Observe mode · human authentication required for actions": "观察模式 · 操作需要用户认证", "UNKNOWN requires reconciliation. Interrupt prevents future admission; an existing physical effect may still require observation.": "UNKNOWN 需要核对恢复。中断阻止后续准入；已经发生的物理效果仍可能需要观测。",
 };
 
 function SkillReview({ skill, enabled, onAction, t }: { skill: Row; enabled: boolean; onAction: (action: string) => void; t: (value: string) => string }) {
   const [reviewed, setReviewed] = useState(false);
-  return <section aria-label="Skill package review"><h2>{String(skill.name)}</h2><p>{String(skill.description)}</p><dl className="operations-work-chain"><dt>Source / version</dt><dd>{String(skill.source)} · {String(skill.version)}</dd><dt>Content digest</dt><dd>{String(skill.digest)}</dd><dt>Risk / trust</dt><dd>{String(skill.risk)} / {String(skill.trust)}</dd><dt>Requested capabilities</dt><dd>{refs(skill.requested_capabilities)}</dd><dt>Compatibility / dependencies</dt><dd>{String(skill.compatibility)} / {refs(skill.dependencies)}</dd><dt>Artifact evidence</dt><dd>{String(skill.artifact_ref || "Not installed")}</dd></dl><p>Installation and enabled state grant no execution permission. Loading reads instructions only; scripts remain unexecuted. Requested capabilities still need Runtime authorization.</p>
-    {skill.provider === "catalog" ? <><label><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} /> I reviewed this exact version, digest and capability request.</label><button disabled={!enabled || !reviewed || !skill.installable} onClick={() => onAction("install")}>{t("Install reviewed package")}</button></> : <div className="operations-controls"><button disabled={!enabled || !skill.enabled} onClick={() => onAction("load")}>{t("Load instructions")}</button><button disabled={!enabled} onClick={() => onAction(skill.enabled ? "disable" : "enable")}>{t(skill.enabled ? "Disable" : "Enable")}</button>{skill.provider === "installed" && <button disabled={!enabled} onClick={() => onAction("remove")}>{t("Uninstall")}</button>}</div>}
+  const identityBlocked = skill.identity_status === "AMBIGUOUS";
+  const canManage = enabled && !identityBlocked;
+  return <section aria-label="Skill package review"><h2>{String(skill.name)}</h2><p>{String(skill.description)}</p><dl className="operations-work-chain"><dt>Source / version</dt><dd>{String(skill.source)} · {String(skill.version)}</dd><dt>Registered catalog</dt><dd>{String(skill.catalog_source || "Not a catalog entry")}</dd><dt>Reviewed package URL / path</dt><dd>{String(skill.package_source || skill.source)}</dd><dt>Content digest</dt><dd>{String(skill.digest)}</dd><dt>Risk / trust</dt><dd>{String(skill.risk)} / {String(skill.trust)}</dd><dt>Requested capabilities</dt><dd>{refs(skill.requested_capabilities)}</dd><dt>Compatibility / dependencies</dt><dd>{String(skill.compatibility)} / {refs(skill.dependencies)}</dd><dt>Artifact evidence</dt><dd>{String(skill.artifact_ref || "Not installed")}</dd></dl><p>Installation and enabled state grant no execution permission. Loading reads instructions only; scripts remain unexecuted. Requested capabilities still need Runtime authorization.</p>
+    {identityBlocked && <p role="status">{t("Conflicting installed Skill identities require a reviewed migration. Management is blocked.")}</p>}
+    {skill.provider === "catalog" ? <><label><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} /> I reviewed this exact catalog, package source, version, digest and capability request.</label><button disabled={!canManage || !reviewed || !skill.installable} onClick={() => onAction("install")}>{t("Install reviewed package")}</button></> : <div className="operations-controls"><button disabled={!canManage || !skill.enabled} onClick={() => onAction("load")}>{t("Load instructions")}</button><button disabled={!canManage} onClick={() => onAction(skill.enabled ? "disable" : "enable")}>{t(skill.enabled ? "Disable" : "Enable")}</button>{skill.provider === "installed" && <button disabled={!canManage} onClick={() => onAction("remove")}>{t("Uninstall")}</button>}</div>}
   </section>;
+}
+
+function SkillCatalogs({ catalogs, enabled, onAction }: { catalogs: Row[]; enabled: boolean; onAction: (action: string, source: string) => void }) {
+  const [source, setSource] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  return <section aria-label="Skill catalogs" className="operations-demo"><h2>Skill catalogs</h2><p>Catalogs provide review metadata. Add and refresh acquire only the exact HTTPS catalog URL with your current network permission.</p><form onSubmit={event => { event.preventDefault(); if (confirmed && source) onAction("catalog_add", source); }}><label>Catalog HTTPS URL <input aria-label="Catalog HTTPS URL" type="url" value={source} onChange={event => { setSource(event.target.value); setConfirmed(false); }} required /></label><label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /> I confirm this exact catalog URL.</label><button disabled={!enabled || !confirmed || !source}>Add catalog</button></form>{catalogs.map(catalog => <div key={String(catalog.source)}><p>{String(catalog.source)}</p><div className="operations-controls">{catalog.remote === true && <button disabled={!enabled} onClick={() => onAction("catalog_refresh", String(catalog.source))}>Refresh catalog</button>}<button disabled={!enabled} onClick={() => onAction("catalog_remove", String(catalog.source))}>Remove catalog</button></div></div>)}</section>;
 }
 
 function WorkEvidence({ work }: { work: Row }) {
@@ -81,9 +92,13 @@ export function OperationsConsole() {
   const [snapshot, setSnapshot] = useState<OperationsSnapshot | null>(null);
   const collection = layout.active;
   const [workspaceOpened, setWorkspaceOpened] = useState(layout.tabs.includes("workspace"));
+  const [automationsOpened, setAutomationsOpened] = useState(layout.tabs.includes("automations"));
   const [workspaceDraft, setWorkspaceDraft] = useState(false);
   const [query, setQuery] = useState("");
   const [human, setHuman] = useState<Human | null>(null);
+  const liveHuman = useRef<Human | null>(null);
+  const active = useRef(true);
+  const updateHuman = useCallback((value: Human | null) => { liveHuman.current = value; setHuman(value); }, []);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [details, setDetails] = useState<Row | null>(null);
@@ -101,6 +116,7 @@ export function OperationsConsole() {
   useEffect(() => { try { localStorage.setItem(layoutKey, JSON.stringify(layout)); } catch { /* Storage restrictions do not block observation. */ } }, [layout]);
   function selectCollection(key: View) {
     if (key === "workspace") setWorkspaceOpened(true);
+    if (key === "automations") setAutomationsOpened(true);
     setLayout(current => ({ ...current, active: key, tabs: current.tabs.includes(key) ? current.tabs : [...current.tabs, key] }));
     setDetails(null); setSkillContent(null); selectedId.current = null; setQuery("");
   }
@@ -115,12 +131,13 @@ export function OperationsConsole() {
   }, []);
   const reload = useCallback(async () => {
     const request = ++refreshSequence.current;
-    try { const value = await api<OperationsSnapshot>("/api/v1/control/operations"); if (request === refreshSequence.current) { setSnapshot(value); setError(""); } }
+    const connection = captureRuntimeConnection();
+    try { const value = await api<OperationsSnapshot>("/api/v1/control/operations"); connection(); if (request === refreshSequence.current) { setSnapshot(value); setError(""); } }
     catch (err) { if (request === refreshSequence.current) { setSnapshot(null); setDetails(null); setSkillContent(null); setError(err instanceof Error ? err.message : "Runtime unavailable"); } }
   }, []);
   // A details view must track the latest authoritative record, including deletion.
   useEffect(() => {
-    if (selectedId.current) setDetails((collection === "environments" || collection === "workspace" || collection === "usage") ? null : snapshot?.[collection]?.find(row => rowId(row) === selectedId.current) ?? null);
+    if (selectedId.current) setDetails((collection === "environments" || collection === "workspace" || collection === "usage" || collection === "automations") ? null : snapshot?.[collection]?.find(row => rowId(row) === selectedId.current) ?? null);
   }, [snapshot, collection]);
   useEffect(() => { void reload(); const timer = setInterval(() => { void reload(); }, 10000); return () => clearInterval(timer); }, [reload]);
   useEffect(() => {
@@ -135,13 +152,13 @@ export function OperationsConsole() {
     }
     const code = query.get("code");
     if (!code) {
-      const controller = getConfig().url;
+      const connection = captureRuntimeConnection();
       let active = true;
       void api<Human>("/api/v1/control/human/session")
         .then(value => {
-          if (active && getConfig().url === controller && typeof value.subject_id === "string" && Number.isFinite(value.expires_at) && value.expires_at * 1000 > Date.now()) setHuman(value);
+          connection(); if (active && typeof value.subject_id === "string" && Number.isFinite(value.expires_at) && value.expires_at * 1000 > Date.now()) updateHuman(value);
         })
-        .catch(() => { if (active) setHuman(null); });
+        .catch(() => { if (active) updateHuman(null); });
       return () => { active = false; };
     }
     callbackHandled.current = true;
@@ -152,10 +169,10 @@ export function OperationsConsole() {
       const pending = JSON.parse(saved || "null") as { state: string; verifier: string; endpoint: string } | null;
       if (!pending || query.get("state") !== pending.state || pending.endpoint !== getConfig().url) throw new Error("Authentication state mismatch");
       void api<Human>("/api/v1/control/human/session", { method: "POST", body: JSON.stringify({ challenge_id: pending.state, code, code_verifier: pending.verifier }) })
-        .then(value => { setHuman(value); void reload(); })
+        .then(value => { updateHuman(value); void reload(); })
         .catch(err => setError(err instanceof Error ? err.message : "Authentication failed"));
     } catch (err) { setError(err instanceof Error ? err.message : "Authentication failed"); }
-  }, [reload]);
+  }, [reload, updateHuman]);
   useEffect(() => {
     if (!human) return;
     // SSE carries durable monotonic transition evidence, then refreshes real state.
@@ -165,9 +182,9 @@ export function OperationsConsole() {
       sequence.current = Math.max(sequence.current, value.sequence);
       void reload();
     });
-    const timer = setTimeout(() => { setHuman(null); source.close(); }, Math.max(0, human.expires_at * 1000 - Date.now()));
+    const timer = setTimeout(() => { updateHuman(null); source.close(); }, Math.max(0, human.expires_at * 1000 - Date.now()));
     return () => { clearTimeout(timer); source.close(); };
-  }, [human, reload]);
+  }, [human, reload, updateHuman]);
   async function signIn() {
     setBusy(true);
     try {
@@ -182,55 +199,69 @@ export function OperationsConsole() {
     finally { setBusy(false); }
   }
   async function action(kind: string, actionName: string, target: string, extra: Row = {}) {
-    const controller = getConfig().url;
+    const original = liveHuman.current;
+    const connection = captureRuntimeConnection();
+    const guard = () => {
+      connection();
+      if (!active.current || !original || liveHuman.current !== original || original.expires_at * 1000 <= Date.now()) throw new Error("Human session changed or expired; action outcome is unconfirmed.");
+    };
     setBusy(true);
     try {
       const path = "/api/v1/control/operations/actions";
       const body = { ...extra, kind, action: actionName, target_id: target };
-      const { nonce } = await api<{ nonce: string }>("/api/v1/control/human/nonce", { method: "POST", body: JSON.stringify({ method: "POST", path, body }) });
-      const result = await api<Row>(path, { method: "POST", headers: { "X-Control-Nonce": nonce }, body: JSON.stringify(body) });
-      if (getConfig().url !== controller) return;
+      const result = await humanMutation<Row>(path, body, guard);
+      guard();
       if (kind === "pairings" && actionName === "create") setInvitation(result);
       if (kind === "skills") setSkillContent(actionName === "load" ? record(record(result.skill).skill) : null);
       await reload();
-    } catch (err) { setError(err instanceof Error ? err.message : "Governed action rejected"); }
-    finally { setBusy(false); }
+      guard();
+    } catch (err) { if (active.current) setError(`Action not confirmed. ${err instanceof Error ? err.message : "Governed action rejected"}. Inspect the original Controller evidence before submitting another action.`); }
+    finally { if (active.current) setBusy(false); }
   }
   async function signOut() {
+    const connection = captureRuntimeConnection();
+    updateHuman(null);
+    setInvitation(null);
+    setSkillContent(null);
     setBusy(true);
     try {
       const path = "/api/v1/control/human/logout";
-      const { nonce } = await api<{ nonce: string }>("/api/v1/control/human/nonce", { method: "POST", body: JSON.stringify({ method: "POST", path, body: {} }) });
-      await api(path, { method: "POST", headers: { "X-Control-Nonce": nonce }, body: JSON.stringify({}) });
-      setHuman(null);
-      setInvitation(null);
-      setSkillContent(null);
+      await humanMutation(path, {}, () => {
+        connection();
+        if (!active.current || liveHuman.current !== null) throw new Error("Human session changed; sign out could not be confirmed.");
+      });
       setError("");
-    } catch (err) { setError(err instanceof Error ? err.message : "Sign out could not be confirmed"); }
-    finally { setBusy(false); }
+    } catch (err) { if (active.current) setError(`Sign out could not be confirmed. ${err instanceof Error ? err.message : "Inspect the original Controller session."}`); }
+    finally { if (active.current) setBusy(false); }
   }
+  useEffect(() => {
+    active.current = true;
+    const unsubscribe = subscribeRuntimeConfig(() => { refreshSequence.current++; updateHuman(null); setSnapshot(null); setDetails(null); setSkillContent(null); setInvitation(null); sequence.current = 0; });
+    return () => { active.current = false; liveHuman.current = null; unsubscribe(); };
+  }, [updateHuman]);
   const enabled = !!human && human.expires_at * 1000 > Date.now() && !busy;
   const simulatedDevices = new Set((snapshot?.devices ?? []).filter(row => record(row.metadata).simulation === true && typeof row.device_id === "string" && row.device_id.length > 0).map(row => String(row.device_id)));
-  const rows = (collection === "environments" || collection === "workspace" || collection === "usage") ? [] : snapshot?.[collection]?.filter(row => !query.trim() || JSON.stringify(row).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) ?? [];
+  const rows = (collection === "environments" || collection === "workspace" || collection === "usage" || collection === "automations") ? [] : snapshot?.[collection]?.filter(row => !query.trim() || JSON.stringify(row).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) ?? [];
   return <main className="operations-console" aria-label="Operations console" lang={layout.locale === "zh" ? "zh-CN" : "en"}>
     <header className="operations-header"><div><p className="operations-eyebrow">APEIR / OPERATIONS</p><h1>{t("Execution & reality")}</h1><p>{t("Observe state, inspect evidence, govern the next action.")}</p></div>
-      <div className="operations-controls"><button onClick={() => void reload()} disabled={busy}>{t("Refresh")}</button><button onClick={() => void signIn()} disabled={busy}>{t(human ? "Renew human session" : "Sign in as human")}</button>{human && <button onClick={() => void signOut()} disabled={busy}>{t("Sign out")}</button>}<button onClick={toggle} aria-label="Toggle theme">{resolved === "dark" ? "☀" : "☾"}</button><button onClick={() => setLayout(current => ({ ...current, locale: current.locale === "en" ? "zh" : "en" }))} aria-label="Change language">{layout.locale === "en" ? "中文" : "English"}</button></div>
+      <div className="operations-controls"><button onClick={() => void reload()} disabled={busy}>{t("Refresh")}</button><button onClick={() => void signIn()} disabled={busy}>{t(human ? "Renew human session" : "Sign in as human")}</button>{human && <button onClick={() => void signOut()}>{t("Sign out")}</button>}<button onClick={toggle} aria-label="Toggle theme">{resolved === "dark" ? "☀" : "☾"}</button><button onClick={() => setLayout(current => ({ ...current, locale: current.locale === "en" ? "zh" : "en" }))} aria-label="Change language">{layout.locale === "en" ? "中文" : "English"}</button></div>
     </header>
     <details className="operations-demo"><summary>Run the verified simulated demo</summary><p>Start with the source Quick Start. Run these CLI commands in an empty dedicated workspace; results and evidence come from the existing Runtime. Approval here is an explicit local OS-user action.</p><pre>apeir demo --workspace ./demo-match --phase prepare --json{"\n"}apeir demo --workspace ./demo-match --phase resume --approve-once --json</pre><p>SIMULATED · Runtime-service · Kernel not traversed. No physical or remote-human qualification.</p><a href="https://github.com/untrod/apeir/blob/main/examples/hello_runtime/README.md" target="_blank" rel="noreferrer">Failure scenarios and evidence guide</a></details>
-    <details><summary>{t("Controller connection")}</summary><form onSubmit={event => { event.preventDefault(); try { const address = new URL(endpoint); if (address.username || address.password || address.search || address.hash || !(address.protocol === "https:" || (address.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(address.hostname)))) throw new Error("Controller requires HTTPS or loopback HTTP without credentials, query or fragment"); const url = address.href.replace(/\/$/, ""); setConfig({ url, token: url === getConfig().url ? getConfig().token : "" }); setHuman(null); setInvitation(null); setControllerConfirmed(false); setSnapshot(null); setDetails(null); setSkillContent(null); selectedId.current = null; sequence.current = 0; void reload(); } catch (err) { setError(err instanceof Error ? err.message : "Invalid controller URL"); } }}><label>API URL <input aria-label="API URL" value={endpoint} onChange={event => setEndpoint(event.target.value)} /></label><button>{t("Connect")}</button></form></details>
+    <details><summary>{t("Controller connection")}</summary><form onSubmit={event => { event.preventDefault(); try { const address = new URL(endpoint); if (address.username || address.password || address.search || address.hash || !(address.protocol === "https:" || (address.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(address.hostname)))) throw new Error("Controller requires HTTPS or loopback HTTP without credentials, query or fragment"); const url = address.href.replace(/\/$/, ""); setConfig({ url, token: url === getConfig().url ? getConfig().token : "" }); updateHuman(null); setInvitation(null); setControllerConfirmed(false); setSnapshot(null); setDetails(null); setSkillContent(null); selectedId.current = null; sequence.current = 0; void reload(); } catch (err) { setError(err instanceof Error ? err.message : "Invalid controller URL"); } }}><label>API URL <input aria-label="API URL" value={endpoint} onChange={event => setEndpoint(event.target.value)} /></label><button>{t("Connect")}</button></form></details>
     <section aria-label="Secure Node onboarding" className="operations-demo"><button disabled={!snapshot || busy} onClick={() => { setNodeForm(current => !current); setControllerConfirmed(false); }}>{t("Add Node")}</button>{nodeForm && <form onSubmit={event => { event.preventDefault(); if (snapshot?.controller_public_key && controllerConfirmed) void action("pairings", "create", snapshot.controller_public_key, { relay_url: relayAddress }); }}><p>Pairing establishes identity trust only. Work execution still requires Governance. Verify this Controller key through a trusted channel before inviting a Node.</p><label>Controller public key <output>{snapshot?.controller_public_key || "UNKNOWN"}</output></label><label>Relay URL <input aria-label="Relay URL" placeholder="wss://controller.example:9771" value={relayAddress} onChange={event => setRelayAddress(event.target.value)} required /></label><label><input type="checkbox" checked={controllerConfirmed} onChange={event => setControllerConfirmed(event.target.checked)} />{t("Confirm Controller identity")}</label><button disabled={!enabled || !controllerConfirmed || !snapshot?.controller_public_key}>{t("Create one-time invitation")}</button><p>Remote connections require verified WSS/TLS. No default route or DNS changes.</p></form>}{invitation && <div aria-label="One-time Node invitation"><p>Enter this code on your Node. It is not saved in browser storage or an execution credential.</p><strong>{Number(invitation.expires_at) * 1000 > Date.now() ? String(invitation.pairing_code) : "EXPIRED"}</strong><p>Request: {String(invitation.request_id)} · Expires: {new Date(Number(invitation.expires_at) * 1000).toISOString()}</p><pre>{JSON.stringify(["apeir-node", "pair", "--request-id", invitation.request_id, "--relay-url", invitation.relay_url, "--server-public-key", invitation.controller_public_key])}</pre><p>Run the shown arguments in the Node terminal; the code is prompted privately. Inspect its exact public key in the pairings view before approving. After approval or response loss, query the same request with --status.</p><button onClick={() => { setInvitation(null); setNodeForm(false); setControllerConfirmed(false); selectCollection("pairings"); }}>Hide code and inspect pairing</button></div>}</section>
     {error && <p role="alert" className="operations-error">{error}</p>}
     <section className="operations-health" aria-label="System health"><div><span className={`operations-badge ${!snapshot || snapshot.health.degraded ? "uncertain" : "healthy"}`}>{!snapshot ? "UNKNOWN" : snapshot.health.degraded ? "DEGRADED" : "HEALTHY"}</span><p>{human ? `Human: ${human.subject_id}` : t("Observe mode · human authentication required for actions")}</p></div>
       <div><strong>{snapshot?.works.length ?? "—"}</strong><span>{t("Work")}</span></div><div><strong>{snapshot?.nodes.length ?? "—"}</strong><span>{t("Nodes")}</span></div><div><strong>{snapshot?.devices.length ?? "—"}</strong><span>{t("Devices")}</span></div><div><strong>{snapshot?.approvals.filter(row => row.status === "PENDING").length ?? "—"}</strong><span>{t("Pending approvals")}</span></div>
     </section>
     <div className="operations-workbench">
-    <nav className="operations-resources" aria-label="Runtime collections"><h2>{t("Workspace resources")}</h2>{collections.map(key => <button key={key} aria-pressed={collection === key} aria-label={layout.locale === "zh" ? t(key) : label(key)} onClick={() => selectCollection(key)}><span>{layout.locale === "zh" ? t(key) : label(key)}</span><small>{(key === "environments" || key === "workspace" || key === "usage") ? "↗" : snapshot?.[key]?.length ?? "—"}</small></button>)}</nav>
+    <nav className="operations-resources" aria-label="Runtime collections"><h2>{t("Workspace resources")}</h2>{collections.map(key => <button key={key} aria-pressed={collection === key} aria-label={layout.locale === "zh" ? t(key) : label(key)} onClick={() => selectCollection(key)}><span>{layout.locale === "zh" ? t(key) : label(key)}</span><small>{(key === "environments" || key === "workspace" || key === "usage" || key === "automations") ? "↗" : snapshot?.[key]?.length ?? "—"}</small></button>)}</nav>
     <div className="operations-center">
     <div className="operations-tabs" role="tablist" aria-label="Open views">{layout.tabs.map(key => <div key={key}><button role="tab" tabIndex={collection === key ? 0 : -1} aria-selected={collection === key} aria-controls="operations-records" onClick={() => selectCollection(key)} onKeyDown={event => { if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) { event.preventDefault(); const index = event.key === "Home" ? 0 : event.key === "End" ? layout.tabs.length - 1 : (layout.tabs.indexOf(key) + (event.key === "ArrowRight" ? 1 : layout.tabs.length - 1)) % layout.tabs.length; selectCollection(layout.tabs[index]); (event.currentTarget.closest('[role="tablist"]')?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[index])?.focus(); } }}>{layout.locale === "zh" ? t(key) : label(key)}</button>{layout.tabs.length > 1 && <button aria-label={`Close ${label(key)} view`} disabled={key === "workspace" && workspaceDraft} onClick={() => { if (key === "workspace") setWorkspaceOpened(false); const tabs = layout.tabs.filter(item => item !== key); setLayout(current => ({ ...current, tabs, active: current.active === key ? tabs[0] : current.active })); if (collection === key) { setDetails(null); setSkillContent(null); selectedId.current = null; setQuery(""); } }}>×</button>}</div>)}</div>
-    {collection !== "environments" && collection !== "workspace" && collection !== "usage" && <label className="operations-search">{t("Search records")}<input ref={searchRef} aria-label="Search records" value={query} onChange={event => setQuery(event.target.value)} placeholder="Ctrl / ⌘ F" /></label>}
+    {collection !== "environments" && collection !== "workspace" && collection !== "usage" && collection !== "automations" && <label className="operations-search">{t("Search records")}<input ref={searchRef} aria-label="Search records" value={query} onChange={event => setQuery(event.target.value)} placeholder="Ctrl / ⌘ F" /></label>}
     <section id="operations-records" role="tabpanel" aria-label={label(collection)} className="operations-records">
       {workspaceOpened && <div hidden={collection !== "workspace"}><DeveloperWorkbench key={getConfig().url} onDraftChange={setWorkspaceDraft} onOpenEnvironments={() => selectCollection("environments")} /></div>}
-      {collection === "workspace" ? null : collection === "usage" ? <DeveloperPlatform modelsOnly /> : collection === "environments" ? <EnvironmentInspector key={getConfig().url} /> : !snapshot ? <p>{t("Waiting for authoritative runtime data.")}</p> : (snapshot[collection]?.length ?? 0) === 0 ? <p>{layout.locale === "zh" ? `暂无${t(collection)}记录。` : `No ${label(collection)} recorded.`}</p> : rows.length === 0 ? <p>{t("No matching records.")}</p> : rows.map((row, index) => {
+      {automationsOpened && <div hidden={collection !== "automations"}><AutomationInspector human={human} approvals={snapshot?.approvals ?? []} /></div>}
+      {collection === "workspace" || collection === "automations" ? null : collection === "usage" ? <DeveloperPlatform modelsOnly /> : collection === "environments" ? <EnvironmentInspector key={getConfig().url} /> : !snapshot ? <p>{t("Waiting for authoritative runtime data.")}</p> : (snapshot[collection]?.length ?? 0) === 0 ? <p>{layout.locale === "zh" ? `暂无${t(collection)}记录。` : `No ${label(collection)} recorded.`}</p> : rows.length === 0 ? <p>{t("No matching records.")}</p> : rows.map((row, index) => {
         const id = rowId(row);
         const status = collection === "skills" ? row.provider === "catalog" ? "AVAILABLE" : row.enabled ? "ENABLED" : "DISABLED" : text(row, ["effective_status", "state", "status", "lifecycle", "connectivity_state", "event_type", "integrity"]);
         const simulated = record(row.metadata).simulation === true || simulatedDevices.has(typeof row.target_resource_id === "string" ? row.target_resource_id : "");
@@ -245,9 +276,9 @@ export function OperationsConsole() {
         </div></article>;
       })}
     </section>
-    {collection === "skills" && <><p>Catalog registration remains a trusted workspace-owner CLI action. Remote package acquisition is not qualified. Installation does not execute a Skill.</p>{snapshot?.skill_diagnostics?.map((item, index) => <p role="status" key={index}>{String(item.source)}: {String(item.error)}</p>)}</>}
+    {collection === "skills" && <><SkillCatalogs key={getConfig().url} catalogs={snapshot?.skill_catalogs ?? []} enabled={enabled} onAction={(name, source) => void action("skills", name, source, { catalog_source: source })} /><p>Package installation requires current permission for both the registered catalog and the exact reviewed package URL. Installation does not execute a Skill.</p>{snapshot?.skill_diagnostics?.map((item, index) => <p role="status" key={index}>{String(item.source)}: {String(item.error)}</p>)}</>}
     </div>
-    {details && <aside className="operations-evidence" aria-label="Evidence details" style={{ width: layout.inspectorWidth }}><header><h2>{t("Evidence details")}</h2><button onClick={() => { selectedId.current = null; setDetails(null); }}>{t("Close details")}</button></header><label className="operations-resize">{t("Resize evidence inspector")}<input aria-label="Resize evidence inspector" type="range" min="280" max="640" step="20" value={layout.inspectorWidth} onChange={event => setLayout(current => ({ ...current, inspectorWidth: Number(event.target.value) }))} /></label>{collection === "works" && <WorkEvidence work={details} />}{collection === "skills" && <SkillReview key={`${rowId(details)}-${String(details.digest)}-${String(details.version)}`} skill={details} enabled={enabled} t={t} onAction={name => void action("skills", name, rowId(details), { version: details.version, digest: details.digest })} />}{collection === "skills" && details.enabled === true && skillContent?.digest === details.digest && <section aria-label="Loaded Skill instructions"><h2>Instructions · no scripts executed</h2><pre>{String(skillContent?.instructions)}</pre></section>}<details open={collection !== "works" && collection !== "skills"}><summary>{t("Raw backend record and diagnostics")}</summary><pre>{JSON.stringify(details, null, 2)}</pre></details></aside>}
+    {details && <aside className="operations-evidence" aria-label="Evidence details" style={{ width: layout.inspectorWidth }}><header><h2>{t("Evidence details")}</h2><button onClick={() => { selectedId.current = null; setDetails(null); }}>{t("Close details")}</button></header><label className="operations-resize">{t("Resize evidence inspector")}<input aria-label="Resize evidence inspector" type="range" min="280" max="640" step="20" value={layout.inspectorWidth} onChange={event => setLayout(current => ({ ...current, inspectorWidth: Number(event.target.value) }))} /></label>{collection === "works" && <WorkEvidence work={details} />}{collection === "skills" && <SkillReview key={`${rowId(details)}-${String(details.digest)}-${String(details.version)}-${String(details.catalog_source)}-${String(details.package_source)}`} skill={details} enabled={enabled} t={t} onAction={name => void action("skills", name, rowId(details), { version: details.version, digest: details.digest, catalog_source: details.catalog_source, package_source: details.package_source })} />}{collection === "skills" && details.enabled === true && skillContent?.digest === details.digest && <section aria-label="Loaded Skill instructions"><h2>Instructions · no scripts executed</h2><pre>{String(skillContent?.instructions)}</pre></section>}<details open={collection !== "works" && collection !== "skills"}><summary>{t("Raw backend record and diagnostics")}</summary><pre>{JSON.stringify(details, null, 2)}</pre></details></aside>}
     </div>
     <section className="operations-activity" aria-label="Activity panel"><button aria-expanded={layout.activityOpen} onClick={() => setLayout(current => ({ ...current, activityOpen: !current.activityOpen }))}>{t(layout.activityOpen ? "Hide activity" : "Show activity")} · {snapshot?.activity.length ?? "—"}</button>{layout.activityOpen && <div>{!snapshot ? <p>{t("Waiting for authoritative runtime data.")}</p> : snapshot.activity.length ? snapshot.activity.slice(-50).map((row, index) => <pre key={index}>{JSON.stringify(row)}</pre>) : <p>{t("No activity recorded.")}</p>}</div>}</section>
     <footer>{t("UNKNOWN requires reconciliation. Interrupt prevents future admission; an existing physical effect may still require observation.")}</footer>

@@ -429,25 +429,73 @@ def _save_automation_store(data: dict) -> None:
     )
 
 
-def handle_automations_list() -> dict[str, Any]:
+def _automation_service(authorization_context, *, permission: str, audit=True):
+    """Reuse current trusted human identity, permissions, and Governance audit."""
+    from nous_runtime.workflow.automation import AutomationConsumer
+
+    service = AutomationConsumer(_workspace())
+    service.admit_management(authorization_context, permission=permission, audit=audit)
+    service.before_consume = lambda: service.admit_management(
+        authorization_context, permission=permission, audit=False
+    )
+    return service
+
+
+def handle_automations_list(*, authorization_context=None) -> dict[str, Any]:
     """List configured automations."""
     try:
         store = _automation_store()
+        from nous_runtime.workflow.store import WorkflowStore
+
+        configured = [
+            {**item, "qualification": "UNQUALIFIED", "execution_qualified": False}
+            for item in store.get("automations", [])
+        ]
+        structured = WorkflowStore(_workspace()).list_automations()
+        if structured:
+            structured = _automation_service(
+                authorization_context, permission="read"
+            ).list()
+        configured.extend(structured)
         return ok(
             {
-                "automations": store.get("automations", []),
-                "total": len(store.get("automations", [])),
+                "automations": configured,
+                "total": len(configured),
             }
         )
+    except PermissionError:
+        raise
     except Exception as e:
         return err("AUTOMATIONS_LIST_ERROR", str(e))
 
 
-def handle_automations_add(body: dict[str, Any]) -> dict[str, Any]:
+def handle_automations_add(
+    body: dict[str, Any], *, authorization_context=None
+) -> dict[str, Any]:
     """Add a new automation rule."""
     try:
         import uuid
 
+        if body.get("adapter") or body.get("workflow_id"):
+            if (
+                set(body) - {"adapter", "name", "trigger", "due_at", "firmware_version"}
+                or body.get("adapter") != "simulated-reality"
+            ):
+                return err(
+                    "AUTOMATION_UNQUALIFIED",
+                    "Only the explicit structured simulated-reality template is supported",
+                )
+            service = _automation_service(authorization_context, permission="manage")
+            return ok(
+                service.add_simulation(
+                    name=body.get("name", "Governed simulated firmware"),
+                    trigger=body.get("trigger", "manual"),
+                    due_at=body.get("due_at", ""),
+                    firmware_version=body.get("firmware_version", "2.0.0"),
+                )
+            )
+        if authorization_context is not None:
+            _automation_service(authorization_context, permission="manage")
         store = _automation_store()
         new_auto = {
             "id": f"auto_{uuid.uuid4().hex[:12]}",
@@ -456,20 +504,82 @@ def handle_automations_add(body: dict[str, Any]) -> dict[str, Any]:
             "schedule": body.get("schedule", ""),
             "action": str(body.get("action", "")),
             "enabled": True,
+            "qualification": "UNQUALIFIED",
+            "execution_qualified": False,
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
         store.setdefault("automations", []).append(new_auto)
         _save_automation_store(store)
         return ok(new_auto)
+    except PermissionError:
+        raise
     except Exception as e:
         return err("AUTOMATIONS_ADD_ERROR", str(e))
 
 
-def handle_automations_action(body: dict[str, Any]) -> dict[str, Any]:
+def handle_automations_action(
+    body: dict[str, Any], *, authorization_context=None
+) -> dict[str, Any]:
     """Enable/disable an automation."""
     try:
         action = str(body.get("action", ""))
         automation_id = str(body.get("automation_id", ""))
+        from nous_runtime.workflow.store import WorkflowStore
+
+        if action == "run_due":
+            if set(body) - {"action", "limit"}:
+                return err(
+                    "AUTOMATION_INVALID_REQUEST", "run_due accepts only a bounded limit"
+                )
+            service = _automation_service(authorization_context, permission="manage")
+            return ok(
+                {
+                    "runs": service.run_due(limit=body.get("limit", 10)),
+                    "simulated": True,
+                }
+            )
+        try:
+            structured = WorkflowStore(_workspace()).get_automation(automation_id)
+        except KeyError:
+            structured = None
+        if structured is not None:
+            allowed = {"action", "automation_id"} | (
+                {"trigger_key"}
+                if action == "trigger"
+                else {"run_id"}
+                if action in {"resume", "reconcile", "cancel"}
+                else set()
+            )
+            if set(body) - allowed:
+                return err(
+                    "AUTOMATION_INVALID_REQUEST",
+                    "Only original trigger/run identifiers may be supplied",
+                )
+            service = _automation_service(authorization_context, permission="manage")
+            if action in {"enable", "disable"}:
+                return ok(
+                    service.store.set_automation_enabled(
+                        automation_id,
+                        action == "enable",
+                        before_publish=service.before_consume,
+                    )
+                )
+            if action == "trigger":
+                return ok(service.trigger(automation_id, body.get("trigger_key", "")))
+            if action in {"resume", "reconcile", "cancel"}:
+                return ok(
+                    getattr(service, action)(
+                        automation_id, str(body.get("run_id") or "")
+                    )
+                )
+            return err("AUTOMATION_INVALID_REQUEST", "Unsupported Automation action")
+        if action not in {"enable", "disable"}:
+            return err(
+                "AUTOMATION_UNQUALIFIED",
+                "Legacy free-text configuration cannot execute a Workflow",
+            )
+        if authorization_context is not None:
+            _automation_service(authorization_context, permission="manage")
         store = _automation_store()
         for a in store.get("automations", []):
             if a["id"] == automation_id:
@@ -480,8 +590,25 @@ def handle_automations_action(body: dict[str, Any]) -> dict[str, Any]:
                 _save_automation_store(store)
                 return ok(a)
         return err("AUTOMATION_NOT_FOUND", f"Automation {automation_id} not found")
+    except PermissionError:
+        raise
     except Exception as e:
         return err("AUTOMATIONS_ACTION_ERROR", str(e))
+
+
+def handle_automations_history(
+    automation_id: str, params=None, *, authorization_context=None
+):
+    try:
+        return ok(
+            _automation_service(authorization_context, permission="read").history(
+                automation_id, limit=int((params or {}).get("limit", 50))
+            )
+        )
+    except PermissionError:
+        raise
+    except (KeyError, ValueError) as exc:
+        return err("AUTOMATION_HISTORY_ERROR", str(exc))
 
 
 # Knowledge
@@ -544,74 +671,89 @@ def handle_knowledge_add(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def handle_security_permissions() -> dict[str, Any]:
-    """List permission status from governance layer."""
+    """Inspect canonical configuration without inventing an authorization."""
     try:
+        from nous_runtime.governance import get_gate
         from nous_runtime.governance.permission import PermissionEngine
 
-        engine = PermissionEngine()
-        rules = engine.list_rules() if hasattr(engine, "list_rules") else []
+        gate = get_gate()
+        engine = gate.permission_engine
+        state = (
+            "unconfigured"
+            if engine is None
+            else "configured"
+            if isinstance(engine, PermissionEngine)
+            else "unknown"
+        )
         return ok(
             {
-                "permissions": [
-                    {
-                        "id": getattr(r, "permission_id", str(r)),
-                        "name": getattr(r, "name", str(r)),
-                        "description": getattr(r, "description", ""),
-                        "granted": getattr(r, "granted", True),
-                        "risk": getattr(r, "risk_level", "medium"),
-                    }
-                    for r in rules
-                ]
-                if rules
-                else _default_permissions(),
+                "permissions": _default_permissions(),
+                "configuration_state": state,
+                "configuration": engine.configuration_status()
+                if isinstance(engine, PermissionEngine)
+                else None,
+                "permissions_evaluated": False,
+                "reason": (
+                    "Authorization requires the current subject, action, resource and context. "
+                    "Selected-file delivery requires a trusted host-configured canonical PermissionEngine."
+                ),
             }
         )
-    except Exception:
-        return ok({"permissions": _default_permissions()})
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        from nous_runtime.core.redaction import redact_sensitive_text
+
+        return err("SECURITY_PERMISSION_READ_ERROR", redact_sensitive_text(str(exc)))
 
 
 def _default_permissions() -> list[dict]:
+    """Compatibility descriptions only; no request has been evaluated here."""
     return [
         {
             "id": "model_access",
             "name": "Model Access",
             "description": "Allow AI models to process your requests",
-            "granted": True,
+            "granted": None,
+            "evaluation_state": "UNKNOWN",
             "risk": "low",
         },
         {
             "id": "file_access",
             "name": "File Access",
             "description": "Allow reading and writing files in workspace",
-            "granted": True,
+            "granted": None,
+            "evaluation_state": "UNKNOWN",
             "risk": "medium",
         },
         {
             "id": "network_access",
             "name": "Network Access",
             "description": "Allow connecting to external services",
-            "granted": True,
+            "granted": None,
+            "evaluation_state": "UNKNOWN",
             "risk": "medium",
         },
         {
             "id": "code_execution",
             "name": "Code Execution",
             "description": "Allow executing generated code",
-            "granted": False,
+            "granted": None,
+            "evaluation_state": "UNKNOWN",
             "risk": "high",
         },
         {
             "id": "system_commands",
             "name": "System Commands",
             "description": "Allow running system shell commands",
-            "granted": False,
+            "granted": None,
+            "evaluation_state": "UNKNOWN",
             "risk": "high",
         },
         {
             "id": "device_control",
             "name": "Device Control",
             "description": "Allow controlling connected devices",
-            "granted": False,
+            "granted": None,
+            "evaluation_state": "UNKNOWN",
             "risk": "high",
         },
     ]
@@ -752,12 +894,21 @@ DESKTOP_ROUTES = {
     ("GET", "/api/v1/automations"): handle_automations_list,
     ("POST", "/api/v1/automations/add"): handle_automations_add,
     ("POST", "/api/v1/automations/action"): handle_automations_action,
+    ("GET", "/api/v1/automations/{automation_id}/history"): handle_automations_history,
     ("GET", "/api/v1/knowledge"): handle_knowledge_list,
     ("POST", "/api/v1/knowledge/add"): handle_knowledge_add,
     ("GET", "/api/v1/security/permissions"): handle_security_permissions,
     ("GET", "/api/v1/logs"): handle_logs_list,
     ("GET", "/api/v1/runtime/memory"): handle_memory_usage,
     ("GET", "/api/v1/dashboard"): handle_dashboard_full,
+}
+
+
+AUTOMATION_AUTHENTICATED_ROUTES = {
+    handle_automations_list,
+    handle_automations_add,
+    handle_automations_action,
+    handle_automations_history,
 }
 
 

@@ -1,11 +1,12 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OperationsConsole, type OperationsSnapshot } from "../components/OperationsConsole";
+import { setConfig } from "../lib/api";
 
 const fixture: OperationsSnapshot = {
   agents: [], works: [{ work_id: "uncertain-effect-1", state: "UNKNOWN", execution_capability: "device.firmware.update" }], workflows: [], nodes: [{ node_id: "jetson-sim-1", state: "ONLINE" }], devices: [{ device_id: "actuator-sim-1", lifecycle: "AVAILABLE" }], approvals: [{ request_id: "approval-original-1", status: "PENDING" }], grants: [], credential_leases: [], artifacts: [], evidence: [{ work_id: "uncertain-effect-1", receipt: { status: "SUCCEEDED" }, effect_verification: { verdict: "UNKNOWN" } }], activity: [], incidents: [], health: { degraded: true, components: [] }, controls: { actions: ["approve_once", "deny", "interrupt", "reconcile"] },
 };
-afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear(); window.history.replaceState({}, "", "/"); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear(); setConfig({ url: "http://localhost:8770", token: "" }); window.history.replaceState({}, "", "/"); });
 describe("Operations Console", () => {
   it("opens the existing Environment API view without model requests or duplicated state", async () => {
     const fetcher = vi.fn().mockImplementation(async (url: string) => ({ ok: true, json: async () => ({ ok: true, data: url.endsWith("/environments/status") ? { environments: 0, providers: [] } : url.endsWith("/environments") ? { environments: [], total: 0 } : fixture }) }));
@@ -282,8 +283,24 @@ describe("Secure Node onboarding", () => {
 });
 
 describe("Controlled Skill Center", () => {
-  const entry = { skill_key: "catalog:review-skill:source", skill_id: "review-skill", name: "Review Skill", description: "Inspect bounded evidence", version: "1.0.0", digest: "sha256:" + "a".repeat(64), provider: "catalog", source: "/reviewed/catalog/review-skill", risk: "high", trust: "unverified", requested_capabilities: ["device.state.read"], dependencies: [], compatibility: "linux", installable: true, enabled: true, installed: false, artifact_ref: "" };
+  const entry = { skill_key: "catalog:review-skill:source", skill_id: "review-skill", name: "Review Skill", description: "Inspect bounded evidence", version: "1.0.0", digest: "sha256:" + "a".repeat(64), provider: "catalog", source: "/reviewed/catalog/review-skill", catalog_source: "/reviewed/catalog", package_source: "/reviewed/catalog/review-skill", risk: "high", trust: "unverified", requested_capabilities: ["device.state.read"], dependencies: [], compatibility: "linux", installable: true, enabled: true, installed: false, artifact_ref: "" };
   beforeEach(() => { vi.stubGlobal("EventSource", class { close() {} addEventListener() {} }); });
+  it("shows canonical identity conflicts and blocks alias management", async () => {
+    const conflicting = { ...entry, provider: "installed", skill_key: "installed:review-skill:import", installed: true, identity_status: "AMBIGUOUS" };
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string) => {
+      requests.push(url);
+      const data = url.endsWith("/human/session") ? { subject_id: "fake-human", expires_at: Date.now() / 1000 + 300 } : { ...fixture, skills: [conflicting] };
+      return { ok: true, json: async () => ({ ok: true, data }) };
+    }));
+    render(<OperationsConsole />);
+    await screen.findByText("Human: fake-human");
+    fireEvent.click(screen.getByRole("button", { name: /^skills/ }));
+    fireEvent.click(screen.getByRole("button", { name: conflicting.skill_key }));
+    expect(screen.getByRole("status")).toHaveTextContent("Conflicting installed Skill identities");
+    for (const name of ["Load instructions", "Disable", "Uninstall"]) expect(screen.getByRole("button", { name })).toBeDisabled();
+    expect(requests.some(url => url.endsWith("/operations/actions") || url.endsWith("/human/nonce"))).toBe(false);
+  });
   it("requires exact-package review and submits existing human nonce actions", async () => {
     let skills = [entry];
     const requests: Record<string, unknown>[] = [];
@@ -309,7 +326,7 @@ describe("Controlled Skill Center", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed this exact/ }));
     fireEvent.click(install);
     await screen.findByRole("button", { name: "installed:review-skill" });
-    expect(requests[0]).toEqual({ kind: "skills", action: "install", target_id: entry.skill_key, version: entry.version, digest: entry.digest });
+    expect(requests[0]).toEqual({ kind: "skills", action: "install", target_id: entry.skill_key, version: entry.version, digest: entry.digest, catalog_source: entry.catalog_source, package_source: entry.package_source });
     fireEvent.click(screen.getByRole("button", { name: "installed:review-skill" }));
     fireEvent.click(screen.getByRole("button", { name: "Load instructions" }));
     expect(await screen.findByLabelText("Loaded Skill instructions")).toHaveTextContent("never self-approve");
@@ -328,5 +345,166 @@ describe("Controlled Skill Center", () => {
     fireEvent.click(screen.getByRole("button", { name: "Install reviewed package" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Catalog digest changed");
     expect(screen.queryByRole("button", { name: "installed:review-skill" })).not.toBeInTheDocument();
+  });
+  it("adds, refreshes and removes exact catalogs through the original nonce body", async () => {
+    const source = "https://catalog.example.test/catalog.json";
+    const requests: { url: string; body?: Record<string, unknown> }[] = [];
+    let catalogs: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string, options: RequestInit = {}) => {
+      const body = options.body ? JSON.parse(String(options.body)) : undefined;
+      requests.push({ url, body });
+      if (url.endsWith("/operations/actions")) {
+        catalogs = body.action === "catalog_remove" ? [] : [{ source, remote: true }];
+      }
+      const data = url.endsWith("/human/session") ? { subject_id: "fake-human", expires_at: Date.now() / 1000 + 300 } : url.endsWith("/human/nonce") ? { nonce: "catalog-body-nonce" } : { ...fixture, skills: [], skill_catalogs: catalogs };
+      return { ok: true, json: async () => ({ ok: true, data }) };
+    }));
+    render(<OperationsConsole />);
+    await screen.findByText("Human: fake-human");
+    fireEvent.click(screen.getByRole("button", { name: /^skills/ }));
+    const add = screen.getByRole("button", { name: "Add catalog" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Catalog HTTPS URL" }), { target: { value: source } });
+    expect(add).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "I confirm this exact catalog URL." }));
+    fireEvent.click(add);
+    await screen.findByRole("button", { name: "Refresh catalog" });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh catalog" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove catalog" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "Remove catalog" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Refresh catalog" })).not.toBeInTheDocument());
+    const actions = requests.filter(request => request.url.endsWith("/operations/actions"));
+    expect(actions.map(request => request.body?.action)).toEqual(["catalog_add", "catalog_refresh", "catalog_remove"]);
+    const nonces = requests.filter(request => request.url.endsWith("/human/nonce"));
+    actions.forEach((request, index) => {
+      expect(request.body).toEqual({ kind: "skills", action: request.body?.action, target_id: source, catalog_source: source });
+      expect(nonces[index].body?.body).toEqual(request.body);
+    });
+    expect(requests.every(request => !request.url.startsWith(source))).toBe(true);
+    expect(JSON.stringify(localStorage) + JSON.stringify(sessionStorage)).not.toContain(source);
+  });
+  it("clears the package review when the backend package URL changes with the same digest", async () => {
+    let skill = { ...entry, source: "https://packages.example.test/old.zip", package_source: "https://packages.example.test/old.zip", catalog_source: "https://catalog.example.test/catalog.json" };
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string) => ({ ok: true, json: async () => ({ ok: true, data: url.endsWith("/human/session") ? { subject_id: "fake-human", expires_at: Date.now() / 1000 + 300 } : { ...fixture, skills: [skill] } }) })));
+    render(<OperationsConsole />);
+    await screen.findByText("Human: fake-human");
+    fireEvent.click(screen.getByRole("button", { name: /^skills/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Review package" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed this exact/ }));
+    expect(screen.getByRole("button", { name: "Install reviewed package" })).not.toBeDisabled();
+    skill = { ...skill, source: "https://packages.example.test/new.zip", package_source: "https://packages.example.test/new.zip" };
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Install reviewed package" })).toBeDisabled());
+    expect(screen.getByRole("checkbox", { name: /I reviewed this exact/ })).not.toBeChecked();
+  });
+
+});
+
+describe("generic Operations mutation admission while a nonce is pending", () => {
+  it.each(["URL", "token", "URL ABA", "token ABA", "expiry", "logout", "same-controller reconnect"])("does not dispatch after %s changes", async change => {
+    vi.stubGlobal("EventSource", class { addEventListener() {} close() {} });
+    setConfig({ url: "https://controller-a.example.test", token: "fake-original-token" });
+    const now = Date.now();
+    let release: (value: unknown) => void = () => {};
+    const nonce = new Promise(resolve => { release = resolve; });
+    const response = (data: unknown) => ({ ok: true, json: async () => ({ ok: true, data }) });
+    const fetcher = vi.fn().mockImplementation(async (url: string, options: RequestInit = {}) => {
+      if (url.endsWith("/human/session")) return response({ subject_id: "original-human", expires_at: now / 1000 + 600 });
+      if (url.endsWith("/human/nonce")) {
+        const body = JSON.parse(String(options.body));
+        return body.path.endsWith("/human/logout") ? response({ nonce: "fake-logout-nonce" }) : nonce;
+      }
+      if (url.endsWith("/human/logout")) return response({ revoked: true });
+      return response(fixture);
+    });
+    vi.stubGlobal("fetch", fetcher); render(<OperationsConsole />);
+    await screen.findByText("Human: original-human");
+    fireEvent.click(screen.getByRole("button", { name: "approvals" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve Once" }));
+    await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith("/human/nonce"))).toBe(true));
+    if (change === "logout") {
+      expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
+      fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+      await waitFor(() => expect(screen.queryByText("Human: original-human")).not.toBeInTheDocument());
+    } else if (change === "same-controller reconnect") {
+      fireEvent.submit(screen.getByRole("textbox", { name: "API URL" }).closest("form")!);
+      expect(screen.queryByText("Human: original-human")).not.toBeInTheDocument();
+    } else if (change === "expiry") vi.spyOn(Date, "now").mockReturnValue(now + 601000);
+    else act(() => {
+      if (change.includes("URL")) {
+        setConfig({ url: "https://controller-b.example.test", token: "fake-original-token" });
+        if (change.endsWith("ABA")) setConfig({ url: "https://controller-a.example.test", token: "fake-original-token" });
+      } else {
+        setConfig({ url: "https://controller-a.example.test", token: "fake-replacement-token" });
+        if (change.endsWith("ABA")) setConfig({ url: "https://controller-a.example.test", token: "fake-original-token" });
+      }
+    });
+    await act(async () => { release(response({ nonce: "fake-original-operation-nonce" })); await nonce; });
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/operations/actions"))).toHaveLength(0);
+    expect(screen.getByRole("alert")).toHaveTextContent(/changed|expired|unconfirmed/i);
+    if (change === "logout") expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/human/logout"))).toHaveLength(1);
+  });
+});
+
+describe("generic Operations original response handling", () => {
+  const response = (data: unknown) => ({ ok: true, json: async () => ({ ok: true, data }) });
+  beforeEach(() => { vi.stubGlobal("EventSource", class { addEventListener() {} close() {} }); });
+  it.each(["URL ABA", "token ABA", "expiry"])("does not project success or re-dispatch after %s changes during the response", async change => {
+    setConfig({ url: "https://controller-a.example.test", token: "fake-original-token" });
+    const now = Date.now();
+    let release: (value: unknown) => void = () => {};
+    const result = new Promise(resolve => { release = resolve; });
+    const fetcher = vi.fn().mockImplementation(async (url: string) => {
+      if (url.endsWith("/human/session")) return response({ subject_id: "original-human", expires_at: now / 1000 + 600 });
+      if (url.endsWith("/human/nonce")) return response({ nonce: "fake-original-nonce" });
+      if (url.endsWith("/operations/actions")) return result;
+      return response(fixture);
+    });
+    vi.stubGlobal("fetch", fetcher); render(<OperationsConsole />);
+    await screen.findByText("Human: original-human");
+    fireEvent.click(screen.getByRole("button", { name: "approvals" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve Once" }));
+    await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/operations/actions"))).toHaveLength(1));
+    const reads = fetcher.mock.calls.filter(([url]) => url.endsWith("/control/operations")).length;
+    if (change === "expiry") vi.spyOn(Date, "now").mockReturnValue(now + 601000);
+    else act(() => {
+      setConfig({ url: change === "URL ABA" ? "https://controller-b.example.test" : "https://controller-a.example.test", token: change === "token ABA" ? "fake-replacement-token" : "fake-original-token" });
+      setConfig({ url: "https://controller-a.example.test", token: "fake-original-token" });
+    });
+    await act(async () => { release(response({ status: "APPROVED" })); await result; });
+    expect(screen.getByRole("alert")).toHaveTextContent(/not confirmed|unconfirmed/i);
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/operations/actions"))).toHaveLength(1);
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/control/operations"))).toHaveLength(reads);
+  });
+  it("does not retry a dispatched mutation when its response is lost", async () => {
+    const fetcher = vi.fn().mockImplementation(async (url: string) => {
+      if (url.endsWith("/human/session")) return response({ subject_id: "original-human", expires_at: Date.now() / 1000 + 600 });
+      if (url.endsWith("/human/nonce")) return response({ nonce: "fake-original-nonce" });
+      if (url.endsWith("/operations/actions")) throw new Error("response lost after possible effect");
+      return response(fixture);
+    });
+    vi.stubGlobal("fetch", fetcher); render(<OperationsConsole />);
+    await screen.findByText("Human: original-human");
+    fireEvent.click(screen.getByRole("button", { name: "approvals" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve Once" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("response lost after possible effect");
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/operations/actions"))).toHaveLength(1);
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/human/nonce"))).toHaveLength(1);
+  });
+  it("invalidates local admission immediately but reports unconfirmed logout revocation", async () => {
+    const fetcher = vi.fn().mockImplementation(async (url: string) => {
+      if (url.endsWith("/human/session")) return response({ subject_id: "original-human", expires_at: Date.now() / 1000 + 600 });
+      if (url.endsWith("/human/nonce")) return response({ nonce: "fake-original-nonce" });
+      if (url.endsWith("/human/logout")) throw new Error("logout response lost");
+      return response(fixture);
+    });
+    vi.stubGlobal("fetch", fetcher); render(<OperationsConsole />);
+    await screen.findByText("Human: original-human");
+    fireEvent.click(screen.getByRole("button", { name: "approvals" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Sign out could not be confirmed");
+    expect(screen.queryByText("Human: original-human")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve Once" })).toBeDisabled();
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/human/logout"))).toHaveLength(1);
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/operations/actions"))).toHaveLength(0);
   });
 });

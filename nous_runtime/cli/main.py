@@ -355,6 +355,7 @@ for _module_name, _register_name in (
     ("nous_runtime.plugins.cli", "register_plugin_commands"),
     ("nous_runtime.knowledge.cli", "register_library_commands"),
     ("nous_runtime.workflow.cli", "register_workflow_commands"),
+    ("nous_runtime.workflow.automation_cli", "register_automation_commands"),
     ("nous_runtime.work.cli", "register_work_commands"),
     ("nous_runtime.tools.cli", "register_tool_commands"),
     ("nous_runtime.skills.cli", "register_skill_commands"),
