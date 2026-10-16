@@ -239,3 +239,76 @@ def test_cleanup_never_repeats_an_accepted_control_after_response_loss(
             time.sleep(0.025)
         else:
             pytest.fail("Accepted original control has no terminal evidence")
+
+
+def test_startup_binding_rejection_uses_one_observed_host_sample(tmp_path, monkeypatch):
+    read_host = ProcessSessionStore._host_state
+    running_reads = []
+
+    def missing_second_sample(self, session_id):
+        observation = read_host(self, session_id)
+        if observation.get("state") == "RUNNING":
+            running_reads.append(session_id)
+            if len(running_reads) == 2:
+                return {}
+        return observation
+
+    monkeypatch.setattr(ProcessSessionStore, "_host_state", missing_second_sample)
+    # Reuse the original exact identity-denial, stdin and single-launch checks.
+    test_startup_never_controls_or_replays_an_unproven_original_host(
+        tmp_path, monkeypatch, "host-binding"
+    )
+    assert running_reads
+
+
+def test_startup_snapshot_does_not_authorize_later_unreadable_host(
+    tmp_path, monkeypatch
+):
+    store = ProcessSessionStore(tmp_path)
+    read_host = store._host_state
+    launches = []
+    launch = process_session.ProcessSandboxHost.launch
+    first_running = False
+    missing = True
+
+    def launch_once(spec):
+        launches.append(spec)
+        return launch(spec)
+
+    def one_running_sample(session_id):
+        nonlocal first_running
+        observation = read_host(session_id)
+        if observation.get("state") == "RUNNING":
+            if first_running and missing:
+                return {}
+            first_running = True
+        return observation
+
+    monkeypatch.setattr(process_session.ProcessSandboxHost, "launch", launch_once)
+    monkeypatch.setattr(store, "_host_state", one_running_sample)
+    result = store.start(
+        [sys.executable, "-u", "-c", "import sys; sys.stdin.readline()"],
+        cwd=tmp_path,
+        environment={
+            "PATH": os.defpath,
+            **({"SystemRoot": os.environ["SystemRoot"]} if os.name == "nt" else {}),
+        },
+        work_id="work-one-host-snapshot",
+        tool_call_id="call-one-host-snapshot",
+    )
+    try:
+        assert first_running
+        assert result["state"] == "RUNNING", result
+        assert len(launches) == 1
+        current = store.status(result["session_id"])
+        assert current["state"] == "RECOVERY_REQUIRED"
+        assert current["error"] == "process host state is missing"
+        assert current["stdin_available"] is False
+        with pytest.raises(ValueError, match="process session is not running"):
+            store.write_stdin(result["session_id"], "not authorized\n")
+        assert not list((store.root / result["session_id"] / "control").glob("*.json"))
+        assert len(launches) == 1
+    finally:
+        missing = False
+        monkeypatch.undo()
+        _cleanup_original_session(store, result["session_id"])

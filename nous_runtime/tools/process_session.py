@@ -216,7 +216,7 @@ class ProcessSessionStore:
         while time.monotonic() < deadline:
             host = self._host_state(session_id)
             if host.get("state") not in {None, "", "STARTING"}:
-                result = self.status(session_id)
+                result = self._record_host_observation(self.require(session_id), host)
                 if not (
                     host.get("state") == ProcessSessionState.RUNNING.value
                     and result["state"] == ProcessSessionState.RECOVERY_REQUIRED.value
@@ -238,8 +238,15 @@ class ProcessSessionStore:
 
     def status(self, session_id: str) -> dict[str, Any]:
         session = self.require(session_id)
+        return self._record_host_observation(
+            session, self._host_state(session.session_id)
+        )
+
+    def _record_host_observation(
+        self, session: ProcessSession, host: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Project one observed host record with current OS identity checks."""
         previous = session.state
-        host = self._host_state(session.session_id)
         if host:
             self._merge_host_state(session, host)
         elif session.state in {

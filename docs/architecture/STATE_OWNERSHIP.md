@@ -235,3 +235,12 @@ Node-owned simulation state. Shared local file/SQLite transactions do not prove
 cross-site consistency, distributed consensus or Controller high availability.
 Remote secret transport, fleet/federation and physical faults require their
 own later acceptance evidence. M3.3-C remains PENDING.
+
+
+A process-startup poll classifies the one host record it just observed. It must
+not re-read the file inside that decision and classify a different or missing
+sample instead. The existing projection still verifies host/session/command
+bindings and current OS creation identities. Each later status, attach or control
+request obtains a new host observation; an earlier RUNNING sample cannot
+authorize stdin or kill when current identity/state is unknown. Startup retains
+its original deadline and single original launch; no replay or host fallback.

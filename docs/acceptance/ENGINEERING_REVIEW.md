@@ -1420,3 +1420,31 @@ response-loss, effect-count, retry-budget or timeout assertion was weakened.
 The complete three-module Connector selection and Governance/Workflow regression
 are rerun before publishing the correction. The failed full CI is not relabelled
 as a baseline environment failure or erased.
+
+
+### Process startup observation consistency — 2026-10-16
+
+Main `b71a766` Multi-Arch `38860036017`, Windows job `116839996688`, retains
+**1 failed, 4673 passed, 60 skipped, 272 deselected, 4 warnings** (1379.91 s).
+The unproven-host binding case remained RECOVERY_REQUIRED/stdin unavailable,
+but returned host-state-missing instead of the required helper-identity-changed
+reason. The exact error assertion is preserved, not broadened to accept either.
+
+**REUSE / FIX** Distribution ProcessSessionStore and its existing host projection,
+OS creation identity checks, journals, controls and deadlines. Startup had read a
+ready record, then called status to read another record before classifying it.
+A controlled missing second sample using the real process reproduces both the
+original identity assertion and loss of a valid startup sample (**2 failed**).
+One poll now projects its exact observed record with the same current OS identity
+checks. Subsequent status/control calls still read again. A separate negative
+proves later missing state returns RECOVERY_REQUIRED, denies stdin and publishes
+no control despite the earlier valid RUNNING snapshot. Original single-launch,
+wrong-identity and no-control/replay assertions remain unchanged. All original
+startup test-function ASTs are unchanged. No change under `nous_runtime/kernel`,
+no 10-second deadline increase, new store, process retry or isolation fallback.
+
+Startup selection has **11 passed** on Python 3.12 (19.40 s), **11 passed** on
+Python 3.10 (19.49 s). Full related regressions and exact-head CI are required.
+This reproduces the double-sample failure class; the cause of the Windows file
+read intermittency itself remains unestablished. It does not qualify a persistent
+PTY, strong product sandbox, installed Desktop or production release.
