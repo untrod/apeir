@@ -239,6 +239,14 @@ Remote secret transport, fleet/federation and physical faults require their
 own later acceptance evidence. M3.3-C remains PENDING.
 
 
+A process-startup poll classifies the one host record it just observed. It must
+not re-read the file inside that decision and classify a different or missing
+sample instead. The existing projection still verifies host/session/command
+bindings and current OS creation identities. Each later status, attach or control
+request obtains a new host observation; an earlier RUNNING sample cannot
+authorize stdin or kill when current identity/state is unknown. Startup retains
+its original deadline and single original launch; no replay or host fallback.
+
 External-provider spool result publication is separate from request retirement.
 A durable signed result cannot be replaced with a rejection because its consumed
 request could not be removed. Storage I/O failure is not validation failure or
