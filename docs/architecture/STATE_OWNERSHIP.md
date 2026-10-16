@@ -255,3 +255,12 @@ another handler invocation. Do not make transport cancellation wait for the
 handler as a substitute for this established recovery contract. Sequence/session
 I/O publication has its separate cancellation-drain rule; it does not transfer
 execution ownership from the Node journal to a transport coroutine.
+
+
+Revocation prevents new execution, not reading already admitted signed execution
+evidence. A retained provider request reconciles the exact original Node,
+Operation, arguments and receipt binding against the persisted signed result,
+even if the Node was revoked before Controller restart. A changed retry cannot
+borrow that result or overwrite it with rejection. Neither recovery nor the
+previous approval restores trust; a new workload still fails the current
+revocation check. Reading an execution fact does not establish an effect MATCH.

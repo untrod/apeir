@@ -1452,3 +1452,34 @@ watchdog failure. The original test is unchanged, and no worker-drain change is
 included here. The local candidate, initial fixture failures and failed broader
 run are retained privately to prevent its accidental integration. Passing narrow
 probes did not justify overriding the existing authoritative recovery path.
+
+
+The retained-request recovery matrix also injects Node revocation before
+Controller restart. With the publication/cleanup fix alone, its corrected probe
+retained **4 failed, 4 passed**: re-entering execution admission to read a known
+result could replace it with a revoked-node rejection. The earlier probe also
+had two test-wrapper argument errors; those fixture errors are not evidence of
+a production defect. Recovery now validates the persisted Node signature and
+original request/receipt binding before reading already admitted evidence. It
+does not transfer artifacts or queue another execution. Changed retry inputs
+cannot erase or borrow the original result. The same revoked Node still rejects
+a separately submitted new workload, and its persisted REVOKED state survives.
+
+The four I/O boundaries, trusted/revoked Node and original/changed retry matrix
+retain byte-identical original journals and previously published results. Final
+protocol/provider selection: **60 passed** on Python 3.12 (2.62 s), **60 passed**
+on Python 3.10 (2.64 s). Expanded Node, Reality, Artifact, Governance, model,
+AgentSession, Workflow, Usage and Connector regression: **961 passed** (130.14 s).
+Exact-source platform CI must qualify this additional runtime change separately
+from the earlier publication-only source. No Kernel or component lock changed.
+
+Full-suite Connector diagnostic run `38828059028`, source `2393bd7`, retained
+**9 failed, 4680 passed, 60 skipped, 272 deselected, 4 warnings** (1887.40 s).
+Twenty instrumented Connector samples satisfy the unchanged 0.5-second bound
+(elapsed 0.06481–0.21026 s); health storage reaches 0.18288 s. This still does not
+reproduce or resolve the earlier 0.96258-second failure. Eight diagnostic failures
+are cp1252 Unicode output errors with uncaptured stdout. The remaining delayed
+Observation restart case ended WAITING instead of COMPLETED; its original
+assertion and failure remain, with cause unestablished. This diagnostic branch
+is not acceptance and must not merge. No production timeout, Connector assertion
+or effect verification is relaxed.

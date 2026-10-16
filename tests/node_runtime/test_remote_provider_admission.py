@@ -242,8 +242,14 @@ def test_cached_result_still_requires_exact_receipt_binding(bound_request):
 @pytest.mark.parametrize(
     "boundary", ["cleanup", "cached-cleanup", "before-publication", "after-publication"]
 )
+@pytest.mark.parametrize(
+    "revoke_before_restart", [False, True], ids=["trusted", "revoked"]
+)
+@pytest.mark.parametrize(
+    "retry_changed", [False, True], ids=["original-retry", "changed-retry"]
+)
 def test_spool_io_failure_preserves_original_signed_result(
-    tmp_path, bound_request, monkeypatch, boundary
+    tmp_path, bound_request, monkeypatch, boundary, revoke_before_restart, retry_changed
 ):
     import asyncio
 
@@ -322,13 +328,13 @@ def test_spool_io_failure_preserves_original_signed_result(
                 raise PermissionError("controlled request cleanup unavailable")
             return unlink(path, *args, **kwargs)
 
-        def unavailable_publication(path, value):
+        def unavailable_publication(path, value, **kwargs):
             if path == result_path and not failures:
                 failures.append(True)
                 if boundary == "after-publication":
-                    publish(path, value)
+                    publish(path, value, **kwargs)
                 raise OSError("controlled result publication unavailable")
-            return publish(path, value)
+            return publish(path, value, **kwargs)
 
         if boundary in {"cleanup", "cached-cleanup"}:
             monkeypatch.setattr(Path, "unlink", unavailable_cleanup)
@@ -344,8 +350,33 @@ def test_spool_io_failure_preserves_original_signed_result(
         assert not server.pending.get(service.identity.node_id)
         assert service.workloads_path.read_bytes() == original_journal
         published_bytes = result_path.read_bytes() if result_path.exists() else None
+        # Revocation denies future execution, not reading original evidence.
+        if revoke_before_restart:
+            server.revoke_node(
+                service.identity.node_id,
+                admit=lambda _: {
+                    "actor_id": "test-human",
+                    "authorization_id": "test-revoke",
+                },
+            )
         # Restart and reconcile the signed terminal journal, not another effect.
         server = NodeRelayServer(state_dir=Path(environ["APEIR_RELAY_STATE_DIR"]))
+        if retry_changed:
+            altered = copy.deepcopy(spool)
+            altered["arguments"]["message"] = "changed retry is not the original call"
+            relay._atomic_json(request_path, altered)
+            await server._ingest_provider_request(request_path)
+            assert request_path.exists()
+            assert not server.pending.get(service.identity.node_id)
+            assert service.workloads_path.read_bytes() == original_journal
+            if published_bytes is None:
+                assert not result_path.exists()
+            else:
+                assert result_path.read_bytes() == published_bytes
+            with pytest.raises(ValueError, match="binding collision"):
+                remote_provider.execute_remote_provider(request, environ)
+            # Explicitly restore the known original binding before reconciliation.
+            relay._atomic_json(request_path, spool)
         await server._ingest_provider_request(request_path)
         assert not request_path.exists()
         assert not server.pending.get(service.identity.node_id)
@@ -353,6 +384,18 @@ def test_spool_io_failure_preserves_original_signed_result(
         if published_bytes is not None:
             assert result_path.read_bytes() == published_bytes
         assert service.workloads_path.read_bytes() == original_journal
+        if revoke_before_restart:
+            from nous_runtime.node_runtime.protocol import NodeProtocolError
+
+            assert (
+                server._trust_document["revoked"][service.identity.node_id]["status"]
+                == "REVOKED"
+            )
+            with pytest.raises(NodeProtocolError, match="revoked"):
+                await server.queue_workload(
+                    service.identity.node_id, "forbidden-new-work", "system.echo"
+                )
+            assert not server.pending.get(service.identity.node_id)
         assert remote_provider.execute_remote_provider(request, environ)["ok"] is True
 
     asyncio.run(scenario())

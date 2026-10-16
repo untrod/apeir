@@ -1777,6 +1777,33 @@ class NodeRelayServer:
                 isinstance(item, str) for item in input_artifacts
             ):
                 raise NodeProtocolError("remote provider input artifacts are invalid")
+            if operation_id in self.result_envelopes:
+                # Reading admitted execution evidence is not a new execution
+                # admission. In particular, revocation cannot erase that fact.
+                recorded = NodeProtocolEnvelope.from_json(
+                    json.dumps(self.result_envelopes[operation_id]), check_time=False
+                )
+                if (
+                    recorded.message_type != "WORKLOAD_STATUS"
+                    or recorded.source != node_id
+                    or recorded.target != CONTROL_PLANE_ID
+                    or not recorded.verify(self.node_keys.get(node_id, ""))
+                    or recorded.payload != self.results.get(operation_id)
+                ):
+                    raise NodeProtocolError("recorded provider result identity changed")
+                _verify_at_most_once_result(
+                    node_id,
+                    {
+                        "workload_id": operation_id,
+                        "capability": str(value.get("capability", "")),
+                        "arguments": dict(value.get("arguments") or {}),
+                        "delivery_semantics": str(value.get("delivery_semantics", "")),
+                        "binding": value.get("binding") or {},
+                    },
+                    recorded.payload,
+                )
+                self._publish_provider_result(operation_id)
+                return
             if input_artifacts and self.artifact_store is not None:
                 self.artifact_store = ContentAddressedArtifactStore(
                     self.artifact_store.root
@@ -1808,6 +1835,15 @@ class NodeRelayServer:
             )
         except (KeyError, TypeError, ValueError, NodeProtocolError) as exc:
             operation_id = request_path.stem
+            if (
+                operation_id in self.result_envelopes
+                or (self.provider_results / f"{operation_id}.json").is_file()
+            ):
+                _LOG.warning(
+                    "Provider request rejected; original result evidence retained (%s)",
+                    type(exc).__name__,
+                )
+                return
             _atomic_json(
                 self.provider_results / f"{operation_id}.json",
                 {
