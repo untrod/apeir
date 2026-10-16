@@ -244,3 +244,14 @@ proof of no effect: retain the original bound request and reconcile persisted
 Node/result evidence on a later sweep or restart. Malformed schema/binding still
 rejects before dispatch. Spool recovery creates no new operation, grant or effect;
 an execution receipt remains distinct from independent effect verification.
+
+
+Transport lifetime is not execution ownership. Cancelling a Node WebSocket task
+may return while the admitted handler continues under the NodeService's durable
+EXECUTING journal. That cancellation is not proof of no effect. The original
+binding returns RECOVERY_REQUIRED while execution remains unresolved, then the
+original completed journal/result can be delivered after reconnect without
+another handler invocation. Do not make transport cancellation wait for the
+handler as a substitute for this established recovery contract. Sequence/session
+I/O publication has its separate cancellation-drain rule; it does not transfer
+execution ownership from the Node journal to a transport coroutine.

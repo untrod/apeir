@@ -1439,3 +1439,16 @@ isolated Windows samples pass (elapsed **0.03874–0.08554 s**, maximum health w
 reproduce the full-suite failure, prove absence of a race, or qualify production
 Multi-Arch. The diagnostic branch must not be merged. Its prior recovery traces
 and all failed runs remain available. Kernel and component lock are unchanged.
+
+
+An independently explored local execution-worker drain prototype is **REJECTED**,
+not part of this spool fix. It incorrectly treated the transport task as execution
+owner. Its narrow 71-test selection passed, but the existing wider cancellation/
+reconnect contract retained **1 failed, 950 passed** (135.43 s): transport must
+return cancellation while the admitted handler remains journal-owned EXECUTING,
+then deliver its original completed result on reconnect with one invocation.
+The prototype made that valid contract wait for the held handler and reach its
+watchdog failure. The original test is unchanged, and no worker-drain change is
+included here. The local candidate, initial fixture failures and failed broader
+run are retained privately to prevent its accidental integration. Passing narrow
+probes did not justify overriding the existing authoritative recovery path.
