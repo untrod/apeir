@@ -1934,3 +1934,62 @@ Explicit negative-observation checks have **2 passed** (2.74 s), retaining
 MISMATCH as uncommitted and UNKNOWN as reconciliation-required. The native
 verifier on main `380e657` still fails with the exact missing locked Windows
 `nousd-x86_64-pc-windows-msvc.exe`; component-lock bytes are unchanged.
+
+
+### Scoped MCP / original Work submission software qualification
+
+Audit classification: **REUSE** existing MCP SDK, authenticated Runtime HTTP,
+Governance/PermissionEngine, OperationsPlane, DeviceRegistry, WorkSupervisor,
+DistributedWorkStore, checkpoint store, EventStream and redaction; **EXTEND** the
+existing extension CLI with a fixed stdio bridge and five tool adapters;
+**FIX** authenticated original Work submission/retry and concurrent cold SQLite
+initialization; **DEFER** complete Codex Harness, remote human identity, native
+installation, physical effects and unqualified Work Harness model disclosure.
+No second authority, Work/Artifact registry, scheduler, verifier or agent is added.
+
+Accepted-main `629b13f` ignored a supplied idempotency key: an actual HTTP test
+with original canonical human approval produced two Runs (1 failed1.21s).
+A test-only first fixture omitted approval and was correctly denied; it is not
+reported as an execution reproduction. The corrected fixture explicitly approves
+through the existing local-human boundary. A later combined run exposed cold
+SQLite `PRAGMA journal_mode=WAL` contention (1 failed220 passed19.20s). Both raw
+failure logs remain private. The canonical store now serializes initialization
+with existing file locking and closes connections on initialization errors.
+Ordinary 30-second SQLite limits, checksum checks and retention assertions remain.
+
+After the correction, MCP/Work/Agent regressions: **278 passed19.44s**.
+Broader Extension/Work/Agent/Governance/API regressions: **666 passed17 skipped
+30.79s**. Public CLI stdio/HTTP and original-submission suite, including two actual
+Runtime processes sharing the cold workspace: **38 passed13.33s**. Counts overlap.
+The model deliberator in these tests is an explicit fixture; no paid-provider,
+physical or native Desktop qualification is claimed. Exact final source and
+resulting-main CI are required before integration.
+
+Official Codex 0.163.0 App Server (native SHA-256
+`399ff69c431c066e40de318fba45c2b07f45a76b19939d247ee4828fc70c4215`)
+was also run against the real Runtime HTTP/MCP bridge: initialize, ephemeral
+read-only thread start, APEIR tool discovery, canonical Node list, original
+Distributed Work status, and new Work requiring human approval. Direct protocol
+qualification: **1 passed5.74s**; zero model Turns, no Work execution and no
+remaining owned process-group members. Private report
+`apeir-codex-mcp-direct-nkig8sul/report.json` retains calls, timings, module hash
+and cleanup without account identifiers or credentials. A separate metadata probe
+successfully read configured-account presence and five model descriptors.
+Configured authentication is not complete Harness qualification: generated
+0.163.0 schemas do not expose the scoped filesystem contract described by newer
+web documentation; disabling shell does not disable all native file tools.
+Do not start a model Turn before actual credential/filesystem isolation and
+approval mapping are qualified. This work does not change Kernel, component
+locks, PID64, sandbox boundaries, published tags or production-release status.
+
+Current additional admission/leakage checks: **807 passed17 skipped37.94s**
+(Extension/Work/Agent/Governance/public API freeze/Control Plane). A controlled
+scope change during original API admission must prevent Work creation; the
+initial unpublished prototype failed that assertion (1 failed1.32s), then gained
+an immediate pre-submit scope recheck. Sensitive credential registration stays
+at the new authenticated MCP execution boundary. A broader prototype registered
+all legacy API fixture tokens globally and collided with the six-character
+fixture value used in SecretHandle field names (1 failed32 setup errors774 passed);
+it is rejected without changing the redactor, legacy fixtures or their assertions.
+Raw failures remain separate from passing results. This is scoped software
+qualification; final composed source CI and actual-provider Gates remain separate.

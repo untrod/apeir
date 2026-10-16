@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import re
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -86,10 +87,20 @@ class WorkHarness:
         conversation_id: str = "",
         owner_id: str = "local",
         execution_options: Mapping[str, Any] | None = None,
+        _submission_run_id: str = "",
     ) -> WorkSnapshot:
         objective = str(objective or "").strip()
         if not objective:
             raise ValueError("work objective is required")
+        if _submission_run_id:
+            if not re.fullmatch(r"work_[0-9a-f]{32}", _submission_run_id):
+                raise ValueError("invalid original submission Run ID")
+            try:
+                self.require(_submission_run_id)
+            except KeyError:
+                pass
+            else:
+                raise ValueError("original submission Work already exists")
 
         workspace = snapshot_workspace(str(self.root), root=str(self.root))
         if conversation_id:
@@ -129,6 +140,10 @@ class WorkHarness:
             plan=plan,
             execution_options=execution_options,
         )
+        # Only the trusted supervisor supplies this ID, under its original
+        # submission lock. It is correlation, never execution authority.
+        if _submission_run_id:
+            snapshot.run_id = _submission_run_id
         self.events.create_run(
             snapshot.run_id,
             task_id=goal.goal_id,

@@ -12,7 +12,10 @@ import typer
 
 from nous_runtime.extensions import ExtensionInspector, ExtensionRegistry
 from compat.nki_client import DEFAULT_ENDPOINT, NKIClient
-from nous_runtime.extensions.admission import ExtensionAdmissionError, ExtensionAdmissionService
+from nous_runtime.extensions.admission import (
+    ExtensionAdmissionError,
+    ExtensionAdmissionService,
+)
 from nous_runtime.extensions.permissions import ExtensionPermissionService
 from nous_runtime.extensions.exporter import ExtensionExportError, ExtensionExporter
 from nous_runtime.governance.broker import ApprovalBroker
@@ -45,8 +48,7 @@ def _emit(value, as_json: bool) -> None:
             + ("kernel_grant" if value.get("granted_capabilities") else "none")
         )
         typer.echo(
-            "Granted: "
-            + (", ".join(value.get("granted_capabilities") or ()) or "none")
+            "Granted: " + (", ".join(value.get("granted_capabilities") or ()) or "none")
         )
         typer.echo(f"Receipt: {value.get('receipt_id') or 'none'}")
         return
@@ -203,8 +205,7 @@ def export_extension(
     typer.echo(f"Exported: {value['package_path']}")
     typer.echo(f"Compatibility: {result.compatibility.status}")
     typer.echo(
-        "Lossy fields: "
-        + (", ".join(result.compatibility.lossy_fields) or "none")
+        "Lossy fields: " + (", ".join(result.compatibility.lossy_fields) or "none")
     )
 
 
@@ -358,6 +359,23 @@ def remove_extension(
         typer.echo(f"Error: extension not found: {extension_id}", err=True)
         raise typer.Exit(1)
     typer.echo(f"removed registry reference: {extension_id}")
+
+
+@extension_app.command("serve-mcp")
+def serve_runtime_mcp(
+    runtime_url: str = typer.Option("http://127.0.0.1:8765", "--runtime-url"),
+):
+    """Serve standard MCP over stdio using a scoped existing Runtime identity."""
+    from nous_runtime.extensions.mcp_server import serve_mcp
+
+    try:
+        serve_mcp(runtime_url)
+    except (ImportError, ValueError):
+        typer.echo(
+            "MCP requires the mcp extra, trusted Controller origin and APEIR_MCP_API_TOKEN service credential.",
+            err=True,
+        )
+        raise typer.Exit(1)
 
 
 def register_extension_commands(app: typer.Typer) -> None:

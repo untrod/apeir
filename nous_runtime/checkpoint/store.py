@@ -13,6 +13,7 @@ from typing import Any, Protocol
 
 from nous_runtime.checkpoint.models import Checkpoint
 from nous_runtime.core.redaction import redact_sensitive_data
+from nous_runtime.locking import file_lock
 from nous_runtime.task.exceptions import TaskRuntimeError
 
 
@@ -48,9 +49,7 @@ class InMemoryCheckpointStore:
         with self._lock:
             checkpoints = list(self._checkpoints.values())
         if task_id:
-            checkpoints = [
-                item for item in checkpoints if item.task_id == task_id
-            ]
+            checkpoints = [item for item in checkpoints if item.task_id == task_id]
         return sorted(
             checkpoints,
             key=lambda item: (item.timestamp, item.checkpoint_id),
@@ -74,9 +73,8 @@ class SQLiteCheckpointStore:
     def _db(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path, timeout=30)
         connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA busy_timeout=30000")
         try:
+            connection.execute("PRAGMA busy_timeout=30000")
             yield connection
             connection.commit()
         except Exception:
@@ -86,7 +84,14 @@ class SQLiteCheckpointStore:
             connection.close()
 
     def _initialize(self) -> None:
-        with self._db() as connection:
+        # WAL is persistent database state. Serialize its first transition and
+        # schema admission across owners; ordinary reads/writes need not try to
+        # change journal mode on every connection while another owner is busy.
+        with (
+            file_lock(self.path.with_name(self.path.name + ".initialize.lock")),
+            self._db() as connection,
+        ):
+            connection.execute("PRAGMA journal_mode=WAL")
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS checkpoints (
@@ -192,16 +197,14 @@ class SQLiteCheckpointStore:
                 "invalid": len(invalid),
             },
             "tasks": len({item.task_id for item in verified}),
-            "latest": [
-                self._public_metadata(item)
-                for item in latest
-            ],
+            "latest": [self._public_metadata(item) for item in latest],
             "invalid": invalid[:maximum],
             "retention": {
                 "policy": "keep_latest_per_task",
                 "keep_latest_per_task": keep_latest,
                 "candidate_count": len(plan["candidate_checkpoint_ids"]),
-                "protected_count": len(verified) - len(plan["candidate_checkpoint_ids"]),
+                "protected_count": len(verified)
+                - len(plan["candidate_checkpoint_ids"]),
                 "invalid_excluded": len(invalid),
                 "plan_digest": plan["plan_digest"],
                 "requires_governed_apply": True,
@@ -314,8 +317,7 @@ class SQLiteCheckpointStore:
                 reverse=True,
             )
             candidate_ids.extend(
-                item.checkpoint_id
-                for item in ordered[keep_latest_per_task:]
+                item.checkpoint_id for item in ordered[keep_latest_per_task:]
             )
         candidate_ids.sort()
         canonical = json.dumps(
@@ -329,9 +331,7 @@ class SQLiteCheckpointStore:
         )
         return {
             "candidate_checkpoint_ids": candidate_ids,
-            "plan_digest": hashlib.sha256(
-                canonical.encode("utf-8")
-            ).hexdigest(),
+            "plan_digest": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
         }
 
     @staticmethod
