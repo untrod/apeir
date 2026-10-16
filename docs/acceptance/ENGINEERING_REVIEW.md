@@ -2166,3 +2166,38 @@ findings. Target-binding regression remains **18 passed**.
 This proves a blocking source in the injection, not the cause of every Windows
 timeout; Issues 4/8 remain open. Exact updated-source cross-platform CI is still
 required before integration.
+
+### Bounded Relay stop and receive backpressure — 2026-10-16
+
+The updated target candidate `f0f43f1` passed Core/Desktop/Security and Linux,
+but Multi-Arch `38927399914` retains Windows **1 failed, 4830 passed,
+60 skipped, 272 deselected, 4 warnings** (1986.70 s). The prior held-observation
+case passed. This failure is the original Artifact/lease/stop test's unchanged
+two-second shutdown bound, waiting for WebSocket close completion.
+
+**REUSE / FIX** the existing Node Relay, protocol flow control, durable sequence
+guard and original Node journal. Two controlled real-loopback tests reproduce
+idle receive waiting beyond stop and a full receive queue hiding the peer's
+close frame: **2 failed** (62.72 s). An independent accepted-main idle probe has
+**1 failed** (2.78 s). No test or production deadline was enlarged. Stop now
+wakes idle receive; closure drains raw frames solely to finish the existing
+handshake. Buffered commands are not decoded, acknowledged or executed, and
+Controller pending Work remains available for original-journal reconciliation.
+
+The first implementation cancelled an already admitted result send; combined
+regression retained **1 failed, 398 passed** (131.55 s) in the existing revocation
+test. That prototype is rejected. Requested stop now preserves an active
+message's original completion/publication; explicit transport cancellation
+retains existing journal ownership and drains durable writes. The unmodified
+revocation/result-denial check passes. Final Node/Reality/target regression:
+**399 passed** (126.25 s); Python 3.10 shutdown/I/O/reconciliation selection:
+**57 passed** (5.96 s). Ten focused original-control, revocation and stop cases
+pass (1.67 s), and eight shutdown cases additionally require clean close code,
+no remaining Relay tasks, no new Node execution and retained pending Work
+(1.42 s). Counts overlap and are not summed.
+
+The ordinary PID64, memory/network/filesystem, identity, signing, replay and
+effect-verification boundaries are unchanged. This proves the controlled stop
+and queue mechanism, not every historical Windows failure or physical/WAN
+qualification. Issues 4/8 remain open. Raw failed CI and prototype logs remain
+outside source control. Updated-source cross-platform CI is required.
