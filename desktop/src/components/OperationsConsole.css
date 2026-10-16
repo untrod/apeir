@@ -70,3 +70,11 @@
 .operations-demo output,.operations-controls span { overflow-wrap:anywhere; }
 .operations-demo output { display:block; font:12px monospace; padding:8px 0; }
 .operations-controls span { max-width:100%; font-size:12px; }
+
+.operations-automation { min-width:0; overflow-wrap:anywhere; }
+.operations-automation form { display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px; margin:16px 0; }
+.operations-automation form label { display:grid; gap:6px; flex:1 1 180px; min-width:0; font-size:13px; }
+.operations-automation form input,.operations-automation form select { width:100%; min-width:0; box-sizing:border-box; margin:0; padding:8px; border:1px solid var(--nous-border); border-radius:6px; background:var(--nous-surface); color:var(--nous-text); }
+.operations-automation article { display:block; min-width:0; }
+.operations-automation article button { max-width:calc(100% - 8px); margin:4px 8px 4px 0; overflow-wrap:anywhere; white-space:normal; }
+.operations-automation pre { max-width:100%; max-height:400px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; }

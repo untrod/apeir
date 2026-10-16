@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import stat
 from pathlib import Path
+
+
+class WorkspaceHardLinkError(PermissionError):
+    """An ordinary workspace path aliases another regular-file name."""
 
 
 def normalize_workspace_path(
@@ -24,6 +29,16 @@ def normalize_workspace_path(
         part.casefold() in {".nous", ".git"} for part in relative.parts
     ):
         raise PermissionError("Runtime-private paths are not ordinary workspace data.")
+    if protect_runtime_state:
+        try:
+            info = resolved.stat()
+        except FileNotFoundError:
+            pass  # Preserve admission of not-yet-created ordinary write targets.
+        else:
+            if stat.S_ISREG(info.st_mode) and info.st_nlink != 1:
+                raise WorkspaceHardLinkError(
+                    "Ordinary workspace data requires single-link files."
+                )
     return resolved
 
 

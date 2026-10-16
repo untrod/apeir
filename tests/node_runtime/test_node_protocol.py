@@ -473,7 +473,19 @@ def test_external_provider_spool_reaches_signed_node_protocol(tmp_path: Path):
                 else:
                     exc.args = (f"{exc}\n{diagnostic}",)
                 raise
-            assert response["ok"] is True
+            from nous_runtime.core.redaction import redact_sensitive_text
+
+            assert response["ok"] is True, {
+                "provider_error_code": redact_sensitive_text(
+                    str(response.get("error", {}).get("code", "UNKNOWN"))
+                )[:120],
+                "client_phase": client._session_phase,
+                "node_memory_state": service._workloads.get(
+                    operation["operation_id"], {}
+                ).get("state", "ABSENT"),
+                "signed_result_present": operation["operation_id"]
+                in server.result_envelopes,
+            }
             assert json.loads(response["output"]) == {"echo": "provider-path"}
             remote = response["remote_execution_receipt"]
             assert remote["operation_id"] == operation["operation_id"]
@@ -675,3 +687,69 @@ async def _wait_for(predicate, timeout: float = 20.0) -> None:
             return
         await asyncio.sleep(0.02)
     raise AssertionError("timed out waiting for relay state")
+
+
+@pytest.mark.parametrize("mismatch", ["source", "target"])
+@pytest.mark.parametrize("retained_session", [False, True])
+def test_registration_acknowledgement_requires_the_exact_peer_before_publication(
+    tmp_path, monkeypatch, mismatch, retained_session
+):
+    from websockets.asyncio.server import serve
+    from nous_runtime.node_runtime.relay import CONTROL_PLANE_ID
+
+    async def scenario():
+        service = NodeRuntimeService(NodeRuntimeConfig(tmp_path / "node"))
+        key = Ed25519PrivateKey.generate()
+        registrations, reports = [], []
+
+        async def peer(websocket):
+            envelope = NodeProtocolEnvelope.from_json(await websocket.recv())
+            assert envelope.verify(service.identity.public_key)
+            registrations.append(envelope)
+            acknowledgement = NodeProtocolEnvelope(
+                message_type="ACK",
+                source="other-controller" if mismatch == "source" else CONTROL_PLANE_ID,
+                target="other-node"
+                if mismatch == "target"
+                else service.identity.node_id,
+                sequence=1,
+                payload={"acknowledged": "REGISTER", "session_id": "foreign-session"},
+                reply_to=envelope.message_id,
+            ).sign(key)
+            await websocket.send(acknowledgement.to_json())
+            await websocket.wait_closed()
+
+        def forbidden_probe(**kwargs):
+            reports.append("probe")
+            raise AssertionError(
+                "registration must reject the wrong peer before probing"
+            )
+
+        async with serve(peer, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            client = NodeRelayClient(
+                service, f"ws://127.0.0.1:{port}", public_key_hex(key)
+            )
+            if retained_session:
+                client._save_session_id("original-session")
+            before = client.session_path.read_bytes() if retained_session else None
+            monkeypatch.setattr(client, "_probe_status", forbidden_probe)
+            with pytest.raises(
+                NodeProtocolError,
+                match="unexpected message source|message addressed to another node",
+            ):
+                await client.run_session(asyncio.Event())
+            after = (
+                client.session_path.read_bytes()
+                if client.session_path.exists()
+                else None
+            )
+            assert after == before
+            assert reports == []
+            assert len(registrations) == 1
+            assert registrations[0].target == CONTROL_PLANE_ID
+            assert registrations[0].payload["resume_session_id"] == (
+                "original-session" if retained_session else ""
+            )
+
+    asyncio.run(scenario())

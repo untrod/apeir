@@ -1,11 +1,12 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OperationsConsole, type OperationsSnapshot } from "../components/OperationsConsole";
+import { setConfig } from "../lib/api";
 
 const fixture: OperationsSnapshot = {
   agents: [], works: [{ work_id: "uncertain-effect-1", state: "UNKNOWN", execution_capability: "device.firmware.update" }], workflows: [], nodes: [{ node_id: "jetson-sim-1", state: "ONLINE" }], devices: [{ device_id: "actuator-sim-1", lifecycle: "AVAILABLE" }], approvals: [{ request_id: "approval-original-1", status: "PENDING" }], grants: [], credential_leases: [], artifacts: [], evidence: [{ work_id: "uncertain-effect-1", receipt: { status: "SUCCEEDED" }, effect_verification: { verdict: "UNKNOWN" } }], activity: [], incidents: [], health: { degraded: true, components: [] }, controls: { actions: ["approve_once", "deny", "interrupt", "reconcile"] },
 };
-afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear(); window.history.replaceState({}, "", "/"); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear(); setConfig({ url: "http://localhost:8770", token: "" }); window.history.replaceState({}, "", "/"); });
 describe("Operations Console", () => {
   it("opens the existing Environment API view without model requests or duplicated state", async () => {
     const fetcher = vi.fn().mockImplementation(async (url: string) => ({ ok: true, json: async () => ({ ok: true, data: url.endsWith("/environments/status") ? { environments: 0, providers: [] } : url.endsWith("/environments") ? { environments: [], total: 0 } : fixture }) }));
@@ -396,4 +397,114 @@ describe("Controlled Skill Center", () => {
     expect(screen.getByRole("checkbox", { name: /I reviewed this exact/ })).not.toBeChecked();
   });
 
+});
+
+describe("generic Operations mutation admission while a nonce is pending", () => {
+  it.each(["URL", "token", "URL ABA", "token ABA", "expiry", "logout", "same-controller reconnect"])("does not dispatch after %s changes", async change => {
+    vi.stubGlobal("EventSource", class { addEventListener() {} close() {} });
+    setConfig({ url: "https://controller-a.example.test", token: "fake-original-token" });
+    const now = Date.now();
+    let release: (value: unknown) => void = () => {};
+    const nonce = new Promise(resolve => { release = resolve; });
+    const response = (data: unknown) => ({ ok: true, json: async () => ({ ok: true, data }) });
+    const fetcher = vi.fn().mockImplementation(async (url: string, options: RequestInit = {}) => {
+      if (url.endsWith("/human/session")) return response({ subject_id: "original-human", expires_at: now / 1000 + 600 });
+      if (url.endsWith("/human/nonce")) {
+        const body = JSON.parse(String(options.body));
+        return body.path.endsWith("/human/logout") ? response({ nonce: "fake-logout-nonce" }) : nonce;
+      }
+      if (url.endsWith("/human/logout")) return response({ revoked: true });
+      return response(fixture);
+    });
+    vi.stubGlobal("fetch", fetcher); render(<OperationsConsole />);
+    await screen.findByText("Human: original-human");
+    fireEvent.click(screen.getByRole("button", { name: "approvals" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve Once" }));
+    await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith("/human/nonce"))).toBe(true));
+    if (change === "logout") {
+      expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
+      fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+      await waitFor(() => expect(screen.queryByText("Human: original-human")).not.toBeInTheDocument());
+    } else if (change === "same-controller reconnect") {
+      fireEvent.submit(screen.getByRole("textbox", { name: "API URL" }).closest("form")!);
+      expect(screen.queryByText("Human: original-human")).not.toBeInTheDocument();
+    } else if (change === "expiry") vi.spyOn(Date, "now").mockReturnValue(now + 601000);
+    else act(() => {
+      if (change.includes("URL")) {
+        setConfig({ url: "https://controller-b.example.test", token: "fake-original-token" });
+        if (change.endsWith("ABA")) setConfig({ url: "https://controller-a.example.test", token: "fake-original-token" });
+      } else {
+        setConfig({ url: "https://controller-a.example.test", token: "fake-replacement-token" });
+        if (change.endsWith("ABA")) setConfig({ url: "https://controller-a.example.test", token: "fake-original-token" });
+      }
+    });
+    await act(async () => { release(response({ nonce: "fake-original-operation-nonce" })); await nonce; });
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/operations/actions"))).toHaveLength(0);
+    expect(screen.getByRole("alert")).toHaveTextContent(/changed|expired|unconfirmed/i);
+    if (change === "logout") expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/human/logout"))).toHaveLength(1);
+  });
+});
+
+describe("generic Operations original response handling", () => {
+  const response = (data: unknown) => ({ ok: true, json: async () => ({ ok: true, data }) });
+  beforeEach(() => { vi.stubGlobal("EventSource", class { addEventListener() {} close() {} }); });
+  it.each(["URL ABA", "token ABA", "expiry"])("does not project success or re-dispatch after %s changes during the response", async change => {
+    setConfig({ url: "https://controller-a.example.test", token: "fake-original-token" });
+    const now = Date.now();
+    let release: (value: unknown) => void = () => {};
+    const result = new Promise(resolve => { release = resolve; });
+    const fetcher = vi.fn().mockImplementation(async (url: string) => {
+      if (url.endsWith("/human/session")) return response({ subject_id: "original-human", expires_at: now / 1000 + 600 });
+      if (url.endsWith("/human/nonce")) return response({ nonce: "fake-original-nonce" });
+      if (url.endsWith("/operations/actions")) return result;
+      return response(fixture);
+    });
+    vi.stubGlobal("fetch", fetcher); render(<OperationsConsole />);
+    await screen.findByText("Human: original-human");
+    fireEvent.click(screen.getByRole("button", { name: "approvals" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve Once" }));
+    await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/operations/actions"))).toHaveLength(1));
+    const reads = fetcher.mock.calls.filter(([url]) => url.endsWith("/control/operations")).length;
+    if (change === "expiry") vi.spyOn(Date, "now").mockReturnValue(now + 601000);
+    else act(() => {
+      setConfig({ url: change === "URL ABA" ? "https://controller-b.example.test" : "https://controller-a.example.test", token: change === "token ABA" ? "fake-replacement-token" : "fake-original-token" });
+      setConfig({ url: "https://controller-a.example.test", token: "fake-original-token" });
+    });
+    await act(async () => { release(response({ status: "APPROVED" })); await result; });
+    expect(screen.getByRole("alert")).toHaveTextContent(/not confirmed|unconfirmed/i);
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/operations/actions"))).toHaveLength(1);
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/control/operations"))).toHaveLength(reads);
+  });
+  it("does not retry a dispatched mutation when its response is lost", async () => {
+    const fetcher = vi.fn().mockImplementation(async (url: string) => {
+      if (url.endsWith("/human/session")) return response({ subject_id: "original-human", expires_at: Date.now() / 1000 + 600 });
+      if (url.endsWith("/human/nonce")) return response({ nonce: "fake-original-nonce" });
+      if (url.endsWith("/operations/actions")) throw new Error("response lost after possible effect");
+      return response(fixture);
+    });
+    vi.stubGlobal("fetch", fetcher); render(<OperationsConsole />);
+    await screen.findByText("Human: original-human");
+    fireEvent.click(screen.getByRole("button", { name: "approvals" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve Once" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("response lost after possible effect");
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/operations/actions"))).toHaveLength(1);
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/human/nonce"))).toHaveLength(1);
+  });
+  it("invalidates local admission immediately but reports unconfirmed logout revocation", async () => {
+    const fetcher = vi.fn().mockImplementation(async (url: string) => {
+      if (url.endsWith("/human/session")) return response({ subject_id: "original-human", expires_at: Date.now() / 1000 + 600 });
+      if (url.endsWith("/human/nonce")) return response({ nonce: "fake-original-nonce" });
+      if (url.endsWith("/human/logout")) throw new Error("logout response lost");
+      return response(fixture);
+    });
+    vi.stubGlobal("fetch", fetcher); render(<OperationsConsole />);
+    await screen.findByText("Human: original-human");
+    fireEvent.click(screen.getByRole("button", { name: "approvals" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Sign out could not be confirmed");
+    expect(screen.queryByText("Human: original-human")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve Once" })).toBeDisabled();
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/human/logout"))).toHaveLength(1);
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/operations/actions"))).toHaveLength(0);
+  });
 });

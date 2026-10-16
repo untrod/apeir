@@ -106,9 +106,32 @@ def test_revoked_effect_recovery_survives_slow_authenticated_restart(
     assert registrations == 2
 
 
-@pytest.mark.parametrize("deliver_result", [True, False], ids=["delayed", "missing"])
+async def _await_original_observation_hold(entered, resumption):
+    """Follow the owned producer, not a second deadline covering its preparation."""
+    reached = asyncio.create_task(entered.wait())
+    try:
+        await asyncio.wait({reached, resumption}, return_when=asyncio.FIRST_COMPLETED)
+        if not entered.is_set():
+            # Surface its original failure/cancellation. A successful return
+            # before the fault was injected is also an invalid acceptance run.
+            result = await resumption
+            pytest.fail(
+                "Original resumption finished without the observation hold: "
+                f"state={result.state}, error={result.error}"
+            )
+    finally:
+        reached.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reached
+
+
+@pytest.mark.parametrize(
+    "deliver_result,held_reads",
+    [(True, 1), (False, 1), (True, 2)],
+    ids=["delayed", "missing", "delayed-again"],
+)
 def test_delayed_observation_after_restart_requires_original_read_evidence(
-    tmp_path, monkeypatch, deliver_result
+    tmp_path, monkeypatch, deliver_result, held_reads
 ):
     async def scenario():
         async with simulation(tmp_path, single_connection=True) as first:
@@ -137,6 +160,8 @@ def test_delayed_observation_after_restart_requires_original_read_evidence(
         entered, release = asyncio.Event(), asyncio.Event()
         original_send = NodeRelayClient._send
         held = {}
+        second_held = {}
+        second_entered, second_release = asyncio.Event(), asyncio.Event()
 
         async def hold_observation(self, websocket, message_type, payload, **kwargs):
             if (
@@ -147,6 +172,16 @@ def test_delayed_observation_after_restart_requires_original_read_evidence(
                 held.update(payload)
                 entered.set()
                 await release.wait()
+            elif (
+                held_reads == 2
+                and message_type == "WORKLOAD_STATUS"
+                and str(payload.get("workload_id", "")).startswith("observe_")
+                and payload["workload_id"] != held.get("workload_id")
+                and not second_held
+            ):
+                second_held.update(payload)
+                second_entered.set()
+                await second_release.wait()
             return await original_send(self, websocket, message_type, payload, **kwargs)
 
         monkeypatch.setattr(NodeRelayClient, "_send", hold_observation)
@@ -155,7 +190,7 @@ def test_delayed_observation_after_restart_requires_original_read_evidence(
                 resume_after_terminal_observation_delivery(restored, paused.session_id)
             )
             try:
-                await asyncio.wait_for(entered.wait(), timeout=5)
+                await _await_original_observation_hold(entered, resumption)
                 acquisition_id = held["workload_id"]
 
                 def waiting_on_original_read():
@@ -195,6 +230,20 @@ def test_delayed_observation_after_restart_requires_original_read_evidence(
                     assert restored.provider.execution_count(WORK_ID) == 1
                     return
                 release.set()
+                if held_reads == 2:
+                    await _await_original_observation_hold(second_entered, resumption)
+                    second_id = second_held["workload_id"]
+                    await wait_for(
+                        lambda: (
+                            restored.coordinator.require(paused.session_id).error
+                            == f"distributed Workflow Work timed out: {second_id}"
+                        )
+                    )
+                    assert restored.work().state is DistributedWorkState.VERIFIED
+                    assert not restored.work().effect_verification
+                    assert second_id not in restored.server.results
+                    assert restored.provider.execution_count(WORK_ID) == 1
+                    second_release.set()
                 result = await resumption
                 assert result.state is AgentSessionState.COMPLETED
                 assert result.workflow_run_id == paused.workflow_run_id
@@ -205,9 +254,43 @@ def test_delayed_observation_after_restart_requires_original_read_evidence(
                 # The existing finalizer acquires a fresh independent read on
                 # continuation. It does not replay the revoked mutation.
                 assert held["output"]["observation_id"] not in observation_ids
+                if second_held:
+                    assert (
+                        second_held["output"]["observation_id"] not in observation_ids
+                    )
             finally:
                 release.set()
+                second_release.set()
                 with contextlib.suppress(asyncio.CancelledError):
                     await resumption
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("outcome", ["error", "cancelled", "no-hold"])
+def test_observation_hold_propagates_producer_failure(outcome):
+    async def scenario():
+        entered = asyncio.Event()
+
+        async def producer():
+            if outcome == "error":
+                raise RuntimeError("original read producer failed")
+            if outcome == "cancelled":
+                raise asyncio.CancelledError
+            from types import SimpleNamespace
+
+            return SimpleNamespace(state="WAITING", error="original read unavailable")
+
+        task = asyncio.create_task(producer())
+        expected = {
+            "error": (RuntimeError, "original read producer failed"),
+            "cancelled": (asyncio.CancelledError, None),
+            "no-hold": (pytest.fail.Exception, "finished without the observation hold"),
+        }[outcome]
+        with pytest.raises(expected[0], match=expected[1]):
+            await _await_original_observation_hold(entered, task)
+        assert task.done()
+        assert not entered.is_set()
+        assert not [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
 
     asyncio.run(scenario())

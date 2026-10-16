@@ -12,12 +12,17 @@ from nous_runtime.api.responses import err_response, ok_response
 def _runtime():
     from nous_runtime.environments import EnvironmentRuntime
 
-    root = Path(os.environ.get("NOUS_WORKSPACE_ROOT") or Path.cwd()).expanduser().resolve()
+    root = (
+        Path(os.environ.get("NOUS_WORKSPACE_ROOT") or Path.cwd()).expanduser().resolve()
+    )
     return EnvironmentRuntime(root)
 
 
 def _error(exc: Exception) -> dict[str, Any]:
-    from nous_runtime.environments import EnvironmentNotFoundError, EnvironmentProviderError
+    from nous_runtime.environments import (
+        EnvironmentNotFoundError,
+        EnvironmentProviderError,
+    )
 
     if isinstance(exc, EnvironmentNotFoundError):
         code = "NOUS_NOT_FOUND"
@@ -53,7 +58,12 @@ def handle_environment(environment_id: str) -> dict[str, Any]:
 def handle_environment_create(body: dict[str, Any]) -> dict[str, Any]:
     try:
         from nous_runtime.capability.runtime_executor import execute_runtime_capability
-        return ok_response(execute_runtime_capability("environment.create", body, workspace_root=_runtime().root))
+
+        return ok_response(
+            execute_runtime_capability(
+                "environment.create", body, workspace_root=_runtime().root
+            )
+        )
     except (OSError, RuntimeError, TypeError, ValueError) as exc:
         return _error(exc)
 
@@ -61,7 +71,14 @@ def handle_environment_create(body: dict[str, Any]) -> dict[str, Any]:
 def handle_environment_start(environment_id: str) -> dict[str, Any]:
     try:
         from nous_runtime.capability.runtime_executor import execute_runtime_capability
-        return ok_response(execute_runtime_capability("environment.start", {"environment_id": environment_id}, workspace_root=_runtime().root))
+
+        return ok_response(
+            execute_runtime_capability(
+                "environment.start",
+                {"environment_id": environment_id},
+                workspace_root=_runtime().root,
+            )
+        )
     except (OSError, RuntimeError, TypeError, ValueError) as exc:
         return _error(exc)
 
@@ -69,15 +86,37 @@ def handle_environment_start(environment_id: str) -> dict[str, Any]:
 def handle_environment_run(environment_id: str, body: dict[str, Any]) -> dict[str, Any]:
     try:
         from nous_runtime.capability.runtime_executor import execute_runtime_capability
-        return ok_response(execute_runtime_capability("environment.run", {"environment_id": environment_id, **body}, workspace_root=_runtime().root))
+
+        arguments = environment_run_arguments(environment_id, body)
+        return ok_response(
+            execute_runtime_capability(
+                "environment.run", arguments, workspace_root=_runtime().root
+            )
+        )
     except (OSError, RuntimeError, TypeError, ValueError) as exc:
         return _error(exc)
+
+
+def environment_run_arguments(
+    environment_id: str, body: dict[str, Any]
+) -> dict[str, Any]:
+    """Bind command arguments to the same target used by route admission."""
+    if "environment_id" in body and body["environment_id"] != environment_id:
+        raise ValueError("Environment command target does not match the route")
+    return {**body, "environment_id": environment_id}
 
 
 def handle_environment_stop(environment_id: str) -> dict[str, Any]:
     try:
         from nous_runtime.capability.runtime_executor import execute_runtime_capability
-        return ok_response(execute_runtime_capability("environment.stop", {"environment_id": environment_id}, workspace_root=_runtime().root))
+
+        return ok_response(
+            execute_runtime_capability(
+                "environment.stop",
+                {"environment_id": environment_id},
+                workspace_root=_runtime().root,
+            )
+        )
     except (OSError, RuntimeError, TypeError, ValueError) as exc:
         return _error(exc)
 
@@ -85,7 +124,14 @@ def handle_environment_stop(environment_id: str) -> dict[str, Any]:
 def handle_environment_destroy(environment_id: str) -> dict[str, Any]:
     try:
         from nous_runtime.capability.runtime_executor import execute_runtime_capability
-        return ok_response(execute_runtime_capability("environment.destroy", {"environment_id": environment_id}, workspace_root=_runtime().root))
+
+        return ok_response(
+            execute_runtime_capability(
+                "environment.destroy",
+                {"environment_id": environment_id},
+                workspace_root=_runtime().root,
+            )
+        )
     except (OSError, RuntimeError, TypeError, ValueError) as exc:
         return _error(exc)
 
@@ -101,11 +147,36 @@ def ensure_environment_capabilities() -> tuple[str, ...]:
     from nous_runtime.capability import register_capability
 
     operations = {
-        "environment.create": ("Create a bounded ExecutionEnvironment contract", "local_write", "reversible", "medium"),
-        "environment.start": ("Prepare and start an environment through its provider", "external_write", "partially_reversible", "high"),
-        "environment.run": ("Run an argv command inside a ready environment", "local_write", "partially_reversible", "high"),
-        "environment.stop": ("Stop a running environment and its process tree", "destructive", "reversible", "high"),
-        "environment.destroy": ("Destroy provider state for an environment", "destructive", "irreversible", "critical"),
+        "environment.create": (
+            "Create a bounded ExecutionEnvironment contract",
+            "local_write",
+            "reversible",
+            "medium",
+        ),
+        "environment.start": (
+            "Prepare and start an environment through its provider",
+            "external_write",
+            "partially_reversible",
+            "high",
+        ),
+        "environment.run": (
+            "Run an argv command inside a ready environment",
+            "local_write",
+            "partially_reversible",
+            "high",
+        ),
+        "environment.stop": (
+            "Stop a running environment and its process tree",
+            "destructive",
+            "reversible",
+            "high",
+        ),
+        "environment.destroy": (
+            "Destroy provider state for an environment",
+            "destructive",
+            "irreversible",
+            "critical",
+        ),
     }
     registered: list[str] = []
     for capability_id, (description, effect, reversibility, risk) in operations.items():
@@ -154,7 +225,11 @@ ENVIRONMENT_ROUTES = {
 }
 
 ENVIRONMENT_GOVERNANCE = {
-    ("POST", "/api/v1/environments"): ("environment.create", "local_write", "reversible"),
+    ("POST", "/api/v1/environments"): (
+        "environment.create",
+        "local_write",
+        "reversible",
+    ),
     ("POST", "/api/v1/environments/{environment_id}/start"): (
         "environment.start",
         "external_write",

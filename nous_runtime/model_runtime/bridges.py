@@ -73,6 +73,7 @@ class GatewayChatHandler:
         input_provenance: dict[int, dict[str, Any]] = {}
         context_snapshot = dict(context.get("context_snapshot") or {})
         context_items = tuple(context_snapshot.get("items") or ())
+        selected_reader = context.get("_selected_input")
         if context_items:
             rendered_context = []
             rendered_sources = []
@@ -173,6 +174,8 @@ class GatewayChatHandler:
         if not self._retained_context_admitted(
             runtime_request, context, context_snapshot, workspace_path
         ):
+            if selected_reader is not None:
+                emit("context.input.rejected", {"sources": selected_reader.reject()})
             return {
                 "ok": False,
                 "status": "failed",
@@ -299,6 +302,10 @@ class GatewayChatHandler:
             if not self._retained_context_admitted(
                 runtime_request, context, context_snapshot, workspace_path
             ):
+                if selected_reader is not None:
+                    emit(
+                        "context.input.rejected", {"sources": selected_reader.reject()}
+                    )
                 checkpoint = agent_execution.finish(
                     ok=False, paused=True, message="Current context admission failed"
                 )
@@ -371,6 +378,16 @@ class GatewayChatHandler:
                     priority=int(constraints.get("priority") or 50),
                 ),
                 messages=tuple(invocation_messages),
+                _input_admission=self._selected_admission(
+                    selected_reader,
+                    runtime_request,
+                    context,
+                    context_snapshot,
+                    workspace_path,
+                    invocation_messages,
+                    tools,
+                    emit,
+                ),
                 # Providers may use their native tool-call envelope. The
                 # provider-neutral text protocol remains a bounded fallback.
                 tools=tuple(tools),
@@ -390,6 +407,7 @@ class GatewayChatHandler:
                     correlation_id=request_id,
                 ),
                 metadata={
+                    "requires_selected_input_admission": selected_reader is not None,
                     "chat_intent": constraints.get("chat_intent", ""),
                     "conversation_summary": constraints.get(
                         "conversation_summary",
@@ -416,6 +434,9 @@ class GatewayChatHandler:
                         "agent_id": "nous.workspace-agent" if tools else "nous.chat",
                         "iteration": iteration + 1,
                         "operation": "chat",
+                        "selected_input": selected_reader.provenance()
+                        if selected_reader is not None
+                        else [],
                         "input_manifest": explain_model_input(
                             gateway_request.messages,
                             gateway_request.tools,
@@ -755,6 +776,20 @@ class GatewayChatHandler:
                 trace_id=str(context.get("trace_id") or request_id),
                 preferred_model=str(constraints.get("model_id") or ""),
                 emit=emit,
+                input_admission_factory=(
+                    lambda review_messages: self._selected_admission(
+                        selected_reader,
+                        runtime_request,
+                        context,
+                        context_snapshot,
+                        workspace_path,
+                        review_messages,
+                        (),
+                        emit,
+                    )
+                )
+                if selected_reader is not None
+                else None,
             )
             result["collaboration"]["review"] = reviewer
         result["agent_execution"] = agent_execution.finish(
@@ -763,6 +798,45 @@ class GatewayChatHandler:
             message=str(result.get("reason") or result.get("status") or ""),
         )
         return result
+
+    def _selected_admission(
+        self,
+        reader,
+        runtime_request,
+        context,
+        snapshot,
+        workspace,
+        messages,
+        tools,
+        emit,
+    ):
+        if reader is None:
+            if getattr(runtime_request, "workspace_file_refs", ()):
+                from nous_runtime.context.selected_input import SelectedInputError
+
+                raise SelectedInputError("selected_input_admission_required")
+            return None
+        from nous_runtime.context.models import ContextSnapshot
+        from nous_runtime.context.selected_input import SelectedInputAdmission
+
+        def verify_original():
+            active = context.get("_selected_request_active")
+            return (
+                callable(active)
+                and active()
+                and self._retained_context_admitted(
+                    runtime_request, context, snapshot, workspace
+                )
+            )
+
+        return SelectedInputAdmission(
+            reader,
+            ContextSnapshot.from_dict(snapshot),
+            verify_original,
+            messages,
+            tools,
+            emit=emit,
+        )
 
     @staticmethod
     def _retained_context_admitted(runtime_request, context, snapshot, workspace):

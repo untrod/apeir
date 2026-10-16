@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import contextvars
 import json
 import threading
@@ -619,5 +621,227 @@ def test_session_persistence_and_probes_cannot_block_transport_callbacks(
             await server.stop()
             watcher.join(timeout=3)
             assert not watcher.is_alive()
+
+    asyncio.run(scenario())
+
+
+def _control_case(tmp_path, kind):
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from nous_runtime.node_runtime.relay import public_key_hex
+
+    service = NodeRuntimeService(NodeRuntimeConfig(tmp_path / "node"))
+    controller_key = Ed25519PrivateKey.generate()
+    owner = NodeRelayClient(service, "ws://127.0.0.1:9", public_key_hex(controller_key))
+    if kind == "ARTIFACT_FETCH":
+        content = b"owned controlled artifact"
+        digest = "sha256:" + hashlib.sha256(content).hexdigest()
+        payload = {
+            "digest": digest,
+            "transfer_id": "transfer-io",
+            "offset": 0,
+            "total_size": len(content),
+            "chunk_b64": base64.b64encode(content).decode(),
+            "artifact": {"artifact_type": "binary", "name": "controlled.bin"},
+            "eof": True,
+        }
+        method, identity = "ingest_artifact_chunk", digest
+    elif kind in {"LEASE_ACQUIRE", "LEASE_RELEASE"}:
+        payload = {"lease_id": "lease-io", "resource_id": "cpu:0", "ttl_seconds": 60}
+        if kind == "LEASE_RELEASE":
+            payload.pop("ttl_seconds")
+            service.acquire_lease("lease-io", "cpu:0", 60)
+        method = "acquire_lease" if kind == "LEASE_ACQUIRE" else "release_lease"
+        identity = "lease-io"
+    else:
+        payload = {"workload_id": "work-stop-io"}
+        method, identity = "stop_workload", "work-stop-io"
+    envelope = NodeProtocolEnvelope(
+        message_type=kind,
+        source="control_plane",
+        target=service.identity.node_id,
+        sequence=1,
+        payload=payload,
+        idempotency_key=identity,
+    ).sign(controller_key)
+    assert envelope.verify(owner.server_public_key)
+    return owner, method, envelope, controller_key
+
+
+@pytest.mark.parametrize(
+    "kind", ["ARTIFACT_FETCH", "LEASE_ACQUIRE", "LEASE_RELEASE", "WORKLOAD_STOP"]
+)
+def test_control_persistence_cannot_block_transport_callbacks(
+    tmp_path, monkeypatch, kind
+):
+    async def scenario():
+        owner, method, envelope, _controller_key = _control_case(tmp_path, kind)
+        websocket = RecordingSocket(owner)
+        entered, release, finished = (threading.Event() for _ in range(3))
+        observations, calls = [], []
+        operation = getattr(owner.service, method)
+        loop = asyncio.get_running_loop()
+
+        def held_operation(*args, **kwargs):
+            calls.append((args, kwargs))
+            entered.set()
+            assert release.wait(5), "controlled control writer was not released"
+            result = operation(*args, **kwargs)
+            finished.set()
+            return result
+
+        def watchdog():
+            if not entered.wait(5):
+                release.set()
+                return
+
+            def transport_tick():
+                observations.append(not finished.is_set())
+                release.set()
+
+            loop.call_soon_threadsafe(transport_tick)
+            if not release.wait(1):
+                release.set()
+
+        monkeypatch.setattr(owner.service, method, held_operation)
+        worker = threading.Thread(target=watchdog)
+        worker.start()
+        try:
+            await owner._handle_message(websocket, envelope)
+            await asyncio.sleep(0)
+            assert observations == [True], observations
+            assert len(calls) == 1
+            assert len(websocket.messages) == 1
+            reply = websocket.messages[0]
+            assert reply.reply_to == envelope.message_id
+            if kind == "ARTIFACT_FETCH":
+                assert reply.message_type == "ARTIFACT_READY"
+                assert reply.payload["state"] == "READY"
+                assert owner.service.artifact_store.verify(envelope.payload["digest"])
+            elif kind.startswith("LEASE_"):
+                assert reply.payload["lease"]["fencing_token"] == 1
+            else:
+                assert reply.payload["state"] == "CANCELLED"
+        finally:
+            release.set()
+            worker.join(timeout=5)
+            assert not worker.is_alive()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("kind", ["LEASE_ACQUIRE", "WORKLOAD_STOP"])
+def test_cancelled_control_drains_original_commit_before_reconciliation(
+    tmp_path, monkeypatch, kind
+):
+    async def scenario():
+        owner, method, envelope, controller_key = _control_case(tmp_path, kind)
+        websocket = RecordingSocket(owner)
+        entered = asyncio.Event()
+        release = threading.Event()
+        finished = []
+        operation = getattr(owner.service, method)
+        loop = asyncio.get_running_loop()
+
+        def held_operation(*args, **kwargs):
+            loop.call_soon_threadsafe(entered.set)
+            assert release.wait(5), "original control writer was not released"
+            result = operation(*args, **kwargs)
+            finished.append(result)
+            return result
+
+        monkeypatch.setattr(owner.service, method, held_operation)
+        original = asyncio.create_task(owner._handle_message(websocket, envelope))
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=5)
+            original.cancel("original cancellation")
+            await asyncio.sleep(0)
+            original.cancel("second cancellation")
+            await asyncio.sleep(0)
+            assert not original.done()
+            assert finished == []
+            assert websocket.messages == []
+            release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(original, timeout=5)
+            assert len(finished) == 1
+            assert websocket.messages == []
+            path = (
+                owner.service.leases_path
+                if kind == "LEASE_ACQUIRE"
+                else owner.service.workloads_path
+            )
+            persisted = path.read_bytes()
+            monkeypatch.setattr(owner.service, method, operation)
+            retry = NodeProtocolEnvelope(
+                message_type=kind,
+                source=envelope.source,
+                target=envelope.target,
+                sequence=2,
+                payload=envelope.payload,
+                idempotency_key=envelope.idempotency_key,
+            ).sign(controller_key)
+            assert retry.verify(owner.server_public_key)
+            await owner._handle_message(websocket, retry)
+            assert path.read_bytes() == persisted
+            assert len(websocket.messages) == 1
+            if kind == "LEASE_ACQUIRE":
+                assert websocket.messages[0].payload["lease"] == finished[0]
+                assert (
+                    json.loads(owner.service.lease_counter_path.read_text())["counter"]
+                    == 1
+                )
+            else:
+                assert websocket.messages[0].payload["state"] == "CANCELLED"
+                assert (
+                    websocket.messages[0].payload["stop_result"] == "ALREADY_TERMINAL"
+                )
+        finally:
+            release.set()
+            await asyncio.gather(original, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
+def test_control_publication_error_emits_no_success_and_preserves_retry(
+    tmp_path, monkeypatch
+):
+    from nous_runtime.node_runtime import service as service_module
+
+    async def scenario():
+        owner, _method, envelope, controller_key = _control_case(
+            tmp_path, "LEASE_ACQUIRE"
+        )
+        websocket = RecordingSocket(owner)
+        write = service_module._atomic_write_json
+
+        def reject_lease(path, value):
+            if path == owner.service.leases_path:
+                raise OSError("controlled lease publication failure")
+            return write(path, value)
+
+        monkeypatch.setattr(service_module, "_atomic_write_json", reject_lease)
+        with pytest.raises(OSError, match="lease publication failure"):
+            await owner._handle_message(websocket, envelope)
+        assert websocket.messages == []
+        assert owner.service._leases == {}
+        assert not owner.service.leases_path.exists()
+        monkeypatch.setattr(service_module, "_atomic_write_json", write)
+        retry = NodeProtocolEnvelope(
+            message_type=envelope.message_type,
+            source=envelope.source,
+            target=envelope.target,
+            sequence=2,
+            payload=envelope.payload,
+            idempotency_key=envelope.idempotency_key,
+        ).sign(controller_key)
+        await owner._handle_message(websocket, retry)
+        assert len(websocket.messages) == 1
+        assert websocket.messages[0].payload["lease"]["fencing_token"] == 2
+        assert (
+            json.loads(owner.service.leases_path.read_text())["lease-io"][
+                "fencing_token"
+            ]
+            == 2
+        )
 
     asyncio.run(scenario())

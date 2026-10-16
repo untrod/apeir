@@ -1777,6 +1777,33 @@ class NodeRelayServer:
                 isinstance(item, str) for item in input_artifacts
             ):
                 raise NodeProtocolError("remote provider input artifacts are invalid")
+            if operation_id in self.result_envelopes:
+                # Reading admitted execution evidence is not a new execution
+                # admission. In particular, revocation cannot erase that fact.
+                recorded = NodeProtocolEnvelope.from_json(
+                    json.dumps(self.result_envelopes[operation_id]), check_time=False
+                )
+                if (
+                    recorded.message_type != "WORKLOAD_STATUS"
+                    or recorded.source != node_id
+                    or recorded.target != CONTROL_PLANE_ID
+                    or not recorded.verify(self.node_keys.get(node_id, ""))
+                    or recorded.payload != self.results.get(operation_id)
+                ):
+                    raise NodeProtocolError("recorded provider result identity changed")
+                _verify_at_most_once_result(
+                    node_id,
+                    {
+                        "workload_id": operation_id,
+                        "capability": str(value.get("capability", "")),
+                        "arguments": dict(value.get("arguments") or {}),
+                        "delivery_semantics": str(value.get("delivery_semantics", "")),
+                        "binding": value.get("binding") or {},
+                    },
+                    recorded.payload,
+                )
+                self._publish_provider_result(operation_id)
+                return
             if input_artifacts and self.artifact_store is not None:
                 self.artifact_store = ContentAddressedArtifactStore(
                     self.artifact_store.root
@@ -1798,8 +1825,25 @@ class NodeRelayServer:
             # transfers an input. Keep the request and persisted assignment for
             # reconnect; at-most-once delivery still returns the Node journal.
             return
-        except (KeyError, OSError, TypeError, ValueError, NodeProtocolError) as exc:
+        except OSError as exc:
+            # Storage failure is not evidence of rejection or of no effect.
+            # Retain the original request; a later sweep reconciles its bound
+            # Node journal/result instead of inventing a terminal outcome.
+            _LOG.warning(
+                "Provider spool I/O deferred; original request retained (%s)",
+                type(exc).__name__,
+            )
+        except (KeyError, TypeError, ValueError, NodeProtocolError) as exc:
             operation_id = request_path.stem
+            if (
+                operation_id in self.result_envelopes
+                or (self.provider_results / f"{operation_id}.json").is_file()
+            ):
+                _LOG.warning(
+                    "Provider request rejected; original result evidence retained (%s)",
+                    type(exc).__name__,
+                )
+                return
             _atomic_json(
                 self.provider_results / f"{operation_id}.json",
                 {
@@ -1822,7 +1866,7 @@ class NodeRelayServer:
             return
         result_path = self.provider_results / f"{workload_id}.json"
         if result_path.is_file():
-            request_path.unlink(missing_ok=True)
+            self._retire_provider_request(request_path)
             return
         payload = self.results[workload_id]
         if payload.get("state") == "RECOVERY_REQUIRED":
@@ -1849,7 +1893,19 @@ class NodeRelayServer:
                 ),
             }
         _atomic_json(result_path, value)
-        request_path.unlink(missing_ok=True)
+        self._retire_provider_request(request_path)
+
+    @staticmethod
+    def _retire_provider_request(request_path: Path) -> None:
+        try:
+            request_path.unlink(missing_ok=True)
+        except OSError as exc:
+            # The signed result is already durable. Cleanup cannot turn it into
+            # a request rejection or erase the original recovery binding.
+            _LOG.warning(
+                "Provider request cleanup deferred; published result retained (%s)",
+                type(exc).__name__,
+            )
 
     async def _send_artifact(
         self,
@@ -2238,7 +2294,8 @@ class NodeRelayClient:
                 )
         elif envelope.message_type == "WORKLOAD_STOP":
             workload_id = str(envelope.payload.get("workload_id", ""))
-            result = self.service.stop_workload(workload_id)
+            self._session_phase = "workload-stop"
+            result = await self._run_session_io(self.service.stop_workload, workload_id)
             await self._send(
                 websocket,
                 "WORKLOAD_STATUS",
@@ -2247,7 +2304,9 @@ class NodeRelayClient:
                 idempotency_key=workload_id,
             )
         elif envelope.message_type == "LEASE_ACQUIRE":
-            lease = self.service.acquire_lease(
+            self._session_phase = "lease-acquire"
+            lease = await self._run_session_io(
+                self.service.acquire_lease,
                 str(envelope.payload.get("lease_id", "")),
                 str(envelope.payload.get("resource_id", "")),
                 envelope.payload.get("ttl_seconds", 0),
@@ -2260,7 +2319,9 @@ class NodeRelayClient:
                 idempotency_key=envelope.idempotency_key,
             )
         elif envelope.message_type == "LEASE_RELEASE":
-            lease = self.service.release_lease(
+            self._session_phase = "lease-release"
+            lease = await self._run_session_io(
+                self.service.release_lease,
                 str(envelope.payload.get("lease_id", "")),
                 str(envelope.payload.get("resource_id", "")),
             )
@@ -2276,7 +2337,9 @@ class NodeRelayClient:
                 chunk = base64.b64decode(
                     str(envelope.payload.get("chunk_b64", "")), validate=True
                 )
-                ready = self.service.ingest_artifact_chunk(
+                self._session_phase = "artifact-write"
+                ready = await self._run_session_io(
+                    self.service.ingest_artifact_chunk,
                     digest=str(envelope.payload.get("digest", "")),
                     transfer_id=str(envelope.payload.get("transfer_id", "")),
                     offset=envelope.payload.get("offset", -1),
@@ -2346,6 +2409,10 @@ class NodeRelayClient:
         envelope = NodeProtocolEnvelope.from_json(raw)
         if not envelope.verify(self.server_public_key):
             raise NodeProtocolError("control-plane signature verification failed")
+        if envelope.source != CONTROL_PLANE_ID:
+            raise NodeProtocolError("unexpected message source")
+        if envelope.target != self.service.identity.node_id:
+            raise NodeProtocolError("message addressed to another node")
         self._replay.accept(envelope)
         return envelope
 
@@ -2369,9 +2436,11 @@ class NodeRelayClient:
     def _save_session_id(self, session_id: str) -> None:
         _atomic_json(self.session_path, {"session_id": session_id})
 
-    async def _run_session_io(self, operation: Callable[..., Any], *args: Any) -> Any:
+    async def _run_session_io(
+        self, operation: Callable[..., Any], *args: Any, **kwargs: Any
+    ) -> Any:
         async with _relay_send_lock(self):
-            return await _run_relay_io(operation, *args)
+            return await _run_relay_io(operation, *args, **kwargs)
 
 
 def _relay_send_lock(owner: Any) -> asyncio.Lock:
