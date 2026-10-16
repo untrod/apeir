@@ -244,3 +244,40 @@ bindings and current OS creation identities. Each later status, attach or contro
 request obtains a new host observation; an earlier RUNNING sample cannot
 authorize stdin or kill when current identity/state is unknown. Startup retains
 its original deadline and single original launch; no replay or host fallback.
+
+External-provider spool result publication is separate from request retirement.
+A durable signed result cannot be replaced with a rejection because its consumed
+request could not be removed. Storage I/O failure is not validation failure or
+proof of no effect: retain the original bound request and reconcile persisted
+Node/result evidence on a later sweep or restart. Malformed schema/binding still
+rejects before dispatch. Spool recovery creates no new operation, grant or effect;
+an execution receipt remains distinct from independent effect verification.
+
+
+Transport lifetime is not execution ownership. Cancelling a Node WebSocket task
+may return while the admitted handler continues under the NodeService's durable
+EXECUTING journal. That cancellation is not proof of no effect. The original
+binding returns RECOVERY_REQUIRED while execution remains unresolved, then the
+original completed journal/result can be delivered after reconnect without
+another handler invocation. Do not make transport cancellation wait for the
+handler as a substitute for this established recovery contract. Sequence/session
+I/O publication has its separate cancellation-drain rule; it does not transfer
+execution ownership from the Node journal to a transport coroutine.
+
+
+Revocation prevents new execution, not reading already admitted signed execution
+evidence. A retained provider request reconciles the exact original Node,
+Operation, arguments and receipt binding against the persisted signed result,
+even if the Node was revoked before Controller restart. A changed retry cannot
+borrow that result or overwrite it with rejection. Neither recovery nor the
+previous approval restores trust; a new workload still fails the current
+revocation check. Reading an execution fact does not establish an effect MATCH.
+
+
+Workflow continuation is not a synchronous-completion promise. After one
+independent read's original signed result is reconciled, finalization can admit a
+new fresh read and pause again on its bounded wait. A consumer follows each exact
+read's terminal evidence before continuing the same Workflow; absent receipts
+remain WAITING and do not trigger mutation replay. A previous read's completion
+is not MATCH for a later acquisition. Neither longer retries nor historical
+resource reports replace that evidence.
