@@ -24,8 +24,8 @@ from nous_runtime.core.redaction import (
 )
 from nous_runtime.locking import file_lock
 
-_DIGEST = re.compile(r"^sha256:([0-9a-f]{64})$")
 _ARTIFACT_TYPES = frozenset(item.value for item in ArtifactType)
+_DIGEST = re.compile(r"^sha256:([0-9a-f]{64})$")
 
 
 def _utc_now() -> str:

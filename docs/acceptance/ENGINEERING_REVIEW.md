@@ -1438,6 +1438,32 @@ Artifact contracts: **31 passed** on Python 3.12 (1.80 s), **31 passed** on Pyth
 3.10 (1.47 s), overlapping the combined selection. Kernel and component lock
 are unchanged; exact source/main CI remain required.
 
+Current-main controlled comparison (2026-10-16) starts from `629b13f` and fixes
+three rounds in order AB/BA/AB, 100 samples per operation in each child process:
+**300 samples per operation/variant**, the same unchanged 1000-record,
+593893-byte index, one-CPU affinity and a warm local Linux filesystem. The host
+is shared, not exclusive. The actual candidate source bytes match the measured
+module SHA-256 `c336f43a64b344527a69d2e69798316c237c3adedaa6d07b056737ac62354977`.
+Only the declaration order of independent constants was aligned to that exact
+measured module; no admission or validation behavior changed.
+
+| Operation | Before p50 / p95 / p99 (ms) | Candidate p50 / p95 / p99 (ms) | CPU seconds before / candidate |
+| --- | --- | --- | --- |
+| metadata get | 12.485 / 16.132 / 27.362 | 9.336 / 12.551 / 15.095 | 3.947 / 2.929 |
+| resolve + content verification | 25.821 / 32.586 / 35.727 | 17.745 / 21.589 / 26.408 | 7.957 / 5.457 |
+
+Peak child RSS was 18820 KiB before and 18788 KiB after. Raw samples, manifest,
+index hashes and source trees remain outside source control. The earlier slower
+101.49 ms p99 is retained above; the new fixed comparison is separate evidence,
+not a replacement favorable rerun. The 300-sample shared-host tail has statistical
+limits and does not establish end-to-end, Windows, network or Token savings.
+After normal dependency integration, Artifact/Node/Governance/Extension writer
+and Skill installation contracts have **565 passed** (28.11 s); focused Artifact
+contracts have **31 passed** on Python 3.12 (0.97 s) and 3.10 (0.99 s). Current
+index reloads, cross-instance graph/pin/GC ownership, corruption rejection,
+redaction, signed results and no-replay behavior remain unchanged. Required
+source and resulting-main CI remain separate gates.
+
 ### Automation configuration publication admission — 2026-10-15
 
 **REUSE / FIX** the existing Workflow writer, immutable Automation definition and
