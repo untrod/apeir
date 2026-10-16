@@ -1510,3 +1510,36 @@ selection: **9 passed** (41.68 s), including missing result and producer-failure
 cases. Fresh exact-head CI remains required. This corrects a demonstrated test
 consumer assumption, not an established root cause of Windows storage latency
 or proof that no runtime race exists. Issues #4/#8 remain open.
+
+### Connector explicit admission contract — 2026-10-16
+
+**REUSE / FIX** the exported Connector library and existing Governance decision;
+no new API, policy or execution authority. An adapter write now requires both
+EXECUTE and explicit boolean `allowed=True`. Controlled decision probes before
+the fix retained **9 failed, 1 passed**: five missing/false/nonboolean admission
+flags reached the mock adapter, while absent/invalid modes could raise instead
+of returning the existing denial result. The valid canonical decision still
+executes once. A first invocation used the wrong checkout and selected no tests;
+that orchestration error is not counted as a reproduction.
+
+The original nine Connector tests, including the unchanged timeout bound, and
+the ten decision probes have **19 passed** on Python 3.12 (0.22 s), **19 passed**
+on Python 3.10 (0.25 s). Governance/Connector/Workflow safety regression has
+**275 passed** (6.58 s). The previous Connector wall-time failure remains
+unexplained; no health-I/O, timeout, retry or persistence setting changes here.
+The library export has no current Desktop consumer; these tests do not qualify
+a live enterprise service, credentials, physical effects or complete product
+integration. Exact-source checks and normal PR integration remain required.
+
+
+Connector source `9d80c48` Core run `38857997503` retains **1 failed, 5000 passed,
+47 skipped, 4 warnings** (478.00 s). The wider response-loss regression imported
+a shared Gate fixture that supplied EXECUTE without the contract's `allowed`
+field, so it was denied before reaching the intended effect-once fault. The
+initial targeted selection omitted this separate retry module. The shared
+fixture now returns the existing canonical AuthorizationDecision with explicit
+boolean admission. All nine original test-function ASTs remain unchanged; no
+response-loss, effect-count, retry-budget or timeout assertion was weakened.
+The complete three-module Connector selection and Governance/Workflow regression
+are rerun before publishing the correction. The failed full CI is not relabelled
+as a baseline environment failure or erased.
