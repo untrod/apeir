@@ -2502,3 +2502,61 @@ is **50 passed (17.86s)**. This is correctness/resource ownership, not a measure
 speed improvement. Official Codex direct-MCP qualification against that async
 code: **1 passed (9.66s)**, report `apeir-codex-mcp-direct-duw7n7vt/report.json`,
 no model Turns and clean owned-process exit. Final composed CI remains required.
+
+Installed external MCP consumer: source `5bd50e5`, independently built wheel
+SHA-256 `d0ba3843f706b1338bc36bc0609bf6ca359e4f857f5eda86deb565cf139ad2b5`,
+installed with the existing MCP extra into a new isolated venv. From an empty
+working directory outside the checkout, public `apeir extension serve-mcp`
+initialized/discovered five described tools, read actual Node and Distributed
+Work state, and stopped Work submission at canonical human approval. **1 passed
+(4.03s)**; installed module resolved under venv site-packages, no model call,
+raw test credential leak or remaining owned process. The protected consumer
+manifest/report retains exact wheel/source/cleanup evidence. This is a source
+wheel, not native Windows installation or production supply-chain qualification.
+
+The separate Windows Automation failure at source97c9a8/run38939446275 is now
+[Issue82](https://github.com/untrod/apeir/issues/82). Its missing verdict must not
+be promoted to MATCH. Source5bd50e5 Linux Automation: **114 passed (195.36s)**;
+this does not identify or resolve the Windows cause. The same original assertion
+now emits the full failed projection and additionally checks original Work/effect
+count, without another attempt, more delay or a larger timeout. Original failure
+logs and the failed run remain retained; general reliability/product status is
+not upgraded on the strength of another passing candidate.
+
+
+### Distribution compatibility migration atomicity and Windows startup follow-up
+
+MCP source5bd50e5 manual full Core run38944737418: Linux3.12, Linux3.10 and
+macOS3.12 passed; Windows3.12 job117120890834 aborted at the unchanged60-second
+pytest limit during a Context fixture's legacy Capability schema migration,
+before MCP tests. The stack is retained. This is not relabelled a passed Windows
+run, and no claim is made that the Automation failure in Issue82 has the same cause.
+
+Audit identified a separate deterministic defect in Distribution's existing
+Python compatibility database (`remote_terminal/nous_core/db.py`): executescript
+committed each DDL before the version record; an injected later SQL error left
+a partial table behind (**1 failed0.08s**). Existing file migrations now each
+own one transaction, including their version record, and inline bootstrap is
+atomic as well. The old connection manager still commits/rolls back/closes;
+WAL, foreign keys, FULL synchronization and5-second busy timeout are unchanged.
+No migration SQL, native Rust Kernel repository/revision, NKI contract,
+`nous_runtime/kernel`, component lock or authority model is modified. Formatting
+of the touched legacy file preserves the measured implementation AST.
+
+The existing Pack test also assumed another test had imported its registry and
+leaked NOUS_DATA_DIR globally. Focused qualification exposed **1 failed71 passed**;
+it now explicitly imports the same owner and restores its temporary environment.
+No assertion was removed. Migrations/Context guard/API admission: **72 passed
+3.34s**. Wider Extension/Work/Agent/Governance/Context/migrations/Environment/
+Artifact/API freeze: **1356 passed19 skipped56.51s**. Python3.10 public MCP,
+submission,CLI,migrations and Context guard: **114 passed20.85s**. Counts overlap.
+
+Controlled cold-schema A12/B12/B12/A12,24 fresh databases per variant on one CPU
+of the shared Linux host: before p50/p95/p99 **51.455/56.662/62.573ms**, CPU
+**0.46595s**; atomic after **30.883/37.761/42.755ms**, CPU **0.34982s**.
+All databases pass integrity_check and contain all14 version records. Private
+`apeir-legacy-migration-ab-t5xxj7g7/report.json` retains raw samples and module
+hash/AST equivalence. Small-sample p99 is the observed maximum, not a stable
+production tail estimate. This does not establish Windows timeout root cause,
+Node end-to-end improvement, model cost savings or physical qualification.
+Exact updated source must run fresh full Core/Multi-Arch before integration.

@@ -45,9 +45,11 @@ REQUIRED_TABLES = {
 
 # Helpers
 
+
 def _get_existing_tables() -> set[str]:
     """Return set of user-table names currently in nous_core.db."""
     from remote_terminal.nous_core.db import connect
+
     with connect(readonly=True) as db:
         rows = db.execute(
             "SELECT name FROM sqlite_master "
@@ -57,6 +59,7 @@ def _get_existing_tables() -> set[str]:
 
 
 # Tests
+
 
 class TestBootstrapCoreTables:
     """Direct tests for bootstrap_core_tables()."""
@@ -128,6 +131,7 @@ class TestRunMigrations:
         monkeypatch.setenv("NOUS_DATA_DIR", str(tmp_path))
 
         from nous_runtime.kernel.runtime import Runtime
+
         rt = Runtime()
         status = rt.start()
         assert status.running
@@ -144,9 +148,18 @@ class TestFreshInstallScenario:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             r = subprocess.run(
-                [sys.executable, "-m", "nous_runtime.cli.main",
-                 "init", "--no-wizard", "--path", tmpdir],
-                capture_output=True, text=True, timeout=30,
+                [
+                    sys.executable,
+                    "-m",
+                    "nous_runtime.cli.main",
+                    "init",
+                    "--no-wizard",
+                    "--path",
+                    tmpdir,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
                 cwd=ROOT,
                 env={**os.environ, "NOUS_DATA_DIR": os.path.join(tmpdir, "data")},
             )
@@ -154,7 +167,7 @@ class TestFreshInstallScenario:
             assert r.returncode == 0, f"nous init failed: {r.stderr}"
             assert "initialized" in r.stdout.lower()
 
-    def test_pack_install_then_capability_list(self, tmp_path):
+    def test_pack_install_then_capability_list(self, tmp_path, monkeypatch):
         """Install hello_pack then list capabilities — no errors."""
         hello_pack_dir = os.path.join(ROOT, "hello_pack")
         if not os.path.isdir(hello_pack_dir):
@@ -163,11 +176,12 @@ class TestFreshInstallScenario:
         # Isolate: use temp data dir for DB and a fresh PackRegistry
         data_dir = str(tmp_path / "data")
         os.makedirs(data_dir, exist_ok=True)
-        os.environ["NOUS_DATA_DIR"] = data_dir
+        monkeypatch.setenv("NOUS_DATA_DIR", data_dir)
 
-        # Override PACK_REGISTRY_FILE via sys.modules
-        import sys
-        reg_module = sys.modules["nous_runtime.pack.registry"]
+        # Import explicitly; this test must also work without prior collection.
+        import importlib
+
+        reg_module = importlib.import_module("nous_runtime.pack.registry")
         old_reg_file = reg_module.PACK_REGISTRY_FILE
         reg_tmp = str(tmp_path / "pack_registry.json")
         reg_module.PACK_REGISTRY_FILE = reg_tmp
@@ -175,22 +189,26 @@ class TestFreshInstallScenario:
         try:
             # 1. Init DB
             from remote_terminal.nous_core.db import run_migrations
+
             run_migrations()
 
             # 2. Install pack (fresh — registry is isolated to temp file)
             from nous_runtime.pack.registry import PackRegistry
+
             reg = PackRegistry()
             pack = reg.install(hello_pack_dir)
             assert pack.manifest.name == "hello_pack"
 
             # 3. List capabilities — must not error, must show hello_pack
             from remote_terminal.nous_core.capability import list_capabilities
+
             caps = list_capabilities()
             cap_names = [c.get("name", "") for c in caps if isinstance(c, dict)]
             assert isinstance(caps, list)
             # hello_pack.hello should be registered
-            assert "hello_pack.hello" in cap_names, \
+            assert "hello_pack.hello" in cap_names, (
                 f"hello_pack.hello not in capabilities: {cap_names}"
+            )
         finally:
             reg_module.PACK_REGISTRY_FILE = old_reg_file
 
@@ -199,9 +217,11 @@ class TestFreshInstallScenario:
         monkeypatch.setenv("NOUS_DATA_DIR", str(tmp_path))
 
         from remote_terminal.nous_core.db import run_migrations
+
         run_migrations()
 
         from remote_terminal.nous_core.capability import list_capabilities
+
         caps = list_capabilities()
         # After bootstrap + auto-seed, we expect default capabilities
         assert isinstance(caps, list)
@@ -210,7 +230,9 @@ class TestFreshInstallScenario:
 class TestNoRemoteTerminalPathReferences:
     """Regression: error messages must not contain stale file-system paths."""
 
-    def test_db_missing_dir_message_is_info_not_path(self, monkeypatch, tmp_path, caplog):
+    def test_db_missing_dir_message_is_info_not_path(
+        self, monkeypatch, tmp_path, caplog
+    ):
         """When migrations dir is missing, the log should be INFO level,
         not a confusing DEBUG message about a file path."""
         monkeypatch.setenv("NOUS_DATA_DIR", str(tmp_path))
@@ -223,8 +245,9 @@ class TestNoRemoteTerminalPathReferences:
 
         # Check that no ERROR or WARNING was emitted about missing dir
         for record in caplog.records:
-            assert record.levelno < logging.WARNING, \
+            assert record.levelno < logging.WARNING, (
                 f"Unexpected warning/error: {record.getMessage()}"
+            )
 
     def test_no_hardcoded_remote_terminal_in_messages(self):
         """Bootstrap code must not hardcode 'remote_terminal' in user-facing
@@ -253,7 +276,7 @@ class TestNoRemoteTerminalPathReferences:
 class TestPackRemoveCleansCapabilities:
     """Regression: removing a pack must unregister its capabilities."""
 
-    def test_remove_clears_capabilities(self, tmp_path):
+    def test_remove_clears_capabilities(self, tmp_path, monkeypatch):
         """Install → verify caps exist → remove → verify caps gone."""
         import sys as _sys
 
@@ -263,10 +286,11 @@ class TestPackRemoveCleansCapabilities:
 
         data_dir = str(tmp_path / "data")
         os.makedirs(data_dir, exist_ok=True)
-        os.environ["NOUS_DATA_DIR"] = data_dir
+        monkeypatch.setenv("NOUS_DATA_DIR", data_dir)
 
         # Isolate pack registry — import first so the module is in sys.modules
         import nous_runtime.pack.registry  # noqa: F401
+
         reg_module = _sys.modules["nous_runtime.pack.registry"]
         old_reg_file = reg_module.PACK_REGISTRY_FILE
         reg_tmp = str(tmp_path / "pack_registry.json")
@@ -275,20 +299,24 @@ class TestPackRemoveCleansCapabilities:
         try:
             # 1. Init DB
             from remote_terminal.nous_core.db import run_migrations
+
             run_migrations()
 
             # 2. Install pack
             from nous_runtime.pack.registry import PackRegistry
+
             reg = PackRegistry()
             pack = reg.install(hello_pack_dir)
             assert pack.manifest.name == "hello_pack"
 
             # 3. Verify capability visible
             from remote_terminal.nous_core.capability import list_capabilities
+
             caps = list_capabilities()
             cap_names = [c.get("name", "") for c in caps if isinstance(c, dict)]
-            assert "hello_pack.hello" in cap_names, \
+            assert "hello_pack.hello" in cap_names, (
                 f"Expected hello_pack.hello in capabilities after install, got: {cap_names}"
+            )
 
             # 4. Remove pack
             reg.remove("hello_pack")
@@ -296,19 +324,25 @@ class TestPackRemoveCleansCapabilities:
             # 5. Verify pack not in registry
             packs = reg.list()
             pack_names = [p["name"] for p in packs]
-            assert "hello_pack" not in pack_names, \
+            assert "hello_pack" not in pack_names, (
                 f"hello_pack should not be in pack list after removal: {pack_names}"
+            )
 
             # 6. Verify capability no longer in database
             caps_after = list_capabilities()
-            cap_names_after = [c.get("name", "") for c in caps_after if isinstance(c, dict)]
-            assert "hello_pack.hello" not in cap_names_after, \
+            cap_names_after = [
+                c.get("name", "") for c in caps_after if isinstance(c, dict)
+            ]
+            assert "hello_pack.hello" not in cap_names_after, (
                 f"hello_pack.hello should NOT be in capabilities after removal: {cap_names_after}"
+            )
 
             # 7. Verify no stale entries (by exact name lookup)
             from remote_terminal.nous_core.capability import get_capability
-            assert get_capability("hello_pack.hello") is None, \
+
+            assert get_capability("hello_pack.hello") is None, (
                 "get_capability('hello_pack.hello') should return None after removal"
+            )
 
         finally:
             reg_module.PACK_REGISTRY_FILE = old_reg_file
@@ -343,6 +377,7 @@ class TestPackRemoveCleansCapabilities:
     def test_unregister_nonexistent_returns_false(self):
         """unregister_capability() on a nonexistent cap returns False."""
         from remote_terminal.nous_core.capability import unregister_capability
+
         ok = unregister_capability("nonexistent.capability.xyz")
         assert ok is False
 
@@ -368,7 +403,8 @@ class TestPackRemoveCleansCapabilities:
         # Verify they exist
         caps_before = list_capabilities()
         bulk_names = [
-            c.get("name") for c in caps_before
+            c.get("name")
+            for c in caps_before
             if isinstance(c, dict) and c.get("provider") == PROVIDER
         ]
         assert len(bulk_names) == 3, f"Expected 3 caps, got: {bulk_names}"
@@ -380,8 +416,77 @@ class TestPackRemoveCleansCapabilities:
         # Verify all gone
         caps_after = list_capabilities()
         remaining = [
-            c.get("name") for c in caps_after
+            c.get("name")
+            for c in caps_after
             if isinstance(c, dict) and c.get("provider") == PROVIDER
         ]
-        assert len(remaining) == 0, \
+        assert len(remaining) == 0, (
             f"Expected 0 caps for provider {PROVIDER}, got: {remaining}"
+        )
+
+
+def test_failed_migration_rolls_back_its_schema_changes(tmp_path, monkeypatch):
+    """An admitted migration is one atomic owner transaction, including DDL."""
+    import sqlite3
+    from remote_terminal.nous_core import db as database
+
+    package = tmp_path / "package"
+    migrations = package / "migrations"
+    migrations.mkdir(parents=True)
+    (migrations / "001_controlled_failure.sql").write_text(
+        "CREATE TABLE partial_schema (value TEXT);\n"
+        "INSERT INTO nonexistent_table VALUES ('not-an-effect');\n"
+        "INSERT INTO schema_migrations(version, name) VALUES (1, 'controlled');\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(database, "__file__", str(package / "db.py"))
+    monkeypatch.setenv("NOUS_DATA_DIR", str(tmp_path / "data"))
+    with pytest.raises(sqlite3.OperationalError, match="nonexistent_table"):
+        database.run_migrations()
+    with database.connect(readonly=True) as connection:
+        assert (
+            connection.execute(
+                "SELECT name FROM sqlite_master WHERE name='partial_schema'"
+            ).fetchone()
+            is None
+        )
+        assert (
+            connection.execute("SELECT version FROM schema_migrations").fetchall() == []
+        )
+
+
+def test_failed_inline_bootstrap_rolls_back_its_schema(tmp_path, monkeypatch):
+    import sqlite3
+    from contextlib import contextmanager
+    from remote_terminal.nous_core import db as database
+
+    monkeypatch.setenv("NOUS_DATA_DIR", str(tmp_path / "data"))
+    connect = database.connect
+
+    class FailingDDL:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def execute(self, sql, *args):
+            if "CREATE TABLE IF NOT EXISTS jobs" in sql:
+                raise sqlite3.OperationalError("controlled bootstrap interruption")
+            return self.connection.execute(sql, *args)
+
+    @contextmanager
+    def interrupted_connection(*args, **kwargs):
+        with connect(*args, **kwargs) as connection:
+            yield FailingDDL(connection)
+
+    with monkeypatch.context() as interrupted:
+        interrupted.setattr(database, "connect", interrupted_connection)
+        with pytest.raises(sqlite3.OperationalError, match="controlled bootstrap"):
+            database.bootstrap_core_tables()
+    with connect(readonly=True) as connection:
+        assert (
+            connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchall()
+            == []
+        )
+    assert database.bootstrap_core_tables() > 0
+    assert REQUIRED_TABLES <= _get_existing_tables()

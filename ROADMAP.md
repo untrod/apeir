@@ -398,3 +398,12 @@ fault recovery, federation, public conformance/specifications, reproducible
 Verified Reality Benchmark and verified release/supply chain. Stable upgrade and
 security boundaries must be documented. Until those Gates pass, do not claim 1.0
 readiness. This roadmap reserves no production version and claims no new Gate PASS.
+
+
+Current reliability follow-up: [Issue82](https://github.com/untrod/apeir/issues/82)
+records a Windows Automation resume response without an effect-verification
+verdict (run38939446275). No root cause or effect outcome is established; passing
+Linux or descendant CI does not resolve it. Runtime product delivery remains
+PARTIAL, and Issues4/8 remain open. The [consolidation record](docs/acceptance/REPOSITORY_CONSOLIDATION.md#unified-main-integration--2026-10-16)
+records exact accepted sources, retained failures and ref retirement. Current
+milestone status remains the closure matrix above; this adds no milestone.
