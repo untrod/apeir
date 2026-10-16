@@ -1628,3 +1628,112 @@ of a tampered committed receipt; it does not itself fix or prove the cause of th
 Windows failure. All fourteen strengthened semantic-tamper cases pass locally
 (8.07 s). No production Runtime, approval, signature or verifier change is made
 for this investigation. Exact updated-source Windows evidence is still required.
+
+### External-provider spool publication and Windows baseline evidence — 2026-10-16
+
+Main `c43f942` Core run `38822457356`, Windows job `116723873694`, retains
+**1 failed, 4970 passed, 60 skipped, 4 warnings** (1539.12 s). The external-provider
+signed Node protocol case returned `ok=false`; its old assertion did not print
+the provider error code. The initial-reports ConnectionClosed warning alone does
+not establish the cause. The unchanged condition now includes redacted error-code
+and content-free phase/memory/result-presence diagnostics for a future failure.
+No assertion, timeout or keepalive setting is relaxed.
+
+**REUSE / FIX** the existing Node journal, signed result admission, Controller
+spool and remote-provider binding checks. A controlled post-publication cleanup
+PermissionError reproduced replacement of a real original signed result with
+`REMOTE_PROVIDER_REQUEST_REJECTED` in two cases (**2 failed**). An earlier fixture
+passed no socket for the existing acknowledgement and had two setup failures;
+its correction reuses the signed RecordingSocket fixture and retains the same
+original-result assertions. Separate before/after-publication I/O probes retained
+**2 failed, 2 passed** after the cleanup correction: publication failure was also
+incorrectly materialized as rejection and could erase its request binding.
+
+Cleanup is now best-effort only after the result is durable. An OSError retains
+the original request and does not invent rejection or no-effect evidence.
+Restart reads the admitted original signed result and retires the original
+request without another pending dispatch. Before-publication failure has no
+published result; after-publication failure preserves its exact bytes. Node
+journal bytes and receipt bindings remain unchanged. Permanent malformed input
+still rejects before dispatch. These are component/storage faults using real
+Node journals and signatures; the broader Reality regression retains independent
+observation/MATCH requirements. The spool response alone is not an effect commit.
+
+Relevant Node/Reality/Artifact/Usage/Gateway/Workflow regressions: **712 passed**
+(137.37 s), before two additional malformed-input cases. Final remote-provider
+and protocol selection: **48 passed** on Python 3.12 (1.87 s), **48 passed** on
+Python 3.10 (1.93 s). Exact-source Windows/ARM64 CI and resulting-main validation
+are still required. The controlled defect matches a possible false-result path,
+not an established cause of the earlier Windows failure or Issues #4/#8.
+
+Main `c43f942` Multi-Arch run `38822457553`, Windows job `116724755654`, separately
+retains **1 failed, 4659 passed, 60 skipped, 272 deselected, 4 warnings** (1740.94 s).
+Its Connector timeout result was correctly `CONNECTOR_TIMEOUT`, but total local
+elapsed time **0.96258 s** exceeded the unchanged **0.5 s** assertion. No production
+or accepted-test change is made for that unexplained timing failure here.
+
+Temporary diagnostic source `195d366` and run `38827287779` use the existing
+Windows diagnostic workflow, retaining the same timeout/elapsed assertions while
+measuring adapter wait, registration, health and result-storage phases. Twenty
+isolated Windows samples pass (elapsed **0.03874–0.08554 s**, maximum health write
+0.06347 s); the adapter had not finished before release in all 20. This does not
+reproduce the full-suite failure, prove absence of a race, or qualify production
+Multi-Arch. The diagnostic branch must not be merged. Its prior recovery traces
+and all failed runs remain available. Kernel and component lock are unchanged.
+
+
+An independently explored local execution-worker drain prototype is **REJECTED**,
+not part of this spool fix. It incorrectly treated the transport task as execution
+owner. Its narrow 71-test selection passed, but the existing wider cancellation/
+reconnect contract retained **1 failed, 950 passed** (135.43 s): transport must
+return cancellation while the admitted handler remains journal-owned EXECUTING,
+then deliver its original completed result on reconnect with one invocation.
+The prototype made that valid contract wait for the held handler and reach its
+watchdog failure. The original test is unchanged, and no worker-drain change is
+included here. The local candidate, initial fixture failures and failed broader
+run are retained privately to prevent its accidental integration. Passing narrow
+probes did not justify overriding the existing authoritative recovery path.
+
+
+The retained-request recovery matrix also injects Node revocation before
+Controller restart. With the publication/cleanup fix alone, its corrected probe
+retained **4 failed, 4 passed**: re-entering execution admission to read a known
+result could replace it with a revoked-node rejection. The earlier probe also
+had two test-wrapper argument errors; those fixture errors are not evidence of
+a production defect. Recovery now validates the persisted Node signature and
+original request/receipt binding before reading already admitted evidence. It
+does not transfer artifacts or queue another execution. Changed retry inputs
+cannot erase or borrow the original result. The same revoked Node still rejects
+a separately submitted new workload, and its persisted REVOKED state survives.
+
+The four I/O boundaries, trusted/revoked Node and original/changed retry matrix
+retain byte-identical original journals and previously published results. Final
+protocol/provider selection: **60 passed** on Python 3.12 (2.62 s), **60 passed**
+on Python 3.10 (2.64 s). Expanded Node, Reality, Artifact, Governance, model,
+AgentSession, Workflow, Usage and Connector regression: **961 passed** (130.14 s).
+Exact-source platform CI must qualify this additional runtime change separately
+from the earlier publication-only source. No Kernel or component lock changed.
+
+Full-suite Connector diagnostic run `38828059028`, source `2393bd7`, retained
+**9 failed, 4680 passed, 60 skipped, 272 deselected, 4 warnings** (1887.40 s).
+Twenty instrumented Connector samples satisfy the unchanged 0.5-second bound
+(elapsed 0.06481–0.21026 s); health storage reaches 0.18288 s. This still does not
+reproduce or resolve the earlier 0.96258-second failure. Eight diagnostic failures
+are cp1252 Unicode output errors with uncaptured stdout. The remaining delayed
+Observation restart case ended WAITING instead of COMPLETED; its original
+assertion and failure remain, with cause unestablished. This diagnostic branch
+is not acceptance and must not merge. No production timeout, Connector assertion
+or effect verification is relaxed.
+
+
+Automation source `14be54f` retains all three PR checks and separately completed
+Core `38830702842` and Multi-Arch `38830705527`. Windows Core: **5083 passed,
+60 skipped, 4 warnings** (2209.01 s); Ubuntu 3.12: **5096 passed, 47 skipped,
+4 warnings** (724.27 s). Multi-Arch Linux amd64/ARM64 each have **4772 passed,
+59 skipped, 272 deselected, 4 warnings** (571.72 / 588.46 s), with platform
+detectors **13 passed** each. Windows 3.11 has **4771 passed, 60 skipped,
+272 deselected, 4 warnings** (1932.24 s). These strengthened precondition tests
+passed; they do not establish the cause of the earlier Windows tamper-probe
+failure or justify closing it from reruns alone. The normal integration of
+Relay source `32f3c7d` requires fresh combined regression and exact-head CI;
+earlier browser/wheel evidence remains explicitly scoped to source `5c28901`.
