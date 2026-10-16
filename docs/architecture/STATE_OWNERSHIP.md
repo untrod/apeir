@@ -119,6 +119,14 @@ authorized read on continuation; it does not replay the mutation. Missing or
 changed evidence remains fail-closed. Resource readiness, result delivery and
 effect verification are distinct conditions with unchanged runtime deadlines.
 
+Automation exposes an original effect Work at VERIFIED as requiring
+reconciliation when its effect verdict is missing, UNKNOWN or MATCH awaiting
+commit publication. A verified receipt is insufficient to hide the recovery
+controls or advertise completion. Reconcile reads the original journals and
+acquires fresh evidence; Resume continues the same Run/Work. Explicit MISMATCH
+still cannot commit. Neither recovery action grants authority or repeats the
+mutation, including when an earlier MATCH was persisted before COMMIT failed.
+
 Node control acknowledgements follow durable publication. Lease acquisition,
 release/expiry and pre-start cancellation stage their update before publishing
 in-memory state; a failed write cannot become a successful acknowledgement.

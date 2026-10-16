@@ -1868,3 +1868,51 @@ cases pass on Python 3.12 (1.16 s) and 3.10 (1.17 s). The full Reality suite has
 10-second production waits nor the existing 60-second CI limit changes.
 This demonstrates an asynchronous projection assumption, not the cause of
 Windows delay or a completed performance/physical/network qualification.
+
+
+### Automation VERIFIED recovery admission — 2026-10-16
+
+**REUSE / FIX** the existing Automation projection, Workflow/Work owners,
+original Node journal, signed receipt, Reality recovery and EffectVerifier.
+The projection omitted VERIFIED mutation Work when its Observation was missing
+or MATCH had persisted before COMMIT publication failed. That could hide the
+original recovery actions even though the effect had already occurred. The
+projection now keeps both cases reconciliation-required; it does not execute
+anything or convert a missing verdict into success. Explicit MISMATCH remains
+uncommittable. No new grant, mutation Work, retry or authority is introduced.
+
+Dropping the actual read result after Node observation and failing the original
+COMMIT publication reproduce **2 failed** projection assertions before the fix.
+Both cases now recover the same Run/Work using existing public Reconcile and
+Resume, persist MATCH and COMMITTED, and retain effect count **1**. Lost read
+observation IDs are excluded from the fresh verification. The targeted history
+and recovery selection has **18 passed** on Python 3.12 (21.00 s) and Python
+3.10 (22.14 s), including 14 unchanged semantic tamper categories.
+
+Source `7d2ce48` full Core `38861767549` retains Windows **1 failed,
+5118 passed, 60 skipped, 4 warnings** (2399.18 s). The committed-history
+fixture failed before tampering: Workflow was failed and original Work VERIFIED.
+Its shortened CI representation did not retain the verdict or precise cause;
+this is not proof of the cause of an earlier changed-receipt rejection failure.
+The test now reports concise content-free preconditions. Only an exact original
+independent-read timeout, VERIFIED mutation without verification, bound read
+Work and effect count 1 permits one explicit public Reconcile/Resume before
+tampering. COMMITTED and tamper rejection remain mandatory. A controlled lost
+read reuses the original changed-receipt test to exercise that continuation.
+MISMATCH, UNKNOWN and other failures are not retried into an accepted fixture.
+
+Current main `380e657` has successful Core `38864193438`, Multi-Arch
+`38864193549`, Desktop `38864193441` and Security `38864193443`. Windows
+Core has **5009 passed, 60 skipped, 4 warnings** (1513.97 s); Windows
+Multi-Arch has **4695 passed, 60 skipped, 272 deselected, 4 warnings**
+(1328.62 s). These main results do not certify this unmerged Automation code.
+Exact-head affected regressions and CI remain required. Product/native, physical,
+real IdP, actual model engineering and strong-environment qualifications remain
+separate; no full product PASS or Windows timing root cause is inferred.
+
+The final Automation/Node/Governance selection has **593 passed** (218.89 s);
+Workflow/safety/human-session regressions have **81 passed** (1.97 s).
+Explicit negative-observation checks have **2 passed** (2.74 s), retaining
+MISMATCH as uncommitted and UNKNOWN as reconciliation-required. The native
+verifier on main `380e657` still fails with the exact missing locked Windows
+`nousd-x86_64-pc-windows-msvc.exe`; component-lock bytes are unchanged.

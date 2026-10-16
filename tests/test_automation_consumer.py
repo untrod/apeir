@@ -436,6 +436,7 @@ def test_negative_independent_observation_never_commits_the_original_effect(
     assert result["effect_counts"][work_id] == 1
     assert result["works"][-1]["state"] == "VERIFIED"
     assert result["works"][-1]["effect_verification"]["verdict"] == verdict
+    assert result["reconciliation_required"] is (verdict == "UNKNOWN")
     monkeypatch.setattr(SimulatedDeviceProvider, "read_state", original_read)
     recovered = consumer.resume(binding["id"], pending["run_id"])
     assert recovered["state"] == "completed"
@@ -1290,14 +1291,41 @@ def test_committed_history_rejects_changed_original_semantic_evidence(
     path = consumer.controller_state / "distributed-works.json"
     document = json.loads(path.read_text(encoding="utf-8"))
     work = document["works"][work_id]
-    before_tamper = {
-        "workflow_state": completed["state"],
-        "work_state": work["state"],
-        "step_states": completed["step_states"],
-        "reconciliation_required": completed["reconciliation_required"],
-        "effect_count": completed["effect_counts"][work_id],
-        "timeout_reported": "timed out" in str(completed.get("error", "")),
-    }
+    prefix = "distributed Workflow Work timed out: observe_"
+    if completed["state"] == "failed" and completed.get("error", "").startswith(prefix):
+        from nous_runtime.node_runtime.distributed_work import DistributedWorkStore
+
+        acquisition_id = completed["error"].removeprefix(
+            "distributed Workflow Work timed out: "
+        )
+        read = DistributedWorkStore(consumer.controller_state).get(acquisition_id)
+        assert read is not None
+        assert read.execution_capability == "device.state.read"
+        assert read.target_resource_id == work["target_resource_id"]
+        assert read.assigned_node == work["assigned_node"]
+        assert read.provenance["workflow_run_id"] == pending["run_id"]
+        assert read.execution_arguments["acquisition_id"] == acquisition_id
+        assert read.input_artifacts == tuple(work["input_artifacts"])
+        assert not read.execution_policy.require_effect_verification
+        assert work["state"] == "VERIFIED"
+        assert not work["effect_verification"]
+        assert completed["effect_counts"][work_id] == 1
+        assert completed["reconciliation_required"]
+        # One explicit recovery of the original effect, not another mutation or
+        # a retry-until-success fixture. Unknown/mismatched evidence still fails.
+        consumer.reconcile(binding["id"], pending["run_id"])
+        completed = consumer.resume(binding["id"], pending["run_id"])
+        assert completed["run_id"] == pending["run_id"]
+        assert completed["outputs"]["mutate"]["work_id"] == work_id
+        document = json.loads(path.read_text(encoding="utf-8"))
+        work = document["works"][work_id]
+    before_tamper = (
+        f"workflow={completed['state']} work={work['state']} "
+        f"verdict={work['effect_verification'].get('verdict', 'missing')} "
+        f"read_timeout={str(completed.get('error', '')).startswith(prefix)} "
+        f"reconcile={completed['reconciliation_required']} "
+        f"effects={completed['effect_counts'][work_id]}"
+    )
     assert completed["state"] == "completed", before_tamper
     assert work["state"] == "COMMITTED", before_tamper
     if changed == "expected-effect":
@@ -1390,6 +1418,31 @@ def test_committed_history_after_grant_revocation_reads_original_evidence_only(
     assert result["works"][-1]["state"] == "COMMITTED"
     assert result["works"][-1]["effect_verification"]["verdict"] == "MATCH"
     assert result["effect_counts"][work_id] == 1
+
+
+def test_committed_history_recovers_original_read_loss_before_tamper_check(
+    consumer, monkeypatch
+):
+    from nous_runtime.node_runtime.relay import NodeRelayClient
+
+    dropped = []
+    send = NodeRelayClient._send
+
+    async def lose_first_observation(self, websocket, message_type, payload, **kwargs):
+        if (
+            message_type == "WORKLOAD_STATUS"
+            and str(payload.get("workload_id", "")).startswith("observe_")
+            and not dropped
+        ):
+            dropped.append(payload["output"]["observation_id"])
+            return
+        return await send(self, websocket, message_type, payload, **kwargs)
+
+    monkeypatch.setattr(NodeRelayClient, "_send", lose_first_observation)
+    test_committed_history_rejects_changed_original_semantic_evidence(
+        consumer, "receipt"
+    )
+    assert len(dropped) == 1
 
 
 @pytest.mark.parametrize("proof", ["verification", "observation"])
@@ -1826,3 +1879,74 @@ def test_http_trigger_revalidates_before_original_run_publication(
         if revocation in {"session", "expiry"}
         else "NOUS_CONTROL_REPLAY"
     )
+
+
+@pytest.mark.parametrize("boundary", ["observation-response", "commit-publication"])
+def test_receipt_verified_original_requires_reconciliation_until_effect_commit(
+    consumer, monkeypatch, boundary
+):
+    from nous_runtime.node_runtime.distributed_work import (
+        DistributedWorkState,
+        DistributedWorkStore,
+    )
+    from nous_runtime.node_runtime.relay import NodeRelayClient
+
+    binding, pending = prepare(consumer)
+    approve(consumer, pending)
+    work_id = pending["outputs"]["mutate"]["work_id"]
+    lost = []
+    send = NodeRelayClient._send
+    transition = DistributedWorkStore.transition
+
+    async def lose_observation(self, websocket, message_type, payload, **kwargs):
+        if message_type == "WORKLOAD_STATUS" and str(
+            payload.get("workload_id", "")
+        ).startswith("observe_"):
+            lost.append(payload["output"]["observation_id"])
+            return
+        return await send(self, websocket, message_type, payload, **kwargs)
+
+    def lose_commit(self, original_id, state, **kwargs):
+        if original_id == work_id and state is DistributedWorkState.COMMITTED:
+            lost.append("commit")
+            raise OSError("controlled original effect commit publication failure")
+        return transition(self, original_id, state, **kwargs)
+
+    with monkeypatch.context() as fault:
+        if boundary == "observation-response":
+            fault.setattr(NodeRelayClient, "_send", lose_observation)
+        else:
+            fault.setattr(DistributedWorkStore, "transition", lose_commit)
+        unresolved = consumer.resume(binding["id"], pending["run_id"])
+    assert lost
+    assert unresolved["state"] == "failed", unresolved
+    original = next(work for work in unresolved["works"] if work["work_id"] == work_id)
+    assert original["state"] == "VERIFIED"
+    assert original["result_summary"]["remote_execution_receipt"]
+    assert unresolved["effect_counts"][work_id] == 1
+    if boundary == "observation-response":
+        assert not original["effect_verification"]
+    else:
+        assert original["effect_verification"]["verdict"] == "MATCH"
+    assert unresolved["reconciliation_required"] is True
+
+    reconciled = consumer.reconcile(binding["id"], pending["run_id"])
+    assert reconciled["run_id"] == pending["run_id"]
+    assert reconciled["works"][-1]["state"] == "COMMITTED"
+    assert reconciled["effect_counts"][work_id] == 1
+    complete = consumer.resume(binding["id"], pending["run_id"])
+    assert complete["state"] == "completed"
+    assert complete["run_id"] == pending["run_id"]
+    assert complete["outputs"]["mutate"]["work_id"] == work_id
+    assert complete["effect_counts"][work_id] == 1
+    assert not complete["reconciliation_required"]
+    assert complete["outputs"]["mutate"]["effect_verification"]["verdict"] == "MATCH"
+    assert {
+        work["work_id"]
+        for work in complete["works"]
+        if work["execution_policy"].get("require_effect_verification")
+    } == {work_id}
+    if boundary == "observation-response":
+        assert set(lost).isdisjoint(
+            complete["outputs"]["mutate"]["effect_verification"]["observation_ids"]
+        )

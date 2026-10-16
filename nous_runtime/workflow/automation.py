@@ -878,6 +878,10 @@ class AutomationConsumer:
             and (
                 work["state"]
                 in {"ASSIGNED", "RUNNING", "SUCCEEDED", "RECOVERING", "UNKNOWN"}
+                or (
+                    work["state"] == "VERIFIED"
+                    and work["effect_verification"].get("verdict") != "MISMATCH"
+                )
                 or work["effect_verification"].get("verdict") == "UNKNOWN"
             )
             for work in records
