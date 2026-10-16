@@ -6,6 +6,7 @@ import hashlib
 from datetime import datetime, timezone
 import json
 import os
+import stat
 from pathlib import Path
 import time
 
@@ -136,8 +137,17 @@ class OperationsPlane:
     def snapshot(self):
         errors = []
 
-        def load(component, call, fallback):
+        def load(component, call, fallback, *, state_file=None):
             try:
+                if state_file is not None:
+                    try:
+                        current = state_file.stat()
+                    except FileNotFoundError:
+                        if state_file.is_symlink():
+                            raise ValueError("Original state file is unavailable")
+                        return fallback
+                    if not stat.S_ISREG(current.st_mode) or current.st_size == 0:
+                        raise ValueError("Original state file is invalid")
                 return call()
             except Exception as exc:
                 errors.append(
@@ -156,6 +166,7 @@ class OperationsPlane:
                 for work in DistributedWorkStore(self.controller_state).list()
             ][:500],
             [],
+            state_file=self.controller_state / "distributed-works.json",
         )
         agents = load(
             "agents",
@@ -163,6 +174,7 @@ class OperationsPlane:
                 :500
             ],
             [],
+            state_file=self.root / ".nous" / "agent_sessions.db",
         )
         workflows = load(
             "workflows",
@@ -171,6 +183,7 @@ class OperationsPlane:
                 for item in WorkflowStore(self.root).list_runs(limit=500)
             ],
             [],
+            state_file=self.root / ".nous" / "workflows.db",
         )
         devices = load(
             "devices",
