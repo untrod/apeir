@@ -1592,3 +1592,21 @@ cases pass on Python 3.12 (1.16 s) and 3.10 (1.17 s). The full Reality suite has
 10-second production waits nor the existing 60-second CI limit changes.
 This demonstrates an asynchronous projection assumption, not the cause of
 Windows delay or a completed performance/physical/network qualification.
+
+
+Source `5b7d6a2` Multi-Arch `38863786127` retains Windows **1 failed,
+4696 passed, 60 skipped, 272 deselected, 4 warnings** (1520.21 s). The
+response-loss/restart case returned VERIFIED after a single Workflow Resume,
+before independent observation completion. The original terminal assertions
+remain; a controlled hold of each of two actual read results reproduces the
+one-resume assumption (**1 failed**, 17.02 s). Success-path continuation now
+reuses the existing exact-read receipt/reconciliation helper. The no-effect
+lost-response case still takes its original failure path, and ACK interleaving,
+same original Work, MATCH, one observation, state change and effect-count checks
+are retained. Five immediate/held recovery cases pass on Python 3.12 (23.41 s) and Python
+3.10 (23.60 s). The final
+full Reality regression has **119 passed** (122.73 s); the controlled case also
+requires two distinct held read acquisitions.
+This corrects another test consumer of the asynchronous contract; no production
+wait, retry, process startup deadline or execution authority changes. Fresh
+cross-platform CI is required; the failed run is not relabelled as successful.
