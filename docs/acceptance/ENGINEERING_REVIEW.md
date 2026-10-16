@@ -1386,3 +1386,56 @@ record is retained separately and the corrected cleanup reproduces the same
 single assertion failure. Final source Desktop lint/typecheck/test/build:
 **180 passed in 38 files** (44.80 s). These are observed UI callback/correctness
 contracts, not measured task latency, Token savings or native UI qualification.
+
+
+### External-provider spool publication and Windows baseline evidence — 2026-10-16
+
+Main `c43f942` Core run `38822457356`, Windows job `116723873694`, retains
+**1 failed, 4970 passed, 60 skipped, 4 warnings** (1539.12 s). The external-provider
+signed Node protocol case returned `ok=false`; its old assertion did not print
+the provider error code. The initial-reports ConnectionClosed warning alone does
+not establish the cause. The unchanged condition now includes redacted error-code
+and content-free phase/memory/result-presence diagnostics for a future failure.
+No assertion, timeout or keepalive setting is relaxed.
+
+**REUSE / FIX** the existing Node journal, signed result admission, Controller
+spool and remote-provider binding checks. A controlled post-publication cleanup
+PermissionError reproduced replacement of a real original signed result with
+`REMOTE_PROVIDER_REQUEST_REJECTED` in two cases (**2 failed**). An earlier fixture
+passed no socket for the existing acknowledgement and had two setup failures;
+its correction reuses the signed RecordingSocket fixture and retains the same
+original-result assertions. Separate before/after-publication I/O probes retained
+**2 failed, 2 passed** after the cleanup correction: publication failure was also
+incorrectly materialized as rejection and could erase its request binding.
+
+Cleanup is now best-effort only after the result is durable. An OSError retains
+the original request and does not invent rejection or no-effect evidence.
+Restart reads the admitted original signed result and retires the original
+request without another pending dispatch. Before-publication failure has no
+published result; after-publication failure preserves its exact bytes. Node
+journal bytes and receipt bindings remain unchanged. Permanent malformed input
+still rejects before dispatch. These are component/storage faults using real
+Node journals and signatures; the broader Reality regression retains independent
+observation/MATCH requirements. The spool response alone is not an effect commit.
+
+Relevant Node/Reality/Artifact/Usage/Gateway/Workflow regressions: **712 passed**
+(137.37 s), before two additional malformed-input cases. Final remote-provider
+and protocol selection: **48 passed** on Python 3.12 (1.87 s), **48 passed** on
+Python 3.10 (1.93 s). Exact-source Windows/ARM64 CI and resulting-main validation
+are still required. The controlled defect matches a possible false-result path,
+not an established cause of the earlier Windows failure or Issues #4/#8.
+
+Main `c43f942` Multi-Arch run `38822457553`, Windows job `116724755654`, separately
+retains **1 failed, 4659 passed, 60 skipped, 272 deselected, 4 warnings** (1740.94 s).
+Its Connector timeout result was correctly `CONNECTOR_TIMEOUT`, but total local
+elapsed time **0.96258 s** exceeded the unchanged **0.5 s** assertion. No production
+or accepted-test change is made for that unexplained timing failure here.
+
+Temporary diagnostic source `195d366` and run `38827287779` use the existing
+Windows diagnostic workflow, retaining the same timeout/elapsed assertions while
+measuring adapter wait, registration, health and result-storage phases. Twenty
+isolated Windows samples pass (elapsed **0.03874–0.08554 s**, maximum health write
+0.06347 s); the adapter had not finished before release in all 20. This does not
+reproduce the full-suite failure, prove absence of a race, or qualify production
+Multi-Arch. The diagnostic branch must not be merged. Its prior recovery traces
+and all failed runs remain available. Kernel and component lock are unchanged.

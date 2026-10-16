@@ -235,3 +235,12 @@ Node-owned simulation state. Shared local file/SQLite transactions do not prove
 cross-site consistency, distributed consensus or Controller high availability.
 Remote secret transport, fleet/federation and physical faults require their
 own later acceptance evidence. M3.3-C remains PENDING.
+
+
+External-provider spool result publication is separate from request retirement.
+A durable signed result cannot be replaced with a rejection because its consumed
+request could not be removed. Storage I/O failure is not validation failure or
+proof of no effect: retain the original bound request and reconcile persisted
+Node/result evidence on a later sweep or restart. Malformed schema/binding still
+rejects before dispatch. Spool recovery creates no new operation, grant or effect;
+an execution receipt remains distinct from independent effect verification.
