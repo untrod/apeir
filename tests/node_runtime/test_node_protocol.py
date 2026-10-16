@@ -473,7 +473,19 @@ def test_external_provider_spool_reaches_signed_node_protocol(tmp_path: Path):
                 else:
                     exc.args = (f"{exc}\n{diagnostic}",)
                 raise
-            assert response["ok"] is True
+            from nous_runtime.core.redaction import redact_sensitive_text
+
+            assert response["ok"] is True, {
+                "provider_error_code": redact_sensitive_text(
+                    str(response.get("error", {}).get("code", "UNKNOWN"))
+                )[:120],
+                "client_phase": client._session_phase,
+                "node_memory_state": service._workloads.get(
+                    operation["operation_id"], {}
+                ).get("state", "ABSENT"),
+                "signed_result_present": operation["operation_id"]
+                in server.result_envelopes,
+            }
             assert json.loads(response["output"]) == {"echo": "provider-path"}
             remote = response["remote_execution_receipt"]
             assert remote["operation_id"] == operation["operation_id"]

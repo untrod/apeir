@@ -156,9 +156,50 @@ export interface AutomationView {
   name: string;
   trigger: string;
   schedule?: string;
+  due_at?: string;
   action: string;
   enabled: boolean;
   created_at: string;
+  adapter?: string;
+  qualification?: string;
+  simulated?: boolean;
+  execution_scope?: string;
+  kernel_traversed?: boolean;
+  workflow_id?: string;
+  definition_digest?: string;
+}
+
+export interface AutomationCreateRequest {
+  adapter: "simulated-reality";
+  name: string;
+  trigger: "manual" | "schedule";
+  due_at?: string;
+  firmware_version: string;
+}
+/** Compatibility configuration only: free-text records remain UNQUALIFIED. */
+export interface LegacyAutomationCreateRequest {
+  name: string;
+  trigger: string;
+  schedule?: string;
+  action: string;
+}
+export interface AutomationRun {
+  automation_id: string;
+  run_id: string;
+  state: string;
+  trigger_key?: string;
+  cancellation_requested: boolean;
+  reconciliation_required: boolean;
+  outputs: Record<string, { approval_request_id?: string; work_id?: string }>;
+  works: Record<string, unknown>[];
+  simulated: boolean;
+  execution_scope: string;
+  kernel_traversed: boolean;
+}
+export interface AutomationHistory {
+  automation_id: string;
+  history: AutomationRun[];
+  total: number;
 }
 
 export interface KnowledgeItem {
@@ -413,15 +454,61 @@ export const fetchDevices = () =>
 export const scanDevices = () =>
   api<{ discovered: DeviceView[]; timestamp: number; status: "UNAVAILABLE"; scan_performed: false; reason: string }>("/api/v1/devices/scan", { method: "POST" });
 
-// Automations
-export const fetchAutomations = () =>
-  api<{ automations: AutomationView[]; total: number }>("/api/v1/automations");
+// Capture the existing connection epoch as well as URL/token: A→B→A is stale.
+export function captureRuntimeConnection() {
+  const captured = getConfig();
+  const version = getRuntimeConfigVersion();
+  return () => {
+    const current = getConfig();
+    if (current.url !== captured.url || current.token !== captured.token || getRuntimeConfigVersion() !== version) {
+      throw new ApiError("NOUS_CONTROLLER_CHANGED", "Controller changed; review the original request again");
+    }
+  };
+}
 
-export const addAutomation = (data: { name: string; trigger: string; schedule?: string; action: string }) =>
-  api<AutomationView>("/api/v1/automations/add", { method: "POST", body: JSON.stringify(data) });
+export async function humanMutation<T = unknown>(path: string, body: Record<string, unknown>, guard: () => void = () => {}) {
+  const current = captureRuntimeConnection();
+  const check = () => { current(); guard(); };
+  check();
+  // Serialize once; the exact body used to issue the nonce is the mutation body.
+  const serialized = JSON.stringify(body);
+  const { nonce } = await api<{ nonce: string }>("/api/v1/control/human/nonce", {
+    method: "POST", body: JSON.stringify({ method: "POST", path, body: JSON.parse(serialized) }),
+  });
+  check();
+  if (typeof nonce !== "string" || !nonce) throw new ApiError("NOUS_HUMAN_APPROVAL_REQUIRED", "Trusted human approval nonce is unavailable");
+  const result = await api<T>(path, { method: "POST", body: serialized, headers: { "X-Control-Nonce": nonce } });
+  check();
+  return result;
+}
 
-export const automationAction = (action: string, automationId: string) =>
-  api("/api/v1/automations/action", { method: "POST", body: JSON.stringify({ action, automation_id: automationId }) });
+// Automations: management proposes intent; it supplies no execution authority.
+export async function fetchAutomations(guard: () => void = () => {}) {
+  const current = captureRuntimeConnection();
+  const result = await api<{ automations: AutomationView[]; total: number }>("/api/v1/automations");
+  current(); guard();
+  return result;
+}
+export const addAutomation = (data: AutomationCreateRequest | LegacyAutomationCreateRequest, guard?: () => void) =>
+  humanMutation<AutomationView>("/api/v1/automations/add", { ...data }, guard);
+
+export const automationAction = (action: string, automationId: string, original: { trigger_key?: string; run_id?: string } = {}, guard?: () => void) =>
+  humanMutation<AutomationRun>("/api/v1/automations/action", { action, automation_id: automationId, ...original }, guard);
+
+export async function fetchAutomationHistory(automationId: string, guard: () => void = () => {}) {
+  const current = captureRuntimeConnection();
+  const result = await api<AutomationHistory>(`/api/v1/automations/${encodeURIComponent(automationId)}/history?limit=50`);
+  current(); guard();
+  if (!result || result.automation_id !== automationId || !Array.isArray(result.history) || result.history.length > 50 || !result.history.every(run =>
+    run && run.automation_id === automationId && typeof run.run_id === "string" && !!run.run_id &&
+    typeof run.trigger_key === "string" && typeof run.state === "string" &&
+    typeof run.cancellation_requested === "boolean" && typeof run.reconciliation_required === "boolean" &&
+    run.outputs && typeof run.outputs === "object" && !Array.isArray(run.outputs) &&
+    Object.values(run.outputs).every(output => output && typeof output === "object") && Array.isArray(run.works) &&
+    run.simulated === true && run.execution_scope === "runtime-service" && run.kernel_traversed === false
+  )) throw new ApiError("AUTOMATION_HISTORY_INVALID", "Original Automation history binding or simulated scope is unavailable");
+  return result;
+}
 
 // Knowledge
 export const fetchKnowledge = (category?: string) => {
@@ -837,16 +924,8 @@ export const scanNodes = () =>
 
 // New: Approvals API
 
-export async function approvalAction(requestId: string, action: "approve" | "deny") {
-  const controller = getConfig().url;
-  const path = `/api/v1/approvals/${encodeURIComponent(requestId)}/${action}`;
-  const body = {};
-  const { nonce } = await api<{ nonce: string }>("/api/v1/control/human/nonce", {
-    method: "POST", body: JSON.stringify({ method: "POST", path, body }),
-  });
-  if (typeof nonce !== "string" || !nonce) throw new ApiError("NOUS_HUMAN_APPROVAL_REQUIRED", "Trusted human approval nonce is unavailable");
-  if (getConfig().url !== controller) throw new ApiError("NOUS_CONTROLLER_CHANGED", "Controller changed; review the original request again");
-  return api(path, { method: "POST", body: JSON.stringify(body), headers: { "X-Control-Nonce": nonce } });
+export async function approvalAction(requestId: string, action: "approve" | "deny", guard?: () => void) {
+  return humanMutation(`/api/v1/approvals/${encodeURIComponent(requestId)}/${action}`, {}, guard);
 }
 
 // New: Runtime Events Stream

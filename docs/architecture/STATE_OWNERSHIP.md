@@ -22,6 +22,7 @@ journal and do not imply Kernel traversal.
 | --- | --- | --- |
 | AgentSession coordination | `AgentSessionCoordinator` / session store | `.nous/agent_sessions.db` |
 | Plan execution, run, pause/resume | existing Workflow Runtime / WorkflowStore | `.nous/workflows.db` and its checkpoints |
+| Automation definition binding and trigger-to-original run relation | existing WorkflowStore | Additional tables in `.nous/workflows.db`; execution state remains original Workflow/Work |
 | Distributed Work lifecycle, placement and dispatch | `DistributedWorkStore` / `NodeRelayServer` | Controller `distributed-works.json` and relay spool |
 | Node identity, delivery and terminal execution evidence | Node Runtime | Node identity and workload journals |
 | Device lifecycle and stable identity | Reality `DeviceRegistry` | existing Reality device store |
@@ -117,6 +118,14 @@ the same Workflow once. The existing finalizer acquires a fresh independently
 authorized read on continuation; it does not replay the mutation. Missing or
 changed evidence remains fail-closed. Resource readiness, result delivery and
 effect verification are distinct conditions with unchanged runtime deadlines.
+
+Automation exposes an original effect Work at VERIFIED as requiring
+reconciliation when its effect verdict is missing, UNKNOWN or MATCH awaiting
+commit publication. A verified receipt is insufficient to hide the recovery
+controls or advertise completion. Reconcile reads the original journals and
+acquires fresh evidence; Resume continues the same Run/Work. Explicit MISMATCH
+still cannot commit. Neither recovery action grants authority or repeats the
+mutation, including when an earlier MATCH was persisted before COMMIT failed.
 
 Node control acknowledgements follow durable publication. Lease acquisition,
 release/expiry and pre-start cancellation stage their update before publishing
@@ -217,6 +226,7 @@ unqualified; #8 stays open. Source/PR/main CI must qualify the final correction.
 | Duplicate original receipt/result | Validate identical bindings and deduplicate; no new effect |
 | Effect occurred, acknowledgement lost | Reconcile persisted Node/Work evidence and acquire a fresh Observation |
 | Executing journal exists but terminal receipt is missing | RECOVERY_REQUIRED/UNKNOWN; no blind replay or fabricated receipt |
+| Automation opens its shared isolated relay for original uncertain Work | Require original bound Node `COMPLETED`/`FAILED` journal and receipt before transport; missing/corrupt/changed evidence stays UNKNOWN |
 | Approval remains valid during uncertain recovery | Authority still does not prove delivery safety; reconcile first |
 | Interrupted commit with durable MATCH evidence | Revalidate persisted bindings/evidence; commit the original verified outcome |
 | Device rediscovery/reconnect or locator change | Preserve stable identity/trust and terminal revocation |
@@ -235,3 +245,49 @@ Node-owned simulation state. Shared local file/SQLite transactions do not prove
 cross-site consistency, distributed consensus or Controller high availability.
 Remote secret transport, fleet/federation and physical faults require their
 own later acceptance evidence. M3.3-C remains PENDING.
+
+
+A process-startup poll classifies the one host record it just observed. It must
+not re-read the file inside that decision and classify a different or missing
+sample instead. The existing projection still verifies host/session/command
+bindings and current OS creation identities. Each later status, attach or control
+request obtains a new host observation; an earlier RUNNING sample cannot
+authorize stdin or kill when current identity/state is unknown. Startup retains
+its original deadline and single original launch; no replay or host fallback.
+
+External-provider spool result publication is separate from request retirement.
+A durable signed result cannot be replaced with a rejection because its consumed
+request could not be removed. Storage I/O failure is not validation failure or
+proof of no effect: retain the original bound request and reconcile persisted
+Node/result evidence on a later sweep or restart. Malformed schema/binding still
+rejects before dispatch. Spool recovery creates no new operation, grant or effect;
+an execution receipt remains distinct from independent effect verification.
+
+
+Transport lifetime is not execution ownership. Cancelling a Node WebSocket task
+may return while the admitted handler continues under the NodeService's durable
+EXECUTING journal. That cancellation is not proof of no effect. The original
+binding returns RECOVERY_REQUIRED while execution remains unresolved, then the
+original completed journal/result can be delivered after reconnect without
+another handler invocation. Do not make transport cancellation wait for the
+handler as a substitute for this established recovery contract. Sequence/session
+I/O publication has its separate cancellation-drain rule; it does not transfer
+execution ownership from the Node journal to a transport coroutine.
+
+
+Revocation prevents new execution, not reading already admitted signed execution
+evidence. A retained provider request reconciles the exact original Node,
+Operation, arguments and receipt binding against the persisted signed result,
+even if the Node was revoked before Controller restart. A changed retry cannot
+borrow that result or overwrite it with rejection. Neither recovery nor the
+previous approval restores trust; a new workload still fails the current
+revocation check. Reading an execution fact does not establish an effect MATCH.
+
+
+Workflow continuation is not a synchronous-completion promise. After one
+independent read's original signed result is reconciled, finalization can admit a
+new fresh read and pause again on its bounded wait. A consumer follows each exact
+read's terminal evidence before continuing the same Workflow; absent receipts
+remain WAITING and do not trigger mutation replay. A previous read's completion
+is not MATCH for a later acquisition. Neither longer retries nor historical
+resource reports replace that evidence.

@@ -1902,11 +1902,14 @@ except ImportError:
 
 # Desktop UI routes — thin adapters over Runtime primitives
 try:
-    from nous_runtime.api.desktop_routes import DESKTOP_ROUTES
+    from nous_runtime.api.desktop_routes import (
+        AUTOMATION_AUTHENTICATED_ROUTES,
+        DESKTOP_ROUTES,
+    )
 
     ROUTES.update(DESKTOP_ROUTES)
 except ImportError:
-    pass
+    AUTOMATION_AUTHENTICATED_ROUTES = set()
 
 # Task Center routes — timeline, graph, artifacts, verification
 try:
@@ -2392,6 +2395,7 @@ def route(
     if surface in {"server", "api", "control_plane"} and (
         handler in OPERATIONS_ROUTES.values()
         or handler in DEVELOPER_AUTHENTICATED_ROUTES
+        or handler in AUTOMATION_AUTHENTICATED_ROUTES
         or handler is handle_approval_action
     ):
         from nous_runtime.control_plane.auth import add_cors_headers
@@ -2459,8 +2463,26 @@ def route(
         if governance_error:
             return governance_error
         if (
+            surface in {"server", "api", "control_plane"}
+            and handler in AUTOMATION_AUTHENTICATED_ROUTES
+        ):
+            from nous_runtime.api.desktop_routes import _automation_service
+
+            try:
+                _automation_service(
+                    authorization_context,
+                    permission="manage" if method_upper in MUTATION_METHODS else "read",
+                    audit=False,
+                )
+            except PermissionError:
+                return err_response(
+                    "NOUS_FORBIDDEN",
+                    "Automation requires current human identity and permission",
+                )
+        if (
             handler in OPERATIONS_ROUTES.values()
             or handler in DEVELOPER_AUTHENTICATED_ROUTES
+            or handler in AUTOMATION_AUTHENTICATED_ROUTES
         ):
             parameters = inspect.signature(handler).parameters
             arguments = {}

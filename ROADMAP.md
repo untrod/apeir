@@ -57,6 +57,19 @@ Future targets below are requirements, not claims of implemented integrations.
 
 ## Execution protocol and immediate governance prerequisite
 
+The bounded Automation consumer is **PARTIAL** product delivery. Explicit CLI
+and authenticated HTTP management consume a fixed structured simulated Reality
+template through existing Workflow/Work/Governance/Node, with separate original
+human approval, independent observation, evidence and history. Manual keys and
+one-shot due polling are supported; recurring/background Cron, event/webhook,
+Recorder and general executable Skill workflows remain unimplemented.
+The existing Operations Console also consumes that same HTTP path for structured
+creation, original history, approval, cancellation and reconciliation; ambiguous
+responses query the original trigger and never create a replacement intent.
+Legacy free-text enabled configuration is UNQUALIFIED. This software slice does not
+upgrade any physical, real-IdP, production-provider or Kernel/binary Gate; its
+contracts are in [Execution Path](docs/architecture/EXECUTION_PATH.md#bounded-automation-consumer).
+
 `main` is the only permanent development branch. Keep one or two active branches
 at most; each branch completes one coherent Gate. Start from clean current main:
 
