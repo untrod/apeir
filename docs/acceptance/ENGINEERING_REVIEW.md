@@ -967,6 +967,35 @@ Final Workflow/Agent contracts pass **64 tests**; the same controlled admission
 delay also passes after correction. Python 3.10 focused contracts pass **3**.
 New source and resulting-main CI remain separate acceptance requirements.
 
+## Bounded Automation product consumer — 2026-10-14
+
+**REUSE / EXTEND** existing WorkflowStore, PlanWorkflowBridge, Reality handler,
+Governance, signed Node journal, EventStream, CAS and Operations Console. Legacy
+enabled text remains UNQUALIFIED. A structured simulated definition now drives
+manual or one-shot due execution, preserving the original run/Work through human
+approval, denial, cancellation, restart, duplicate delivery and reconciliation.
+The scheduler issues no authority; missing original journal/receipt/CAS evidence
+is UNKNOWN and cannot reopen an uncertain effect.
+
+Current combined backend regression has **813 passed** (251.49 s); Desktop has
+**185 passed in 37 files**, with lint/typecheck/build passing. A newly installed
+wheel outside the checkout completes **18 independent CLI subprocess commands**:
+Approve Once yields the original COMMITTED/MATCH Work with effect count1;
+duplicate trigger retains the same run/count; Deny and Cancel retain count0 and
+late approval cannot revive cancellation. Wheel SHA-256 is
+`b1834ba22fce5be049e3f44ff1a46d652679897d9548a8b7792689df265ecec2`;
+that source qualification is not a native binary release.
+
+Actual Runtime HTTP plus built-source App/Operations Console also exercises
+create/trigger/Approve Once, Deny, Cancel and logout refusal through the same
+stores. A 390px source-browser view has no document overflow. Browser screenshots
+and raw histories are source UI evidence with a cryptographic fake IdP and
+simulated device effects, not installed APEIR.exe, a real IdP or physical hardware.
+No model calls are used for these deterministic operations. Background Cron,
+semantic Recorder, executable professional Skills and production execution remain
+unqualified. Source and resulting-main CI are separate required gates; overall
+product status stays PARTIAL.
+
 
 ### Private history database admission and truthful read errors
 
@@ -1123,6 +1152,74 @@ PTY or native Windows qualification. Existing Ruff/format/compile/documentation/
 MEDIUM**, lock contracts **3 passed**. Kernel and component lock are unchanged.
 Required source and resulting-main CI remain separate acceptance gates.
 
+### Automation complete evidence and original continuation — 2026-10-15
+
+**REUSE / FIX** existing Workflow definition/checkpoint validation, original
+Distributed Work and signed evidence, and the Console's current-human action path.
+A completed historical run previously remained completed when its original
+mutation output was missing. It now requires every original step, matching
+checkpoint/output binding and committed original Work before presenting completion;
+incomplete evidence is rejected without reconstructing output or executing again.
+Honest unstarted, approval-waiting and cancelled records remain readable.
+
+A separate actual response-loss probe showed an interface dead end: reconciliation
+committed the original Work/MATCH, but the failed Workflow still needed its original
+resume. The Console now exposes that continuation only for uncancelled, fully
+committed, output-bound original Work with mutation MATCH and no uncertainty. It
+keeps replacement triggers disabled and never manufactures Workflow completion.
+The actual backend sequence preserves the original run/Work IDs and effect count1;
+a trap forbids another mutation during either recovery phase.
+
+Original output-integrity contracts: **8 failed, 2 passed**; final complete consumer
+selection: **92 passed** (165.74 s), with the subsequently added full recovery
+sequence separately **1 passed** (7.40 s). Python 3.10 relevant overlap:
+**17 passed** (19.82 s). Original UI continuation contract: **1 failed, 18 passed**;
+final Desktop: **192 passed in 37 files** (45.21 s), lint/typecheck/build pass.
+Existing build warnings and original failure logs remain retained. These are
+runtime-service simulations, not a vendor account, deployed IdP, physical device,
+background Cron, Recorder, production strong sandbox or native installation.
+Kernel and component lock are unchanged; exact source/main CI remain required.
+
+### Generic Operations current-intent admission — 2026-10-15
+
+**REUSE / FIX** the existing humanMutation exact-body nonce helper and Runtime
+connection epoch for generic pairing, approval and Skill actions. Six controlled
+pending-nonce cases previously dispatched after URL/token/ABA/session expiry,
+while local logout was disabled. The repaired path binds current live human
+intent, synchronously invalidates on logout/reconnect/configuration/expiry/unmount,
+and rejects late response publication. A further same-Controller reconnect probe
+retained **1 failed** because one UI path bypassed the live-human invalidation;
+it now uses the same callback. No server authority is supplied by these guards.
+
+Original controlled cases: **6 failed, 21 passed**; final full Desktop selection:
+**204 passed in 37 files** (45.03 s). Post-dispatch context changes and lost responses
+retain one submission, no automatic retry, and unconfirmed-outcome guidance.
+Lawful bound logout/pairing/Skill behavior remains covered. Local logout failure
+reports server revocation unconfirmed; it is not presented as authenticated IdP
+qualification. One initial test command used the wrong directory and selected no
+matching test; the corrected causal invocation above is retained separately.
+Kernel, component lock, default limits and all backend authority owners remain
+unchanged. Source/main CI and actual source-browser acceptance are separate gates.
+
+Actual source-browser follow-through on clean `0bb053f830a7b8838791e57efd0ce46e7d973b77`
+uses the built App against real Runtime HTTP, a cryptographic fake IdP and simulated
+Reality. Approve Once, Deny, Cancel and response-loss→reconcile→original resume
+reach completed/failed/cancelled/completed with effect counts **1/0/0/1**; recovery
+preserves the exact original run/Work. Browser has zero page errors, no inference
+requests, no 390px horizontal overflow, and logout disables further management.
+The optional favicon request returns 404; the existing psutil/Tauri warnings remain.
+Client monotonic wall times including UI/screenshot work are **2.45/1.89/1.78/9.11 s**,
+one sample per different scenario, not a benchmark distribution or improvement claim.
+These are source-browser records, not installed APEIR.exe or remote identity.
+
+The independent installed wheel from clean `516ad9cefac587ed34ba4fd1feff9fb09ce904ff`
+again completes **18 separate CLI processes** outside the checkout with no
+PYTHONPATH: original approval COMMITTED/MATCH/effect1, same-trigger duplicate1,
+Deny/Cancel0 and late approval rejected. Wheel SHA-256:
+`4592f5e6b731d5b4a708385f71968875d3aa9805cc14c4530d79624810424c06`.
+This wheel qualifies the local simulated CLI contract, not native component hashes,
+signed distribution, arbitrary workloads, live model accounts or physical hardware.
+
 ### Reality restart observation delivery — 2026-10-15
 
 **REUSE** the original Node journal, signed terminal delivery, Distributed Work
@@ -1160,6 +1257,40 @@ compile, documentation/235 links/comments, security (**0 HIGH / 3 known MEDIUM**
 and component-lock contracts (**3 passed**) pass. These are software simulation
 contracts, not physical or native Windows installation qualification. Kernel and
 component lock remain unchanged; source and resulting-main CI are separate gates.
+
+### Automation configuration publication admission — 2026-10-15
+
+**REUSE / FIX** the existing Workflow writer, immutable Automation definition and
+current human management check. Structured enable/disable now revalidates the
+original definition and current session/permission after writer admission and
+immediately before configuration publication. Four controlled HTTP cases on
+`ac26e44` retained a configuration update after authority was withdrawn during
+writer contention; no Workflow run, grant or execution authority was produced.
+The correction retains trusted-local configuration compatibility and the
+independent authorization checks on actual Work consumption.
+
+Final focused contracts: **9 passed** (4.05 s), including lawful publication,
+revoked session/permission, consumed nonce replay, unchanged state after restart
+and missing/changed definitions. Automation/HumanSession/routes: **168 passed**
+(164.12 s); Workflow/API enforcement: **52 passed** (1.77 s). Counts overlap.
+Original probes and initial fixture failures remain retained. The existing
+Workflow writer excludes concurrent definition replacement; separate Governance
+revocation and Workflow commit are not claimed to be one atomic transaction.
+No Kernel, component lock, execution permission or default resource limit changes.
+Source and resulting-main CI remain required; overall product stays PARTIAL.
+
+The same bounded publication review covers new structured configuration: the
+existing add_simulation consumer now passes its existing current-human callback
+to WorkflowStore.put_automation after writer admission. Original HTTP probes
+have **2 failed, 1 passed**: withdrawing the session or management permission
+during writer contention still published an enabled configuration. Repaired
+creation/toggle contracts have **12 passed** (5.69 s), and **12 passed** on Python
+3.10 (6.02 s). Combined Automation/HumanSession/routes/Workflow/API enforcement:
+**223 passed** (171.87 s). Failed publication leaves no Automation, Workflow run
+or grant; a previously prepared immutable definition can remain and is explicitly
+not execution authority. Trusted-local use and idempotent stored bindings remain
+supported. Separate Governance and Workflow commits are not claimed atomic.
+No new authority, store, automatic trigger or execution fallback is introduced.
 
 ### Truthful legacy Device projection — 2026-10-15
 
@@ -1388,6 +1519,116 @@ single assertion failure. Final source Desktop lint/typecheck/test/build:
 contracts, not measured task latency, Token savings or native UI qualification.
 
 
+### Automation integration with canonical Node facts — 2026-10-15
+
+The existing consumer candidate was normally merged with accepted main `c43f942`;
+only independent API-contract and acceptance text required conflict resolution,
+and both records were retained. Current source `13190ae` has **173 passed**
+Automation/Workflow/Node-and-Device projection contracts (173.11 s), and Desktop
+lint/typecheck/test/build has **219 passed in 40 files**. An initial local command
+named a nonexistent `tests/workflow` directory and collected no tests; the
+corrected command uses the existing Workflow test files. It is not counted as a
+product failure or a successful regression. All 12 repository-standard checks
+pass, with **0 HIGH / 3 known MEDIUM**, and **3 component-lock contracts**.
+
+A fresh built source-browser run against actual Runtime HTTP on that source
+again exercised approval, denial, cancellation and response loss: final effect
+counts **1 / 0 / 0 / 1**, with the exact original run and Work preserved during
+reconciliation and resume. Logout blocks creation; the 390-pixel viewport has no
+horizontal overflow and no page errors or model calls occur. Source-browser
+screenshots and original persisted histories are retained privately. The local
+single-case client monotonic times were 2.118 / 2.412 / 1.660 / 9.549 seconds;
+these differing scenarios are not a performance comparison. The identity
+provider is a deterministic signed test fixture and the device is simulated.
+
+Separately, main `1570e3b` passed all Core, Multi-Arch, Desktop and Security
+workflows: Core Windows **4946 passed / 60 skipped**, Linux 3.12 **4959 / 47**,
+Linux 3.10 and macOS each **4948 / 58**; Multi-Arch Windows **4636 / 60 / 272
+deselected**, Linux amd64 and ARM64 each **4637 / 59 / 272 deselected**. This is
+that exact merged Node durability baseline, not qualification of this unmerged
+Automation candidate or resolution of Issues #4/#8. Source/main CI remains
+required for this candidate. No Kernel or component-lock changes.
+
+
+The same source-browser screenshot review found that page-level overflow checks
+alone missed four long identifier/control boxes outside the Automation pane at
+390 pixels. A stricter actual-browser bounds check retained **1 assertion
+failure**, with four off-pane boxes. Scoped rules in the existing Operations CSS
+now wrap the form, stack its record contents and wrap full evidence identifiers;
+no backend or mutation logic changes. The unchanged four-scenario browser flow
+then has zero off-pane boxes, no pane/form overflow, and the same **1/0/0/1**
+effect counts with original recovery bindings. Final Desktop lint/typecheck/
+test/build: **219 passed in 40 files**. These are source-browser layout and
+execution checks, not installed Windows screenshots.
+
+The existing public simulation measurement script was also run on exact main
+`c43f942`: **12/12** fresh isolated Controller workspaces reached COMMITTED/MATCH,
+each with one effect. Local observer monotonic nearest-rank p50/p95/p99 were
+**1.625 / 1.737 / 1.737 seconds**. The preview uses the same fixed Work ID in
+separate workspace namespaces; these are not 12 globally unique operation IDs.
+Linux child CPU was 15.008 user + 1.700 system seconds, with `getrusage` child
+maximum RSS 86480 KiB, not aggregate steady-state service memory. An unavailable
+`/usr/bin/time` was a measurement preflight error; the successful wrapper uses
+Python's existing process/resource facilities. No comparison, Token reduction,
+WAN/physical performance or research-experiment PASS is inferred.
+
+
+A fresh wheel from clean Automation candidate `ab92d13` was installed into a new
+virtual environment and exercised outside the checkout with no `PYTHONPATH`.
+**18 CLI processes** again preserve the original approved COMMITTED/MATCH Work
+and duplicate trigger/effect count one, deny/cancel with zero effects, and reject
+late approval after cancellation. Explicit simulation is required. Wheel SHA-256:
+`8d975c0f0acd9b13698b21503d83e5a684e8bf8a69df8ca91131895fee37d6ee`.
+This is an installed source-package CLI and local OS-human boundary, not an
+NSIS/native installation, remote identity, background scheduler or physical Gate.
+
+
+### Automation start acknowledgement and uncertain effect evidence — 2026-10-15
+
+After normal integration with main `893cbe4`, the combined run retained
+**1 failed, 203 passed** (170.13 s). The failure precedes cancellation: the Node
+already persisted COMPLETED and the device effect count is one, but the
+Controller still has ASSIGNED rather than RUNNING because its start ACK was not
+recorded. An isolated repeat passed (**1 passed**, 6.32 s), which is not a fix.
+Controlled omission of the start ACK reproduces the exact original assertion
+failure (**1 failed**, 5.79 s). Existing signed-result reconciliation already
+admits original ASSIGNED Work; ASSIGNED cannot prove an effect did not occur.
+
+The test now separates start-ACK delivery from terminal-response loss. The
+recorded-ACK cases use an explicit publication barrier and retain the exact
+RUNNING assertion. The ACK-loss cases require exact ASSIGNED, a completed original
+Node journal, no Controller receipt or MATCH, and reconciliation of the original
+operation. Both are tested with and without cancellation and later grant
+revocation. All original final MATCH/COMMITTED, same-run, one-effect and exactly
+one grant-consumption assertions remain. No production state, timeout, retry,
+protocol, authority or safety assertion is relaxed. This is a controlled causal
+fault matrix, not sleeping or treating a passing rerun as resolution.
+
+The four-case matrix has **4 passed** (23.16 s) on Python 3.12 and **4 passed**
+(23.30 s) on Python 3.10. This identifies the candidate test's notification
+assumption; it does not establish the OS cause of historical Issues #4/#8 or
+upgrade Windows, WAN, native or physical acceptance.
+
+
+### Automation Windows negative-history investigation — 2026-10-16
+
+Candidate `5c28901` Core run `38825658046`, Windows job `116732406366`, retains
+**1 failed, 5081 passed, 60 skipped, 4 warnings** (2020.16 s): the receipt variant
+of the committed-history tamper test did not raise WorkflowBindingError. Other
+selected platforms passed. The original failure did not record the Workflow/Work
+state immediately before tampering, so its cause is **not established**. It must
+not be dismissed because other runs or platforms passed. The candidate remains
+a draft; no Windows or integration Gate is promoted.
+
+The negative test now explicitly requires COMPLETED Workflow and COMMITTED Work
+before modifying evidence, preserving the original tamper/rejection assertion.
+On failure it reports only state, step status, reconciliation/effect count and a
+timeout-present boolean. This distinguishes an incomplete setup from acceptance
+of a tampered committed receipt; it does not itself fix or prove the cause of the
+Windows failure. All fourteen strengthened semantic-tamper cases pass locally
+(8.07 s). No production Runtime, approval, signature or verifier change is made
+for this investigation. Exact updated-source Windows evidence is still required.
+
 ### External-provider spool publication and Windows baseline evidence — 2026-10-16
 
 Main `c43f942` Core run `38822457356`, Windows job `116723873694`, retains
@@ -1484,6 +1725,41 @@ assertion and failure remain, with cause unestablished. This diagnostic branch
 is not acceptance and must not merge. No production timeout, Connector assertion
 or effect verification is relaxed.
 
+
+Automation source `14be54f` retains all three PR checks and separately completed
+Core `38830702842` and Multi-Arch `38830705527`. Windows Core: **5083 passed,
+60 skipped, 4 warnings** (2209.01 s); Ubuntu 3.12: **5096 passed, 47 skipped,
+4 warnings** (724.27 s). Multi-Arch Linux amd64/ARM64 each have **4772 passed,
+59 skipped, 272 deselected, 4 warnings** (571.72 / 588.46 s), with platform
+detectors **13 passed** each. Windows 3.11 has **4771 passed, 60 skipped,
+272 deselected, 4 warnings** (1932.24 s). These strengthened precondition tests
+passed; they do not establish the cause of the earlier Windows tamper-probe
+failure or justify closing it from reruns alone. The normal integration of
+Relay source `32f3c7d` requires fresh combined regression and exact-head CI;
+earlier browser/wheel evidence remains explicitly scoped to source `5c28901`.
+
+
+A further HTTP writer-contention probe of the unmerged Automation consumer
+retained **2 failed, 1 passed**: after initial nonce admission, session or
+management-permission revocation prevented execution but still left a new
+PENDING Run when the delayed writer acquired its lock. **REUSE / FIX** the
+existing management callback and Workflow transaction; the callback now runs
+inside first-trigger publication before creating the Run/relation. This changes
+no execution authority and adds no store. Duplicate original-run reads remain
+compatible. Controlled session revocation, persisted expiry, permission denial
+and valid admission retain explicit nonce/replay, restart and zero-effect checks.
+The final writer/creation/toggle/concurrent-trigger/checkpoint selection has
+**15 passed** on Python 3.12 (9.07 s), **15 passed** on Python 3.10 (9.29 s).
+Exact-head CI must qualify the additional runtime change.
+
+Normal integration parent `9d9fff9` was also exercised using actual Runtime HTTP
+and the built source Operations Console: Approve Once, Deny, Cancel and response
+loss/recovery retain the same original Run/Work and effect counts **1/0/0/1**.
+Both successful flows have original receipt, fresh Observation and MATCH. Logout
+disables mutation, no model request occurs, and the 390-pixel form/pane have no
+horizontal overflow or off-pane evidence/control bounds. This uses signed fake
+identity and the explicit simulated template; it is not a deployed human IdP,
+installed APEIR.exe, physical effect or cross-network qualification.
 
 Spool source `32f3c7d` passed four-platform Core `38856754480`, including Windows
 **4994 passed, 60 skipped, 4 warnings** (1515.80 s), but Multi-Arch `38856756820`
@@ -1610,3 +1886,51 @@ requires two distinct held read acquisitions.
 This corrects another test consumer of the asynchronous contract; no production
 wait, retry, process startup deadline or execution authority changes. Fresh
 cross-platform CI is required; the failed run is not relabelled as successful.
+
+
+### Automation VERIFIED recovery admission — 2026-10-16
+
+**REUSE / FIX** the existing Automation projection, Workflow/Work owners,
+original Node journal, signed receipt, Reality recovery and EffectVerifier.
+The projection omitted VERIFIED mutation Work when its Observation was missing
+or MATCH had persisted before COMMIT publication failed. That could hide the
+original recovery actions even though the effect had already occurred. The
+projection now keeps both cases reconciliation-required; it does not execute
+anything or convert a missing verdict into success. Explicit MISMATCH remains
+uncommittable. No new grant, mutation Work, retry or authority is introduced.
+
+Dropping the actual read result after Node observation and failing the original
+COMMIT publication reproduce **2 failed** projection assertions before the fix.
+Both cases now recover the same Run/Work using existing public Reconcile and
+Resume, persist MATCH and COMMITTED, and retain effect count **1**. Lost read
+observation IDs are excluded from the fresh verification. The targeted history
+and recovery selection has **18 passed** on Python 3.12 (21.00 s) and Python
+3.10 (22.14 s), including 14 unchanged semantic tamper categories.
+
+Source `7d2ce48` full Core `38861767549` retains Windows **1 failed,
+5118 passed, 60 skipped, 4 warnings** (2399.18 s). The committed-history
+fixture failed before tampering: Workflow was failed and original Work VERIFIED.
+Its shortened CI representation did not retain the verdict or precise cause;
+this is not proof of the cause of an earlier changed-receipt rejection failure.
+The test now reports concise content-free preconditions. Only an exact original
+independent-read timeout, VERIFIED mutation without verification, bound read
+Work and effect count 1 permits one explicit public Reconcile/Resume before
+tampering. COMMITTED and tamper rejection remain mandatory. A controlled lost
+read reuses the original changed-receipt test to exercise that continuation.
+MISMATCH, UNKNOWN and other failures are not retried into an accepted fixture.
+
+Current main `380e657` has successful Core `38864193438`, Multi-Arch
+`38864193549`, Desktop `38864193441` and Security `38864193443`. Windows
+Core has **5009 passed, 60 skipped, 4 warnings** (1513.97 s); Windows
+Multi-Arch has **4695 passed, 60 skipped, 272 deselected, 4 warnings**
+(1328.62 s). These main results do not certify this unmerged Automation code.
+Exact-head affected regressions and CI remain required. Product/native, physical,
+real IdP, actual model engineering and strong-environment qualifications remain
+separate; no full product PASS or Windows timing root cause is inferred.
+
+The final Automation/Node/Governance selection has **593 passed** (218.89 s);
+Workflow/safety/human-session regressions have **81 passed** (1.97 s).
+Explicit negative-observation checks have **2 passed** (2.74 s), retaining
+MISMATCH as uncommitted and UNKNOWN as reconciliation-required. The native
+verifier on main `380e657` still fails with the exact missing locked Windows
+`nousd-x86_64-pc-windows-msvc.exe`; component-lock bytes are unchanged.
