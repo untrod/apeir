@@ -10,6 +10,7 @@ import pytest
 
 from nous_runtime.api import environment_routes, routes
 from nous_runtime.api.server import RuntimeAPIHandler, RuntimeHTTPServer
+from nous_runtime.governance.contracts import AuthorizationDecision
 
 FAKE_SERVICE_TOKEN = "fake-environment-target-service-token"
 
@@ -25,7 +26,12 @@ def execution_boundary(monkeypatch, tmp_path):
     class Gate:
         def evaluate(self, proposal, context):
             proposals.append(proposal)
-            return SimpleNamespace(action_mode="EXECUTE")
+            return AuthorizationDecision(
+                action_mode="EXECUTE",
+                allowed=True,
+                proposal_hash=proposal.proposal_hash,
+                context_id=context.context_id,
+            )
 
     monkeypatch.setenv("NOUS_API_TOKEN", FAKE_SERVICE_TOKEN)
     monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(tmp_path))

@@ -1954,3 +1954,45 @@ Explicit negative-observation checks have **2 passed** (2.74 s), retaining
 MISMATCH as uncommitted and UNKNOWN as reconciliation-required. The native
 verifier on main `380e657` still fails with the exact missing locked Windows
 `nousd-x86_64-pc-windows-msvc.exe`; component-lock bytes are unchanged.
+
+
+### Unified-main target-binding qualification — 2026-10-16
+
+The renewed audit begins at accepted main
+`629b13f38a2b663b00596782c0e85be6731d2c5a`; its Core, Desktop,
+Multi-Arch and Security workflows all completed successfully. Six remote
+branches, 31 unchanged historical checkpoint tags, open PR 67, open Issues
+1/2/4/8 and no published Releases remain. Re-query before subsequent mutations.
+
+**REUSE** the existing Environment API, authorization route, Capability executor,
+original unmerged target-binding fix and its tests. **FIX** the route/body target
+inconsistency before proposal construction and again before dispatch. An exact
+main reproduction retained **15 failed / 3 passed** (1.31 s), including real
+loopback HTTP with an instrumented dispatcher; no actual external workload was
+executed. This is an argument-binding defect, not physical-effect evidence.
+Normal merge retained the original fix SHA and all main changes. The shared
+fixture now returns the canonical explicit allowed AuthorizationDecision rather
+than an incomplete EXECUTE-only object. All 18 original cases and their
+assertions are retained. Final target checks: **18 passed** on Python 3.12
+and **18 passed** on Python 3.10 (0.83 s each). Environment/Governance/Control
+Plane/Capability/terminal regressions: **572 passed / 6 skipped** (16.02 s).
+An earlier selection named nonexistent test files and collected no tests; that
+invocation is retained separately and is not counted as successful regression.
+
+**EXTEND** the existing external-agent Provider and official MCP SDK boundaries;
+the present production MCP code is a client, while server objects occur only in
+test fixtures. A public scoped APEIR MCP server and qualified Codex App Server
+Harness path are **MISSING**. Official App Server documentation was fetched and
+installed `codex-cli 0.159.0-alpha.3` generated its current JSON schemas; schema
+inspection is not an authenticated engineering task or integration PASS.
+**DEFER** physical Jetson/ESP32, installed native binaries and production release
+until their independent prerequisites are available. Kernel/component lock,
+sandbox requirements, authorization and uncertain-effect recovery are unchanged.
+
+Before any queued branch abandonment, all five remote tips and the OCI local
+continuation were saved in one owner-protected Git Bundle. Bundle verification,
+independent bare-repository restore, exact-ref comparison and full connectivity
+checks passed for all six refs. Raw Git objects and runtime evidence stay outside
+the source tree; existing dirty worktrees were not discarded. Saved diagnostics
+are not automatically accepted product code. Exact-source PR and resulting-main
+CI remain separate gates.
