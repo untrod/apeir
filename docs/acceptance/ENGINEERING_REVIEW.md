@@ -1996,3 +1996,27 @@ checks passed for all six refs. Raw Git objects and runtime evidence stay outsid
 the source tree; existing dirty worktrees were not discarded. Saved diagnostics
 are not automatically accepted product code. Exact-source PR and resulting-main
 CI remain separate gates.
+
+The first target-binding candidate `c5e82aa` passed Core, Desktop, Security and
+Linux Multi-Arch, but Multi-Arch `38920847961` retained Windows **1 failed,
+4829 passed, 60 skipped, 272 deselected, 4 warnings** (2093.64 s). Its controlled
+two-observation response-loss test timed out awaiting original signed read
+delivery and recorded a Relay heartbeat disconnect. This is not an Environment
+target-binding failure and is not relabelled PASS. The original raw job log is
+retained outside source control.
+
+The injection polled `AgentSessionStore.get` synchronously on the transport
+event loop while coordination used its existing writer lock. A bounded writer
+lock held until a scheduled loop callback reproduces starvation: **1 failed**
+(2.71 s). Polling that same original Session through `asyncio.to_thread` makes
+the callback and store access progress without weakening transport isolation or
+authority. Only test-side durable reads change. Existing 15-second polling and
+60-second outer deadlines, original read IDs, signed-result checks, VERIFIED,
+MATCH/COMMITTED and one-effect assertions remain. The six focused recovery and
+lock-contention cases pass on Python 3.12 (23.26 s) and 3.10 (23.54 s).
+The full Reality regression has **120 passed** (121.69 s); all 12 existing
+repository-standard checks also pass, with 0 HIGH and 3 known MEDIUM scanner
+findings. Target-binding regression remains **18 passed**.
+This proves a blocking source in the injection, not the cause of every Windows
+timeout; Issues 4/8 remain open. Exact updated-source cross-platform CI is still
+required before integration.
