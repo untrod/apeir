@@ -1108,6 +1108,26 @@ Kernel and component lock are unchanged. Source and resulting-main cross-platfor
 CI are required before qualification; native Windows hashes and physical/network
 acceptance retain their independent blockers.
 
+### Environment command target binding — 2026-10-14
+
+**REUSE** the existing Environment API, mutation Governance and canonical Runtime
+capability dispatcher. **FIX** command target consistency: the execution arguments
+must retain the same Environment selected by the route and reviewed by Governance.
+A conflicting body target is rejected before policy/approval construction and
+before the handler invokes the dispatcher; an omitted or identical target stays
+compatible. Authentication still precedes this validation. No permission, Provider,
+execution database or host fallback is added.
+
+The original controlled handler/route/actual-loopback-HTTP regression retained
+**15 failed, 3 passed**. Its dispatcher was instrumented with a fake bounded
+result; this proves argument misbinding, not an unauthorized real workload effect.
+The corrected contracts have **18 passed** on Python 3.12 (1.00 s) and Python 3.10
+(1.70 s). Environment/Governance/Control Plane/Runtime-dispatch/terminal regression:
+**509 passed, 2 skipped** (14.08 s). Original strict sandbox, high-risk approval,
+credential and resource boundaries remain unchanged; default OCI control remains
+BLOCKED without qualified strong isolation. This does not qualify actual OCI,
+interactive PTY, native installation, physical devices or a remote human.
+
 ### Original ProcessSession cleanup admission — 2026-10-14
 
 **REUSE** ProcessSessionStore, its original process/helper identity checks and
@@ -1934,3 +1954,104 @@ Explicit negative-observation checks have **2 passed** (2.74 s), retaining
 MISMATCH as uncommitted and UNKNOWN as reconciliation-required. The native
 verifier on main `380e657` still fails with the exact missing locked Windows
 `nousd-x86_64-pc-windows-msvc.exe`; component-lock bytes are unchanged.
+
+
+### Unified-main target-binding qualification — 2026-10-16
+
+The renewed audit begins at accepted main
+`629b13f38a2b663b00596782c0e85be6731d2c5a`; its Core, Desktop,
+Multi-Arch and Security workflows all completed successfully. Six remote
+branches, 31 unchanged historical checkpoint tags, open PR 67, open Issues
+1/2/4/8 and no published Releases remain. Re-query before subsequent mutations.
+
+**REUSE** the existing Environment API, authorization route, Capability executor,
+original unmerged target-binding fix and its tests. **FIX** the route/body target
+inconsistency before proposal construction and again before dispatch. An exact
+main reproduction retained **15 failed / 3 passed** (1.31 s), including real
+loopback HTTP with an instrumented dispatcher; no actual external workload was
+executed. This is an argument-binding defect, not physical-effect evidence.
+Normal merge retained the original fix SHA and all main changes. The shared
+fixture now returns the canonical explicit allowed AuthorizationDecision rather
+than an incomplete EXECUTE-only object. All 18 original cases and their
+assertions are retained. Final target checks: **18 passed** on Python 3.12
+and **18 passed** on Python 3.10 (0.83 s each). Environment/Governance/Control
+Plane/Capability/terminal regressions: **572 passed / 6 skipped** (16.02 s).
+An earlier selection named nonexistent test files and collected no tests; that
+invocation is retained separately and is not counted as successful regression.
+
+**EXTEND** the existing external-agent Provider and official MCP SDK boundaries;
+the present production MCP code is a client, while server objects occur only in
+test fixtures. A public scoped APEIR MCP server and qualified Codex App Server
+Harness path are **MISSING**. Official App Server documentation was fetched and
+installed `codex-cli 0.159.0-alpha.3` generated its current JSON schemas; schema
+inspection is not an authenticated engineering task or integration PASS.
+**DEFER** physical Jetson/ESP32, installed native binaries and production release
+until their independent prerequisites are available. Kernel/component lock,
+sandbox requirements, authorization and uncertain-effect recovery are unchanged.
+
+Before any queued branch abandonment, all five remote tips and the OCI local
+continuation were saved in one owner-protected Git Bundle. Bundle verification,
+independent bare-repository restore, exact-ref comparison and full connectivity
+checks passed for all six refs. Raw Git objects and runtime evidence stay outside
+the source tree; existing dirty worktrees were not discarded. Saved diagnostics
+are not automatically accepted product code. Exact-source PR and resulting-main
+CI remain separate gates.
+
+The first target-binding candidate `c5e82aa` passed Core, Desktop, Security and
+Linux Multi-Arch, but Multi-Arch `38920847961` retained Windows **1 failed,
+4829 passed, 60 skipped, 272 deselected, 4 warnings** (2093.64 s). Its controlled
+two-observation response-loss test timed out awaiting original signed read
+delivery and recorded a Relay heartbeat disconnect. This is not an Environment
+target-binding failure and is not relabelled PASS. The original raw job log is
+retained outside source control.
+
+The injection polled `AgentSessionStore.get` synchronously on the transport
+event loop while coordination used its existing writer lock. A bounded writer
+lock held until a scheduled loop callback reproduces starvation: **1 failed**
+(2.71 s). Polling that same original Session through `asyncio.to_thread` makes
+the callback and store access progress without weakening transport isolation or
+authority. Only test-side durable reads change. Existing 15-second polling and
+60-second outer deadlines, original read IDs, signed-result checks, VERIFIED,
+MATCH/COMMITTED and one-effect assertions remain. The six focused recovery and
+lock-contention cases pass on Python 3.12 (23.26 s) and 3.10 (23.54 s).
+The full Reality regression has **120 passed** (121.69 s); all 12 existing
+repository-standard checks also pass, with 0 HIGH and 3 known MEDIUM scanner
+findings. Target-binding regression remains **18 passed**.
+This proves a blocking source in the injection, not the cause of every Windows
+timeout; Issues 4/8 remain open. Exact updated-source cross-platform CI is still
+required before integration.
+
+### Bounded Relay stop and receive backpressure — 2026-10-16
+
+The updated target candidate `f0f43f1` passed Core/Desktop/Security and Linux,
+but Multi-Arch `38927399914` retains Windows **1 failed, 4830 passed,
+60 skipped, 272 deselected, 4 warnings** (1986.70 s). The prior held-observation
+case passed. This failure is the original Artifact/lease/stop test's unchanged
+two-second shutdown bound, waiting for WebSocket close completion.
+
+**REUSE / FIX** the existing Node Relay, protocol flow control, durable sequence
+guard and original Node journal. Two controlled real-loopback tests reproduce
+idle receive waiting beyond stop and a full receive queue hiding the peer's
+close frame: **2 failed** (62.72 s). An independent accepted-main idle probe has
+**1 failed** (2.78 s). No test or production deadline was enlarged. Stop now
+wakes idle receive; closure drains raw frames solely to finish the existing
+handshake. Buffered commands are not decoded, acknowledged or executed, and
+Controller pending Work remains available for original-journal reconciliation.
+
+The first implementation cancelled an already admitted result send; combined
+regression retained **1 failed, 398 passed** (131.55 s) in the existing revocation
+test. That prototype is rejected. Requested stop now preserves an active
+message's original completion/publication; explicit transport cancellation
+retains existing journal ownership and drains durable writes. The unmodified
+revocation/result-denial check passes. Final Node/Reality/target regression:
+**399 passed** (126.25 s); Python 3.10 shutdown/I/O/reconciliation selection:
+**57 passed** (5.96 s). Ten focused original-control, revocation and stop cases
+pass (1.67 s), and eight shutdown cases additionally require clean close code,
+no remaining Relay tasks, no new Node execution and retained pending Work
+(1.42 s). Counts overlap and are not summed.
+
+The ordinary PID64, memory/network/filesystem, identity, signing, replay and
+effect-verification boundaries are unchanged. This proves the controlled stop
+and queue mechanism, not every historical Windows failure or physical/WAN
+qualification. Issues 4/8 remain open. Raw failed CI and prototype logs remain
+outside source control. Updated-source cross-platform CI is required.

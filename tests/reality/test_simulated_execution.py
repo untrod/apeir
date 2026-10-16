@@ -269,6 +269,50 @@ async def wait_for(predicate, timeout=15):
     raise AssertionError("simulation condition did not converge")
 
 
+async def wait_for_session_error(coordinator, session_id, error):
+    """Poll durable coordination without blocking transport on its store lock."""
+    deadline = asyncio.get_running_loop().time() + 15
+    while asyncio.get_running_loop().time() < deadline:
+        session = await asyncio.to_thread(coordinator.require, session_id)
+        if session.error == error:
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("original Session error did not converge")
+
+
+def test_session_error_wait_keeps_relay_loop_responsive(tmp_path):
+    import threading
+
+    async def scenario():
+        coordinator = AgentSessionCoordinator(tmp_path)
+        session = coordinator.create(
+            agent_id="simulation-agent",
+            model="deterministic-planner",
+            objective="Exercise the original Session store lock",
+        )
+        entered = asyncio.Event()
+        release = threading.Event()
+        loop = asyncio.get_running_loop()
+
+        def hold_original_writer_lock():
+            with coordinator.store._lock:
+                loop.call_soon_threadsafe(entered.set)
+                assert release.wait(2), "Session polling blocked transport progress"
+
+        writer = asyncio.create_task(asyncio.to_thread(hold_original_writer_lock))
+        try:
+            await entered.wait()
+            loop.call_soon(release.set)
+            await wait_for_session_error(coordinator, session.session_id, session.error)
+            await writer
+        finally:
+            release.set()
+            await writer
+            coordinator.close()
+
+    asyncio.run(scenario())
+
+
 def test_goal_plan_work_node_device_observation_effect_commit_provenance(tmp_path):
     async def scenario():
         async with simulation(tmp_path) as sim:
@@ -598,12 +642,11 @@ def test_response_loss_restart_follows_each_original_read_before_continuation(
             and len(held_reads) < 2
         ):
             sim = active["simulation"]
-            session = sim.coordinator.store.list()[0]
-            await wait_for(
-                lambda: (
-                    sim.coordinator.require(session.session_id).error
-                    == "distributed Workflow Work timed out: " + acquisition_id
-                )
+            session = (await asyncio.to_thread(sim.coordinator.store.list))[0]
+            await wait_for_session_error(
+                sim.coordinator,
+                session.session_id,
+                "distributed Workflow Work timed out: " + acquisition_id,
             )
             assert sim.work().state is DistributedWorkState.VERIFIED
             assert sim.provider.execution_count(WORK_ID) == 1
