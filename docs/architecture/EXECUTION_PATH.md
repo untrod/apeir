@@ -327,3 +327,28 @@ services remain separate and are never described as Kernel-executed.
 - optimistic desktop lifecycle mutations;
 - secret values in configuration, events, traces or state;
 - adaptive policy activation without safety and governance approval.
+
+
+### MCP bridge and original Work submission
+
+The official stdio MCP server forwards five fixed tools to authenticated Runtime
+HTTP `/api/v1/mcp/call`. Service identity comes from existing API authentication;
+caller-supplied identity or workspace overrides are rejected. Current canonical
+Governance requires explicit per-tool/resource permission and rechecks that
+permission before delivery. Service clients cannot approve themselves.
+`apeir.work.submit` additionally invokes the unchanged `runtime.execute` mutation
+admission before the original process-owned WorkSupervisor. The bridge has no
+worker or authority of its own. Read APIs explicitly select the existing Work
+Harness or Distributed Work owner, without a success-producing fallback.
+
+For explicitly keyed submissions, WorkSupervisor stores an original-request
+fence in the existing checksum-verified SQLiteCheckpointStore before creating
+or dispatching Work. Workspace, authenticated actor, key, effective input hash
+and original random Work UUID are bound together. A concurrent/restarted caller
+can only inspect that original Work; incomplete initialization is UNKNOWN, never
+permission to create or resume a replacement. The authenticated HTTP retry lookup
+cannot execute or consume another approval. Legacy unkeyed submissions retain
+their existing contract. Ordinary checkpoint retention preserves the fence.
+WAL/schema initialization uses the existing cross-process lock; regular database
+connections do not reconfigure journal mode. No receipt, observation or verifier
+is synthesized. See the [public MCP scope](../development/DEVELOPER_PLATFORM.md#mcp-access-to-the-existing-runtime).

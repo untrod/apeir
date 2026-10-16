@@ -44,7 +44,7 @@ Future targets below are requirements, not claims of implemented integrations.
 | M4.6 bounded Ray diagnostic / Workflow qualification | PARTIAL | Actual Ray2.49.2 now participates in one durable AgentSession/Plan through Distributed Work/Node, separate Ray/device Approve Once, CAS, fake execution-time credentials and independent simulated MATCH; Deny/MISMATCH/UNKNOWN, post-start expiry/policy/profile denial, journal reload and prior response-loss/cancellation cases are exercised. Normal OCI PID64 is unchanged. [Qualification scope](docs/architecture/PROVIDER_CONTRACT.md#workflow-and-post-start-admission-qualification); fixed diagnostic task is not a production Ray adapter/resource profile, remote cluster/GPU/platform or physical acceptance. |
 | Provider dispatch-admission boundary | PARTIAL | Existing supervisor/SDK post-setup admission is now exercised after real Ray startup in the bounded Workflow qualification, as well as negative fake-runner contracts; [contract and limits](docs/architecture/PROVIDER_CONTRACT.md#dispatch-admission-after-provider-setup). Production adapters must independently exercise this contract and their complete execution/recovery/cleanup gates. |
 | Environment numeric resource admission | PASS | Existing Environment limits reject non-finite CPU, ambiguous/fractional integer bounds and zero timeout/output before persistence or execution; constructed Provider inputs and restart records are revalidated. [Contract](docs/architecture/PROVIDER_CONTRACT.md#environment-resource-admission). This scoped software hardening does not qualify a production Ray profile or change PID64. |
-| M4 authenticated Codex / remaining industrial Providers | PENDING | Codex CLI discovery currently requires authentication; no authenticated service integration is qualified. Production Ray/Kubernetes, SPIFFE/SPIRE and Viam/ROS/KubeEdge remain unqualified. OPA reference does not complete M4 or authenticate remote human approval. |
+| M4 authenticated Codex / remaining industrial Providers | PENDING | Official Codex0.163.0 account/model metadata is available; direct App Server→APEIR MCP reads and approval-required submission have software evidence, with no model Turn. Complete authenticated Harness, native tool/filesystem/credential isolation, usage and recovery remain unqualified. Production Ray/Kubernetes, SPIFFE/SPIRE and Viam/ROS/KubeEdge remain unqualified. OPA reference does not complete M4 or authenticate remote human approval. |
 | M5 Reality & Hardware (complete target) | PARTIAL | Read-only signed SerialTransport/ESP32 host contracts exist. Physical mutation, firmware persistence and a second device family remain missing. |
 | M5 serial/ESP32 host-contract preparation | PASS | `ff4d7b4`: 28 focused tests, bounded signed frames/fresh nonce/stable identity/trust preservation; `tests/reality/test_serial_contract.py`. No firmware-write capability advertised. |
 | M5 physical ESP32 write / power-loss acceptance | PENDING | Requires real Jetson/ESP32, firmware/NVS behavior and physical fault-injection evidence. |
@@ -398,3 +398,12 @@ fault recovery, federation, public conformance/specifications, reproducible
 Verified Reality Benchmark and verified release/supply chain. Stable upgrade and
 security boundaries must be documented. Until those Gates pass, do not claim 1.0
 readiness. This roadmap reserves no production version and claims no new Gate PASS.
+
+
+Current reliability follow-up: [Issue82](https://github.com/untrod/apeir/issues/82)
+records a Windows Automation resume response without an effect-verification
+verdict (run38939446275). No root cause or effect outcome is established; passing
+Linux or descendant CI does not resolve it. Runtime product delivery remains
+PARTIAL, and Issues4/8 remain open. The [consolidation record](docs/acceptance/REPOSITORY_CONSOLIDATION.md#unified-main-integration--2026-10-16)
+records exact accepted sources, retained failures and ref retirement. Current
+milestone status remains the closure matrix above; this adds no milestone.
