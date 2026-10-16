@@ -457,10 +457,12 @@ def create_mcp_server(runtime_url, token):
 
     @server.tool(name="apeir.nodes.list", annotations=read)
     async def nodes_list():
+        """Read canonical Node/trust/connection facts for the authorized workspace."""
         return await forward("apeir.nodes.list", {})
 
     @server.tool(name="apeir.devices.inspect", annotations=read)
     async def device_inspect(device_id: str):
+        """Inspect one registered Device by stable ID; this is not a fresh physical observation."""
         return await forward("apeir.devices.inspect", {"device_id": device_id})
 
     @server.tool(
@@ -470,6 +472,11 @@ def create_mcp_server(runtime_url, token):
         ),
     )
     async def work_submit(objective: str, idempotency_key: str):
+        """Propose bounded read-only Work; original human approval is still required.
+
+        Reuse the exact key and inputs after a lost response to query the original
+        Work. Never invent a new key to blindly repeat an uncertain operation.
+        """
         return await forward(
             "apeir.work.submit",
             {"objective": objective, "idempotency_key": idempotency_key},

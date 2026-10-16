@@ -685,7 +685,8 @@ apeir extension serve-mcp --runtime-url http://127.0.0.1:8770
 Remote Controller origins require HTTPS and the platform certificate trust
 store. Plain HTTP is limited to numeric loopback; redirects, URL credentials,
 query strings and alternate paths are rejected. The official MCP SDK owns the
-stdio protocol. The bridge owns no execution worker, state database, approval,
+stdio protocol. The bridge has a whole-call HTTP deadline and closes its request on cancellation.
+It owns no execution worker, state database, approval,
 trust store or verification authority. It never automatically retries HTTP calls.
 The Controller authenticates every call to its existing API before dispatch.
 

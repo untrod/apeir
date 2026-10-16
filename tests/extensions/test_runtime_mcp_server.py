@@ -192,6 +192,7 @@ def test_official_sdk_stdio_calls_actual_runtime_http(runtime):
                 initialized = await client.initialize()
                 assert initialized.server_info.name == "APEIR Runtime"
                 listed = await client.list_tools()
+                assert all(tool.description for tool in listed.tools)
                 assert {tool.name for tool in listed.tools} == {
                     "apeir.nodes.list",
                     "apeir.devices.inspect",
