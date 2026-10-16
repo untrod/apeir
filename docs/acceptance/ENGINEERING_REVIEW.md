@@ -1543,3 +1543,25 @@ response-loss, effect-count, retry-budget or timeout assertion was weakened.
 The complete three-module Connector selection and Governance/Workflow regression
 are rerun before publishing the correction. The failed full CI is not relabelled
 as a baseline environment failure or erased.
+
+
+Automation source `2bc4166` Core `38857348310` retains Windows **1 failed,
+5104 passed, 60 skipped, 4 warnings** (1999.26 s): the device-disconnect test
+asserted Controller FAILED while its original terminal result had not yet
+projected and Work remained RUNNING. Source 443fc72's earlier qualification is
+superseded by this additional test-consumer correction; a cancelled superseded
+run is not a passing result. No production Runtime code changes in this step.
+
+A controlled signed-status hold reuses the original failure/disconnect test
+function and its assertions. Both faults reproduce the same pre-terminal
+assertion (**2 failed**). At that barrier the actual Node journal is FAILED,
+Controller Work is RUNNING, no Controller result exists and effect count is zero.
+After release the original test now waits for that exact result and calls the
+existing Controller reconciliation. FAILED, OFFLINE, zero-effect and no
+re-execution-after-reconnect/resume assertions remain. Four immediate/held
+cases pass on Python 3.12 (1.16 s) and 3.10 (1.17 s). The full Reality suite has
+**118 passed** on Python 3.12 (122.11 s) and **118 passed** on Python 3.10
+(123.76 s), including the repeated independent-read pause correction. Neither
+10-second production waits nor the existing 60-second CI limit changes.
+This demonstrates an asynchronous projection assumption, not the cause of
+Windows delay or a completed performance/physical/network qualification.
