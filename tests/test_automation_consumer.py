@@ -1290,6 +1290,16 @@ def test_committed_history_rejects_changed_original_semantic_evidence(
     path = consumer.controller_state / "distributed-works.json"
     document = json.loads(path.read_text(encoding="utf-8"))
     work = document["works"][work_id]
+    before_tamper = {
+        "workflow_state": completed["state"],
+        "work_state": work["state"],
+        "step_states": completed["step_states"],
+        "reconciliation_required": completed["reconciliation_required"],
+        "effect_count": completed["effect_counts"][work_id],
+        "timeout_reported": "timed out" in str(completed.get("error", "")),
+    }
+    assert completed["state"] == "completed", before_tamper
+    assert work["state"] == "COMMITTED", before_tamper
     if changed == "expected-effect":
         work["expected_effect"] = {"firmware_version": "9.9.9"}
     elif changed == "capability":

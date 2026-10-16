@@ -1608,3 +1608,23 @@ The four-case matrix has **4 passed** (23.16 s) on Python 3.12 and **4 passed**
 (23.30 s) on Python 3.10. This identifies the candidate test's notification
 assumption; it does not establish the OS cause of historical Issues #4/#8 or
 upgrade Windows, WAN, native or physical acceptance.
+
+
+### Automation Windows negative-history investigation — 2026-10-16
+
+Candidate `5c28901` Core run `38825658046`, Windows job `116732406366`, retains
+**1 failed, 5081 passed, 60 skipped, 4 warnings** (2020.16 s): the receipt variant
+of the committed-history tamper test did not raise WorkflowBindingError. Other
+selected platforms passed. The original failure did not record the Workflow/Work
+state immediately before tampering, so its cause is **not established**. It must
+not be dismissed because other runs or platforms passed. The candidate remains
+a draft; no Windows or integration Gate is promoted.
+
+The negative test now explicitly requires COMPLETED Workflow and COMMITTED Work
+before modifying evidence, preserving the original tamper/rejection assertion.
+On failure it reports only state, step status, reconciliation/effect count and a
+timeout-present boolean. This distinguishes an incomplete setup from acceptance
+of a tampered committed receipt; it does not itself fix or prove the cause of the
+Windows failure. All fourteen strengthened semantic-tamper cases pass locally
+(8.07 s). No production Runtime, approval, signature or verifier change is made
+for this investigation. Exact updated-source Windows evidence is still required.
