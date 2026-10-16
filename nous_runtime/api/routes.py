@@ -1339,6 +1339,7 @@ def handle_runtime_run(
                 if authorization_context
                 else "api",
                 constraints=dict(body.get("constraints") or {}),
+                workspace_file_refs=body.get("workspace_file_refs", ()),
                 authorization_context=authorization_context.to_dict()
                 if authorization_context
                 else {},
@@ -1715,6 +1716,7 @@ def handle_chat_runtime(
                 model_id=str(body.get("model_id") or ""),
                 agent_mode=str(body.get("agent_mode") or "agent"),
                 request_id=str(body.get("request_id") or ""),
+                workspace_file_refs=body.get("workspace_file_refs", ()),
             ),
             authorization_context=authorization_context.to_dict()
             if authorization_context
@@ -1729,7 +1731,11 @@ def handle_chat_runtime(
                 "status": response.status,
                 "message": response.message,
                 "trace_id": response.trace_id,
-                "run_id": str(response.data.get("run_id") or ""),
+                "run_id": str(
+                    response.data.get("run_id")
+                    or (response.data.get("result") or {}).get("run_id")
+                    or ""
+                ),
                 "task_promoted": response.task_promoted,
                 "requires_trusted_approval": response.requires_trusted_approval,
                 "data": response.data,

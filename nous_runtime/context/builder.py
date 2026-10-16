@@ -92,7 +92,10 @@ class ContextBuilder:
     """
 
     def __init__(
-        self, workspace: str = "", providers: list[ContextProvider] | None = None
+        self,
+        workspace: str = "",
+        providers: list[ContextProvider] | None = None,
+        extra_providers: tuple[ContextProvider, ...] = (),
     ):
         if not workspace and providers is None:
             from nous_runtime.project.workspace import find_workspace
@@ -101,7 +104,7 @@ class ContextBuilder:
         self._workspace = workspace
         self._providers = (
             providers if providers is not None else _default_providers(workspace)
-        )
+        ) + list(extra_providers)
 
     # Public API
 
@@ -508,7 +511,12 @@ class ContextBuilder:
 # Convenience factory
 
 
-def build_context(request: BuildRequest, workspace: str = "") -> ContextSnapshot:
+def build_context(
+    request: BuildRequest,
+    workspace: str = "",
+    *,
+    extra_providers: tuple[ContextProvider, ...] = (),
+) -> ContextSnapshot:
     """One-shot context build with default providers.
 
     Args:
@@ -518,7 +526,7 @@ def build_context(request: BuildRequest, workspace: str = "") -> ContextSnapshot
     Returns:
         A ContextSnapshot.
     """
-    builder = ContextBuilder(workspace=workspace)
+    builder = ContextBuilder(workspace=workspace, extra_providers=extra_providers)
     return builder.build_context(request)
 
 

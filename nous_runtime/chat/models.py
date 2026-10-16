@@ -27,6 +27,7 @@ class ChatRequest:
     model_id: str = ""
     agent_mode: str = "agent"
     request_id: str = ""
+    workspace_file_refs: tuple[Any, ...] = ()
 
 
 @dataclass(frozen=True)

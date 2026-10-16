@@ -59,6 +59,13 @@ class RuntimePipeline:
         self._trace_roots: dict[str, str] = {}
 
     def run(self, request: RuntimeRequest) -> RuntimeResponse:
+        if (
+            request.workspace_file_refs
+            and self.events.get_run(request.request_id) is not None
+        ):
+            from nous_runtime.context.selected_input import SelectedInputError
+
+            raise SelectedInputError("original_request_already_exists")
         # A single identifier links the public Run, trace, events, and UI replay.
         trace = RuntimeTrace(request.request_id, trace_id=request.request_id)
         try:
@@ -163,6 +170,32 @@ class RuntimePipeline:
             workspace=workspace.workspace_id,
             constraints={**request.constraints, "workspace_path": workspace.path},
         )
+        if request.workspace_file_refs:
+            self.events.emit(
+                RunEvent(
+                    run_id=request.request_id,
+                    task_id=request.request_id,
+                    event_type="runtime.input.bound",
+                    payload={
+                        "request_binding_sha256": self._input_request_binding(request)
+                    },
+                )
+            )
+            self._emit(
+                request.request_id,
+                "context.input.selected",
+                {
+                    "sources": [
+                        {
+                            "source_id": ref.source_id,
+                            "source_version": ref.sha256,
+                            "status": "selected",
+                            "was_read": False,
+                        }
+                        for ref in request.workspace_file_refs
+                    ]
+                },
+            )
 
         context_snapshot = self._build_context(request, decision.intent, workspace.path)
         context_status = str(context_snapshot.get("status") or "loaded")
@@ -173,6 +206,7 @@ class RuntimePipeline:
             "item_count": context_snapshot.get("item_count", 0),
             "checksum": context_snapshot.get("checksum", ""),
             "truncated": context_snapshot.get("truncated", False),
+            "selected_input": context_snapshot.get("selected_input", []),
             "admission_decision_id": context_snapshot.get("admission_decision_id")
             or (context_snapshot.get("metadata", {}).get("context_binding") or {}).get(
                 "admission_decision_id", ""
@@ -191,6 +225,19 @@ class RuntimePipeline:
                 decision,
                 result={"context_snapshot": context_snapshot},
             )
+        if request.workspace_file_refs:
+            # Explicit selected input must never degrade to a source-free call.
+            if context_snapshot.get("delivery_status") != "loaded":
+                return self._response(
+                    request,
+                    trace,
+                    "selected_input_rejected",
+                    "Selected saved input could not be admitted.",
+                    decision,
+                    result={
+                        "selected_input": context_snapshot.get("selected_input", [])
+                    },
+                )
 
         self._active_intent_analysis = intent_resolution.analysis
         plan = self._plan(
@@ -362,9 +409,24 @@ class RuntimePipeline:
     def _build_context(
         self, request: RuntimeRequest, intent: str, workspace_path: str
     ) -> dict[str, Any]:
-        empty = {"snapshot_id": "", "item_count": 0, "items": [], "truncated": False}
+        empty = {
+            "snapshot_id": "",
+            "item_count": 0,
+            "items": [],
+            "truncated": False,
+            "selected_input": [
+                {
+                    "source_id": ref.source_id,
+                    "source_version": ref.sha256,
+                    "status": "rejected",
+                    "was_read": False,
+                }
+                for ref in request.workspace_file_refs
+            ],
+        }
         try:
             from nous_runtime.context.builder import build_context
+            from nous_runtime.context.selected_input import SelectedWorkspaceInput
             from nous_runtime.context.schema import ContextSource
             from nous_runtime.context.security import ContextAccessRequest, ContextGuard
             from nous_runtime.context.types import BuildRequest
@@ -427,6 +489,20 @@ class RuntimePipeline:
                     "context_token_budgets"
                 ]
 
+            reader = None
+            if request.workspace_file_refs:
+                from nous_runtime.governance import get_gate
+
+                reader = SelectedWorkspaceInput(
+                    workspace_path,
+                    request.workspace_file_refs,
+                    authorization_context=context,
+                    purpose=purpose,
+                    work_id=request.request_id,
+                    gate=self.gate or get_gate(),
+                )
+                object.__setattr__(request, "_selected_input", reader)
+
             snapshot = build_context(
                 BuildRequest(
                     intent=intent,
@@ -437,7 +513,16 @@ class RuntimePipeline:
                     metadata=build_metadata,
                 ),
                 workspace=workspace_path,
+                **({"extra_providers": (reader,)} if reader is not None else {}),
             )
+            if reader is not None:
+                reader.require_collected()
+                reader.prepare_snapshot(snapshot)
+                self._emit(
+                    request.request_id,
+                    "context.input.read",
+                    {"sources": reader.provenance()},
+                )
             snapshot = replace(
                 snapshot,
                 metadata={
@@ -455,6 +540,11 @@ class RuntimePipeline:
                 "snapshot_id": snapshot.id,
                 "delivery_status": "loaded",
                 "truncated": bool(snapshot.metadata.get("truncation_explanation")),
+                **(
+                    {"selected_input": reader.provenance()}
+                    if reader is not None
+                    else {}
+                ),
             }
         except ContextBudgetError:
             return {
@@ -467,7 +557,50 @@ class RuntimePipeline:
                 **empty,
                 "status": "context_error",
                 "error": "Context could not be prepared.",
+                "selected_input": request._selected_input.reject()
+                if request._selected_input is not None
+                else empty["selected_input"],
             }
+
+    @staticmethod
+    def _input_request_binding(request: RuntimeRequest) -> str:
+        import json
+
+        value = {
+            "request": request.to_dict(),
+            "workspace_path": request.constraints.get("workspace_path"),
+            "context_id": getattr(request.authenticated_context, "context_id", ""),
+        }
+        return hashlib.sha256(
+            json.dumps(
+                value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode()
+        ).hexdigest()
+
+    def _selected_request_active(self, request: RuntimeRequest, intent: str) -> bool:
+        # Reload the existing Run owner's events so another API process's
+        # cancel/pause or a prior terminal request cannot be hidden by a cache.
+        events = self.events.load_events(request.request_id)
+        bindings = [
+            event.payload.get("request_binding_sha256")
+            for event in events
+            if event.event_type == "runtime.input.bound"
+        ]
+        if bindings != [self._input_request_binding(request)]:
+            return False
+        fresh = EventStream(self.workspace_root or ".").get_run(request.request_id)
+        if (
+            fresh is None
+            or fresh.task_id != request.request_id
+            or fresh.state not in {RunState.RUNNING, RunState.EXECUTING}
+        ):
+            return False
+        return (
+            self._governance(
+                request, intent, str(request.constraints.get("workspace_path") or "")
+            )["status"]
+            == "EXECUTE"
+        )
 
     def _plan(
         self,
@@ -642,6 +775,10 @@ class RuntimePipeline:
                                 "context_snapshot": dict(context_snapshot or {}),
                                 "event_stream": self.events,
                                 "_governance_gate": self.gate,
+                                "_selected_input": request._selected_input,
+                                "_selected_request_active": lambda: (
+                                    self._selected_request_active(request, intent)
+                                ),
                             },
                         )
                         or {}

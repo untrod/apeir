@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,21 @@ class ExecutionAuthorizationGate(OperationAuthorizationMixin):
         operation_policy_provider=None,
     ):
         self.store = store or GovernanceStore()
+        if permission_engine is None:
+            configured = os.environ.get("NOUS_PERMISSION_POLICY", "")
+            if configured:
+                policy_path = Path(configured).absolute()
+                state_dir = Path(self.store.db_path).parent.absolute()
+                # Policy is explicitly selected by the trusted host, never by
+                # discovery, model/request data or an ordinary workspace file.
+                if (
+                    state_dir.name.casefold() != ".nous"
+                    or policy_path.parent.resolve() != state_dir.resolve()
+                ):
+                    raise PermissionError(
+                        "Permission policy must use this authority's private state directory"
+                    )
+                permission_engine = PermissionEngine.from_owner_file(policy_path)
         self.permission_engine = permission_engine
         self.operation_policy_provider = operation_policy_provider
         self._execution_admissions = {}

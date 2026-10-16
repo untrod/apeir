@@ -175,6 +175,7 @@ class ChatRuntime:
             authenticated_context=authenticated_context,
             governance_surface=governance_surface,
             request_id=request.request_id,
+            workspace_file_refs=request.workspace_file_refs,
         )
         project_binding = None
         if promoted and self.project_execution is not None:

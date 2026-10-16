@@ -1172,6 +1172,100 @@ PTY or native Windows qualification. Existing Ruff/format/compile/documentation/
 MEDIUM**, lock contracts **3 passed**. Kernel and component lock are unchanged.
 Required source and resulting-main CI remain separate acceptance gates.
 
+### Selected input secondary transfer and file alias admission — 2026-10-14
+
+**REUSE** the original ContextBuilder/ContextGuard, WorkspaceGuard, Runtime Run,
+Model Gateway recipient admission and usage ledger. **FIX** two candidate input
+boundaries before publication; no additional authority, model registry or store.
+The primary model's answer can contain selected-source text. Its collaboration
+review previously lacked the selected-input hook, so current transfer revocation,
+reviewer recipient changes, source changes or cancellation did not block that
+secondary request. A private host factory now binds the actual review messages to
+the same original Run, source snapshot and current reviewer permission. Review
+failure stays visible and unapproved; model review grants no execution authority.
+The new input digest describes source-derived candidate text, not proof that the
+entire raw file was sent again or that a remote Provider received it.
+
+Descriptor traversal denied symlinks but did not reject hard-linked input. The
+opened regular file must now have one link both before and after its bounded
+read. Protected/external aliases fail before reading; a link created during the
+read prevents Context publication. Ordinary single-link files retain their path,
+version, secret filtering and permission checks. Unsupported no-follow hosts,
+including the current native Windows path, remain BLOCKED without a fallback.
+
+Original deterministic fake-Provider reviewer regressions: **5 failed**. Owned
+hard-link regressions before correction: **4 failed, 60 deselected** (0.80 s).
+Corrected selected-input and collaboration focus: **102 passed** on Python 3.12
+(13.85 s) and Python 3.10 (15.08 s).
+Context, collaboration, Gateway/facade/accounting, fake NKI, persistent checkpoint
+and Runtime admission regression: **596 passed** (17.38 s). The reviewer negatives
+require no secondary dispatch or budget reservation; lawful review retains its
+ordinary reported usage and original source lineage. One mistyped regression
+path collected no tests and is retained; the corrected named selection ran.
+These are controlled software/HTTP-fixture checks, not live model, native Kernel,
+remote-human, physical or installed Desktop qualification. Existing isolation,
+PID64, Kernel and component lock remain unchanged; source/main CI is still required.
+
+The Gateway also removes the private admission hook from direct/stream adapter
+requests after checking it and fencing dispatch. The original host request retains
+its checks and evidence, while serialized IDs, messages, tools and metadata remain
+unchanged. The original fake-adapter boundary checks had **2 failed, 2 passed**;
+four allowed/denied direct/stream cases now pass within the regression above.
+This minimizes exposure of a host callback; it is not evidence of leaked real
+credentials or an authority exploit by a trusted host adapter. NKI payload and
+original accounting/reconciliation semantics are unchanged.
+
+The same review extended the existing `normalize_workspace_path` owner for
+protected ordinary-file scopes. A benign owned probe established that hard-link
+aliases of protected/external files entered Workbench and Chat read/search,
+preview diffs and pre-approval proposal snapshots/CAS. Original files remained
+unchanged and proposals still required approval; no real secrets or unauthorized
+mutation were exercised. Placing an alias requires filesystem access to its
+source; this is a scope/data-provenance correction, not a demonstrated remote
+link-creation exploit. Static single-link admission now covers those existing
+consumers, without changing explicit unprotected internal callers or adding a
+file authority. Selected input preserves its stronger descriptor checks.
+The new ordinary-surface contracts retained **3 failed, 1 passed** before repair;
+after repair the alias/selected-input selection has **68 passed** (2.39 s).
+Context/Model/Runtime/Chat/Workbench/proposal/API/checkpoint regression has
+**863 passed** (25.99 s); Python 3.10 alias/selected-input regression has
+**103 passed** (15.48 s). One initial private probe compared the enum against an
+incorrect uppercase literal; the corrected probe uses the authoritative enum.
+These checks do not qualify host-owner race resistance or native installation.
+
+### Explicit host permission configuration and truthful status — 2026-10-14
+
+**REUSE** PermissionEngine, PermissionRule, the canonical Gate and its authority's
+private state. **EXTEND** explicit trusted-host policy input, selected solely by
+`NOUS_PERMISSION_POLICY`; discovered files and model/request data cannot configure
+authority. No policy/grant store or approval implementation is added. POSIX
+owner-only regular-file, directory, no-follow, single-link, byte/rule bounds,
+unique-key JSON, secret filtering and optional expiration fail closed. Every
+permission check reloads policy; file removal/revocation/corruption blocks later
+use. Runtime `add` is refused on file-backed policy. Native grants, Approval,
+authorization/credential expiry, sandbox and billing remain separate requirements.
+Windows owner-file loading is unqualified/blocked; trusted host injection remains
+compatible, and selected file descriptor limits are unchanged.
+
+The legacy permission query fabricated static granted flags from a new empty
+engine. It now reads the canonical configuration, returns nullable UNKNOWN grants
+without a subject-bound evaluation, and reports read errors instead of fake
+success. Its four corrected contracts failed on the original handler. Rule
+conditions also require present, exact-typed facts: original absent-null and
+boolean/integer coercion contracts had **3 failed**; their corrected cases pass.
+
+An actual Runtime HTTP service-bearer request now loads an explicitly selected
+owner policy through ordinary Gate construction, without injecting a PermissionEngine,
+and delivers admitted bytes to the owned HTTP Provider fixture exactly once.
+Removing permissions after Provider setup causes zero sends. These **2 passed**
+(2.55 s) preserve the original source/recipient/budget/Run checks. Initial fixture
+errors omitted the known read-only chat Capability declaration and assumed a
+load method; those failed attempts remain, corrected without changing admission.
+Governance/Context/Model/Runtime/Chat/Workbench/proposal/API/checkpoint regression:
+**1107 passed** (31.52 s). Final Python 3.10 policy/input/alias selection has
+**127 passed** (18.31 s), including the exact-type cases. Live vendor,
+remote-human, strong execution, physical and native qualification stay incomplete.
+
 ### Automation complete evidence and original continuation — 2026-10-15
 
 **REUSE / FIX** existing Workflow definition/checkpoint validation, original
@@ -1538,6 +1632,26 @@ single assertion failure. Final source Desktop lint/typecheck/test/build:
 **180 passed in 38 files** (44.80 s). These are observed UI callback/correctness
 contracts, not measured task latency, Token savings or native UI qualification.
 
+
+Selected-input candidate Core run `38819836324`, Windows job `116713447362`,
+retains **4983 passed, 149 skipped, 4 warnings, 2 errors** (1401.08 s).
+Both errors occur in pytest setup/teardown: its generated node ID embeds the
+65 KiB oversized bytes fixture and exceeds Windows' 32767-character environment
+variable limit before the test body can run. Explicit short parameter IDs retain
+all five original payloads, byte limits and refusal assertions. The 64 collected
+node IDs now have maximum length 138. No new skip, timeout increase or production
+read fallback is introduced. Current source still blocks selected-source delivery
+on hosts without the required safe descriptor operations.
+
+After integrating main `c43f942`, the combined Context/owner-policy/Gateway/Node/
+Reality/Artifact/file-alias/Node-and-Device projection regression has **1184 passed**
+(174.68 s); Desktop lint/typecheck/test/build has **181 passed in 38 files**.
+After the parameter-ID correction, selected-input/integration/owner-policy has
+**119 passed** (15.58 s), and selected-input alone has **64 passed** on Python 3.10
+(2.20 s). The failed Windows run remains evidence; corrected Windows and exact
+source/resulting-main CI are separate outstanding acceptance, not inferred from
+these local passes. No real Provider task, Token saving or Windows-native release
+qualification is claimed.
 
 ### Automation integration with canonical Node facts — 2026-10-15
 
@@ -1997,6 +2111,38 @@ the source tree; existing dirty worktrees were not discarded. Saved diagnostics
 are not automatically accepted product code. Exact-source PR and resulting-main
 CI remain separate gates.
 
+### Saved workspace input current-main integration — 2026-10-16
+
+**REUSE / EXTEND / FIX** the original PR 67, ContextBuilder/ContextGuard,
+WorkspaceGuard, live PermissionEngine, Gateway admission and existing Inspector.
+Normal merges preserve current main and the target-binding candidate; PR 67 is
+dependent on PR 78 and cannot bypass its qualification. No second authority,
+Context store, registry or model execution service is added. Saved selection
+requests separate current read and exact Provider-recipient transfer permission;
+Chat uses the existing authenticated service identity, not human approval power.
+
+Combined Context, owner-policy, model/accounting, file-alias, permission-status,
+Node-protocol and Environment-target regression: **813 passed** (22.52 s).
+Python 3.10 policy/input/alias selection: **127 passed** (17.95 s). Desktop lint,
+typecheck, **220 tests** and build pass against the integrated main UI. All 12
+existing repository-standard checks pass; scanner findings remain 0 HIGH and
+3 known MEDIUM. Windows no-follow source delivery and owner-file ACL admission
+remain explicitly blocked; no host fallback is introduced.
+
+At source `adbb6e3`, an actual sandboxed source Chromium browser selected a saved
+file, called Runtime HTTP using an explicitly configured owner-file read/transfer
+policy and delivered the exact version to an owned fake HTTP Provider once.
+The source path was absent from Provider input; the Inspector showed read/sent
+provenance and opening it made zero extra model calls. The file stayed unchanged,
+page errors were absent and the 390-pixel viewport did not overflow. Servers,
+threads and browser were closed. An initial private driver used a nonexistent
+title selector for the Inspector button; that timeout remains recorded, and the
+correct driver uses its actual accessible button name. No product assertion was
+weakened. Evidence/screenshots remain outside source control. This is software
+HTTP/UI integration with an explicit fake Provider, not native APEIR.exe, NKI,
+real remote-human or paid vendor task acceptance. Exact-source CI and main
+integration are still required.
+
 The first target-binding candidate `c5e82aa` passed Core, Desktop, Security and
 Linux Multi-Arch, but Multi-Arch `38920847961` retained Windows **1 failed,
 4829 passed, 60 skipped, 272 deselected, 4 warnings** (2093.64 s). Its controlled
@@ -2055,3 +2201,22 @@ effect-verification boundaries are unchanged. This proves the controlled stop
 and queue mechanism, not every historical Windows failure or physical/WAN
 qualification. Issues 4/8 remain open. Raw failed CI and prototype logs remain
 outside source control. Updated-source cross-platform CI is required.
+
+
+### Workspace input candidate ARM64 comparator qualification failure
+
+Candidate `df36290` Multi-Arch run `38934932374` failed Linux ARM64 job
+`117087935836`: **1 failed, 4942 passed, 59 skipped, 290 deselected**
+(641.37s); Windows and Linux amd64 passed. The original failure log is retained
+in the private qualification evidence. The existing within-tolerance comparator
+unit test compared two separately timed near-empty tasks. The runner records
+integer milliseconds; the observed 0ms baseline and 1ms candidate correctly
+triggered BLOCK, contradicting the fixture's WARN expectation. Accepted main
+`629b13f` contains this same timing-dependent test.
+
+The comparator unit fixture now supplies explicit 100ms/105ms inputs, retaining
+its WARN/no-regression assertions. A separate explicit 0ms/1ms regression keeps
+the original observed case BLOCK. Production timing, comparator tolerances,
+performance gates, Node assertions and timeouts are unchanged. This is test
+input determinism, not a performance improvement or a Windows recovery fix.
+Exact-source CI remains required before integration.
