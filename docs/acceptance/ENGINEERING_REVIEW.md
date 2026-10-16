@@ -1485,6 +1485,33 @@ index reloads, cross-instance graph/pin/GC ownership, corruption rejection,
 redaction, signed results and no-replay behavior remain unchanged. Required
 source and resulting-main CI remain separate gates.
 
+### OCI readiness current-main integration — 2026-10-16
+
+**REUSE / FIX** the original closed-unmerged PR 68 continuation, existing OCI
+Provider, ProcessSandbox admission and Environment status API. Normal dependency
+merges preserve the target-binding implementation from PR 78 rather than adding
+a second fix; after preceding gates the remaining scope is four existing files
+(Provider, readiness tests and canonical documentation). The passive probe
+separates engine discovery from strong control admission, unknown engine health
+and not-run workload qualification. It starts no engine command or workload.
+No default PID64, mount, network, credential, authorization or sandbox change.
+
+Integrated Environment/terminal regression: **149 passed, 3 skipped** (1.56 s).
+Python 3.10 target/readiness contracts: **30 passed** (1.21 s). All 12 existing
+repository-standard checks pass; security retains **0 HIGH / 5 MEDIUM** with
+the reviewed private-IP SSRF fixtures from the Catalog dependency.
+
+An actual service-authenticated loopback HTTP status request on this Linux host
+reports Docker found, `available=false`, `control_admission=blocked`,
+`control_security_grade=resource_only`, `engine_health=unknown`, and
+`workload_qualification=not_run`. No workload or host fallback ran, and the owned
+HTTP thread/server were closed. Initial private driver errors omitted creation
+of the selected workspace and assumed a different Provider ID; those attempts
+remain separate from the corrected check using the canonical Provider ID.
+This is truthful preflight/status qualification, not actual container isolation,
+Python/scientific execution, PTY, native installation or physical acceptance.
+Source and resulting-main CI remain required before integration.
+
 ### Automation configuration publication admission — 2026-10-15
 
 **REUSE / FIX** the existing Workflow writer, immutable Automation definition and
