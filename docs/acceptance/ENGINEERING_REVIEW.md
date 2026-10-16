@@ -2205,3 +2205,35 @@ findings. Target-binding regression remains **18 passed**.
 This proves a blocking source in the injection, not the cause of every Windows
 timeout; Issues 4/8 remain open. Exact updated-source cross-platform CI is still
 required before integration.
+
+### Controlled Catalog current-main integration — 2026-10-16
+
+**REUSE / EXTEND / FIX** the existing Skill/Extension registries, CAS, central
+WebGateway, current human-session/nonce authority and Operations Console.
+Normal dependency merges retain main, PR 78 target admission and PR 67 input
+delivery; those gates must merge first. The UI conflict resolution retains
+Automation navigation, exact reviewed Catalog/package binding and the current
+Controller/session epoch guards. No second downloader, Skill registry, approval
+system or execution authority is introduced.
+
+Skill, Extension, Control Plane and Automation regression: **572 passed,
+17 skipped** (308.54 s). Python 3.10 Skill/Extension and focused Skill Control
+Plane regression: **303 passed, 17 skipped** (42.38 s). Desktop lint/typecheck,
+**223 tests** and build pass. All 12 existing repository checks pass. Scanner
+results are **0 HIGH / 5 MEDIUM**: three existing public Ray image-layout paths
+and two explicit private-IP rejection vectors in `test_remote_catalog.py`.
+The fake addresses test all-private and mixed-public/private DNS denial; no
+credential or actual private deployment address is recorded. Assertions and
+scanner rules are unchanged, and the two additional findings remain visible.
+
+Source `b4ea288` also passed an owned browser/HTTP/TLS acceptance: add Catalog,
+review exact source/version/digest, install, verify CAS, load instructions,
+disable, reject disabled reads, enable and uninstall. Three actual child-server
+TLS acquisitions occurred through the test's explicit DNS/route seam. The
+source Chromium page had no script errors or mobile overflow, and no execution
+Grant was issued. Browser and owned servers/threads were cleaned up. This
+private driver has **1 passed, 2 marker-configuration warnings** (6.59 s), not
+hidden product failures. Fake signed human identity and local TLS do not
+qualify a real IdP, public publisher, installed APEIR.exe or executable Skill.
+Instruction loading remains distinct from execution. Exact-source PR/platform
+and resulting-main CI remain required; overall product status stays PARTIAL.
