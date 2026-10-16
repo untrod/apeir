@@ -65,7 +65,12 @@ The existing Connector compatibility path honors its declared additional retry
 budget. Non-idempotent calls have zero retries, including temporary errors after
 an effect; an error response cannot authorize another invocation. Explicitly
 idempotent calls keep their bounded retries. This does not turn Connector
-metadata or a cached result into independent EffectVerification.
+metadata or a cached result into independent EffectVerification. Its exported
+Connector library admits a write only when the existing Governance decision has
+both `action_mode=EXECUTE` and boolean `allowed=True`. Missing, inconsistent or
+unknown decisions do not invoke the adapter or create a cached success. This
+library boundary does not establish a connected Desktop integration, Kernel
+traversal or an independently verified effect.
 
 This second path is real and governed, but it does **not** traverse the Rust
 Kernel. Responses and UI status must report `execution_scope=runtime-service`
@@ -98,6 +103,82 @@ executed again merely because an approval/grant remains valid. See
 [Runtime Coordination](RUNTIME_COORDINATION.md),
 [State/failure semantics](STATE_OWNERSHIP.md) and
 [Reality acceptance](../acceptance/REALITY_ARCHITECTURE_AUDIT.md).
+
+## Bounded Automation consumer
+
+The explicit `simulated-reality` Automation template compiles a structured
+TaskPlan with the existing `PlanWorkflowBridge`: read simulated firmware, propose
+its update, then independently observe and verify through
+`RealityOperationWorkflowHandler`. The existing fixed simulator factory isolates
+Node/Device/relay state under `.nous/automation-simulation`; Workflow and current
+Governance remain workspace-owned. Only that simulated Node and Device are
+enrolled. No real resource is trusted and no approval or grant is issued by the
+factory or consumer. This is runtime-service simulation, not physical acceptance.
+
+`AutomationConsumer` stores an immutable definition digest and trigger-to-original
+Workflow run relation in the existing `WorkflowStore`. The relation, original
+run, inputs and idempotency key commit together before handlers can run. A manual
+trigger requires an explicit bounded key. `run_due` consumes at most ten one-shot
+UTC due proposals; it never resumes an already consumed due trigger. Repeated
+keys and restart reuse the original run and Work. Every distinct firmware Work
+requires its own current approval; prior Approve Once cannot authorize another.
+
+CLI execution requires `--simulation`. HTTP management uses the existing live
+trusted human session, exact mutation nonce and `control.automation.manage`
+permission; listing and history require `control.automation.read`, including
+empty, legacy-only and mixed HTTP stores. The existing Governance
+human boundary also requires `governance.approve` for the workspace resource.
+Service bearer authentication, constructed actor claims, `approved_steps`, a
+legacy `enabled` flag and arbitrary text/capabilities cannot supply this authority.
+Management revalidates before and after simulator startup; the original Operation
+revalidates again at Node admission. Cancellation uses the original Governance
+interruption and Workflow cancellation; an effect that may already have occurred remains
+unresolved until evidence is reconciled. Explicit `reconcile` reads the original
+Node journal/receipt and acquires independent observation without entering a
+mutation handler. History verifies original CAS references and the committed
+Work's semantic binding to the original Workflow definition, Governance request,
+Capability, Device, input, signed receipt and independent Observation. The exact
+original CAS EffectVerification must match the Work, and the existing v1 verifier
+must reproduce its semantic fields from that receipt and Observation. Completed
+runs must also retain every original definition step, its completed
+state, exact checkpoint-bound output and COMMITTED Work. Missing or contradictory
+outputs fail closed instead of disappearing from the history projection; history
+does not reconstruct them or start another Work. Honest unstarted, approval-waiting
+and cancelled runs remain readable as partial records.
+Historical signature checks omit transport clock freshness; later grant revocation does not
+invalidate lawful recorded evidence. History opens no transport and performs no
+new execution admission, provider call or effect. These local integrity checks
+do not resist a host owner rewriting all stores and signing keys. MISMATCH and
+UNKNOWN cannot commit Work.
+
+Before opening transport, the consumer checks every unresolved effectful Work in
+the shared isolated Automation relay store against its original Node journal.
+Node terminal records use `COMPLETED` or `FAILED`, distinct from Controller Work
+states. The original journal key, Work/Operation, Node assignment, dispatch/request
+digest and bound receipt must agree with existing Governance and relay evidence.
+Missing, malformed, incomplete or changed evidence fences the run as UNKNOWN
+before delivery opens. An unbound pre-start `CANCELLED` record cannot resolve an
+uncertain effect. Starting another Automation cannot reopen unsafe original
+delivery from the shared spool. Valid terminal evidence is still reconciled
+through the existing signed Node result path and independently observed; the
+preflight issues no authority and cannot commit an effect.
+
+The existing Operations Console now consumes these same HTTP endpoints. Its
+Automation pane displays structured simulated definitions, original run history,
+pending approvals and receipt/observation/verification evidence. Approve Once or
+Deny addresses the original approval, then resumes that exact run. An uncertain
+trigger response retains its original key and queries persisted history instead
+of creating another trigger. Session expiry, logout and Controller configuration
+changes invalidate retained views and mutations, including an address/token ABA
+change. The browser stores no private run or identity state; simulator and
+runtime-service labels do not imply Kernel or physical execution.
+
+The existing free-text Automation JSON stays `UNQUALIFIED` configuration. A
+background timer, recurring Cron/event/webhook triggers, general executable Skill
+workflows and a semantic action recorder are unimplemented. Other production
+Workflow handlers require their own trusted factory and exercised contracts;
+the consumer introduces no general capability executor or model fallback. See
+the [runnable Workflow example](../../examples/hello_workflow/README.md).
 
 ## Product execution projection
 
@@ -146,6 +227,33 @@ Work Goal + Task Assessment
 Resume restores the latest Goal, Plan, observations, artifacts, and Agent
 checkpoint, then produces a new deliberation against the current workspace.
 The last requested tool action is not replayed automatically.
+
+Work result admission requires explicit, agreeing boolean `ok`, `success` or
+`passed` fields. Error, contradictory and unknown envelopes cannot become a
+successful observation or verification merely because the handler returned.
+Scalar payloads retain their data without an invented success flag. An ambiguous
+effect response or an exception after dispatch retains the original pending
+action for recovery; a recovery discovery flag cannot override invalid evidence.
+A completed failed write, execute or unknown tool response also retains recovery:
+failure alone cannot prove that no effect occurred. Only the selected host
+Workspace runtime and exact persisted original proposal/approval binding can
+establish the existing pre-effect proposal pause. Provider-returned hints cannot
+authorize a new attempt.
+Process recovery also requires the selected canonical ProcessSession owner and
+the original pending Work/action/invocation binding. The host-prepared command,
+workspace cwd and environment profile digests are persisted before dispatch;
+recovery compares them with the original session and host specification, then
+uses the existing process identity observation. A generic `found=true` response,
+another valid host for the same Work/action, or a missing legacy binding remains
+RECOVERY_REQUIRED. Recovery neither launches nor controls a process, and a
+changed Work checkpoint (including cancellation) stops continuation. This does
+not expose the currently unsupported `shell_start` tool or qualify a live PTY.
+Unplanned tool Work still passes the existing recorded-work completion gate.
+Coding verification uses current Plan evidence: tests and diff review must follow
+the latest recorded change, and a process started before it does not gain
+freshness from later polling. Test success requires EXITED with exact integer
+exit code zero. These records remain software evidence, not an independent
+Reality Observation or physical-effect commitment.
 
 Tool discovery is progressive:
 

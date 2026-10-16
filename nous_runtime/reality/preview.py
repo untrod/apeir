@@ -60,11 +60,18 @@ async def _wait(predicate, timeout=15):
 class _DemoComponents:
     """Local lifecycle wrapper only; each mutable state keeps its existing owner."""
 
-    def __init__(self, root: Path, *, response_loss=False):
+    def __init__(
+        self, root: Path, *, response_loss=False, automation=False, governance=None
+    ):
         self.bus = None
         self.coordinator = None
         try:
-            self._initialize(root, response_loss=response_loss)
+            self._initialize(
+                root,
+                response_loss=response_loss,
+                automation=automation,
+                governance=governance,
+            )
         except BaseException:
             if self.coordinator is not None:
                 self.coordinator.close()
@@ -72,17 +79,28 @@ class _DemoComponents:
                 self.bus.shutdown()
             raise
 
-    def _initialize(self, root: Path, *, response_loss=False):
+    def _initialize(
+        self, root: Path, *, response_loss=False, automation=False, governance=None
+    ):
         self.root = root
         self.state = root / ".nous"
-        self.controller_state = self.state / "relay"
-        self.bus = RuntimeEventBus(str(root))
-        self.registry = DeviceRegistry(self.state / "reality", event_bus=self.bus)
-        self.provider = SimulatedDeviceProvider(
-            DEFINITION, state_dir=self.state / "simulated-device"
+        execution_state = (
+            self.state / "automation-simulation" if automation else self.state
         )
-        self.gate = ExecutionAuthorizationGate(GovernanceStore(self.state))
-        artifacts = ContentAddressedArtifactStore(self.state / "node" / "artifacts")
+        self.controller_state = execution_state / "relay"
+        self.bus = RuntimeEventBus(str(root))
+        self.registry = DeviceRegistry(execution_state / "reality", event_bus=self.bus)
+        self.provider = SimulatedDeviceProvider(
+            DEFINITION, state_dir=execution_state / "simulated-device"
+        )
+        self.gate = (
+            governance
+            if governance is not None
+            else ExecutionAuthorizationGate(GovernanceStore(self.state))
+        )
+        artifacts = ContentAddressedArtifactStore(
+            execution_state / "node" / "artifacts"
+        )
         firmware = SimulatedDeviceOperationHandler(
             self.provider,
             self.registry,
@@ -91,7 +109,7 @@ class _DemoComponents:
             capability_id="device.firmware.update",
         )
         self.node = NodeRuntimeService(
-            NodeRuntimeConfig(self.state / "node"),
+            NodeRuntimeConfig(execution_state / "node"),
             capability_handlers={
                 "device.firmware.update": firmware,
                 "device.state.read": firmware.read,
@@ -282,6 +300,23 @@ class _DemoComponents:
             "artifact_integrity_checked": len(refs),
             "operations": plane.snapshot(),
         }
+
+
+def create_automation_simulation_components(root: Path, *, governance):
+    """Explicit fixed simulator factory; enroll no real Node or physical Device.
+
+    Transport/device state is isolated; the caller supplies the current original
+    Governance authority. This lifecycle issues no grant and approves no Work.
+    """
+    root = Path(root).expanduser().resolve()
+    if (
+        not isinstance(governance, ExecutionAuthorizationGate)
+        or Path(governance.store.db_path).resolve() != root / ".nous" / "governance.db"
+    ):
+        raise ValueError(
+            "Automation requires its original workspace Governance authority"
+        )
+    return _DemoComponents(root, automation=True, governance=governance)
 
 
 async def _run(root, scenario, phase, approval_context):

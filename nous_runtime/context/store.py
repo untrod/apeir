@@ -15,6 +15,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from nous_runtime.security.private_files import validate_private_database_path
+
 from nous_runtime.context.exceptions import ContextStoreError
 from nous_runtime.context.models import ContextSnapshot
 
@@ -23,16 +25,16 @@ from nous_runtime.schema_registry import STORE_SCHEMA_VERSION
 _log = logging.getLogger("nous.context.store")
 
 
-
 # Internal helpers
 
 
 @contextmanager
 def _db_connect(db_path: str, readonly: bool = False):
     path = Path(db_path)
+    validate_private_database_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if readonly:
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        conn = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)
     else:
         conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
@@ -52,7 +54,6 @@ def _db_connect(db_path: str, readonly: bool = False):
         conn.close()
 
 
-
 # ContextStore
 
 
@@ -69,6 +70,12 @@ class ContextStore:
     """
 
     def __init__(self, workspace_path: str | Path = ""):
+        if not workspace_path and os.environ.get("NOUS_WORKSPACE_ROOT"):
+            from nous_runtime.project.workspace import find_workspace
+
+            workspace_path = find_workspace(allow_uninitialized=True)
+            if workspace_path is None:
+                raise ValueError("Configured workspace state is unavailable")
         if workspace_path:
             self.db_path = str(Path(workspace_path) / "context.db")
         else:
@@ -79,7 +86,6 @@ class ContextStore:
     # schema
 
     def _ensure_tables(self) -> None:
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
             try:
                 with _db_connect(self.db_path) as db:
@@ -124,7 +130,9 @@ class ContextStore:
                         (STORE_SCHEMA_VERSION,),
                     )
             except Exception as exc:
-                raise ContextStoreError(f"Failed to initialise context store: {exc}") from exc
+                raise ContextStoreError(
+                    f"Failed to initialise context store: {exc}"
+                ) from exc
 
     # CRUD
 
@@ -156,25 +164,35 @@ class ContextStore:
                             snapshot.timestamp,
                         ),
                     )
-            _log.debug("Saved snapshot %s (items=%d, checksum=%s)", snapshot.id, snapshot.item_count, checksum[:12])
+            _log.debug(
+                "Saved snapshot %s (items=%d, checksum=%s)",
+                snapshot.id,
+                snapshot.item_count,
+                checksum[:12],
+            )
             return True
         except Exception as exc:
             _log.error("Failed to save snapshot %s: %s", snapshot.id, exc)
-            raise ContextStoreError(f"Failed to save snapshot {snapshot.id}: {exc}") from exc
+            raise ContextStoreError(
+                f"Failed to save snapshot {snapshot.id}: {exc}"
+            ) from exc
 
     def get(self, snapshot_id: str) -> ContextSnapshot | None:
         """Retrieve a single snapshot by id. Returns None if not found."""
         try:
             with _db_connect(self.db_path, readonly=True) as db:
                 row = db.execute(
-                    "SELECT snapshot_json FROM context_snapshots WHERE id = ?", (snapshot_id,)
+                    "SELECT snapshot_json FROM context_snapshots WHERE id = ?",
+                    (snapshot_id,),
                 ).fetchone()
             if row is None:
                 return None
             return ContextSnapshot.from_dict(json.loads(row["snapshot_json"]))
         except Exception as exc:
             _log.error("Failed to get snapshot %s: %s", snapshot_id, exc)
-            raise ContextStoreError(f"Failed to get snapshot {snapshot_id}: {exc}") from exc
+            raise ContextStoreError(
+                f"Failed to get snapshot {snapshot_id}: {exc}"
+            ) from exc
 
     def list(
         self,
@@ -211,7 +229,9 @@ class ContextStore:
                             LIMIT ? OFFSET ?""",
                         (limit, offset),
                     ).fetchall()
-            return [ContextSnapshot.from_dict(json.loads(r["snapshot_json"])) for r in rows]
+            return [
+                ContextSnapshot.from_dict(json.loads(r["snapshot_json"])) for r in rows
+            ]
         except Exception as exc:
             _log.error("Failed to list snapshots: %s", exc)
             raise ContextStoreError(f"Failed to list snapshots: {exc}") from exc
@@ -221,14 +241,19 @@ class ContextStore:
         try:
             with self._lock:
                 with _db_connect(self.db_path) as db:
-                    cur = db.execute("DELETE FROM context_snapshots WHERE id = ? AND id != '__schema__'", (snapshot_id,))
+                    cur = db.execute(
+                        "DELETE FROM context_snapshots WHERE id = ? AND id != '__schema__'",
+                        (snapshot_id,),
+                    )
             deleted = cur.rowcount > 0
             if deleted:
                 _log.debug("Deleted snapshot %s", snapshot_id)
             return deleted
         except Exception as exc:
             _log.error("Failed to delete snapshot %s: %s", snapshot_id, exc)
-            raise ContextStoreError(f"Failed to delete snapshot {snapshot_id}: {exc}") from exc
+            raise ContextStoreError(
+                f"Failed to delete snapshot {snapshot_id}: {exc}"
+            ) from exc
 
     def restore(self, snapshot_id: str) -> ContextSnapshot | None:
         """Retrieve a snapshot and mark it as restored.
@@ -239,6 +264,7 @@ class ContextStore:
         if snap is None:
             return None
         from nous_runtime.context.schema import SnapshotStatus
+
         restored = snap.with_status(SnapshotStatus.RESTORED)
         self.save(restored)
         return restored
@@ -255,6 +281,7 @@ class ContextStore:
     ) -> bool:
         """Record an audit entry for context access."""
         from datetime import datetime, timezone
+
         try:
             with self._lock:
                 with _db_connect(self.db_path) as db:
@@ -321,7 +348,9 @@ class ContextStore:
                 active = db.execute(
                     "SELECT COUNT(*) FROM context_snapshots WHERE id != '__schema__' AND status = 'active'"
                 ).fetchone()[0]
-                audit_count = db.execute("SELECT COUNT(*) FROM context_audit").fetchone()[0]
+                audit_count = db.execute(
+                    "SELECT COUNT(*) FROM context_audit"
+                ).fetchone()[0]
             return {
                 "total_snapshots": total,
                 "active_snapshots": active,

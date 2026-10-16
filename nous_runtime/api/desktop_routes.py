@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import os
-import platform
 import time
 from pathlib import Path
 from typing import Any
@@ -352,94 +351,59 @@ def handle_work_inspect(run_id: str) -> dict[str, Any]:
 
 
 def handle_devices_list() -> dict[str, Any]:
-    """List known devices from the connectivity layer."""
-    devices = []
+    """Project managed Devices from the same registry as Operations."""
     try:
-        # Try connected nodes
-        try:
-            from nous_runtime.connectivity.cli.commands import _list_nodes
+        from nous_runtime.control_plane.operations import get_operations
+        from nous_runtime.reality.registry import DeviceRegistry
+        from nous_runtime.core.redaction import redact_sensitive_data
 
-            nodes = _list_nodes() if callable(_list_nodes) else []
-            for n in nodes if isinstance(nodes, list) else []:
-                devices.append(
-                    {
-                        "device_id": n.get("node_id", ""),
-                        "name": n.get("name", "Unknown"),
-                        "type": n.get("type", "node"),
-                        "status": n.get("status", "unknown"),
-                        "address": n.get("address", ""),
-                        "capabilities": n.get("capabilities", []),
-                    }
-                )
-        except Exception:
-            pass
-
-        # Add local machine
-        try:
-            local = {
-                "device_id": "local",
-                "name": platform.node() or "This Computer",
-                "type": "pc",
-                "status": "online",
-                "hardware": f"{platform.processor() or 'Unknown'}",
-                "address": "localhost",
-                "capabilities": ["runtime", "desktop"],
+        devices = [
+            {
+                **device.to_dict(),
+                "name": device.device_id,
+                "type": device.device_type,
+                "status": device.lifecycle.value.lower(),
+                "capabilities": list(device.capability_ids),
+                "liveness_status": "UNKNOWN",
             }
-            devices.insert(0, local)
-        except Exception:
-            devices.insert(
-                0,
+            for device in DeviceRegistry(get_operations().device_state).list()
+        ]
+        return ok(
+            redact_sensitive_data(
                 {
-                    "device_id": "local",
-                    "name": "This Computer",
-                    "type": "pc",
-                    "status": "online",
-                    "hardware": platform.platform(),
-                    "address": "localhost",
-                    "capabilities": ["runtime", "desktop"],
-                },
+                    "devices": devices,
+                    "total": len(devices),
+                    # Persisted lifecycle is not a current connectivity observation.
+                    "online": 0,
+                    "liveness_status": "UNKNOWN",
+                    "source": "reality.device_registry",
+                }
             )
-
-        return ok(
-            {
-                "devices": devices,
-                "total": len(devices),
-                "online": sum(1 for d in devices if d["status"] == "online"),
-            }
-        )
-    except Exception as e:
-        return err("DEVICES_LIST_ERROR", str(e))
-
-
-def handle_devices_scan() -> dict[str, Any]:
-    """Scan local network for devices."""
-    try:
-        from nous_runtime.connectivity.control_plane.pairing_service import (
-            discover_devices,
-        )
-
-        discovered = discover_devices() if callable(discover_devices) else []
-        return ok(
-            {
-                "discovered": list(discovered) if discovered else [],
-                "timestamp": time.time(),
-            }
         )
     except Exception:
-        # Fallback: return local device only
-        return ok(
-            {
-                "discovered": [
-                    {
-                        "device_id": "local",
-                        "name": "This Computer",
-                        "status": "online",
-                        "type": "pc",
-                    }
-                ],
-                "timestamp": time.time(),
-            }
+        return err(
+            "DEVICES_LIST_ERROR",
+            "Managed Device state could not be read",
+            {"status": "UNKNOWN", "source": "reality.device_registry"},
         )
+
+
+def handle_devices_scan(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Report unavailable discovery without scanning or inventing candidates."""
+    if body is not None and body != {}:
+        return err(
+            "DEVICES_SCAN_INVALID_REQUEST",
+            "This compatibility endpoint does not accept discovery targets",
+        )
+    return ok(
+        {
+            "discovered": [],
+            "timestamp": time.time(),
+            "status": "UNAVAILABLE",
+            "scan_performed": False,
+            "reason": "No qualified discovery backend is configured; use explicit Node pairing or managed Device providers",
+        }
+    )
 
 
 # Automations
@@ -465,25 +429,73 @@ def _save_automation_store(data: dict) -> None:
     )
 
 
-def handle_automations_list() -> dict[str, Any]:
+def _automation_service(authorization_context, *, permission: str, audit=True):
+    """Reuse current trusted human identity, permissions, and Governance audit."""
+    from nous_runtime.workflow.automation import AutomationConsumer
+
+    service = AutomationConsumer(_workspace())
+    service.admit_management(authorization_context, permission=permission, audit=audit)
+    service.before_consume = lambda: service.admit_management(
+        authorization_context, permission=permission, audit=False
+    )
+    return service
+
+
+def handle_automations_list(*, authorization_context=None) -> dict[str, Any]:
     """List configured automations."""
     try:
         store = _automation_store()
+        from nous_runtime.workflow.store import WorkflowStore
+
+        configured = [
+            {**item, "qualification": "UNQUALIFIED", "execution_qualified": False}
+            for item in store.get("automations", [])
+        ]
+        structured = WorkflowStore(_workspace()).list_automations()
+        if structured:
+            structured = _automation_service(
+                authorization_context, permission="read"
+            ).list()
+        configured.extend(structured)
         return ok(
             {
-                "automations": store.get("automations", []),
-                "total": len(store.get("automations", [])),
+                "automations": configured,
+                "total": len(configured),
             }
         )
+    except PermissionError:
+        raise
     except Exception as e:
         return err("AUTOMATIONS_LIST_ERROR", str(e))
 
 
-def handle_automations_add(body: dict[str, Any]) -> dict[str, Any]:
+def handle_automations_add(
+    body: dict[str, Any], *, authorization_context=None
+) -> dict[str, Any]:
     """Add a new automation rule."""
     try:
         import uuid
 
+        if body.get("adapter") or body.get("workflow_id"):
+            if (
+                set(body) - {"adapter", "name", "trigger", "due_at", "firmware_version"}
+                or body.get("adapter") != "simulated-reality"
+            ):
+                return err(
+                    "AUTOMATION_UNQUALIFIED",
+                    "Only the explicit structured simulated-reality template is supported",
+                )
+            service = _automation_service(authorization_context, permission="manage")
+            return ok(
+                service.add_simulation(
+                    name=body.get("name", "Governed simulated firmware"),
+                    trigger=body.get("trigger", "manual"),
+                    due_at=body.get("due_at", ""),
+                    firmware_version=body.get("firmware_version", "2.0.0"),
+                )
+            )
+        if authorization_context is not None:
+            _automation_service(authorization_context, permission="manage")
         store = _automation_store()
         new_auto = {
             "id": f"auto_{uuid.uuid4().hex[:12]}",
@@ -492,20 +504,82 @@ def handle_automations_add(body: dict[str, Any]) -> dict[str, Any]:
             "schedule": body.get("schedule", ""),
             "action": str(body.get("action", "")),
             "enabled": True,
+            "qualification": "UNQUALIFIED",
+            "execution_qualified": False,
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
         store.setdefault("automations", []).append(new_auto)
         _save_automation_store(store)
         return ok(new_auto)
+    except PermissionError:
+        raise
     except Exception as e:
         return err("AUTOMATIONS_ADD_ERROR", str(e))
 
 
-def handle_automations_action(body: dict[str, Any]) -> dict[str, Any]:
+def handle_automations_action(
+    body: dict[str, Any], *, authorization_context=None
+) -> dict[str, Any]:
     """Enable/disable an automation."""
     try:
         action = str(body.get("action", ""))
         automation_id = str(body.get("automation_id", ""))
+        from nous_runtime.workflow.store import WorkflowStore
+
+        if action == "run_due":
+            if set(body) - {"action", "limit"}:
+                return err(
+                    "AUTOMATION_INVALID_REQUEST", "run_due accepts only a bounded limit"
+                )
+            service = _automation_service(authorization_context, permission="manage")
+            return ok(
+                {
+                    "runs": service.run_due(limit=body.get("limit", 10)),
+                    "simulated": True,
+                }
+            )
+        try:
+            structured = WorkflowStore(_workspace()).get_automation(automation_id)
+        except KeyError:
+            structured = None
+        if structured is not None:
+            allowed = {"action", "automation_id"} | (
+                {"trigger_key"}
+                if action == "trigger"
+                else {"run_id"}
+                if action in {"resume", "reconcile", "cancel"}
+                else set()
+            )
+            if set(body) - allowed:
+                return err(
+                    "AUTOMATION_INVALID_REQUEST",
+                    "Only original trigger/run identifiers may be supplied",
+                )
+            service = _automation_service(authorization_context, permission="manage")
+            if action in {"enable", "disable"}:
+                return ok(
+                    service.store.set_automation_enabled(
+                        automation_id,
+                        action == "enable",
+                        before_publish=service.before_consume,
+                    )
+                )
+            if action == "trigger":
+                return ok(service.trigger(automation_id, body.get("trigger_key", "")))
+            if action in {"resume", "reconcile", "cancel"}:
+                return ok(
+                    getattr(service, action)(
+                        automation_id, str(body.get("run_id") or "")
+                    )
+                )
+            return err("AUTOMATION_INVALID_REQUEST", "Unsupported Automation action")
+        if action not in {"enable", "disable"}:
+            return err(
+                "AUTOMATION_UNQUALIFIED",
+                "Legacy free-text configuration cannot execute a Workflow",
+            )
+        if authorization_context is not None:
+            _automation_service(authorization_context, permission="manage")
         store = _automation_store()
         for a in store.get("automations", []):
             if a["id"] == automation_id:
@@ -516,8 +590,25 @@ def handle_automations_action(body: dict[str, Any]) -> dict[str, Any]:
                 _save_automation_store(store)
                 return ok(a)
         return err("AUTOMATION_NOT_FOUND", f"Automation {automation_id} not found")
+    except PermissionError:
+        raise
     except Exception as e:
         return err("AUTOMATIONS_ACTION_ERROR", str(e))
+
+
+def handle_automations_history(
+    automation_id: str, params=None, *, authorization_context=None
+):
+    try:
+        return ok(
+            _automation_service(authorization_context, permission="read").history(
+                automation_id, limit=int((params or {}).get("limit", 50))
+            )
+        )
+    except PermissionError:
+        raise
+    except (KeyError, ValueError) as exc:
+        return err("AUTOMATION_HISTORY_ERROR", str(exc))
 
 
 # Knowledge
@@ -788,12 +879,21 @@ DESKTOP_ROUTES = {
     ("GET", "/api/v1/automations"): handle_automations_list,
     ("POST", "/api/v1/automations/add"): handle_automations_add,
     ("POST", "/api/v1/automations/action"): handle_automations_action,
+    ("GET", "/api/v1/automations/{automation_id}/history"): handle_automations_history,
     ("GET", "/api/v1/knowledge"): handle_knowledge_list,
     ("POST", "/api/v1/knowledge/add"): handle_knowledge_add,
     ("GET", "/api/v1/security/permissions"): handle_security_permissions,
     ("GET", "/api/v1/logs"): handle_logs_list,
     ("GET", "/api/v1/runtime/memory"): handle_memory_usage,
     ("GET", "/api/v1/dashboard"): handle_dashboard_full,
+}
+
+
+AUTOMATION_AUTHENTICATED_ROUTES = {
+    handle_automations_list,
+    handle_automations_add,
+    handle_automations_action,
+    handle_automations_history,
 }
 
 

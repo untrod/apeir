@@ -379,3 +379,59 @@ silently become empty successful audits. No Runtime execution path changes.
 Ten meaningful repository contract regressions cover these positive/negative
 cases using real temporary Git refs. The repository suite passes **248 tests**.
 The failed CI run remains published; the fix does not skip Git metadata auditing.
+
+## Follow-up ref cleanup — 2026-10-16
+
+The read-only audit began at main `380e657d1f4ef2f6929ec0f9ce6ddb79af5ee927`:
+25 remote branches, 31 `milestone/*` tags, no GitHub Releases, 71 all-state PRs,
+and no repository rulesets returned by the API. Branches, exact refs, PR state,
+commit reachability and local worktrees were inventoried before deletion.
+Existing main protection was reported; no settings were changed by this cleanup.
+
+Seventeen historical branches had zero commits outside accepted main, closed
+merged PRs, no open PR work, and unchanged unprotected remote heads. Each was
+rechecked immediately before deletion:
+
+- `fix/artifact-index-concurrency`, `fix/artifact-read-freshness`
+- `fix/context-workspace-binding`, `fix/device-fact-projection`
+- `fix/model-usage-accounting`, `fix/node-readiness-snapshot-contract`
+- `fix/node-reconnect-evidence`, `fix/node-registration-peer-binding`
+- `fix/node-report-readiness`, `fix/oci-input-admission`
+- `fix/process-startup-cleanup-contract`, `fix/reality-restart-reconciliation`
+- `fix/relay-cancellation-contract`, `fix/relay-durable-io`
+- `fix/restart-observation-hold-contract`, `fix/work-tool-result-admission`
+- `fix/workflow-concurrency-contract`
+
+PRs [76](https://github.com/untrod/apeir/pull/76) and
+[70](https://github.com/untrod/apeir/pull/70) then integrated by normal merge,
+preserving their historical SHAs. Their exact source CI passed before integration;
+the resulting main `82464cf24f28b2e696dc071646b6f21a7ceb3863` contains both
+accepted source trees. Their two branches were retired only after merged-PR,
+remote-head and main-reachability verification. Resulting-main CI was launched
+and remains a separate check, not implied by branch deletion.
+
+The remaining six remote branches at that point were:
+
+| Branch | Retention reason |
+| --- | --- |
+| `main` | Protected permanent development line |
+| `feature/governed-workspace-input` | Open PR 67; unmerged governed input/Context work |
+| `feature/controlled-skill-catalog` | Unique controlled remote Catalog implementation awaiting review/qualification |
+| `fix/oci-readiness-report` | Unique queued work from closed unmerged PR 68; not accepted OCI execution |
+| `fix/artifact-validation-overhead` | Unique performance candidate with mixed tail-latency evidence; no blanket speed claim |
+| `test/windows-recovery-trace` | Unique diagnostic commits and failed experiment evidence; never merge diagnostic instrumentation into Runtime |
+
+Every retained non-main branch still has commits outside main. This cleanup did
+not delete those commits, discard dirty local worktrees, replace pending PRs,
+rebase, force-push, or fabricate acceptance to reduce the branch count. Its own
+short-lived documentation PR follows the same merge-and-retire policy.
+
+All 31 published tags resolve to their original exact commits, all reachable
+from main. Before/after remote tag refs (including annotated tag objects) match
+exactly. There were no throwaway version tags to remove. The two names
+`milestone/m3.2-terminal-projection-contract` and
+`milestone/m4.4-openbao-kv2-reference` deliberately retain different evidence
+scopes at `c3eeeaca434118565f09300e96e1e9663b749c6e`. Their shared commit is
+not grounds for deleting an acceptance record. The existing acceptance index
+now groups checkpoint families; no new tag, Release, roadmap or archive was
+created. Kernel and the component lock remain unchanged.

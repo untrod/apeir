@@ -754,6 +754,159 @@ Agent/Workflow/workspace regression has **858 passed** (134.73 s). Counts overla
 Required new-source and resulting-main CI remain pending; native hashes and
 physical/remote-network acceptance retain their separate blockers.
 
+
+## CAS reader freshness correction — 2026-10-13
+
+Classification: **REUSE** the existing ContentAddressedArtifactStore, immutable
+objects, atomic index publication and error contract; **FIX** stale metadata on
+long-lived readers; **DEFER** cache optimization pending measurement. Independent
+store instances previously could publish an object that get/list/resolve/verify
+on an existing reader did not see. An already cached valid index also concealed
+corrupt persisted metadata and could still report verification success. Five
+pre-change cases fail under those controlled conditions.
+
+Readers now load the current authoritative index under the existing in-process
+guard. They observe atomic old-or-new publication without adding a file-lock
+nest or another index owner. Four publication and four corruption cases preserve
+the original object bytes, leave corrupt records unchanged, and require an
+Artifact error rather than guessed success. This adds filesystem reads; no
+latency or throughput improvement is claimed. Source/PR and resulting-main CI,
+native bytes and physical effects remain separate acceptance requirements.
+
+## Work result and coding evidence admission — 2026-10-13
+
+Read-only product audit starts at main `566b801`. **REUSE** the original Work,
+Agent invocation, ToolCatalog, ProcessSession, checkpoints and recorded-work
+verifier; **FIX** result admission and current coding evidence. No executor,
+verification authority, grant, Kernel or component lock is added or changed.
+An original Work receiving an error-only read-tool envelope completed with a
+successful observation and baseline verification. An error-only verifier also
+completed Work. Empty, truthy and contradictory result mappings had the same
+problem; scalar Catalog/Work responses invented a success flag. The original
+completion gate skipped verification for unplanned Work without explicit criteria.
+Recovery separately trusted a `found` flag rather than the original result.
+
+Admission now requires explicit agreeing boolean success fields, refusing
+errors, uncertainty and contradictory flags. Built-in Workspace, Git, Artifact,
+Skill, Web and ProcessSession producers already emit boolean `ok`. Custom or
+extension scalar/arbitrary mappings no longer prove success and must normalize
+through their existing adapter; boolean verifier responses remain supported.
+Unknown effect responses and post-dispatch exceptions retain their original
+pending action and fail closed across restart, without another effect. Recovery
+uses the same admission rule. Unplanned tool Work reuses the existing recorded-work
+verification; a pure explanation does not acquire mandatory coding criteria.
+
+The existing coding gate accepted tests and diff review from before a later
+patch or another Plan revision. Missing/null/coerced exit codes also qualified as
+successful tests. Current revision and recorded action ordering now fence these
+facts; a real ProcessSession's original Work/start sequence must follow the
+latest change, so polling an old test cannot manufacture freshness. Only exact
+integer-zero EXITED test evidence qualifies. Positive fixture evidence now carries
+its actual action ordering; original success and no-replay assertions remain.
+The reattachment fixture's goal now describes its actual process-state inspection;
+a separate negative proves RUNNING tests cannot complete original coding Work.
+
+Controlled contracts exercise complete original Work progression, real Artifact
+reader envelopes, boolean verifier compatibility, scalar Catalog results,
+ambiguous effects/restart, recovery discovery, test/diff freshness and exact exit
+codes. Registered fake sensitive material remains absent from durable state after
+an effect-then-exception result. Evidence uses fake seams, not live models, real
+PTY/build execution, native Windows, IdP or physical hardware. Their independent
+qualification blockers remain unchanged. Final local checks and source/main CI
+must be reported separately; this repair does not certify overall product PASS.
+
+Initial controlled suite on original `566b801`: **73 failed, 14 passed**; the same
+contracts on the corrected tree: **87 passed** on Python 3.12 and **87 passed**
+on Python 3.10. Affected Work/Agent/Governance/Catalog/built-in tools/Chat:
+**498 passed, 1 skipped** (13.74 s). Repository contracts: **282 passed**.
+Counts overlap. Changed-file Ruff/format/compile and diff checks pass; current
+Markdown links (**235 files**), document/comment hygiene pass. Security retains
+**0 HIGH / 3 unchanged MEDIUM** findings. No full regression, live process sandbox,
+Provider account, physical or native test was performed by this bounded repair.
+Source/PR and resulting-main CI remain prerequisites for integration acceptance.
+
+Root review on Usage main `508504a` exposed another concrete replay defect:
+a non-idempotent fake effect increments its state, then returns explicit boolean
+failure. Both original `566b801` and the initial corrected candidate invoke it
+again during automatic Work reanalysis: two effects for write, execute and unknown
+handlers. Real Workspace/runtime-capability and ProcessSession adapters also
+collapse pre-dispatch and post-effect failures into failed response envelopes;
+a boolean failure does not establish that no effect occurred.
+
+Completed failures for these effect classes now preserve the original pending
+operation and require recovery. The repaired probe records one effect and restart
+invokes neither handler nor model. This deliberately blocks genuine pre-dispatch
+failures conservatively; Provider-returned `no_effect` hints cannot authorize
+retry. The existing original proposal pause requires the selected host Workspace
+runtime and current canonical Work/Plan/manifest/authorization/approval binding,
+with the original journal still PROPOSED and approval PENDING. Forged proposal
+fields cannot substitute for that owner. Read failures and known Web GET behavior
+retain their existing contracts. The original no-replay proposal recovery,
+human approval and MATCH-only application remain exercised.
+
+Four new initial-candidate contracts retained **4 failures**. An old generic
+check fixture now declares its actual read-only semantics while preserving its
+replan and completion assertions. The old failed-patch fixture's assumption of
+safe automatic retry is replaced by recovery, unchanged source revision and no
+second mutation or model call after restart. Independent same-Plan verification
+probing found no stale success reuse: the verifier runs again after the later
+mutation and its failure blocks completion. Incoming Usage diagnostic tests
+continue to distinguish missing/null counters from explicitly reported zero.
+
+Final combined affected Work/Agent/Governance/Catalog/built-in tools/Chat plus
+proposal/API selection on `508504a`: **551 passed, 1 skipped** (16.91 s).
+Work/Catalog selection: **180 passed**. Python 3.10 result admission and original
+proposal recovery: **101 passed**. These counts overlap earlier evidence.
+No new full regression or external qualification was run; source/PR and
+resulting-main CI remain separate prerequisites.
+
+Review on 2026-10-14 retained a further concrete failed-effect recovery probe:
+after the original fake shell effect returned failure, a generic
+`found=true/state=RUNNING` response reopened Work and produced a second effect.
+The original log remains preserved. Recovery now selects the canonical bound
+ProcessSession owner, validates the persisted original Work/action/invocation
+and prepared command/cwd/environment digests, revalidates the host specification
+and uses the existing original process identity observation. A matching Work and
+action alone cannot substitute a different command or profile. Work checkpoint
+changes during observation, including cancellation, stop continuation.
+Generic recovery responses and missing legacy descriptors fail closed; this
+intentional compatibility correction cannot reconstruct an unrecorded binding.
+
+The controlled repaired Work exercises one original fake effect, retains the
+original pending action through restart, and calls neither the forged recovery
+executor nor the model. Canonical positive and negative fixtures use persisted
+original session/spec/host records with an explicit identity seam; they reject
+different Work/action/session/invocation/arguments/command/profile/cwd and lost
+helper/target identity. Fixtures explicitly fail if recovery launches or controls
+a host. These are software contracts, not a live process, PTY, build/test,
+Provider-account or physical qualification; `shell_start` remains unsupported
+by the public ProcessSession runtime. No Kernel or component-lock changes occur.
+
+Final candidate on base `508504a` has **561 passed, 1 skipped** across the affected
+Work/Agent/Governance/Catalog/built-in tools/Chat/workspace proposal/API selection.
+Work/Catalog has **195 passed**; Python 3.10 original Work/result/proposal recovery
+has **139 passed**; repository contracts have **286 passed**. Counts overlap.
+All repository Ruff, changed-file formatting, compile, documentation/link,
+comment/identity/git hygiene and version checks pass. Security retains **0 HIGH /
+3 unchanged MEDIUM** findings; component-lock contracts pass **3 tests**, while
+actual native hash verification remains BLOCKED by the missing locked Windows
+`nousd` binary. Required source and resulting-main CI remain pending integration.
+
+Directly affected original ProcessSession and startup contracts were additionally
+executed in the supported initialized Linux harness: **15 passed** on Python 3.12
+(19.31 s), and **15 passed** on Python 3.10 (15.29 s). These execute real disposable
+host processes and preserve the existing identity, crash-recovery and orphan
+cleanup assertions. The harness uses the previously pinned Python image,
+`--init`, PID64, CPU2/RAM2GiB, network disabled, read-only source/rootfs, dropped
+capabilities and no new privileges; both containers were removed after exit.
+An initial candidate regression dropped `state` from an unprovable-spec recovery
+response. Its unchanged original test failed with `KeyError`; the failure was
+retained, and the corrected response preserves original diagnostic identifiers
+while explicitly denying recovery/control/replay. Invalid selectors do not
+change another Work's journal. This bounded Linux contract run does not qualify
+public PTY, Windows installed Desktop, remote Nodes or weaker execution isolation.
+
+
 ## Execution input and output boundary review — 2026-10-13
 
 **REUSE** existing Environment validation, OCI Provider, terminal conversation
@@ -813,6 +966,97 @@ not identify the original CI host's timing cause or claim a performance gain.
 Final Workflow/Agent contracts pass **64 tests**; the same controlled admission
 delay also passes after correction. Python 3.10 focused contracts pass **3**.
 New source and resulting-main CI remain separate acceptance requirements.
+
+## Bounded Automation product consumer — 2026-10-14
+
+**REUSE / EXTEND** existing WorkflowStore, PlanWorkflowBridge, Reality handler,
+Governance, signed Node journal, EventStream, CAS and Operations Console. Legacy
+enabled text remains UNQUALIFIED. A structured simulated definition now drives
+manual or one-shot due execution, preserving the original run/Work through human
+approval, denial, cancellation, restart, duplicate delivery and reconciliation.
+The scheduler issues no authority; missing original journal/receipt/CAS evidence
+is UNKNOWN and cannot reopen an uncertain effect.
+
+Current combined backend regression has **813 passed** (251.49 s); Desktop has
+**185 passed in 37 files**, with lint/typecheck/build passing. A newly installed
+wheel outside the checkout completes **18 independent CLI subprocess commands**:
+Approve Once yields the original COMMITTED/MATCH Work with effect count1;
+duplicate trigger retains the same run/count; Deny and Cancel retain count0 and
+late approval cannot revive cancellation. Wheel SHA-256 is
+`b1834ba22fce5be049e3f44ff1a46d652679897d9548a8b7792689df265ecec2`;
+that source qualification is not a native binary release.
+
+Actual Runtime HTTP plus built-source App/Operations Console also exercises
+create/trigger/Approve Once, Deny, Cancel and logout refusal through the same
+stores. A 390px source-browser view has no document overflow. Browser screenshots
+and raw histories are source UI evidence with a cryptographic fake IdP and
+simulated device effects, not installed APEIR.exe, a real IdP or physical hardware.
+No model calls are used for these deterministic operations. Background Cron,
+semantic Recorder, executable professional Skills and production execution remain
+unqualified. Source and resulting-main CI are separate required gates; overall
+product status stays PARTIAL.
+
+
+### Private history database admission and truthful read errors
+
+Classification: **REUSE** the selected workspace resolver, three existing
+SQLite owners, private-file security layer and API error contracts; **FIX**
+file-level state admission and false empty/zero history on storage failures.
+With the selected `.nous` directory real, links for `context.db`, `evaluation.db`
+and `experience.db` previously exposed another disposable workspace's records.
+A Context audit write followed the same link. The controlled Linux probes use
+only owned fake workspaces; they do not establish a remotely authenticated
+exploit or access to real private files. The connection boundaries now reject
+static symbolic/reparse links, broken links, multiply linked database files,
+nonregular database/sidecar files and a replaced
+state directory before opening state. Independent review then reproduced a
+second binding defect without a link: an unescaped read-only SQLite URI for a
+literal `#` workspace name opened a sibling fake database instead of the validated
+file. Percent escapes and question marks also changed path interpretation.
+Read-only connections now use the encoded absolute file URI; writes keep plain
+paths. Actual sibling-database probes retain the original bytes and exercise
+empty/read/write/reload/API behavior with hash, percent, spaces and Unicode names.
+Question-mark names are tested only on systems where they are valid filenames.
+Normal explicit paths and first-use
+creation remain supported; OS ancestor aliases are not new authority.
+
+A corrupt Evaluation database previously returned successful empty API history;
+after initialization, missing Experience tables also produced empty lists and
+zero statistics. Existing domain exceptions now distinguish these failures from
+healthy empty stores. Context corrupt-store errors already fail closed. Optional
+history/learning diagnostics remain separate from authorization and effect
+verification: losing a trend is not proof of an effect, and the Task Center's
+recorded MATCH/COMMITTED projection is not derived from Evaluation scores.
+
+Prerepair focused contracts: **33 failed**; three additional hardlink probes also
+failed before admission was extended. Repaired workspace-binding contracts are
+included in Context/Evaluation/Experience/Governance/Agent/API regressions:
+**872 passed** (14.06 s); Python 3.10 Context/Evaluation/Experience/intelligence
+regressions: **570 passed** (8.75 s). The URI contracts had **9 failed, 3 passed**
+before correction; final workspace-binding contracts have **135 passed** (1.42 s).
+Counts overlap. Static path checks do not
+claim malicious same-OS-owner TOCTOU protection or native Windows ACL acceptance.
+Kernel and component lock remain unchanged; source and resulting-main CI are
+separate acceptance requirements.
+
+The bounded URI audit also found six raw read-only URI entries in five existing
+modules: GovernanceStore, SQLiteRuntime (connection and integrity metrics),
+CapabilityRegistry, legacy NetworkRegistry and SQLiteConnector. Owned Governance
+getters read foreign EXECUTE decisions, PENDING approvals and ACTIVE leases;
+the selected store's write transaction still rejected foreign lease consumption.
+This is a reproduced authority-record binding defect, not evidence that an
+unauthorized effect executed. Those entries now use the same encoded file URI,
+without changing each owner's path, permission, transaction or trust contract and
+without applying the private-history path guard to different stores.
+
+Additional contracts before correction: **18 failed, 6 passed**; final combined
+URI/workspace contracts: **159 passed** (1.49 s). Extended Context/Evaluation/
+Experience/Governance/Agent/Control Plane/Network/SQLite/Connector/API regression:
+**1093 passed** (23.10 s); Python 3.10 affected subset: **1021 passed** (23.78 s).
+Counts overlap. Four newly touched modules had existing formatter failures;
+only those files were mechanically formatted and the patched AST was unchanged.
+No network-filesystem or UNC qualification is claimed; unsupported nonlocal URI
+authority fails closed rather than reverting to an unescaped path.
 
 ### Original-result recovery versus readiness snapshot — 2026-10-14
 
@@ -883,3 +1127,830 @@ The corrected contracts have **18 passed** on Python 3.12 (1.00 s) and Python 3.
 credential and resource boundaries remain unchanged; default OCI control remains
 BLOCKED without qualified strong isolation. This does not qualify actual OCI,
 interactive PTY, native installation, physical devices or a remote human.
+
+### Original ProcessSession cleanup admission — 2026-10-14
+
+**REUSE** ProcessSessionStore, its original process/helper identity checks and
+bounded control acknowledgement. **FIX** the startup test's cleanup observation
+assumption; no production identity, control, retry, isolation or timeout changes.
+Main `cf55c6d8e160eef330abd26f4150ef3250998615` passed Desktop, Security and
+Multi-Arch CI, but Windows Core run `38588916681`, job `115938259917`, retained
+**1 failed, 4790 passed, 60 skipped, 4 warnings** (1865.80 s). All startup/no-new-
+spawn assertions had passed. During cleanup, a RUNNING status was followed by
+`kill` performing its own identity check and rejecting RECOVERY_REQUIRED before
+writing a control. The actual Windows OS-query cause is not established; neither
+this correction nor passing reruns closes Issues #4/#8.
+
+A controlled identity-query miss between the first observation and control
+admission reproduces the same rejection: **2 failed, 2 passed, 2 deselected**.
+The corrected cleanup observes the same original session and may re-attempt only
+that explicit pre-dispatch refusal. Every attempt still requires the production
+identity check. After a control is accepted it only observes terminal evidence;
+acknowledgement loss and other uncertain failures propagate without another
+control. It never kills a bare PID, invents identity, respawns a process or treats
+UNKNOWN as terminal success. The existing five-second control bound is unchanged.
+
+The normal/transient cases retain one launch, original identities and recovered
+attachment. Actual atomic control-file writes must be exactly one, bound to that
+session and action. Permanent identity uncertainty writes zero controls and
+fails closed; cleanup succeeds only after the fixture restores real observation.
+Two response-loss cases perform the original accepted control once, then lose the
+result and prove the helper does not repeat it. The actual signed/session/lifecycle
+contracts remain in their existing owners.
+
+Final focused startup contracts: **9 passed** on Python 3.12 (18.70 s) and Python
+3.10 (18.82 s); startup/catalog/Node-readiness/reconciliation selection: **61 passed**
+(23.17 s). Earlier broader selection **251 passed** remains scoped to the earlier
+seven-case candidate. One mistyped test-path invocation collected no tests and is
+retained separately; the corrected selection above ran successfully.
+Actual initialized Linux ProcessSession/startup contracts: **20 passed** (33.66 s),
+using the pinned public image, non-root UID, read-only source/rootfs, network-none,
+dropped capabilities, no-new-privileges, PID64, CPU2 and RAM2GiB. The owned container
+was removed and checked absent. This is a test harness, not product strong-sandbox,
+PTY or native Windows qualification. Existing Ruff/format/compile/documentation/
+235 links/hygiene/version/security checks pass; scanner retains **0 HIGH / 3 known
+MEDIUM**, lock contracts **3 passed**. Kernel and component lock are unchanged.
+Required source and resulting-main CI remain separate acceptance gates.
+
+### Automation complete evidence and original continuation — 2026-10-15
+
+**REUSE / FIX** existing Workflow definition/checkpoint validation, original
+Distributed Work and signed evidence, and the Console's current-human action path.
+A completed historical run previously remained completed when its original
+mutation output was missing. It now requires every original step, matching
+checkpoint/output binding and committed original Work before presenting completion;
+incomplete evidence is rejected without reconstructing output or executing again.
+Honest unstarted, approval-waiting and cancelled records remain readable.
+
+A separate actual response-loss probe showed an interface dead end: reconciliation
+committed the original Work/MATCH, but the failed Workflow still needed its original
+resume. The Console now exposes that continuation only for uncancelled, fully
+committed, output-bound original Work with mutation MATCH and no uncertainty. It
+keeps replacement triggers disabled and never manufactures Workflow completion.
+The actual backend sequence preserves the original run/Work IDs and effect count1;
+a trap forbids another mutation during either recovery phase.
+
+Original output-integrity contracts: **8 failed, 2 passed**; final complete consumer
+selection: **92 passed** (165.74 s), with the subsequently added full recovery
+sequence separately **1 passed** (7.40 s). Python 3.10 relevant overlap:
+**17 passed** (19.82 s). Original UI continuation contract: **1 failed, 18 passed**;
+final Desktop: **192 passed in 37 files** (45.21 s), lint/typecheck/build pass.
+Existing build warnings and original failure logs remain retained. These are
+runtime-service simulations, not a vendor account, deployed IdP, physical device,
+background Cron, Recorder, production strong sandbox or native installation.
+Kernel and component lock are unchanged; exact source/main CI remain required.
+
+### Generic Operations current-intent admission — 2026-10-15
+
+**REUSE / FIX** the existing humanMutation exact-body nonce helper and Runtime
+connection epoch for generic pairing, approval and Skill actions. Six controlled
+pending-nonce cases previously dispatched after URL/token/ABA/session expiry,
+while local logout was disabled. The repaired path binds current live human
+intent, synchronously invalidates on logout/reconnect/configuration/expiry/unmount,
+and rejects late response publication. A further same-Controller reconnect probe
+retained **1 failed** because one UI path bypassed the live-human invalidation;
+it now uses the same callback. No server authority is supplied by these guards.
+
+Original controlled cases: **6 failed, 21 passed**; final full Desktop selection:
+**204 passed in 37 files** (45.03 s). Post-dispatch context changes and lost responses
+retain one submission, no automatic retry, and unconfirmed-outcome guidance.
+Lawful bound logout/pairing/Skill behavior remains covered. Local logout failure
+reports server revocation unconfirmed; it is not presented as authenticated IdP
+qualification. One initial test command used the wrong directory and selected no
+matching test; the corrected causal invocation above is retained separately.
+Kernel, component lock, default limits and all backend authority owners remain
+unchanged. Source/main CI and actual source-browser acceptance are separate gates.
+
+Actual source-browser follow-through on clean `0bb053f830a7b8838791e57efd0ce46e7d973b77`
+uses the built App against real Runtime HTTP, a cryptographic fake IdP and simulated
+Reality. Approve Once, Deny, Cancel and response-loss→reconcile→original resume
+reach completed/failed/cancelled/completed with effect counts **1/0/0/1**; recovery
+preserves the exact original run/Work. Browser has zero page errors, no inference
+requests, no 390px horizontal overflow, and logout disables further management.
+The optional favicon request returns 404; the existing psutil/Tauri warnings remain.
+Client monotonic wall times including UI/screenshot work are **2.45/1.89/1.78/9.11 s**,
+one sample per different scenario, not a benchmark distribution or improvement claim.
+These are source-browser records, not installed APEIR.exe or remote identity.
+
+The independent installed wheel from clean `516ad9cefac587ed34ba4fd1feff9fb09ce904ff`
+again completes **18 separate CLI processes** outside the checkout with no
+PYTHONPATH: original approval COMMITTED/MATCH/effect1, same-trigger duplicate1,
+Deny/Cancel0 and late approval rejected. Wheel SHA-256:
+`4592f5e6b731d5b4a708385f71968875d3aa9805cc14c4530d79624810424c06`.
+This wheel qualifies the local simulated CLI contract, not native component hashes,
+signed distribution, arbitrary workloads, live model accounts or physical hardware.
+
+### Reality restart observation delivery — 2026-10-15
+
+**REUSE** the original Node journal, signed terminal delivery, Distributed Work
+reconciler, AgentSession/Workflow and independent Reality observation. **FIX**
+the acceptance assumption that fresh connection/resource readiness also proves
+the subsequent read Work has delivered its result. No production execution,
+authorization, retry, isolation or timeout contract changes.
+
+Main `4a5d1858fa71c971c087f73eb19da52ea8d3c165` Windows Core run `38655187548`,
+job `116163146461`, retained **1 failed, 4911 passed, 60 skipped, 4 warnings**
+(1908.58 s). The slow authenticated restart test expected COMPLETED but received
+WAITING; the truncated error identified a separate `observe_` Work. The complete
+Windows error/journal is unavailable, so its actual OS/network cause remains
+unproved and Issues #4/#8 stay open.
+
+A controlled hold of an independently acquired read's terminal upload reproduces
+the same premature completion assertion (**1 failed**, 17.25 s). The unchanged
+runtime correctly leaves the original mutation VERIFIED with one effect and no
+MATCH while the original Workflow waits for that read. Acceptance now permits
+exactly one continuation after the paused read's original ID, Capability, target,
+Node, Workflow, acquisition and input Artifact bindings are checked and its signed
+terminal result is canonically reconciled. The next independent read is fresh;
+the revoked mutation is never executed again. No result means WAITING, no MATCH
+and no continuation. The original final COMPLETED/COMMITTED/MATCH/one-effect
+assertions and all runtime deadlines remain unchanged.
+
+Final restart/observation/original response-loss selection: **6 passed** on Python
+3.12 (35.02 s) and Python 3.10 (35.52 s). Reality, Node, Workflow safety/runtime,
+AgentSession coordination and Artifact CAS regression: **410 passed** (117.55 s).
+An initial new-test observer saw the
+intermediate OBSERVING state between saving the error and saving WAITING; its
+**1 failed, 4 passed** record is retained separately. The corrected observer checks
+state and error from one current AgentSession. Ruff, changed-file formatting,
+compile, documentation/235 links/comments, security (**0 HIGH / 3 known MEDIUM**)
+and component-lock contracts (**3 passed**) pass. These are software simulation
+contracts, not physical or native Windows installation qualification. Kernel and
+component lock remain unchanged; source and resulting-main CI are separate gates.
+
+### Automation configuration publication admission — 2026-10-15
+
+**REUSE / FIX** the existing Workflow writer, immutable Automation definition and
+current human management check. Structured enable/disable now revalidates the
+original definition and current session/permission after writer admission and
+immediately before configuration publication. Four controlled HTTP cases on
+`ac26e44` retained a configuration update after authority was withdrawn during
+writer contention; no Workflow run, grant or execution authority was produced.
+The correction retains trusted-local configuration compatibility and the
+independent authorization checks on actual Work consumption.
+
+Final focused contracts: **9 passed** (4.05 s), including lawful publication,
+revoked session/permission, consumed nonce replay, unchanged state after restart
+and missing/changed definitions. Automation/HumanSession/routes: **168 passed**
+(164.12 s); Workflow/API enforcement: **52 passed** (1.77 s). Counts overlap.
+Original probes and initial fixture failures remain retained. The existing
+Workflow writer excludes concurrent definition replacement; separate Governance
+revocation and Workflow commit are not claimed to be one atomic transaction.
+No Kernel, component lock, execution permission or default resource limit changes.
+Source and resulting-main CI remain required; overall product stays PARTIAL.
+
+The same bounded publication review covers new structured configuration: the
+existing add_simulation consumer now passes its existing current-human callback
+to WorkflowStore.put_automation after writer admission. Original HTTP probes
+have **2 failed, 1 passed**: withdrawing the session or management permission
+during writer contention still published an enabled configuration. Repaired
+creation/toggle contracts have **12 passed** (5.69 s), and **12 passed** on Python
+3.10 (6.02 s). Combined Automation/HumanSession/routes/Workflow/API enforcement:
+**223 passed** (171.87 s). Failed publication leaves no Automation, Workflow run
+or grant; a previously prepared immutable definition can remain and is explicitly
+not execution authority. Trusted-local use and idempotent stored bindings remain
+supported. Separate Governance and Workflow commits are not claimed atomic.
+No new authority, store, automatic trigger or execution fallback is introduced.
+
+### Truthful legacy Device projection — 2026-10-15
+
+**REUSE / FIX** the configured Operations DeviceRegistry and existing Desktop
+compatibility routes. The legacy list and scan called absent Connectivity
+helpers and fabricated a local online Device on fallback. Actual service-bearer
+HTTP reached this result; anonymous requests were rejected. Current Operations
+already read separate canonical Nodes and Devices; the exported legacy Desktop
+fetch helpers have no current UI callers. This was a fact-projection defect, not
+evidence of unauthorized execution or actual discovery.
+
+The list now preserves the registered stable identity, lifecycle (including
+REVOKED), Node association and simulation metadata without manufacturing a host
+or Node as a Device. Missing current liveness remains UNKNOWN; persisted
+AVAILABLE is not an online observation. Scan reports UNAVAILABLE, no candidates
+and scan_performed=false, without network activity or trust changes. Empty JSON
+bodies now receive the same unavailable result as bodyless requests; nonempty
+targets are refused. Corrupt registry content produces an UNKNOWN error rather
+than a fabricated local host or successful empty list. Original envelope/list
+keys remain; tests requiring a synthetic local Device were corrected to canonical
+facts and explicit liveness uncertainty.
+
+Prerepair contracts: **15 failed**. Final Device/API/Operations/enforcement and
+compatibility selection: **164 passed** (4.97 s); Python 3.10 focused contracts:
+**15 passed** (2.70 s). Full Desktop: **165 passed in 35 files**, lint/typecheck/build
+pass. An initial canonical-snapshot fixture compared JSON arrays with Python
+tuples (**7 failed, 157 passed**); expected transport normalization was corrected
+without changing the production identity/lifecycle assertions. A removed import
+was caught by Ruff and corrected. No registry, discovery protocol, trust source,
+Kernel, component lock, permissions or production liveness qualification added.
+Exact source/main CI remain required; overall product remains PARTIAL.
+
+The Device adapter also uses the same centralized redaction as Operations before
+returning canonical metadata. An additional malformed fake-metadata probe failed
+before this defense; final combined selection has **165 passed** (5.41 s), with
+**16 passed** (2.43 s) on Python 3.10. Earlier 164/15 counts above precede that
+additional negative case. Transport comparisons normalize Python tuples to JSON
+arrays; identity, lifecycle and revocation assertions remain intact. A scanner
+match on an inline deterministic fake bearer fixture was retained and its source
+made explicit through the named fake-token constant; no scanning rule changed.
+This response defense does not claim to erase historical registry content.
+
+
+### Signed Node facts reach the existing Desktop — 2026-10-15
+
+**REUSE / FIX** OperationsPlane's existing signed Relay Controller and the
+existing EntityStore. The legacy node list/detail and setup query read early
+Connectivity SQL/session state, while Operations used the signed Node path.
+Six causal backend probes failed before the adapter correction. List/detail/query
+now use the configured Controller, preserve original public-key identity and
+revocation, report unavailable facts as UNKNOWN, and perform no network discovery
+or trust mutation. Existing compatibility Connectivity classes remain untouched;
+they are not the signed Node trust source. The retained ConnectScreen/SetupWizard wording now accurately
+says registered Nodes, with optional offline continuation and Operations Add Node.
+The current App bootstrap uses OnboardingWizard; no replacement wizard was added.
+
+Four original frontend probes failed: missing entity IDs collapsed multiple Nodes
+under `undefined`, raw online flags were accepted without canonical readiness,
+cached event time hid current revocation, and old responses survived credential
+changes. The existing API adapter now binds exact Node IDs, conservative readiness
+and current configuration generation; unknown capabilities/counters/roles stay
+unknown. Two further activity probes failed because generic Node events promoted
+unseen or revoked Nodes to online. Activity now preserves uncertainty/revocation.
+Two real-store probes also failed: React's useSyncExternalStore did not see a new
+snapshot reference, and reset reused already-mutated default maps. Notification
+now publishes a fresh top-level reference; initial/reset maps are independent.
+Historical Node cache restores no current readiness. No second frontend store,
+Node registry, event system, trust source or execution authority was introduced.
+
+Actual authenticated HTTP list/detail/empty-body query and a real loopback signed
+Node connection cover readiness, absent current resource evidence, and persisted
+revocation after reopening the Controller. One new fixture initially dialed the
+configured ephemeral port 0 instead of start()'s returned URL (**1 failed,
+7 passed**); that is preserved and corrected without changing runtime deadlines.
+The next probe exposed the adapter's insufficient ONLINE-only alias; it now also
+requires current fresh resource facts and a valid connected lease. Final focused
+backend **8 passed** (1.38 s); Node/Device/Control Plane/API/security compatibility
+selection **224 passed** (17.56 s); Python 3.10 Node/Device **24 passed** (3.91 s).
+The first two mistyped frontend/test launch commands collected no tests; corrected
+commands above and the retained causal failures are separate evidence.
+
+Final Desktop lint/typecheck/test/build: **175 passed in 36 files** (47.26 s),
+including an actual React useNodes subscription, reset, activity, cached-revocation
+and pending-response checks. This is source-level frontend/HTTP/loopback software
+qualification. Native APEIR.exe, real remote IdP, WAN/NAT, Windows/Jetson and physical
+Device acceptance remain unqualified; source/main CI and native binary hash checks
+are separate gates. Frozen Kernel, component lock and product PARTIAL are unchanged.
+
+
+Node-page failure delivery is exercised separately from DTO unit tests. Two
+original rendered-page probes failed because an unavailable/pending Controller
+looked like a successful empty directory. The existing NodesPage now shows its
+actual pending read, backend failure and a manual read retry; Controller changes
+hide previous rows before publishing the new response. A full empty REST snapshot
+also originally retained former Nodes (**1 failed, 10 passed**); the existing
+snapshot consumer now replaces membership instead of accumulating old Controllers.
+No command or network discovery is triggered by these read controls. Final source
+Desktop lint/typecheck/test/build has **179 passed in 37 files** (51.70 s), including
+actual rendered loading/error/retry and Controller-switch flows. The earlier
+175/177 counts describe preceding candidates. Native Windows UI and all legacy
+cross-Controller event/cache paths remain separate qualification limits.
+
+### Observation fault-hold producer lifecycle — 2026-10-15
+
+**REUSE / FIX** the existing Reality restart test and its original read producer.
+Main `bd89756` Core run `38683486516`, Windows job `116253006935`, retains
+**1 failed, 4918 passed, 60 skipped, 4 warnings** (1483.70 s): the added delayed
+observation case timed out waiting five seconds for its fault-injection point.
+Multi-Arch, Desktop and Security passed. This is not the previous final-session
+assertion failure; no complete Windows worker trace establishes its OS cause.
+Issues #4/#8 remain open.
+
+A controlled delay of only the first independent read's worker-result return
+reproduces the same original five-second TimeoutError. The test now awaits
+either its owned producer or the actual fault-hold event. Producer errors and
+cancellation propagate immediately; finishing without entering the fault is a
+failure. This removes a competing preparation deadline, not a Runtime timeout
+or retry check: original Work/reconciliation bounds and CI's 60-second test
+bound remain unchanged. All original WAITING/no-MATCH/one-effect, fresh-read and
+final COMPLETED/COMMITTED/MATCH assertions remain. The same controlled single
+delay passes after correction. An initial broader probe delayed every fresh
+read and correctly failed the final completion assertion; that record is kept
+and the correction does not admit repeated slow reads as success.
+
+Final Reality/Node/Workflow/Agent/Artifact selection: **368 passed** (108.15 s).
+Python 3.10 focused restart/producer-error/cancellation contracts: **8 passed**
+(32.32 s). The initial focused run had **8 passed, 1 warning**; the new negative
+fixture's empty-regex warning was corrected without changing production code.
+No Kernel, component lock, production execution or authorization changes.
+Exact source and resulting-main cross-platform CI remain required.
+
+
+### Node control publication and response-loss recovery — 2026-10-15
+
+**REUSE / FIX** the existing signed Node protocol, Node journal, state lock,
+Artifact CAS and Relay ordered blocking-I/O lane. Controlled Artifact, lease
+acquire/release and stop writes originally blocked a queued transport callback
+(**4 failed**); the same hold now permits the callback without changing the
+write, durability, signature, readiness or timeout contract. Cancellation drains
+the original operation before releasing its owner, emits no invented success,
+and preserves the original signed-control idempotency binding on reconciliation.
+
+Four controlled pre-commit failures also reproduced memory publication before
+lease acquire/release/expiry or pre-start cancellation was durably recorded.
+Updates now stage the existing mapping, persist it, then publish it. A failed
+lease publication never reuses a consumed fencing token. A separate boundary
+selection retained **4 failed, 1 passed**: after a commit whose response was lost,
+the same process could issue a replacement lease or execute an already cancelled
+Work; malformed journal records were silently discarded. Current requests now
+reconcile the original persisted journal first. Unknown EXECUTING evidence cannot
+restart an effect; malformed records or lost previously observed Work IDs fail
+closed. This remains single-owner Node storage, not multi-process writer or
+complete journal-erasure protection.
+
+The first expanded Node run retained **1 failed, 236 passed**: an uncertainty
+fixture seeded only a private memory mapping without its purported persisted
+record. It now writes that original journal before reconciliation and retains
+all RECOVERY_REQUIRED/UNKNOWN and no-replay assertions. Production at-most-once
+admission already stages its EXECUTING record before publishing it; new boundary
+checks preserve that contract rather than claiming a new admission mechanism.
+
+Six actual CLI processes in fresh owned directories exercised MATCH, Deny,
+MISMATCH, UNKNOWN, lost response and restart. The actual results were respectively
+COMMITTED/MATCH/1 effect, CREATED/no verdict/0, VERIFIED/MISMATCH/1,
+VERIFIED/UNKNOWN/1, COMMITTED/MATCH/1 and COMMITTED/MATCH/1. Lost response first
+had no Controller receipt and already one effect. These are simulated devices,
+local CLI human attestation and runtime-service scope, not real model, remote IdP,
+Kernel, native Windows or physical hardware qualification. Single-run durations
+(1.269–2.826 s) are observations, not a comparative performance benchmark.
+
+The earlier source `92f2c0c` passed all four Core platforms, including Windows
+**4923 passed, 60 skipped**. Its Multi-Arch run `38766532736` was cancelled by the
+operator while Windows was still progressing at 99%; it is **CANCELLED**, not a
+pass or proof of a hang. Its earlier Artifact/control test failure and a failure
+marker during cancellation are preserved without an unavailable final stack.
+An isolated Windows/Linux two-test diagnostic passed but did not reproduce the
+failure. A separate full-prefix Windows Python 3.11 diagnostic `38775081314`
+passed **4616 tests, 60 skipped, 272 deselected** (2181.62 s), including both marked
+cases. That diagnostic adds stricter failure/trace bounds and is explicitly not
+a replacement for production Multi-Arch acceptance. No observed failure is
+closed merely because a subsequent run passed; Issues #4/#8 remain open.
+
+Final local Node/Reality/Governance/Artifact/Work/AgentSession/Workflow/Gateway
+and usage regression: **980 passed** (144.77 s). Python 3.10 Node service and
+Relay I/O contracts: **69 passed** (5.41 s). No default PID, isolation, identity,
+authorization, frozen Kernel or component-lock change. Standard repository checks
+and exact new-source/resulting-main CI remain distinct evidence from the earlier
+source and diagnostics above; none upgrades physical or native release status.
+
+### Node registration peer binding — 2026-10-15
+
+**REUSE / FIX** the existing configured Controller signing key, Node identity,
+NodeProtocolEnvelope and ReplayWindow. Ordinary session messages already enforce
+the expected Controller source and exact Node target. The registration helper
+verified the signature but omitted those peer checks before saving the session
+and collecting host reports. Two controlled loopback probes with a correctly
+signed but differently addressed ACK reached the forbidden host probe (**2 failed**).
+
+The same source/target checks now apply before registration replay acceptance,
+session publication and host reporting. No identity/key/trust-root, authority,
+Work, timeout, replay-window or automatic retry changes. Negative cases exercise
+both absent and retained original session records; neither can be replaced by
+foreign session data. Existing valid registration, signed execution, Artifact,
+lease, cancellation and reconnect contracts remain exercised.
+
+Node/Reality/Artifact/AgentSession/Governance operation regression before adding
+the two retained-session variants: **422 passed** (131.17 s). Final protocol
+selection including those variants: **18 passed** on Python 3.12 (0.90 s) and
+Python 3.10 (0.92 s). These are controlled software protocol tests, not remote IdP,
+physical or native installation qualification. Exact-source CI and resulting-main
+acceptance remain required; this does not establish the cause of Issues #4/#8 or
+claim exhaustive handshake/replay qualification. Kernel and component lock stay
+unchanged.
+
+
+The shared-store correction also exposed an existing Chat auto-scroll dependency
+on a newly allocated message array: an unrelated Node snapshot caused one extra
+scroll without new content (**1 failed** controlled subscriber probe). Chat now
+tracks the latest message identity/content/card count and loading state instead;
+real new/updated messages still scroll, while a Node refresh makes zero additional
+scroll calls and zero model/network requests in that fixture. An initial fixture
+removed its scroll stub before unmounting (**1 failed / 1 cleanup error**); that
+record is retained separately and the corrected cleanup reproduces the same
+single assertion failure. Final source Desktop lint/typecheck/test/build:
+**180 passed in 38 files** (44.80 s). These are observed UI callback/correctness
+contracts, not measured task latency, Token savings or native UI qualification.
+
+
+### Automation integration with canonical Node facts — 2026-10-15
+
+The existing consumer candidate was normally merged with accepted main `c43f942`;
+only independent API-contract and acceptance text required conflict resolution,
+and both records were retained. Current source `13190ae` has **173 passed**
+Automation/Workflow/Node-and-Device projection contracts (173.11 s), and Desktop
+lint/typecheck/test/build has **219 passed in 40 files**. An initial local command
+named a nonexistent `tests/workflow` directory and collected no tests; the
+corrected command uses the existing Workflow test files. It is not counted as a
+product failure or a successful regression. All 12 repository-standard checks
+pass, with **0 HIGH / 3 known MEDIUM**, and **3 component-lock contracts**.
+
+A fresh built source-browser run against actual Runtime HTTP on that source
+again exercised approval, denial, cancellation and response loss: final effect
+counts **1 / 0 / 0 / 1**, with the exact original run and Work preserved during
+reconciliation and resume. Logout blocks creation; the 390-pixel viewport has no
+horizontal overflow and no page errors or model calls occur. Source-browser
+screenshots and original persisted histories are retained privately. The local
+single-case client monotonic times were 2.118 / 2.412 / 1.660 / 9.549 seconds;
+these differing scenarios are not a performance comparison. The identity
+provider is a deterministic signed test fixture and the device is simulated.
+
+Separately, main `1570e3b` passed all Core, Multi-Arch, Desktop and Security
+workflows: Core Windows **4946 passed / 60 skipped**, Linux 3.12 **4959 / 47**,
+Linux 3.10 and macOS each **4948 / 58**; Multi-Arch Windows **4636 / 60 / 272
+deselected**, Linux amd64 and ARM64 each **4637 / 59 / 272 deselected**. This is
+that exact merged Node durability baseline, not qualification of this unmerged
+Automation candidate or resolution of Issues #4/#8. Source/main CI remains
+required for this candidate. No Kernel or component-lock changes.
+
+
+The same source-browser screenshot review found that page-level overflow checks
+alone missed four long identifier/control boxes outside the Automation pane at
+390 pixels. A stricter actual-browser bounds check retained **1 assertion
+failure**, with four off-pane boxes. Scoped rules in the existing Operations CSS
+now wrap the form, stack its record contents and wrap full evidence identifiers;
+no backend or mutation logic changes. The unchanged four-scenario browser flow
+then has zero off-pane boxes, no pane/form overflow, and the same **1/0/0/1**
+effect counts with original recovery bindings. Final Desktop lint/typecheck/
+test/build: **219 passed in 40 files**. These are source-browser layout and
+execution checks, not installed Windows screenshots.
+
+The existing public simulation measurement script was also run on exact main
+`c43f942`: **12/12** fresh isolated Controller workspaces reached COMMITTED/MATCH,
+each with one effect. Local observer monotonic nearest-rank p50/p95/p99 were
+**1.625 / 1.737 / 1.737 seconds**. The preview uses the same fixed Work ID in
+separate workspace namespaces; these are not 12 globally unique operation IDs.
+Linux child CPU was 15.008 user + 1.700 system seconds, with `getrusage` child
+maximum RSS 86480 KiB, not aggregate steady-state service memory. An unavailable
+`/usr/bin/time` was a measurement preflight error; the successful wrapper uses
+Python's existing process/resource facilities. No comparison, Token reduction,
+WAN/physical performance or research-experiment PASS is inferred.
+
+
+A fresh wheel from clean Automation candidate `ab92d13` was installed into a new
+virtual environment and exercised outside the checkout with no `PYTHONPATH`.
+**18 CLI processes** again preserve the original approved COMMITTED/MATCH Work
+and duplicate trigger/effect count one, deny/cancel with zero effects, and reject
+late approval after cancellation. Explicit simulation is required. Wheel SHA-256:
+`8d975c0f0acd9b13698b21503d83e5a684e8bf8a69df8ca91131895fee37d6ee`.
+This is an installed source-package CLI and local OS-human boundary, not an
+NSIS/native installation, remote identity, background scheduler or physical Gate.
+
+
+### Automation start acknowledgement and uncertain effect evidence — 2026-10-15
+
+After normal integration with main `893cbe4`, the combined run retained
+**1 failed, 203 passed** (170.13 s). The failure precedes cancellation: the Node
+already persisted COMPLETED and the device effect count is one, but the
+Controller still has ASSIGNED rather than RUNNING because its start ACK was not
+recorded. An isolated repeat passed (**1 passed**, 6.32 s), which is not a fix.
+Controlled omission of the start ACK reproduces the exact original assertion
+failure (**1 failed**, 5.79 s). Existing signed-result reconciliation already
+admits original ASSIGNED Work; ASSIGNED cannot prove an effect did not occur.
+
+The test now separates start-ACK delivery from terminal-response loss. The
+recorded-ACK cases use an explicit publication barrier and retain the exact
+RUNNING assertion. The ACK-loss cases require exact ASSIGNED, a completed original
+Node journal, no Controller receipt or MATCH, and reconciliation of the original
+operation. Both are tested with and without cancellation and later grant
+revocation. All original final MATCH/COMMITTED, same-run, one-effect and exactly
+one grant-consumption assertions remain. No production state, timeout, retry,
+protocol, authority or safety assertion is relaxed. This is a controlled causal
+fault matrix, not sleeping or treating a passing rerun as resolution.
+
+The four-case matrix has **4 passed** (23.16 s) on Python 3.12 and **4 passed**
+(23.30 s) on Python 3.10. This identifies the candidate test's notification
+assumption; it does not establish the OS cause of historical Issues #4/#8 or
+upgrade Windows, WAN, native or physical acceptance.
+
+
+### Automation Windows negative-history investigation — 2026-10-16
+
+Candidate `5c28901` Core run `38825658046`, Windows job `116732406366`, retains
+**1 failed, 5081 passed, 60 skipped, 4 warnings** (2020.16 s): the receipt variant
+of the committed-history tamper test did not raise WorkflowBindingError. Other
+selected platforms passed. The original failure did not record the Workflow/Work
+state immediately before tampering, so its cause is **not established**. It must
+not be dismissed because other runs or platforms passed. The candidate remains
+a draft; no Windows or integration Gate is promoted.
+
+The negative test now explicitly requires COMPLETED Workflow and COMMITTED Work
+before modifying evidence, preserving the original tamper/rejection assertion.
+On failure it reports only state, step status, reconciliation/effect count and a
+timeout-present boolean. This distinguishes an incomplete setup from acceptance
+of a tampered committed receipt; it does not itself fix or prove the cause of the
+Windows failure. All fourteen strengthened semantic-tamper cases pass locally
+(8.07 s). No production Runtime, approval, signature or verifier change is made
+for this investigation. Exact updated-source Windows evidence is still required.
+
+### External-provider spool publication and Windows baseline evidence — 2026-10-16
+
+Main `c43f942` Core run `38822457356`, Windows job `116723873694`, retains
+**1 failed, 4970 passed, 60 skipped, 4 warnings** (1539.12 s). The external-provider
+signed Node protocol case returned `ok=false`; its old assertion did not print
+the provider error code. The initial-reports ConnectionClosed warning alone does
+not establish the cause. The unchanged condition now includes redacted error-code
+and content-free phase/memory/result-presence diagnostics for a future failure.
+No assertion, timeout or keepalive setting is relaxed.
+
+**REUSE / FIX** the existing Node journal, signed result admission, Controller
+spool and remote-provider binding checks. A controlled post-publication cleanup
+PermissionError reproduced replacement of a real original signed result with
+`REMOTE_PROVIDER_REQUEST_REJECTED` in two cases (**2 failed**). An earlier fixture
+passed no socket for the existing acknowledgement and had two setup failures;
+its correction reuses the signed RecordingSocket fixture and retains the same
+original-result assertions. Separate before/after-publication I/O probes retained
+**2 failed, 2 passed** after the cleanup correction: publication failure was also
+incorrectly materialized as rejection and could erase its request binding.
+
+Cleanup is now best-effort only after the result is durable. An OSError retains
+the original request and does not invent rejection or no-effect evidence.
+Restart reads the admitted original signed result and retires the original
+request without another pending dispatch. Before-publication failure has no
+published result; after-publication failure preserves its exact bytes. Node
+journal bytes and receipt bindings remain unchanged. Permanent malformed input
+still rejects before dispatch. These are component/storage faults using real
+Node journals and signatures; the broader Reality regression retains independent
+observation/MATCH requirements. The spool response alone is not an effect commit.
+
+Relevant Node/Reality/Artifact/Usage/Gateway/Workflow regressions: **712 passed**
+(137.37 s), before two additional malformed-input cases. Final remote-provider
+and protocol selection: **48 passed** on Python 3.12 (1.87 s), **48 passed** on
+Python 3.10 (1.93 s). Exact-source Windows/ARM64 CI and resulting-main validation
+are still required. The controlled defect matches a possible false-result path,
+not an established cause of the earlier Windows failure or Issues #4/#8.
+
+Main `c43f942` Multi-Arch run `38822457553`, Windows job `116724755654`, separately
+retains **1 failed, 4659 passed, 60 skipped, 272 deselected, 4 warnings** (1740.94 s).
+Its Connector timeout result was correctly `CONNECTOR_TIMEOUT`, but total local
+elapsed time **0.96258 s** exceeded the unchanged **0.5 s** assertion. No production
+or accepted-test change is made for that unexplained timing failure here.
+
+Temporary diagnostic source `195d366` and run `38827287779` use the existing
+Windows diagnostic workflow, retaining the same timeout/elapsed assertions while
+measuring adapter wait, registration, health and result-storage phases. Twenty
+isolated Windows samples pass (elapsed **0.03874–0.08554 s**, maximum health write
+0.06347 s); the adapter had not finished before release in all 20. This does not
+reproduce the full-suite failure, prove absence of a race, or qualify production
+Multi-Arch. The diagnostic branch must not be merged. Its prior recovery traces
+and all failed runs remain available. Kernel and component lock are unchanged.
+
+
+An independently explored local execution-worker drain prototype is **REJECTED**,
+not part of this spool fix. It incorrectly treated the transport task as execution
+owner. Its narrow 71-test selection passed, but the existing wider cancellation/
+reconnect contract retained **1 failed, 950 passed** (135.43 s): transport must
+return cancellation while the admitted handler remains journal-owned EXECUTING,
+then deliver its original completed result on reconnect with one invocation.
+The prototype made that valid contract wait for the held handler and reach its
+watchdog failure. The original test is unchanged, and no worker-drain change is
+included here. The local candidate, initial fixture failures and failed broader
+run are retained privately to prevent its accidental integration. Passing narrow
+probes did not justify overriding the existing authoritative recovery path.
+
+
+The retained-request recovery matrix also injects Node revocation before
+Controller restart. With the publication/cleanup fix alone, its corrected probe
+retained **4 failed, 4 passed**: re-entering execution admission to read a known
+result could replace it with a revoked-node rejection. The earlier probe also
+had two test-wrapper argument errors; those fixture errors are not evidence of
+a production defect. Recovery now validates the persisted Node signature and
+original request/receipt binding before reading already admitted evidence. It
+does not transfer artifacts or queue another execution. Changed retry inputs
+cannot erase or borrow the original result. The same revoked Node still rejects
+a separately submitted new workload, and its persisted REVOKED state survives.
+
+The four I/O boundaries, trusted/revoked Node and original/changed retry matrix
+retain byte-identical original journals and previously published results. Final
+protocol/provider selection: **60 passed** on Python 3.12 (2.62 s), **60 passed**
+on Python 3.10 (2.64 s). Expanded Node, Reality, Artifact, Governance, model,
+AgentSession, Workflow, Usage and Connector regression: **961 passed** (130.14 s).
+Exact-source platform CI must qualify this additional runtime change separately
+from the earlier publication-only source. No Kernel or component lock changed.
+
+Full-suite Connector diagnostic run `38828059028`, source `2393bd7`, retained
+**9 failed, 4680 passed, 60 skipped, 272 deselected, 4 warnings** (1887.40 s).
+Twenty instrumented Connector samples satisfy the unchanged 0.5-second bound
+(elapsed 0.06481–0.21026 s); health storage reaches 0.18288 s. This still does not
+reproduce or resolve the earlier 0.96258-second failure. Eight diagnostic failures
+are cp1252 Unicode output errors with uncaptured stdout. The remaining delayed
+Observation restart case ended WAITING instead of COMPLETED; its original
+assertion and failure remain, with cause unestablished. This diagnostic branch
+is not acceptance and must not merge. No production timeout, Connector assertion
+or effect verification is relaxed.
+
+
+Automation source `14be54f` retains all three PR checks and separately completed
+Core `38830702842` and Multi-Arch `38830705527`. Windows Core: **5083 passed,
+60 skipped, 4 warnings** (2209.01 s); Ubuntu 3.12: **5096 passed, 47 skipped,
+4 warnings** (724.27 s). Multi-Arch Linux amd64/ARM64 each have **4772 passed,
+59 skipped, 272 deselected, 4 warnings** (571.72 / 588.46 s), with platform
+detectors **13 passed** each. Windows 3.11 has **4771 passed, 60 skipped,
+272 deselected, 4 warnings** (1932.24 s). These strengthened precondition tests
+passed; they do not establish the cause of the earlier Windows tamper-probe
+failure or justify closing it from reruns alone. The normal integration of
+Relay source `32f3c7d` requires fresh combined regression and exact-head CI;
+earlier browser/wheel evidence remains explicitly scoped to source `5c28901`.
+
+
+A further HTTP writer-contention probe of the unmerged Automation consumer
+retained **2 failed, 1 passed**: after initial nonce admission, session or
+management-permission revocation prevented execution but still left a new
+PENDING Run when the delayed writer acquired its lock. **REUSE / FIX** the
+existing management callback and Workflow transaction; the callback now runs
+inside first-trigger publication before creating the Run/relation. This changes
+no execution authority and adds no store. Duplicate original-run reads remain
+compatible. Controlled session revocation, persisted expiry, permission denial
+and valid admission retain explicit nonce/replay, restart and zero-effect checks.
+The final writer/creation/toggle/concurrent-trigger/checkpoint selection has
+**15 passed** on Python 3.12 (9.07 s), **15 passed** on Python 3.10 (9.29 s).
+Exact-head CI must qualify the additional runtime change.
+
+Normal integration parent `9d9fff9` was also exercised using actual Runtime HTTP
+and the built source Operations Console: Approve Once, Deny, Cancel and response
+loss/recovery retain the same original Run/Work and effect counts **1/0/0/1**.
+Both successful flows have original receipt, fresh Observation and MATCH. Logout
+disables mutation, no model request occurs, and the 390-pixel form/pane have no
+horizontal overflow or off-pane evidence/control bounds. This uses signed fake
+identity and the explicit simulated template; it is not a deployed human IdP,
+installed APEIR.exe, physical effect or cross-network qualification.
+
+Spool source `32f3c7d` passed four-platform Core `38856754480`, including Windows
+**4994 passed, 60 skipped, 4 warnings** (1515.80 s), but Multi-Arch `38856756820`
+retains Windows **1 failed, 4681 passed, 60 skipped, 272 deselected, 4 warnings**
+(1505.06 s). The delayed Observation restart case returned WAITING on a new
+independent read after its first held read had completed. It did not commit
+without observation. The production spool/Node implementation remains unchanged
+from that source; the failed Windows run is not treated as acceptance.
+
+A controlled second signed-read hold reproduces the same WAITING-versus-COMPLETED
+assertion with the old test driver (**1 failed**). That driver followed only one
+paused acquisition and assumed the next resume must finish synchronously. It
+now follows each distinct exact read's terminal signed evidence before another
+continuation, checking original Workflow, device, Node, capability, Artifact and
+mutation bindings at every pause. Missing read evidence still blocks; repeated
+already-consumed read IDs fail rather than spin. The existing final COMMITTED,
+MATCH, original Workflow and effect-count-one assertions remain, and both held
+observations are excluded from the final fresh verification. The original
+`delayed` and `missing` case IDs are preserved; `delayed-again` adds the second
+controlled pause. Production waits (including three seconds), receipt waits and
+retry settings do not change. The test driver also has the existing CI's
+60-second bound; it does not increase that CI limit. Python 3.10 recovery-driver
+selection: **9 passed** (41.68 s), including missing result and producer-failure
+cases. Fresh exact-head CI remains required. This corrects a demonstrated test
+consumer assumption, not an established root cause of Windows storage latency
+or proof that no runtime race exists. Issues #4/#8 remain open.
+
+### Connector explicit admission contract — 2026-10-16
+
+**REUSE / FIX** the exported Connector library and existing Governance decision;
+no new API, policy or execution authority. An adapter write now requires both
+EXECUTE and explicit boolean `allowed=True`. Controlled decision probes before
+the fix retained **9 failed, 1 passed**: five missing/false/nonboolean admission
+flags reached the mock adapter, while absent/invalid modes could raise instead
+of returning the existing denial result. The valid canonical decision still
+executes once. A first invocation used the wrong checkout and selected no tests;
+that orchestration error is not counted as a reproduction.
+
+The original nine Connector tests, including the unchanged timeout bound, and
+the ten decision probes have **19 passed** on Python 3.12 (0.22 s), **19 passed**
+on Python 3.10 (0.25 s). Governance/Connector/Workflow safety regression has
+**275 passed** (6.58 s). The previous Connector wall-time failure remains
+unexplained; no health-I/O, timeout, retry or persistence setting changes here.
+The library export has no current Desktop consumer; these tests do not qualify
+a live enterprise service, credentials, physical effects or complete product
+integration. Exact-source checks and normal PR integration remain required.
+
+
+Connector source `9d80c48` Core run `38857997503` retains **1 failed, 5000 passed,
+47 skipped, 4 warnings** (478.00 s). The wider response-loss regression imported
+a shared Gate fixture that supplied EXECUTE without the contract's `allowed`
+field, so it was denied before reaching the intended effect-once fault. The
+initial targeted selection omitted this separate retry module. The shared
+fixture now returns the existing canonical AuthorizationDecision with explicit
+boolean admission. All nine original test-function ASTs remain unchanged; no
+response-loss, effect-count, retry-budget or timeout assertion was weakened.
+The complete three-module Connector selection and Governance/Workflow regression
+are rerun before publishing the correction. The failed full CI is not relabelled
+as a baseline environment failure or erased.
+
+
+### Process startup observation consistency — 2026-10-16
+
+Main `b71a766` Multi-Arch `38860036017`, Windows job `116839996688`, retains
+**1 failed, 4673 passed, 60 skipped, 272 deselected, 4 warnings** (1379.91 s).
+The unproven-host binding case remained RECOVERY_REQUIRED/stdin unavailable,
+but returned host-state-missing instead of the required helper-identity-changed
+reason. The exact error assertion is preserved, not broadened to accept either.
+
+**REUSE / FIX** Distribution ProcessSessionStore and its existing host projection,
+OS creation identity checks, journals, controls and deadlines. Startup had read a
+ready record, then called status to read another record before classifying it.
+A controlled missing second sample using the real process reproduces both the
+original identity assertion and loss of a valid startup sample (**2 failed**).
+One poll now projects its exact observed record with the same current OS identity
+checks. Subsequent status/control calls still read again. A separate negative
+proves later missing state returns RECOVERY_REQUIRED, denies stdin and publishes
+no control despite the earlier valid RUNNING snapshot. Original single-launch,
+wrong-identity and no-control/replay assertions remain unchanged. All original
+startup test-function ASTs are unchanged. No change under `nous_runtime/kernel`,
+no 10-second deadline increase, new store, process retry or isolation fallback.
+
+Startup selection has **11 passed** on Python 3.12 (19.40 s), **11 passed** on
+Python 3.10 (19.49 s). Full related regressions and exact-head CI are required.
+This reproduces the double-sample failure class; the cause of the Windows file
+read intermittency itself remains unestablished. It does not qualify a persistent
+PTY, strong product sandbox, installed Desktop or production release.
+
+Automation source `2bc4166` Core `38857348310` retains Windows **1 failed,
+5104 passed, 60 skipped, 4 warnings** (1999.26 s): the device-disconnect test
+asserted Controller FAILED while its original terminal result had not yet
+projected and Work remained RUNNING. Source 443fc72's earlier qualification is
+superseded by this additional test-consumer correction; a cancelled superseded
+run is not a passing result. No production Runtime code changes in this step.
+
+A controlled signed-status hold reuses the original failure/disconnect test
+function and its assertions. Both faults reproduce the same pre-terminal
+assertion (**2 failed**). At that barrier the actual Node journal is FAILED,
+Controller Work is RUNNING, no Controller result exists and effect count is zero.
+After release the original test now waits for that exact result and calls the
+existing Controller reconciliation. FAILED, OFFLINE, zero-effect and no
+re-execution-after-reconnect/resume assertions remain. Four immediate/held
+cases pass on Python 3.12 (1.16 s) and 3.10 (1.17 s). The full Reality suite has
+**118 passed** on Python 3.12 (122.11 s) and **118 passed** on Python 3.10
+(123.76 s), including the repeated independent-read pause correction. Neither
+10-second production waits nor the existing 60-second CI limit changes.
+This demonstrates an asynchronous projection assumption, not the cause of
+Windows delay or a completed performance/physical/network qualification.
+
+
+Source `5b7d6a2` Multi-Arch `38863786127` retains Windows **1 failed,
+4696 passed, 60 skipped, 272 deselected, 4 warnings** (1520.21 s). The
+response-loss/restart case returned VERIFIED after a single Workflow Resume,
+before independent observation completion. The original terminal assertions
+remain; a controlled hold of each of two actual read results reproduces the
+one-resume assumption (**1 failed**, 17.02 s). Success-path continuation now
+reuses the existing exact-read receipt/reconciliation helper. The no-effect
+lost-response case still takes its original failure path, and ACK interleaving,
+same original Work, MATCH, one observation, state change and effect-count checks
+are retained. Five immediate/held recovery cases pass on Python 3.12 (23.41 s) and Python
+3.10 (23.60 s). The final
+full Reality regression has **119 passed** (122.73 s); the controlled case also
+requires two distinct held read acquisitions.
+This corrects another test consumer of the asynchronous contract; no production
+wait, retry, process startup deadline or execution authority changes. Fresh
+cross-platform CI is required; the failed run is not relabelled as successful.
+
+
+### Automation VERIFIED recovery admission — 2026-10-16
+
+**REUSE / FIX** the existing Automation projection, Workflow/Work owners,
+original Node journal, signed receipt, Reality recovery and EffectVerifier.
+The projection omitted VERIFIED mutation Work when its Observation was missing
+or MATCH had persisted before COMMIT publication failed. That could hide the
+original recovery actions even though the effect had already occurred. The
+projection now keeps both cases reconciliation-required; it does not execute
+anything or convert a missing verdict into success. Explicit MISMATCH remains
+uncommittable. No new grant, mutation Work, retry or authority is introduced.
+
+Dropping the actual read result after Node observation and failing the original
+COMMIT publication reproduce **2 failed** projection assertions before the fix.
+Both cases now recover the same Run/Work using existing public Reconcile and
+Resume, persist MATCH and COMMITTED, and retain effect count **1**. Lost read
+observation IDs are excluded from the fresh verification. The targeted history
+and recovery selection has **18 passed** on Python 3.12 (21.00 s) and Python
+3.10 (22.14 s), including 14 unchanged semantic tamper categories.
+
+Source `7d2ce48` full Core `38861767549` retains Windows **1 failed,
+5118 passed, 60 skipped, 4 warnings** (2399.18 s). The committed-history
+fixture failed before tampering: Workflow was failed and original Work VERIFIED.
+Its shortened CI representation did not retain the verdict or precise cause;
+this is not proof of the cause of an earlier changed-receipt rejection failure.
+The test now reports concise content-free preconditions. Only an exact original
+independent-read timeout, VERIFIED mutation without verification, bound read
+Work and effect count 1 permits one explicit public Reconcile/Resume before
+tampering. COMMITTED and tamper rejection remain mandatory. A controlled lost
+read reuses the original changed-receipt test to exercise that continuation.
+MISMATCH, UNKNOWN and other failures are not retried into an accepted fixture.
+
+Current main `380e657` has successful Core `38864193438`, Multi-Arch
+`38864193549`, Desktop `38864193441` and Security `38864193443`. Windows
+Core has **5009 passed, 60 skipped, 4 warnings** (1513.97 s); Windows
+Multi-Arch has **4695 passed, 60 skipped, 272 deselected, 4 warnings**
+(1328.62 s). These main results do not certify this unmerged Automation code.
+Exact-head affected regressions and CI remain required. Product/native, physical,
+real IdP, actual model engineering and strong-environment qualifications remain
+separate; no full product PASS or Windows timing root cause is inferred.
+
+The final Automation/Node/Governance selection has **593 passed** (218.89 s);
+Workflow/safety/human-session regressions have **81 passed** (1.97 s).
+Explicit negative-observation checks have **2 passed** (2.74 s), retaining
+MISMATCH as uncommitted and UNKNOWN as reconciliation-required. The native
+verifier on main `380e657` still fails with the exact missing locked Windows
+`nousd-x86_64-pc-windows-msvc.exe`; component-lock bytes are unchanged.

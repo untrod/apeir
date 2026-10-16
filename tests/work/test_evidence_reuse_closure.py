@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+import pytest
+
 from nous_runtime.events import RunState
 from nous_runtime.work import DecisionStatus, WorkDecision, WorkHarness
 from nous_runtime.work.loop import AgentLoop
@@ -212,7 +214,7 @@ def test_repeated_covered_range_stops_as_action_transition_stall(tmp_path):
     )
 
 
-def test_failed_patch_allows_one_fresh_recovery_read(tmp_path):
+def test_failed_patch_preserves_original_recovery_without_another_mutation(tmp_path):
     harness = WorkHarness(tmp_path)
     created = harness.create("Fix the code in this repository")
     tools = ClosureTools(patch_failures=1)
@@ -262,21 +264,31 @@ def test_failed_patch_allows_one_fresh_recovery_read(tmp_path):
         max_iterations=8,
     )
 
-    assert completed.state is RunState.COMPLETED
+    assert completed.state is RunState.RECOVERY_REQUIRED
+    assert completed.pending_action["tool"] == "patch_file"
+    original = dict(completed.pending_action)
     assert [name for name, _arguments in tools.calls] == [
         "read_file",
         "patch_file",
-        "read_file",
-        "patch_file",
     ]
+    assert tools.revision == 1
     reads = [
         item
         for item in completed.observations
         if item["kind"] == "tool" and item["tool"] == "read_file"
     ]
-    assert len(reads) == 2
-    assert reads[-1]["result"]["start_line"] == 20
-    assert reads[-1]["result"]["end_line"] == 30
+    assert len(reads) == 1
+    resumed = WorkHarness(tmp_path).resume(
+        created.run_id,
+        deliberator=lambda _context: pytest.fail(
+            "uncertain patch must not deliberate after restart"
+        ),
+        tools=tools,
+    )
+    assert resumed.state is RunState.RECOVERY_REQUIRED
+    assert resumed.pending_action == original
+    assert [name for name, _arguments in tools.calls] == ["read_file", "patch_file"]
+    assert tools.revision == 1
 
 
 def test_retryable_url_failure_is_bounded_to_three_attempts(tmp_path):
