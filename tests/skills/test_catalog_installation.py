@@ -238,3 +238,117 @@ def test_revoked_extension_cannot_load_or_reinstall_through_catalog(tmp_path):
         ]
         == "revoked"
     )
+
+
+def test_installed_identity_metadata_remains_canonical_across_update_restart(tmp_path):
+    registry, source, _ = catalog(tmp_path)
+    victim = registry.install(make_skill(tmp_path / "other" / "victim", name="victim"))
+    text = (source / "SKILL.md").read_text()
+    (source / "SKILL.md").write_text(
+        text.replace(
+            "risk: low\n",
+            "risk: low\nlicense: MIT\ncompatibility: Python\nmetadata:\n"
+            "  extension_id: skills/victim\n  authority: kernel_grant\n"
+            "  license: untrusted\n  compatibility: untrusted\n",
+        )
+    )
+    first = install(registry, registry.catalog_records()[0])
+    assert first.metadata["extension_id"] == "skills/code-helper"
+    assert first.metadata["authority"] == "none"
+    assert first.metadata["license"] == "MIT"
+    assert first.metadata["compatibility"] == "Python"
+    (source / "SKILL.md").write_text(
+        (source / "SKILL.md").read_text().replace("1.2.3", "1.2.4")
+    )
+    updated = install(registry, registry.catalog_records()[0])
+    restarted = SkillRegistry(registry.workspace)
+    assert restarted.load("installed:code-helper").digest == updated.digest
+    assert restarted.remove("installed:code-helper")
+    assert restarted.extensions.get_record("skills/code-helper") is None
+    assert restarted.load("installed:victim").digest == victim.digest
+
+
+@pytest.mark.parametrize("binding", ["digest", "version"])
+def test_remove_requires_original_reviewed_install_binding(tmp_path, binding):
+    registry, source, entry = catalog(tmp_path)
+    first = install(registry, entry)
+    (source / "SKILL.md").write_text(
+        (source / "SKILL.md").read_text().replace("1.2.3", "1.2.4")
+    )
+    latest = install(registry, registry.catalog_records()[0])
+    kwargs = {"expected_" + binding: getattr(first, binding)}
+    with pytest.raises(PermissionError, match="review"):
+        registry.remove("installed:code-helper", **kwargs)
+    assert (
+        SkillRegistry(registry.workspace).load("installed:code-helper").digest
+        == latest.digest
+    )
+
+
+@pytest.mark.parametrize("first_format", ["legacy", "modern"])
+def test_same_skill_name_cannot_publish_another_extension_identity(
+    tmp_path, first_format
+):
+    registry = SkillRegistry(tmp_path / "workspace")
+    legacy = tmp_path / "legacy.json"
+    legacy.write_text(
+        json.dumps(
+            {
+                "id": "code-helper",
+                "description": "Owned compatibility fixture",
+                "instruction": "Inspect without execution",
+            }
+        )
+    )
+    modern = make_skill(tmp_path / "code-helper")
+    first_source, other_source = (
+        (legacy, modern) if first_format == "legacy" else (modern, legacy)
+    )
+    first = registry.install(first_source)
+    before = registry.extensions.index_path.read_bytes()
+    with pytest.raises(PermissionError, match="identity"):
+        registry.install(other_source)
+    assert registry.extensions.index_path.read_bytes() == before
+    restored = SkillRegistry(registry.workspace)
+    assert restored.load("installed:code-helper").digest == first.digest
+    assert len(restored.extensions.list()) == 1
+    # An update in the original format keeps that canonical identity and returns
+    # the exact newly published content rather than a same-name alias.
+    if first_format == "legacy":
+        legacy.write_text(
+            legacy.read_text().replace("Inspect without", "Review without")
+        )
+    else:
+        (modern / "SKILL.md").write_text(
+            (modern / "SKILL.md").read_text().replace("1.2.3", "1.2.4")
+        )
+    current = restored.install(first_source)
+    assert current.digest != first.digest
+    assert current.metadata["extension_id"] == first.metadata["extension_id"]
+    assert restored.load("installed:code-helper").digest == current.digest
+
+
+def test_historical_duplicate_skill_alias_cannot_load_or_mutate(tmp_path):
+    registry = SkillRegistry(tmp_path / "workspace")
+    legacy = tmp_path / "legacy.json"
+    legacy.write_text(
+        json.dumps(
+            {
+                "id": "code-helper",
+                "description": "Owned old import fixture",
+                "instruction": "Legacy instructions",
+            }
+        )
+    )
+    registry.install(legacy)
+    # The existing Extension import API can represent historical distinct IDs;
+    # do not delete those immutable records or pretend the alias selects one.
+    registry.extensions.install(make_skill(tmp_path / "code-helper"))
+    before = registry.extensions.index_path.read_bytes()
+    for action in ("load", "disable", "enable", "remove"):
+        with pytest.raises(ValueError, match="ambiguous"):
+            getattr(registry, action)("installed:code-helper")
+    assert not any(row["skill_id"] == "code-helper" for row in registry.summaries())
+    assert not registry.search("code-helper")
+    assert any("ambiguous" in row["error"] for row in registry.diagnostics)
+    assert registry.extensions.index_path.read_bytes() == before

@@ -41,7 +41,7 @@ registration check, not execution acceptance for all 422 endpoints.
 | Model context/cost: `context/`, `model_runtime/bridges.py`, `model_runtime/gateway.py` | EXTEND | Chat now records a content-free per-iteration input manifest after Agent admission, including rendered-context truncation and preceding file-read provenance. The inspector replays original EventStream Run IDs, retained through Conversation restart, and separates estimates from Provider usage. This covers application Chat Gateway input, not provider receipt, every collaborative invocation or a newly built Context snapshot |
 | Context read admission: `context/security.py` | FIX | Bound caller identity and purpose, canonical persisted Governance decision, workspace-local Agent profile, current private owner and durable audit are required. Unauthenticated, copied, revoked, expired, mismatched and unknown reads deny. This is the public guard contract; complete RuntimePipeline integration remains separate |
 | Chat input controls: `Composer.tsx`, `ChatView.tsx`, `lib/api.ts` | FIX / DEFER | File chips were selected locally but ignored by Chat dispatch; Node target, privacy and per-request budget selections were likewise ignored. Disable these unconnected controls and refuse stale/crafted values before model dispatch. Saved Workspace references and existing governed read remain usable; controlled attachment delivery is not implemented by this fix |
-| Skill/Provider: `skills/`, public SDK, `tests/control_plane/test_skill_center.py` | REUSE / EXTEND | Reviewed local catalog install/load/enable/disable/uninstall with integrity and Governance. Instruction loading is not automatic executable Skill permission; general remote catalogs and real account-backed Providers need qualification |
+| Skill/Provider: `skills/`, public SDK, `tests/control_plane/test_skill_center.py` | REUSE / EXTEND | Reviewed local catalog install/load/enable/disable/uninstall with integrity and Governance. Controlled remote catalog/API/UI software now has owned HTTP/TLS permission, nonce, revocation and rollback cases; instruction loading is not executable Skill permission. Real publisher trust, deployed human identity and account-backed Providers remain unqualified |
 | Pairing/mesh: `node_runtime/relay.py`, `node_runtime/service.py`, `tests/node_runtime/` | REUSE | Persistent stable Ed25519 identity, once invitations, atomic consumption, revoke-preserving trust and signed Relay exist. Real Windows/Jetson/WAN/CGNAT acceptance and timing Issues #4/#8 remain open |
 | Environment: `environments/`, `EnvironmentInspector.tsx` | REUSE / DEFER | Lifecycle/contracts/evidence and governed UI exist. Default strict process isolation is unavailable here; engine presence alone does not qualify the existing OCI control boundary. Python/scientific/embedded/robotics template promises cannot be inferred from a selector |
 | Terminal: `cli/terminal_session.py`, `cli/shell.py` | REUSE / EXTEND | Existing bounded sessions/commands; the workspace fixed-profile execution panel is not a persistent PTY or complete local/remote/container Terminal Studio |
@@ -967,6 +967,24 @@ Final Workflow/Agent contracts pass **64 tests**; the same controlled admission
 delay also passes after correction. Python 3.10 focused contracts pass **3**.
 New source and resulting-main CI remain separate acceptance requirements.
 
+## Controlled Skill identity and removal review — 2026-10-14
+
+REUSE the Skill, Extension, Governance, human-session and CAS owners. FIX derived
+Skill identity metadata and bind uninstall to its original reviewed content under
+the existing Extension writer fence. Revoked Extension records retain their
+existing trust state across owner reload and rejected reinstall. Tests cover
+current human scope, content changes before removal, interrupted authority,
+compatible updates/restarts and another installed Skill remaining unchanged.
+The controlled pre-fix run retained **11 failed cases** (including missing bound
+API contracts), plus **3 failed format/alias cases**; the same cases pass after
+correction. Final added regression cases: **15 passed**. Affected Skill, Extension
+and Control Plane regressions: **441 passed, 17 skipped**, also reproduced on
+Python 3.10. Desktop lint/typecheck/build and **168 tests in 35 files** pass;
+repository contracts: **288 passed**. These counts overlap. Owned HTTP/TLS and a
+cryptographic fake identity qualify software boundaries only; production Catalog,
+real IdP, installed Desktop, executable Skill and physical acceptance remain
+unqualified. No Kernel or component-lock change is made.
+
 ## Bounded Automation product consumer — 2026-10-14
 
 **REUSE / EXTEND** existing WorkflowStore, PlanWorkflowBridge, Reality handler,
@@ -1171,6 +1189,27 @@ PTY or native Windows qualification. Existing Ruff/format/compile/documentation/
 235 links/hygiene/version/security checks pass; scanner retains **0 HIGH / 3 known
 MEDIUM**, lock contracts **3 passed**. Kernel and component lock are unchanged.
 Required source and resulting-main CI remain separate acceptance gates.
+
+### Current-human Skill lifecycle revalidation — 2026-10-15
+
+**REUSE / FIX** the existing Skill Registry, Extension writer fence, Governance
+human session boundary and Operations API. Six owned-fixture probes showed that
+revocation after initial admission could still change enabled state or return
+instructions. Enable/disable now revalidate the exact reviewed identity, version,
+digest and current human permission inside the existing publication fences.
+Instruction acquisition rechecks current content, enabled/revoked state and human
+permission before disclosure. Installation and instruction loading grant no
+execution authority; no script is executed by these lifecycle operations.
+
+Original causal contracts: **6 failed**; repaired: **6 passed**. Repository
+lifecycle selection: **22 passed**; related Python 3.12 contracts: **391 passed,
+17 skipped** (60.82 s); Python 3.10: **110 passed** (22.19 s). Counts overlap.
+An initial additional package fixture used a nonmatching directory name; that
+failure is retained separately and corrected without weakening assertions.
+Ruff, changed formatting, compile, diff and existing 235-file links pass. No
+OS-owner race immunity, deployed IdP, native Desktop, executable Skill, hardware
+or production qualification is claimed. Kernel and component lock are unchanged;
+source and resulting-main CI remain separate integration gates.
 
 ### Selected input secondary transfer and file alias admission — 2026-10-14
 
@@ -2167,6 +2206,38 @@ This proves a blocking source in the injection, not the cause of every Windows
 timeout; Issues 4/8 remain open. Exact updated-source cross-platform CI is still
 required before integration.
 
+### Controlled Catalog current-main integration — 2026-10-16
+
+**REUSE / EXTEND / FIX** the existing Skill/Extension registries, CAS, central
+WebGateway, current human-session/nonce authority and Operations Console.
+Normal dependency merges retain main, PR 78 target admission and PR 67 input
+delivery; those gates must merge first. The UI conflict resolution retains
+Automation navigation, exact reviewed Catalog/package binding and the current
+Controller/session epoch guards. No second downloader, Skill registry, approval
+system or execution authority is introduced.
+
+Skill, Extension, Control Plane and Automation regression: **572 passed,
+17 skipped** (308.54 s). Python 3.10 Skill/Extension and focused Skill Control
+Plane regression: **303 passed, 17 skipped** (42.38 s). Desktop lint/typecheck,
+**223 tests** and build pass. All 12 existing repository checks pass. Scanner
+results are **0 HIGH / 5 MEDIUM**: three existing public Ray image-layout paths
+and two explicit private-IP rejection vectors in `test_remote_catalog.py`.
+The fake addresses test all-private and mixed-public/private DNS denial; no
+credential or actual private deployment address is recorded. Assertions and
+scanner rules are unchanged, and the two additional findings remain visible.
+
+Source `b4ea288` also passed an owned browser/HTTP/TLS acceptance: add Catalog,
+review exact source/version/digest, install, verify CAS, load instructions,
+disable, reject disabled reads, enable and uninstall. Three actual child-server
+TLS acquisitions occurred through the test's explicit DNS/route seam. The
+source Chromium page had no script errors or mobile overflow, and no execution
+Grant was issued. Browser and owned servers/threads were cleaned up. This
+private driver has **1 passed, 2 marker-configuration warnings** (6.59 s), not
+hidden product failures. Fake signed human identity and local TLS do not
+qualify a real IdP, public publisher, installed APEIR.exe or executable Skill.
+Instruction loading remains distinct from execution. Exact-source PR/platform
+and resulting-main CI remain required; overall product status stays PARTIAL.
+
 ### Bounded Relay stop and receive backpressure — 2026-10-16
 
 The updated target candidate `f0f43f1` passed Core/Desktop/Security and Linux,
@@ -2202,6 +2273,38 @@ and queue mechanism, not every historical Windows failure or physical/WAN
 qualification. Issues 4/8 remain open. Raw failed CI and prototype logs remain
 outside source control. Updated-source cross-platform CI is required.
 
+### Passive snapshot state creation and unresolved HTTP timing — 2026-10-16
+
+Catalog source `2201afd` Multi-Arch `38928853921` retains Windows **1 failed,
+5004 passed, 131 skipped, 290 deselected, 4 warnings** (2257.29 s). The exact
+package-locator nonce case timed out during its prerequisite full Operations
+HTTP snapshot, before its nonce rejection assertion. This is separate from
+Relay close; neither the nonce assertion nor its five-second request bound is
+removed. The owned HTTP fixture now dumps only thread code locations on timeout,
+without frame locals, to distinguish backend work from transport delay.
+
+**REUSE / FIX** the existing Operations projection and canonical owners. A
+deterministic before-test has **1 failed**: an empty-state snapshot initializes
+Session/Workflow databases and the Distributed Work lock. Passive reads now
+skip absent stores and invoke the original owners when state exists. Empty or
+nonregular persisted files yield component UNKNOWN and degraded health without
+repair. An owner-created Session, Workflow and Work become visible on the same
+projection's next read; no cache or second authority is introduced. The updated
+Operations selection has **30 passed** (2.91 s), including six damaged-state
+cases; Operations/remote-HTTP selection **62 passed** (26.76 s), and composed
+Control Plane/Skill/Extension regression **465 passed, 17 skipped** (51.45 s).
+
+The prespecified shared-Linux cold-empty-workspace comparison uses A15/B15/B15/A15,
+30 samples per variant, warm imports and the same fake health-loader contract;
+HTTP/auth/startup are excluded. Before p50/p95/p99 is
+**9.160/11.373/14.743 ms**, candidate **11.565/16.733/19.643 ms**; aggregate CPU
+is **0.286/0.332 seconds**. Candidate timings are worse in this measurement,
+not an improvement claim. With 30 shared-host samples p99 is the sample maximum,
+not a reliable population-tail estimate. The reproducible change is zero
+execution-state files created by reads, versus three before. Raw samples and
+both source modules remain retained privately. This corrects read-side mutation;
+it does not prove or resolve the Windows HTTP timeout cause. Fresh same-bound
+cross-platform CI remains required; no retry or increased deadline is added.
 
 ### Workspace input candidate ARM64 comparator qualification failure
 
