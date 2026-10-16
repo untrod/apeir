@@ -548,11 +548,16 @@ def test_response_loss_restart_reconciles_persisted_result_and_fresh_observation
             assert first.node._workloads[WORK_ID]["receipt"]["operation_id"] == WORK_ID
             session_id = waiting.session_id
         async with simulation(tmp_path) as restored:
-            recovered = await asyncio.to_thread(
-                restored.coordinator.resume_plan,
-                session_id,
-                handlers={"reality.operation": restored.handler},
-            )
+            if expected_count:
+                recovered = await resume_after_terminal_observation_delivery(
+                    restored, session_id
+                )
+            else:
+                recovered = await asyncio.to_thread(
+                    restored.coordinator.resume_plan,
+                    session_id,
+                    handlers={"reality.operation": restored.handler},
+                )
             assert restored.work().state is expected_state
             assert restored.provider.execution_count(WORK_ID) == expected_count
             if expected_count:
@@ -571,6 +576,52 @@ def test_response_loss_restart_reconciles_persisted_result_and_fresh_observation
     asyncio.run(scenario())
     if ack_interleaving:
         assert len(interleavings) == 1
+
+
+def test_response_loss_restart_follows_each_original_read_before_continuation(
+    tmp_path, monkeypatch
+):
+    active = {}
+    held_reads = []
+    start = Simulation.start
+    send = NodeRelayClient._send
+
+    async def remember_simulation(self):
+        active["simulation"] = self
+        return await start(self)
+
+    async def hold_observation(self, websocket, message_type, payload, **kwargs):
+        acquisition_id = str(payload.get("workload_id", ""))
+        if (
+            message_type == "WORKLOAD_STATUS"
+            and acquisition_id.startswith("observe_")
+            and len(held_reads) < 2
+        ):
+            sim = active["simulation"]
+            session = sim.coordinator.store.list()[0]
+            await wait_for(
+                lambda: (
+                    sim.coordinator.require(session.session_id).error
+                    == "distributed Workflow Work timed out: " + acquisition_id
+                )
+            )
+            assert sim.work().state is DistributedWorkState.VERIFIED
+            assert sim.provider.execution_count(WORK_ID) == 1
+            held_reads.append(acquisition_id)
+        return await send(self, websocket, message_type, payload, **kwargs)
+
+    monkeypatch.setattr(Simulation, "start", remember_simulation)
+    monkeypatch.setattr(NodeRelayClient, "_send", hold_observation)
+    test_response_loss_restart_reconciles_persisted_result_and_fresh_observation_without_replay(
+        tmp_path,
+        monkeypatch,
+        SimulationFault.EFFECT_THEN_RESPONSE_LOST,
+        1,
+        DistributedWorkState.COMMITTED,
+        True,
+    )
+    assert len(held_reads) == 2
+    assert len(held_reads) == len(set(held_reads))
 
 
 def test_device_available_event_wakes_restored_session_and_resumes_same_workflow(

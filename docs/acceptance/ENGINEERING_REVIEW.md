@@ -1545,6 +1545,33 @@ are rerun before publishing the correction. The failed full CI is not relabelled
 as a baseline environment failure or erased.
 
 
+### Process startup observation consistency — 2026-10-16
+
+Main `b71a766` Multi-Arch `38860036017`, Windows job `116839996688`, retains
+**1 failed, 4673 passed, 60 skipped, 272 deselected, 4 warnings** (1379.91 s).
+The unproven-host binding case remained RECOVERY_REQUIRED/stdin unavailable,
+but returned host-state-missing instead of the required helper-identity-changed
+reason. The exact error assertion is preserved, not broadened to accept either.
+
+**REUSE / FIX** Distribution ProcessSessionStore and its existing host projection,
+OS creation identity checks, journals, controls and deadlines. Startup had read a
+ready record, then called status to read another record before classifying it.
+A controlled missing second sample using the real process reproduces both the
+original identity assertion and loss of a valid startup sample (**2 failed**).
+One poll now projects its exact observed record with the same current OS identity
+checks. Subsequent status/control calls still read again. A separate negative
+proves later missing state returns RECOVERY_REQUIRED, denies stdin and publishes
+no control despite the earlier valid RUNNING snapshot. Original single-launch,
+wrong-identity and no-control/replay assertions remain unchanged. All original
+startup test-function ASTs are unchanged. No change under `nous_runtime/kernel`,
+no 10-second deadline increase, new store, process retry or isolation fallback.
+
+Startup selection has **11 passed** on Python 3.12 (19.40 s), **11 passed** on
+Python 3.10 (19.49 s). Full related regressions and exact-head CI are required.
+This reproduces the double-sample failure class; the cause of the Windows file
+read intermittency itself remains unestablished. It does not qualify a persistent
+PTY, strong product sandbox, installed Desktop or production release.
+
 Automation source `2bc4166` Core `38857348310` retains Windows **1 failed,
 5104 passed, 60 skipped, 4 warnings** (1999.26 s): the device-disconnect test
 asserted Controller FAILED while its original terminal result had not yet
@@ -1565,3 +1592,21 @@ cases pass on Python 3.12 (1.16 s) and 3.10 (1.17 s). The full Reality suite has
 10-second production waits nor the existing 60-second CI limit changes.
 This demonstrates an asynchronous projection assumption, not the cause of
 Windows delay or a completed performance/physical/network qualification.
+
+
+Source `5b7d6a2` Multi-Arch `38863786127` retains Windows **1 failed,
+4696 passed, 60 skipped, 272 deselected, 4 warnings** (1520.21 s). The
+response-loss/restart case returned VERIFIED after a single Workflow Resume,
+before independent observation completion. The original terminal assertions
+remain; a controlled hold of each of two actual read results reproduces the
+one-resume assumption (**1 failed**, 17.02 s). Success-path continuation now
+reuses the existing exact-read receipt/reconciliation helper. The no-effect
+lost-response case still takes its original failure path, and ACK interleaving,
+same original Work, MATCH, one observation, state change and effect-count checks
+are retained. Five immediate/held recovery cases pass on Python 3.12 (23.41 s) and Python
+3.10 (23.60 s). The final
+full Reality regression has **119 passed** (122.73 s); the controlled case also
+requires two distinct held read acquisitions.
+This corrects another test consumer of the asynchronous contract; no production
+wait, retry, process startup deadline or execution authority changes. Fresh
+cross-platform CI is required; the failed run is not relabelled as successful.
