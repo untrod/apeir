@@ -1386,3 +1386,24 @@ record is retained separately and the corrected cleanup reproduces the same
 single assertion failure. Final source Desktop lint/typecheck/test/build:
 **180 passed in 38 files** (44.80 s). These are observed UI callback/correctness
 contracts, not measured task latency, Token savings or native UI qualification.
+
+
+### Connector explicit admission contract — 2026-10-16
+
+**REUSE / FIX** the exported Connector library and existing Governance decision;
+no new API, policy or execution authority. An adapter write now requires both
+EXECUTE and explicit boolean `allowed=True`. Controlled decision probes before
+the fix retained **9 failed, 1 passed**: five missing/false/nonboolean admission
+flags reached the mock adapter, while absent/invalid modes could raise instead
+of returning the existing denial result. The valid canonical decision still
+executes once. A first invocation used the wrong checkout and selected no tests;
+that orchestration error is not counted as a reproduction.
+
+The original nine Connector tests, including the unchanged timeout bound, and
+the ten decision probes have **19 passed** on Python 3.12 (0.22 s), **19 passed**
+on Python 3.10 (0.25 s). Governance/Connector/Workflow safety regression has
+**275 passed** (6.58 s). The previous Connector wall-time failure remains
+unexplained; no health-I/O, timeout, retry or persistence setting changes here.
+The library export has no current Desktop consumer; these tests do not qualify
+a live enterprise service, credentials, physical effects or complete product
+integration. Exact-source checks and normal PR integration remain required.
