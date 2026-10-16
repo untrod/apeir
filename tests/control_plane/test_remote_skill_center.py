@@ -85,6 +85,14 @@ def remote_http(plane, tls_catalog, monkeypatch):
             result = json.loads(response.read())
             assert response.headers["Cache-Control"] == "no-store"
             return result
+        except TimeoutError:
+            # Preserve the original five-second deadline. A client traceback
+            # alone cannot distinguish Runtime auth/store work from transport
+            # delay; capture only thread code locations, never frame locals.
+            import faulthandler
+
+            faulthandler.dump_traceback()
+            raise
         finally:
             connection.close()
 

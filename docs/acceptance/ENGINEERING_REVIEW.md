@@ -2340,3 +2340,71 @@ hidden product failures. Fake signed human identity and local TLS do not
 qualify a real IdP, public publisher, installed APEIR.exe or executable Skill.
 Instruction loading remains distinct from execution. Exact-source PR/platform
 and resulting-main CI remain required; overall product status stays PARTIAL.
+
+### Bounded Relay stop and receive backpressure — 2026-10-16
+
+The updated target candidate `f0f43f1` passed Core/Desktop/Security and Linux,
+but Multi-Arch `38927399914` retains Windows **1 failed, 4830 passed,
+60 skipped, 272 deselected, 4 warnings** (1986.70 s). The prior held-observation
+case passed. This failure is the original Artifact/lease/stop test's unchanged
+two-second shutdown bound, waiting for WebSocket close completion.
+
+**REUSE / FIX** the existing Node Relay, protocol flow control, durable sequence
+guard and original Node journal. Two controlled real-loopback tests reproduce
+idle receive waiting beyond stop and a full receive queue hiding the peer's
+close frame: **2 failed** (62.72 s). An independent accepted-main idle probe has
+**1 failed** (2.78 s). No test or production deadline was enlarged. Stop now
+wakes idle receive; closure drains raw frames solely to finish the existing
+handshake. Buffered commands are not decoded, acknowledged or executed, and
+Controller pending Work remains available for original-journal reconciliation.
+
+The first implementation cancelled an already admitted result send; combined
+regression retained **1 failed, 398 passed** (131.55 s) in the existing revocation
+test. That prototype is rejected. Requested stop now preserves an active
+message's original completion/publication; explicit transport cancellation
+retains existing journal ownership and drains durable writes. The unmodified
+revocation/result-denial check passes. Final Node/Reality/target regression:
+**399 passed** (126.25 s); Python 3.10 shutdown/I/O/reconciliation selection:
+**57 passed** (5.96 s). Ten focused original-control, revocation and stop cases
+pass (1.67 s), and eight shutdown cases additionally require clean close code,
+no remaining Relay tasks, no new Node execution and retained pending Work
+(1.42 s). Counts overlap and are not summed.
+
+The ordinary PID64, memory/network/filesystem, identity, signing, replay and
+effect-verification boundaries are unchanged. This proves the controlled stop
+and queue mechanism, not every historical Windows failure or physical/WAN
+qualification. Issues 4/8 remain open. Raw failed CI and prototype logs remain
+outside source control. Updated-source cross-platform CI is required.
+
+### Passive snapshot state creation and unresolved HTTP timing — 2026-10-16
+
+Catalog source `2201afd` Multi-Arch `38928853921` retains Windows **1 failed,
+5004 passed, 131 skipped, 290 deselected, 4 warnings** (2257.29 s). The exact
+package-locator nonce case timed out during its prerequisite full Operations
+HTTP snapshot, before its nonce rejection assertion. This is separate from
+Relay close; neither the nonce assertion nor its five-second request bound is
+removed. The owned HTTP fixture now dumps only thread code locations on timeout,
+without frame locals, to distinguish backend work from transport delay.
+
+**REUSE / FIX** the existing Operations projection and canonical owners. A
+deterministic before-test has **1 failed**: an empty-state snapshot initializes
+Session/Workflow databases and the Distributed Work lock. Passive reads now
+skip absent stores and invoke the original owners when state exists. Empty or
+nonregular persisted files yield component UNKNOWN and degraded health without
+repair. An owner-created Session, Workflow and Work become visible on the same
+projection's next read; no cache or second authority is introduced. The updated
+Operations selection has **30 passed** (2.91 s), including six damaged-state
+cases; Operations/remote-HTTP selection **62 passed** (26.76 s), and composed
+Control Plane/Skill/Extension regression **465 passed, 17 skipped** (51.45 s).
+
+The prespecified shared-Linux cold-empty-workspace comparison uses A15/B15/B15/A15,
+30 samples per variant, warm imports and the same fake health-loader contract;
+HTTP/auth/startup are excluded. Before p50/p95/p99 is
+**9.160/11.373/14.743 ms**, candidate **11.565/16.733/19.643 ms**; aggregate CPU
+is **0.286/0.332 seconds**. Candidate timings are worse in this measurement,
+not an improvement claim. With 30 shared-host samples p99 is the sample maximum,
+not a reliable population-tail estimate. The reproducible change is zero
+execution-state files created by reads, versus three before. Raw samples and
+both source modules remain retained privately. This corrects read-side mutation;
+it does not prove or resolve the Windows HTTP timeout cause. Fresh same-bound
+cross-platform CI remains required; no retry or increased deadline is added.

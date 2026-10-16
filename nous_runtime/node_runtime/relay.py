@@ -2118,111 +2118,159 @@ class NodeRelayClient:
             ping_interval=self.heartbeat_seconds,
             ping_timeout=self.heartbeat_seconds * 2,
         ) as websocket:
-            self._session_phase = "register"
-            authentication_started = time.monotonic()
-            await self._send(
-                websocket,
-                "REGISTER",
+            stopping = asyncio.create_task(stop_event.wait(), name="apeir-relay-stop")
+            session = asyncio.create_task(
+                self._run_connected_session(
+                    websocket, stop_event, connection_started, stopping
+                ),
+                name="apeir-relay-session",
+            )
+            try:
+                # Stop interrupts idle receive, not an admitted Operation or
+                # its original result publication. External cancellation keeps
+                # the established Node journal ownership semantics.
+                await session
+            finally:
+                session.cancel()
+                stopping.cancel()
+                # Transport cancellation cannot release an unfinished durable
+                # writer; the existing session I/O guard drains that writer.
+                # Node execution ownership remains in the original Node journal.
+                await asyncio.gather(session, stopping, return_exceptions=True)
+                await self._close_transport(websocket)
+
+    async def _close_transport(self, websocket: Any) -> None:
+        async def discard_frames():
+            try:
+                while True:
+                    await websocket.recv()
+            except ConnectionClosed:
+                pass
+
+        # A full application receive queue can pause socket reads and hide the
+        # peer's close frame. Drain bytes only: after stop, no queued command is
+        # decoded, acknowledged, admitted or executed. Controller pending Work
+        # and the original Node execution journal remain reconciliation owners.
+        drain = asyncio.create_task(discard_frames(), name="apeir-relay-close-drain")
+        try:
+            await websocket.close()
+        finally:
+            drain.cancel()
+            await asyncio.gather(drain, return_exceptions=True)
+
+    async def _run_connected_session(
+        self,
+        websocket: Any,
+        stop_event: asyncio.Event,
+        connection_started: float,
+        stopping: asyncio.Task,
+    ) -> None:
+        self._session_phase = "register"
+        authentication_started = time.monotonic()
+        await self._send(
+            websocket,
+            "REGISTER",
+            {
+                "node_id": self.service.identity.node_id,
+                "identity": self.service.identity.to_dict(),
+                "supported_versions": [NODE_PROTOCOL_VERSION],
+                "resume_session_id": await self._run_session_io(self._load_session_id),
+            },
+        )
+        welcome = await self._receive(websocket, stopping=stopping)
+        if welcome is None:
+            return
+        if (
+            welcome.message_type != "ACK"
+            or welcome.payload.get("acknowledged") != "REGISTER"
+        ):
+            raise NodeProtocolError("relay did not accept node registration")
+        authenticated_at = time.monotonic()
+        await self._run_session_io(
+            self._save_session_id, str(welcome.payload["session_id"])
+        )
+        status = await _run_relay_io(self._probe_status)
+        if status is not None:
+            self._session_phase = "initial-reports"
+            await self._send(websocket, "RESOURCE_REPORT", status["resources"])
+            await self._send(websocket, "DEVICE_REPORT", {"devices": status["devices"]})
+            self.service._emit(
+                "node.relay.authenticated",
                 {
-                    "node_id": self.service.identity.node_id,
-                    "identity": self.service.identity.to_dict(),
-                    "supported_versions": [NODE_PROTOCOL_VERSION],
-                    "resume_session_id": await self._run_session_io(
-                        self._load_session_id
-                    ),
+                    "controller_key_sha256": hashlib.sha256(
+                        bytes.fromhex(self.server_public_key)
+                    ).hexdigest(),
+                    "transport": "wss"
+                    if self.relay_url.startswith("wss:")
+                    else "ws-loopback",
+                    "clock": "node-local-monotonic",
+                    "connect_seconds": authentication_started - connection_started,
+                    "authenticate_seconds": authenticated_at - authentication_started,
+                    "initial_probe_and_report_send_seconds": time.monotonic()
+                    - authenticated_at,
+                    "report_delivery_confirmed": False,
                 },
             )
-            welcome = await self._receive(websocket)
-            if (
-                welcome.message_type != "ACK"
-                or welcome.payload.get("acknowledged") != "REGISTER"
-            ):
-                raise NodeProtocolError("relay did not accept node registration")
-            authenticated_at = time.monotonic()
-            await self._run_session_io(
-                self._save_session_id, str(welcome.payload["session_id"])
-            )
-            status = await _run_relay_io(self._probe_status)
-            if status is not None:
-                self._session_phase = "initial-reports"
-                await self._send(websocket, "RESOURCE_REPORT", status["resources"])
-                await self._send(
-                    websocket, "DEVICE_REPORT", {"devices": status["devices"]}
-                )
-                self.service._emit(
-                    "node.relay.authenticated",
-                    {
-                        "controller_key_sha256": hashlib.sha256(
-                            bytes.fromhex(self.server_public_key)
-                        ).hexdigest(),
-                        "transport": "wss"
-                        if self.relay_url.startswith("wss:")
-                        else "ws-loopback",
-                        "clock": "node-local-monotonic",
-                        "connect_seconds": authentication_started - connection_started,
-                        "authenticate_seconds": authenticated_at
-                        - authentication_started,
-                        "initial_probe_and_report_send_seconds": time.monotonic()
-                        - authenticated_at,
-                        "report_delivery_confirmed": False,
-                    },
-                )
-            device_digest = _payload_digest(status["devices"]) if status else ""
-            loop = asyncio.get_running_loop()
-            next_heartbeat = loop.time() + self.heartbeat_seconds
+        device_digest = _payload_digest(status["devices"]) if status else ""
+        loop = asyncio.get_running_loop()
+        next_heartbeat = loop.time() + self.heartbeat_seconds
 
-            while not stop_event.is_set():
-                self._session_phase = "receive"
-                timeout = max(next_heartbeat - loop.time(), 0.001)
-                try:
-                    raw = await asyncio.wait_for(websocket.recv(), timeout=timeout)
-                except asyncio.TimeoutError:
-                    pass
-                else:
-                    envelope = NodeProtocolEnvelope.from_json(raw)
-                    if envelope.source != CONTROL_PLANE_ID:
-                        raise NodeProtocolError("unexpected message source")
-                    if envelope.target != self.service.identity.node_id:
-                        raise NodeProtocolError("message addressed to another node")
-                    if not envelope.verify(self.server_public_key):
-                        raise NodeProtocolError(
-                            "control-plane signature verification failed"
-                        )
-                    self._replay.accept(envelope)
-                    self._session_phase = "message"
-                    await self._handle_message(
-                        websocket, envelope, reconcile_only=status is None
+        while not stop_event.is_set():
+            self._session_phase = "receive"
+            timeout = max(next_heartbeat - loop.time(), 0.001)
+            try:
+                raw = await self._receive_raw_or_stop(websocket, stopping, timeout)
+            except asyncio.TimeoutError:
+                pass
+            else:
+                if raw is None:
+                    break
+                envelope = NodeProtocolEnvelope.from_json(raw)
+                if envelope.source != CONTROL_PLANE_ID:
+                    raise NodeProtocolError("unexpected message source")
+                if envelope.target != self.service.identity.node_id:
+                    raise NodeProtocolError("message addressed to another node")
+                if not envelope.verify(self.server_public_key):
+                    raise NodeProtocolError(
+                        "control-plane signature verification failed"
                     )
-                if loop.time() < next_heartbeat:
-                    continue
-                status = await _run_relay_io(
-                    self._probe_status, tolerate_failure=status is None
+                self._replay.accept(envelope)
+                self._session_phase = "message"
+                await self._handle_message(
+                    websocket, envelope, reconcile_only=status is None
                 )
-                if status is None:
-                    next_heartbeat = loop.time() + self.heartbeat_seconds
-                    continue
-                self._session_phase = "heartbeat"
+            if stop_event.is_set():
+                break
+            if loop.time() < next_heartbeat:
+                continue
+            status = await _run_relay_io(
+                self._probe_status, tolerate_failure=status is None
+            )
+            if status is None:
+                next_heartbeat = loop.time() + self.heartbeat_seconds
+                continue
+            self._session_phase = "heartbeat"
+            await self._send(
+                websocket,
+                "HEARTBEAT",
+                {
+                    "node_id": self.service.identity.node_id,
+                    "status": "ONLINE",
+                    "heartbeat_sequence": status["heartbeat_sequence"],
+                },
+            )
+            # A successful probe renews resource freshness even when its
+            # payload is unchanged; a heartbeat cannot renew old resources.
+            await self._send(websocket, "RESOURCE_REPORT", status["resources"])
+            next_device_digest = _payload_digest(status["devices"])
+            if next_device_digest != device_digest:
                 await self._send(
                     websocket,
-                    "HEARTBEAT",
-                    {
-                        "node_id": self.service.identity.node_id,
-                        "status": "ONLINE",
-                        "heartbeat_sequence": status["heartbeat_sequence"],
-                    },
+                    "DEVICE_REPORT",
+                    {"devices": status["devices"]},
                 )
-                # A successful probe renews resource freshness even when its
-                # payload is unchanged; a heartbeat cannot renew old resources.
-                await self._send(websocket, "RESOURCE_REPORT", status["resources"])
-                next_device_digest = _payload_digest(status["devices"])
-                if next_device_digest != device_digest:
-                    await self._send(
-                        websocket,
-                        "DEVICE_REPORT",
-                        {"devices": status["devices"]},
-                    )
-                    device_digest = next_device_digest
-                next_heartbeat = loop.time() + self.heartbeat_seconds
+                device_digest = next_device_digest
+            next_heartbeat = loop.time() + self.heartbeat_seconds
 
     def _probe_status(self, *, tolerate_failure: bool = True) -> dict[str, Any] | None:
         self._session_phase = "host-probe"
@@ -2404,8 +2452,33 @@ class NodeRelayClient:
         ).sign(self.service.load_private_key())
         return envelope.to_json()
 
-    async def _receive(self, websocket: Any) -> NodeProtocolEnvelope:
-        raw = await asyncio.wait_for(websocket.recv(), timeout=10.0)
+    async def _receive_raw_or_stop(self, websocket, stopping, timeout):
+        receiver = asyncio.create_task(websocket.recv(), name="apeir-relay-receive")
+        try:
+            done, _ = await asyncio.wait(
+                (receiver, stopping),
+                timeout=timeout,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if stopping in done:
+                return None
+            if receiver in done:
+                return receiver.result()
+            raise asyncio.TimeoutError
+        finally:
+            receiver.cancel()
+            await asyncio.gather(receiver, return_exceptions=True)
+
+    async def _receive(
+        self, websocket: Any, *, stopping=None
+    ) -> NodeProtocolEnvelope | None:
+        raw = (
+            await asyncio.wait_for(websocket.recv(), timeout=10.0)
+            if stopping is None
+            else await self._receive_raw_or_stop(websocket, stopping, 10.0)
+        )
+        if raw is None:
+            return None
         envelope = NodeProtocolEnvelope.from_json(raw)
         if not envelope.verify(self.server_public_key):
             raise NodeProtocolError("control-plane signature verification failed")

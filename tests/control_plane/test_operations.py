@@ -62,6 +62,9 @@ def test_projection_is_authoritative_and_does_not_provision_controller(plane):
     assert data["health"]["degraded"]
     assert data["health"]["components"][0]["status"] == "UNKNOWN"
     assert not (view.controller_state / "identity.ed25519.pem").exists()
+    assert not (view.root / ".nous" / "agent_sessions.db").exists()
+    assert not (view.root / ".nous" / "workflows.db").exists()
+    assert not (view.controller_state / "distributed-works.lock").exists()
     assert set(data) >= {
         "agents",
         "workflows",
@@ -73,6 +76,82 @@ def test_projection_is_authoritative_and_does_not_provision_controller(plane):
         "activity",
         "incidents",
     }
+
+
+def test_projection_observes_canonical_owners_created_after_empty_read(plane):
+    from nous_runtime.agent.session import AgentSession, AgentSessionStore
+    from nous_runtime.node_runtime.distributed_work import (
+        DistributedWork,
+        DistributedWorkStore,
+    )
+    from nous_runtime.workflow.models import (
+        WorkflowDefinition,
+        WorkflowRun,
+        WorkflowStep,
+        StepType,
+        TriggerType,
+    )
+    from nous_runtime.workflow.store import WorkflowStore
+
+    view, _, _ = plane
+    empty = view.snapshot()
+    assert empty["agents"] == empty["works"] == empty["workflows"] == []
+    session = AgentSession.create(
+        agent_id="projection-agent",
+        model="not_invoked",
+        objective="Observe durable state",
+    )
+    AgentSessionStore(view.root).save(session)
+    work = DistributedWorkStore(view.controller_state).create(
+        DistributedWork(intent="Pending only; no execution")
+    )
+    workflows = WorkflowStore(view.root)
+    definition = WorkflowDefinition(
+        "projection-only",
+        "1",
+        TriggerType.MANUAL,
+        (WorkflowStep("inspect", StepType.CAPABILITY, "not_invoked"),),
+    )
+    workflows.put_definition(definition)
+    run = workflows.create_run(
+        WorkflowRun(definition.workflow_id, definition.version, {})
+    )
+    observed = view.snapshot()
+    assert [row["session_id"] for row in observed["agents"]] == [session.session_id]
+    assert [row["work_id"] for row in observed["works"]] == [work.work_id]
+    assert [row["run_id"] for row in observed["workflows"]] == [run.run_id]
+    assert observed["works"][0]["state"] == "CREATED"
+    assert observed["workflows"][0]["state"] == "pending"
+
+
+@pytest.mark.parametrize(
+    "component,path",
+    [
+        ("agents", "agent_sessions.db"),
+        ("workflows", "workflows.db"),
+        ("works", "relay/distributed-works.json"),
+    ],
+)
+@pytest.mark.parametrize("damage", ["empty", "directory"])
+def test_projection_does_not_repair_or_hide_invalid_persisted_state(
+    plane, component, path, damage
+):
+    view, _, _ = plane
+    target = view.root / ".nous" / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if damage == "empty":
+        target.write_bytes(b"")
+    else:
+        target.mkdir()
+    result = view.snapshot()
+    assert result[component] == []
+    assert {
+        "component": component,
+        "status": "UNKNOWN",
+        "error_type": "ValueError",
+    } in result["health"]["components"]
+    assert result["health"]["degraded"] is True
+    assert target.read_bytes() == b"" if damage == "empty" else target.is_dir()
 
 
 @pytest.mark.parametrize("answer", ["approve_once", "deny"])
