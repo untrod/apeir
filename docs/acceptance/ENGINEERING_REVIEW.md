@@ -1483,3 +1483,30 @@ Observation restart case ended WAITING instead of COMPLETED; its original
 assertion and failure remain, with cause unestablished. This diagnostic branch
 is not acceptance and must not merge. No production timeout, Connector assertion
 or effect verification is relaxed.
+
+
+Spool source `32f3c7d` passed four-platform Core `38856754480`, including Windows
+**4994 passed, 60 skipped, 4 warnings** (1515.80 s), but Multi-Arch `38856756820`
+retains Windows **1 failed, 4681 passed, 60 skipped, 272 deselected, 4 warnings**
+(1505.06 s). The delayed Observation restart case returned WAITING on a new
+independent read after its first held read had completed. It did not commit
+without observation. The production spool/Node implementation remains unchanged
+from that source; the failed Windows run is not treated as acceptance.
+
+A controlled second signed-read hold reproduces the same WAITING-versus-COMPLETED
+assertion with the old test driver (**1 failed**). That driver followed only one
+paused acquisition and assumed the next resume must finish synchronously. It
+now follows each distinct exact read's terminal signed evidence before another
+continuation, checking original Workflow, device, Node, capability, Artifact and
+mutation bindings at every pause. Missing read evidence still blocks; repeated
+already-consumed read IDs fail rather than spin. The existing final COMMITTED,
+MATCH, original Workflow and effect-count-one assertions remain, and both held
+observations are excluded from the final fresh verification. The original
+`delayed` and `missing` case IDs are preserved; `delayed-again` adds the second
+controlled pause. Production waits (including three seconds), receipt waits and
+retry settings do not change. The test driver also has the existing CI's
+60-second bound; it does not increase that CI limit. Python 3.10 recovery-driver
+selection: **9 passed** (41.68 s), including missing result and producer-failure
+cases. Fresh exact-head CI remains required. This corrects a demonstrated test
+consumer assumption, not an established root cause of Windows storage latency
+or proof that no runtime race exists. Issues #4/#8 remain open.

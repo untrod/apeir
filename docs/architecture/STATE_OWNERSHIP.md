@@ -264,3 +264,12 @@ even if the Node was revoked before Controller restart. A changed retry cannot
 borrow that result or overwrite it with rejection. Neither recovery nor the
 previous approval restores trust; a new workload still fails the current
 revocation check. Reading an execution fact does not establish an effect MATCH.
+
+
+Workflow continuation is not a synchronous-completion promise. After one
+independent read's original signed result is reconciled, finalization can admit a
+new fresh read and pause again on its bounded wait. A consumer follows each exact
+read's terminal evidence before continuing the same Workflow; absent receipts
+remain WAITING and do not trigger mutation replay. A previous read's completion
+is not MATCH for a later acquisition. Neither longer retries nor historical
+resource reports replace that evidence.
