@@ -486,12 +486,14 @@ def create_mcp_server(runtime_url, token):
     async def work_status(
         run_id: str, owner: Literal["work-harness", "distributed"] = "work-harness"
     ):
+        """Read original Work from its explicit owner; never resume or execute it."""
         return await forward("apeir.work.status", {"run_id": run_id, "owner": owner})
 
     @server.tool(name="apeir.evidence.read", annotations=read)
     async def evidence_read(
         run_id: str, owner: Literal["work-harness", "distributed"] = "work-harness"
     ):
+        """Read original evidence/state references; receipts do not prove observed effects."""
         return await forward("apeir.evidence.read", {"run_id": run_id, "owner": owner})
 
     return server
