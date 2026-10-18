@@ -128,6 +128,11 @@ non-dispatch remains zero. Cancelling the parent cancels and joins its original
 children and retains their unsettled accounting. This does not qualify durable
 replay of an entire parallel parent request: do not resubmit a lost fan-out as a
 new invocation; inspect original request/Work evidence first.
+Parallel numeric limits reject ambiguous types and non-finite values; a zero
+aggregate cost/token budget prevents even the first child dispatch. Positive
+aggregate budgets stop later admission and cancel pending work, but cannot undo
+charges from concurrent requests already dispatched. Per-request/daily budget
+reservations remain owned by CostController; this is not a vendor billing cap.
 
 The Desktop's public model list projects the active Gateway registry. Declared
 availability is not a successful health probe; absent benchmark price/latency

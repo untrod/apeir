@@ -56,6 +56,49 @@ def add_model(
     )
 
 
+@pytest.mark.parametrize(
+    "field,invalid",
+    [
+        (field, invalid)
+        for field in ("max_candidates", "max_concurrency", "min_successes")
+        for invalid in (True, 0, -1, 1.5, "2")
+    ]
+    + [
+        (field, invalid)
+        for field in ("max_total_cost_usd", "timeout_s")
+        for invalid in (True, float("nan"), float("inf"), float("-inf"), "1")
+    ]
+    + [("max_total_tokens", invalid) for invalid in (True, -1, 1.5, "2")],
+)
+def test_parallel_policy_rejects_ambiguous_numeric_bounds(field, invalid):
+    with pytest.raises(ModelInvocationError):
+        ParallelInvocationPolicy(**{field: invalid})
+
+
+@pytest.mark.parametrize("field", ["max_total_cost_usd", "max_total_tokens"])
+def test_parallel_zero_budget_prevents_first_provider_dispatch(field):
+    async def scenario():
+        registry = ModelRuntimeRegistry()
+        add_model(registry, "a", "a")
+        adapters = ModelAdapterRegistry()
+        adapter = MockModelAdapter(content="must not execute")
+        adapter.backend_id = "a"
+        adapters.register(adapter)
+        gateway = ModelGateway(registry, adapters)
+        result = await gateway.invoke_parallel(
+            ModelRequest(task_id="zero-budget"),
+            policy=ParallelInvocationPolicy(**{field: 0}),
+        )
+        assert adapter.invocations == []
+        assert gateway.scheduler.active_leases() == ()
+        assert not result.successful and result.responses == ()
+        assert result.cancelled_models == ("a",)
+        assert result.total_cost_usd == result.total_tokens == 0
+        assert "parallel invocation budget exhausted" in result.failures
+
+    asyncio.run(scenario())
+
+
 def test_gateway_falls_back_and_records_safe_observability() -> None:
     async def scenario() -> None:
         registry = ModelRuntimeRegistry()

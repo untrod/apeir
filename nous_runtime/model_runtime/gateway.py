@@ -9,6 +9,7 @@ import inspect
 import ipaddress
 import json
 import logging
+import math
 import os
 import re
 import threading
@@ -64,18 +65,35 @@ class ParallelInvocationPolicy:
     min_successes: int = 1
 
     def __post_init__(self) -> None:
-        if self.max_candidates < 1 or self.max_concurrency < 1:
+        for name in ("max_candidates", "max_concurrency", "min_successes"):
+            value = getattr(self, name)
+            if type(value) is not int or value < 1:
+                raise ModelInvocationError(
+                    f"parallel {name} must be a positive integer"
+                )
+        if self.max_total_tokens is not None and (
+            type(self.max_total_tokens) is not int or self.max_total_tokens < 0
+        ):
             raise ModelInvocationError(
-                "parallel candidate and concurrency limits must be positive"
+                "parallel token budget must be a non-negative integer"
             )
-        if self.min_successes < 1:
-            raise ModelInvocationError("parallel min_successes must be positive")
-        if self.max_total_cost_usd is not None and self.max_total_cost_usd < 0:
-            raise ModelInvocationError("parallel cost budget must be non-negative")
-        if self.max_total_tokens is not None and self.max_total_tokens < 0:
-            raise ModelInvocationError("parallel token budget must be non-negative")
-        if self.timeout_s is not None and self.timeout_s <= 0:
-            raise ModelInvocationError("parallel timeout must be positive")
+        for name in ("max_total_cost_usd", "timeout_s"):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            try:
+                valid = (
+                    not isinstance(value, bool)
+                    and isinstance(value, (int, float))
+                    and math.isfinite(value)
+                    and (value > 0 if name == "timeout_s" else value >= 0)
+                )
+            except OverflowError:
+                valid = False
+            if not valid:
+                raise ModelInvocationError(
+                    f"parallel {name} has an invalid numeric bound"
+                )
 
 
 @dataclass(frozen=True)
@@ -566,13 +584,16 @@ class ModelGateway:
                 model_for_task[task] = model_id
                 pending.add(task)
 
-        launch_available()
         responses_by_model: dict[str, ModelResponse] = {}
         failures: list[str] = []
         total_cost = 0.0
         total_tokens = 0
         unknown_cost = unknown_tokens = False
-        budget_exhausted = False
+        budget_exhausted = (
+            active_policy.max_total_cost_usd == 0 or active_policy.max_total_tokens == 0
+        )
+        if not budget_exhausted:
+            launch_available()
 
         def account_unanswered(model_id: str) -> None:
             nonlocal total_cost, total_tokens, unknown_cost, unknown_tokens

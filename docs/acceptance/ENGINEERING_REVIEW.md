@@ -2543,6 +2543,16 @@ Plane/Provider **1312 passed** (69.35s), Python3.11 Model Runtime **314 passed**
 (3.20s). Counts overlap. Final composed source qualification remains required.
 These changes do not qualify durable replay of a parent fan-out across restart.
 
+An additional policy-boundary probe retained **22 failed,9 passed** before the
+fix: non-finite/ambiguous budgets were accepted and a zero aggregate budget
+still dispatched the first Provider call. Parallel limits now validate numeric
+types/finiteness and reject zero-budget work before any child dispatch. Model
+Runtime regression after this correction: **345 passed** on each of Python3.12
+(2.76s) and Python3.11 (3.02s). These are software/fake-Provider tests, not billed
+requests or a cost benchmark. Positive aggregate limits stop further admission;
+they cannot retroactively prevent charges for concurrent already-dispatched
+requests. Original CostController per-request/daily reservations remain separate.
+
 Candidate28aa586 Multi-Arch run39119424955 failed the same Gateway fan-out test
 on Linux AMD64 and ARM64/Python3.11. Original raw logs are retained. A controlled
 75ms preparation stall reproduces the old assumption that zero-delay mock
