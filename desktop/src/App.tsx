@@ -56,6 +56,7 @@ import { DocumentWorkbench } from "./components/DocumentWorkbench";
 import { EnvironmentInspector } from "./components/EnvironmentInspector";
 import { SimulationWorkbench } from "./components/SimulationWorkbench";
 import { errorMessage, fixedNumber } from "./lib/format";
+import { usageMoney, usageNumber } from "./lib/usageAccounting";
 
 // Design token injection (run once)
 injectDesignTokens();
@@ -461,7 +462,7 @@ export function NodesPage({ onNodeClick }: { onNodeClick: (nodeId: string) => vo
   );
 }
 
-function ModelsPage({ onModelClick }: { onModelClick: (modelId: string) => void }) {
+export function ModelsPage({ onModelClick }: { onModelClick: (modelId: string) => void }) {
   const models = useModels();
   const healthy = models.filter((m) => m.health === "healthy").length;
   return (
@@ -472,9 +473,10 @@ function ModelsPage({ onModelClick }: { onModelClick: (modelId: string) => void 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: space.lg }}>
             {models.map((model) => (
               <RuntimeCard key={model.id} variant="model" title={model.display_name}
-                status={model.state} subtitle={`${model.provider_kind} · ${model.health}`}
+                status={model.state} subtitle={`${model.provider_kind || model.provider_id || model.endpoint_type || "UNKNOWN"} · ${model.health}`}
                 detail={{ model_id: model.id, provider: model.provider_id, health: model.health,
-                  latency: `${fixedNumber(model.avg_latency_ms, 0)}ms`, cost: `$${fixedNumber(model.cost_per_1k_tokens_usd, 4)}/1k`,
+                  latency: usageNumber(model.avg_latency_ms) === "UNKNOWN" ? "UNKNOWN" : `${usageNumber(model.avg_latency_ms)}ms`,
+                  cost: usageMoney(model.cost_per_1k_tokens_usd) === "UNKNOWN" ? "UNKNOWN" : `${usageMoney(model.cost_per_1k_tokens_usd)}/1k`,
                   capabilities: (model.capabilities || []).join(", "),
                   calibration: model.calibration ? `${fixedNumber(Number(model.calibration.overall_score || 0) * 100, 0)}%` : "—" }}
                 onClick={() => onModelClick(model.id)} />
@@ -663,13 +665,13 @@ function SettingsPage() {
 }
 
 // Resource Dock
-function ResourceDock() {
+export function ResourceDock() {
   const nodes = useNodes();
   const models = useModels();
   const tasks = useTasks();
   const approvals = usePendingApprovals();
   const onlineNodes = nodes.filter((n) => n.online);
-  const enabledModels = models.filter((m) => m.state !== "disabled");
+  const enabledModels = models.filter((m) => m.state === "enabled");
   const runningTasks = tasks.filter((t) => ["running", "queued", "awaiting_approval", "verifying"].includes(t.status));
 
   return (

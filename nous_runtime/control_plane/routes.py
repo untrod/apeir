@@ -19,6 +19,7 @@ Verified APIs:
 from __future__ import annotations
 
 import logging
+import math
 import os
 from typing import Any
 
@@ -67,13 +68,23 @@ def _paginate(items: list[Any], page: int, page_size: int) -> dict[str, Any]:
     }
 
 
+def _model_measurement(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        measured = float(value)
+    except OverflowError:
+        return None
+    return measured if math.isfinite(measured) and measured >= 0 else None
+
+
 def _adapt_model_record(record) -> dict[str, Any]:
     """Adapt a ModelRecord to API response dict."""
     d = record.descriptor
     state = record.state.value if hasattr(record.state, "value") else str(record.state)
     health = str((record.health or {}).get("status") or "").lower()
     if health not in {"healthy", "degraded", "unhealthy", "unknown"}:
-        health = "healthy" if state == "enabled" and d.availability else "unknown"
+        health = "unknown"
     provider_name = d.provider_id.lower()
     provider_kind = (
         "anthropic"
@@ -124,10 +135,12 @@ def _adapt_model_record(record) -> dict[str, Any]:
         "health": health,
         "health_status": state,
         "probes": [],
-        "cost_per_1k_tokens_usd": float(
-            (record.benchmark or {}).get("cost_per_1k_tokens_usd") or 0
+        "cost_per_1k_tokens_usd": _model_measurement(
+            (record.benchmark or {}).get("cost_per_1k_tokens_usd")
         ),
-        "avg_latency_ms": float((record.benchmark or {}).get("avg_latency_ms") or 0),
+        "avg_latency_ms": _model_measurement(
+            (record.benchmark or {}).get("avg_latency_ms")
+        ),
         "token_limit": d.context_length,
         "recoverable": state not in {"removed"},
         "schema_version": "1.0.0",

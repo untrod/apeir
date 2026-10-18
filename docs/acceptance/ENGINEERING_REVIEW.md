@@ -2444,11 +2444,13 @@ untouched. The root checkout remains on main; candidate work is isolated.
 | Prepared Work model input | FIX | A 96,000-character string slice could corrupt JSON and omit Goal constraints/schema. Complete compacted input now either dispatches whole or pauses the original Work before Provider invocation. |
 | Signed Node result recovery | FIX | Re-signing the same terminal journal could overwrite the envelope digest already bound to VERIFIED Work. Preserve first evidence, ACK canonical duplicates, reject conflicts; terminal stop control metadata is distinct from execution evidence. |
 | Reviewed Skill acquisition | REUSE | Main has original human-reviewed local/HTTPS catalog/Extension/CAS paths. Correct the stale example claim that all remote acquisition is rejected. Instruction loading is not executable Skill qualification. |
-| Model Center / Context / Workbench | EXTEND | Existing Gateway/Registry, saved-file admission, editor/proposals and original Work paths. Full authenticated Harness, all native filesystem paths and actual cloud/local model tasks require independent qualification. |
+| Model Center | FIX / EXTEND | The live HTTP route is the Control Plane adapter over the active Gateway registry, not the earlier same-path ModelCenter handler. Do not infer measured health from declared availability or invent zero price/latency when benchmark evidence is absent. Existing REST membership and canonical enabled-only Desktop selection remain the owners. |
+| Context / Workbench | EXTEND | Existing saved-file admission, editor/proposals and original Work paths. Full authenticated Harness, all native filesystem paths and actual cloud/local model tasks require independent qualification. |
+| Parallel model invocation | FIX | Bind child dispatch to the remaining aggregate deadline and honor the requested minimum successful responses. Retain partial output/cost evidence without calling it aggregate success. |
 | Terminal / Git / Environment | EXTEND | Existing process sessions, bounded profiles, read-only sandboxed Git and Environment service. Do not label fixed profiles as a qualified full PTY or bypass missing strict isolation. |
 | Automation | EXTEND | Existing manual/one-shot simulated consumer; recurring real-node health work, general executable Skills and Recorder remain missing. |
 | Embedded / Network / Scientific | EXTEND | Existing signed Node/Device, Serial host contracts and numerical reference. Physical/WAN and strict-isolation computation/report gates remain pending or blocked. |
-| Native Windows installation | FIX | Actual verifier still fails on missing locked `nousd` bytes; worker also absent. No Rust/MSVC/PowerShell/Windows SDK toolchain here. Kernel repository has no release/artifact archive; its CI has no dispatch or artifact upload. A different rebuild hash cannot replace the lock. |
+| Native Windows installation | FIX | Actual verifier still fails on missing locked `nousd` bytes; worker also absent. No local Rust/MSVC/PowerShell/Windows SDK toolchain. A separate PR #84 extends the existing Desktop workflow with an opt-in frozen-source Windows rebuild diagnostic; no packaging, installation or hash match is implied by compiling. A different rebuild hash cannot replace the lock. |
 | Additional Harnesses / protocols / general engines | DEFER | See the dated official-source/license adoption table in the existing Provider contract; no copied Harness, scheduler, inference engine or workflow engine. |
 
 Defect evidence is retained privately outside source. Work overflow reproduction
@@ -2478,6 +2480,57 @@ PR #81 through a normal merge preserving its exact accepted source SHA; its
 own final combined regression, source CI and protected main integration remain
 required before claiming integration. Original Kernel, component lock, PID64,
 credential/sandbox boundaries and native release rules are unchanged.
+
+The initial direct ModelCenter DTO probe showed missing entity aliases, but a
+real authenticated HTTP round trip exposed the existing route override. That
+probe must **not** be reported as proof that the public model list loses every
+model. The actual Control Plane adapter already supplies both identities. Its
+missing benchmark measurements were nevertheless rendered as zero and declared
+availability as measured health; review follows the actual HTTP producer through
+Desktop consumption. The ModelCenter action DTO alias is compatibility only.
+Protected HTTP tests now use the real active Gateway and persisted registry,
+including unauthenticated denial and reopen/removal. Missing or invalid benchmark
+values remain null, unobserved health is UNKNOWN, and only canonical enabled
+models are offered. The existing central redactor permits only the exact nullable
+finite nonnegative numeric model-price field; strings, credentials, bools,
+negative/nonfinite values and other sensitive keys remain redacted. Complete
+Desktop REST loading follows bounded pagination and rejects duplicates, changed
+totals or Controller changes before publishing membership. Positive zero is
+preserved as evidence.
+
+Focused real model/API/UI checks include retained pre-fix failures; these are
+software fixtures and authenticated loopback HTTP, not actual model inference.
+Pagination regression: **5 failed,12 passed** before, **17 passed** after.
+Current full Desktop: **40 files,239 tests passed**, with lint, typecheck and Vite
+build passing. Shared-redactor Governance/credential/usage regression: **264
+passed**. Full composed Python and exact-source CI remain required. One touched
+legacy ModelCenter file already fails whole-file Ruff formatting on the original
+baseline; its one additive alias does not reformat unrelated implementation.
+
+Candidate28aa586 Multi-Arch run39119424955 failed the same Gateway fan-out test
+on Linux AMD64 and ARM64/Python3.11. Original raw logs are retained. A controlled
+75ms preparation stall reproduces the old assumption that zero-delay mock
+Providers necessarily finish within a whole-call50ms limit; the precise CI
+scheduling cause remains UNKNOWN. Ordering/concurrency are now event-coordinated
+and the separate pending-cancellation test retains50ms. Independent controlled
+regressions prove two product defects: an exhausted parallel deadline could still
+dispatch a child with the original1s limit, and one response could report
+`successful=True` despite `min_successes=2`. Child deadlines and the result
+predicate now enforce those original policy inputs. Partial responses, original
+request bindings and usage are retained; no timeout, retry or authority is
+expanded. Both Python3.11 and3.12 focused Model Runtime suites pass274 tests at
+that patch scope. Final composed checks and cross-platform CI remain required.
+
+The PR #84 opt-in native diagnostic was actually exercised at Distribution
+424429c/run39121517509 on Windows Server2025/Rust1.99.1. Both frozen Kernel
+release components built in1m49s, both PE machines are0x8664 and tracked Kernel
+source stayed clean. **Both hashes differ from the original lock**, so the
+diagnostic correctly fails and native integrity remains BLOCKED. The retained
+six-file logs/report artifact12134755674 has ZIP SHA-256
+`f35a283b49584d8a81e2effb99585a718f1a80ee8d544788479a9d684e8baf8e`,
+independently downloaded and checked. Exact expected/actual hashes are in PR #84.
+No component is staged/relocked, no mismatched EXE is offered for installation,
+and no installer, NKI runtime or Windows10 lifecycle qualification is claimed.
 
 ### Scoped MCP / original Work submission software qualification
 

@@ -24,6 +24,29 @@ COUNTERS = (
 )
 
 
+@pytest.mark.parametrize("value", [None, 0, 0.25, 12])
+def test_model_cost_measurement_survives_without_a_credential_escape_hatch(value):
+    payload = {"cost_per_1k_tokens_usd": value}
+    assert redact_sensitive_data(payload) == payload
+
+
+@pytest.mark.parametrize(
+    "value",
+    [True, False, -1, float("nan"), float("inf"), "0.25", "FAKE_SECRET_VALUE", {}, []],
+)
+def test_model_cost_measurement_rejects_credential_shaped_or_invalid_values(value):
+    assert redact_sensitive_data({"cost_per_1k_tokens_usd": value}) == {
+        "cost_per_1k_tokens_usd": REDACTED
+    }
+
+
+@pytest.mark.parametrize(
+    "key", ["token", "access_token", "cost_per_1k_tokens_usd_secret"]
+)
+def test_model_cost_exception_does_not_relax_other_credential_keys(key):
+    assert redact_sensitive_data({key: None}) == {key: REDACTED}
+
+
 def test_nullable_usage_and_bounded_measurements_survive_real_jsonl_reload(tmp_path):
     values = {counter: None for counter in COUNTERS}
     values["input_tokens"] = 0

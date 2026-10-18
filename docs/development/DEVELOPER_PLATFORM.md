@@ -116,6 +116,20 @@ original Goal/checkpoint retained. Reduce selected context or explicitly split
 the task rather than silently replacing its requirements. This is a character
 admission bound, not a Provider token measurement or automatic long-task summary.
 
+Parallel Gateway requests keep each child's original parent binding and limit
+its dispatch to the remaining aggregate deadline. The requested `min_successes`
+controls aggregate success; a retained partial answer does not satisfy a larger
+threshold. Partial output and usage remain available for inspection. Cancellation
+and missing responses do not prove that a dispatched Provider incurred no cost.
+
+The Desktop's public model list projects the active Gateway registry. Declared
+availability is not a successful health probe; absent benchmark price/latency
+remain `null`/`UNKNOWN`, while explicit measured zero remains zero. Model choice
+uses canonical `enabled` state. The client reads all advertised pages before
+replacing list membership, bounded to 20 pages/10,000 records. Inconsistent or
+changing pagination and a changed Controller are errors, not complete snapshots.
+This live list neither grants permission nor replaces dispatch-time admission.
+
 The current Chat handler supports text, model choice and execution mode. File
 attachments and Node/privacy/per-request-budget controls are disabled because
 this request path does not deliver them. Drop/paste and stale or crafted values

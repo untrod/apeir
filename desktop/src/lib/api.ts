@@ -116,16 +116,18 @@ export interface ModelView {
   model_id: string;
   display_name: string;
   provider_id: string;
-  provider_kind: "openai" | "anthropic" | "local" | "custom";
+  provider_kind?: "openai" | "anthropic" | "local" | "custom";
+  endpoint_type?: string;
   state: string;
   health: string;
   capabilities: string[];
-  capability_scores: Record<string, number>;
-  evaluation?: { overall_score?: number; error_rate?: number };
+  capability_scores?: Record<string, number>;
+  evaluation?: { overall_score?: number; error_rate?: number } | null;
+  location?: string;
   recoverable: boolean;
-  avg_latency_ms: number;
-  cost_per_1k_tokens_usd: number;
-  token_limit: number;
+  avg_latency_ms?: number | null;
+  cost_per_1k_tokens_usd?: number | null;
+  token_limit?: number | null;
 }
 
 export interface TaskView {
@@ -379,8 +381,58 @@ export const runPrompt = (
   );
 
 // Models
-export const fetchModels = () =>
-  api<{ models: ModelView[]; total_count: number; available_count: number }>("/api/v1/models");
+export async function fetchModels() {
+  const current = captureRuntimeConnection();
+  type Snapshot = {
+    models: (Omit<ModelView, "id"> & { id?: string })[];
+    summary?: { total: number; enabled: number; healthy: number; recoverable_operations: number };
+    total_count?: number;
+    available_count?: number;
+    pagination?: { page: number; page_size: number; total: number; total_pages: number; has_next: boolean };
+  };
+  const models: ModelView[] = [];
+  const identities = new Set<string>();
+  let first: Snapshot | undefined;
+  let pageSize = 500;
+  for (let page = 1; page <= 20; page++) {
+    current();
+    const snapshot = await api<Snapshot>(`/api/v1/models?page=${page}&page_size=${pageSize}`);
+    current();
+    const invalid = () => new ApiError("MODEL_SNAPSHOT_INVALID", "Model list changed or exceeds the bounded snapshot; refresh before choosing a model");
+    if (!Array.isArray(snapshot.models) || models.length + snapshot.models.length > 10_000) throw invalid();
+    const paging = snapshot.pagination;
+    if (paging) {
+      if (![paging.page, paging.page_size, paging.total, paging.total_pages].every(Number.isSafeInteger)
+        || paging.page !== page || paging.page_size < 1 || paging.page_size > 500
+        || paging.total < 0 || paging.total > 10_000 || paging.total_pages > 20
+        || paging.total_pages !== Math.max(1, Math.ceil(paging.total / paging.page_size))
+        || paging.has_next !== (page < paging.total_pages)
+        || snapshot.models.length !== Math.min(paging.page_size, Math.max(0, paging.total - (page - 1) * paging.page_size))
+        || (first && (first.pagination?.total !== paging.total || first.pagination?.page_size !== paging.page_size))) throw invalid();
+      pageSize = paging.page_size;
+    } else if (page !== 1 || (snapshot.total_count !== undefined && snapshot.total_count !== snapshot.models.length)) {
+      throw invalid();
+    }
+    first ??= snapshot;
+    for (const model of snapshot.models) {
+      if (!model || typeof model.model_id !== "string" || !model.model_id.trim()
+        || (model.id !== undefined && model.id !== model.model_id)) {
+        throw new ApiError("MODEL_IDENTITY_INVALID", "Model Center identity is unavailable or inconsistent");
+      }
+      if (identities.has(model.model_id)) throw invalid();
+      identities.add(model.model_id);
+      // Compatibility with older DTOs; no new model identity is minted.
+      models.push({ ...model, id: model.model_id });
+    }
+    if (!paging?.has_next) {
+      current();
+      // This is a live multi-page projection, not an atomic registry snapshot
+      // or permission. The Gateway rechecks eligibility before dispatch.
+      return { ...first, models };
+    }
+  }
+  throw new ApiError("MODEL_SNAPSHOT_INVALID", "Model list exceeds the bounded snapshot");
+}
 
 export const modelAction = (action: string, modelId: string) =>
   api("/api/v1/models/action", {

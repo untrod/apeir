@@ -254,13 +254,14 @@ export interface Model extends EntityBase {
   display_name: string;
   provider_id: string;
   provider_kind: ModelProviderKind;
-  state: "enabled" | "disabled" | "degraded" | "recovering";
+  endpoint_type?: string;
+  state: "discovered" | "downloading" | "partial" | "installed" | "registered" | "enabled" | "disabled" | "broken" | "removed" | "degraded" | "recovering";
   health: "healthy" | "degraded" | "unhealthy" | "unknown";
   capabilities: string[];
   probes: ModelProbe[];
   calibration?: ModelCalibration;
-  cost_per_1k_tokens_usd: number;
-  avg_latency_ms: number;
+  cost_per_1k_tokens_usd: number | null;
+  avg_latency_ms: number | null;
   token_limit: number;
   recoverable: boolean;
 }

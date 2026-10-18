@@ -428,9 +428,8 @@ class EntityStoreImpl {
   }
 
   upsertModels(models: Model[]): void {
-    // Remove records written by the pre-RC3 API shape, which did not expose
-    // the canonical entity id expected by the desktop store.
-    delete this.state.models.undefined;
+    // Callers supply the complete current REST snapshot, including removals.
+    this.state.models = {};
     for (const m of models) {
       if (!m.id) continue;
       // The REST snapshot is authoritative and also repairs incomplete cache

@@ -6,6 +6,7 @@ import re
 import contextlib
 import io
 import logging
+import sys
 import threading
 import traceback
 from collections.abc import Mapping
@@ -202,6 +203,12 @@ def redact_sensitive_data(value: Any) -> Any:
             nullable_usage_counter = (
                 normalized in _USAGE_COUNTER_FIELDS and item is None
             )
+            model_cost_measurement = normalized == "cost_per_1k_tokens_usd" and (
+                item is None
+                or isinstance(item, (int, float))
+                and not isinstance(item, bool)
+                and 0 <= item <= sys.float_info.max
+            )
             lease_metadata = (
                 normalized == "credential_leases"
                 and isinstance(item, list)
@@ -216,6 +223,7 @@ def redact_sensitive_data(value: Any) -> Any:
                 and normalized not in _SAFE_REFERENCE_KEYS
                 and not numeric_token_counter
                 and not nullable_usage_counter
+                and not model_cost_measurement
                 and any(marker in normalized for marker in _SENSITIVE_MARKERS)
             ):
                 redacted[safe_key] = REDACTED

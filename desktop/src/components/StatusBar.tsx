@@ -1,6 +1,6 @@
 ﻿import React, { useState } from "react";
 import { colors, typo, shadow, space } from "../design";
-import { fixedNumber } from "../lib/format";
+import { usageNumber } from "../lib/usageAccounting";
 import { useOnlineNodes, useModels, usePendingApprovals, useCostSummary } from "../store";
 import { useEffect } from "react";
 import { fetchStatus, getConfig, getRuntimeConfigVersion, type RuntimeStatus } from "../lib/api";
@@ -16,7 +16,7 @@ export function StatusBar({ onSearch }: { onSearch?: () => void }) {
   const cost = useCostSummary();
   const configurationVersion = useRuntimeConfigVersion();
 
-  const enabledModels = models.filter((model) => model.state !== "disabled");
+  const enabledModels = models.filter((model) => model.state === "enabled");
   const healthyModels = enabledModels.filter((model) => model.health === "healthy");
 
   useEffect(() => {
@@ -136,7 +136,7 @@ export function StatusBar({ onSearch }: { onSearch?: () => void }) {
               {enabledModels.slice(0, 5).map((model) => (
                 <div key={model.id} style={{ color: colors.textSecondary, padding: "2px 0", fontSize: typo.xs }}>
                   <span style={{ color: model.health === "healthy" ? colors.success : colors.warning }}>●</span>{" "}
-                  {model.display_name} · {fixedNumber(model.avg_latency_ms, 0)}ms
+                  {model.display_name} · {usageNumber(model.avg_latency_ms) === "UNKNOWN" ? "UNKNOWN" : `${usageNumber(model.avg_latency_ms)}ms`}
                 </div>
               ))}
             </StatusGroup>
