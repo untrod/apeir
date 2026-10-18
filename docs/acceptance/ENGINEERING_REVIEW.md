@@ -2510,6 +2510,19 @@ in source0a75af7 Security CI. The alias is withdrawn instead of reformatting the
 unrelated legacy implementation or weakening the changed-file formatter. The
 failed run and baseline-format evidence are retained.
 
+The pre-final bare-host full run recorded **5540 passed,58 skipped,3 failed**
+(719.21s). One existing Provider catalog test incorrectly equated enabled with
+healthy. Its corrected contract now asserts UNKNOWN and absent price/latency,
+then requires an explicitly recorded health result before reporting healthy;
+the existing identity/state assertions remain. The other two original process
+cleanup assertions found zombies adopted by this container's non-reaping PID1
+`tail`, a previously documented unsupported environment. No process assertion,
+timeout or Kernel code changes. The same unchanged ProcessSession/startup scope
+under a process-local Linux child reaper passes **22 tests**; four adopted
+children were reaped and no owned children remain. This is initialized test
+environment evidence, not a new product sandbox or Scientific qualification.
+The bare-host failures remain retained separately from initialized/final CI.
+
 Candidate28aa586 Multi-Arch run39119424955 failed the same Gateway fan-out test
 on Linux AMD64 and ARM64/Python3.11. Original raw logs are retained. A controlled
 75ms preparation stall reproduces the old assumption that zero-delay mock

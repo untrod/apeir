@@ -94,7 +94,14 @@ def test_model_catalog_reads_the_active_gateway_registry(monkeypatch):
     assert model["model_id"] == "deepseek/deepseek-chat"
     assert model["id"] == "deepseek/deepseek-chat"
     assert model["state"] == "enabled"
-    assert model["health"] == "healthy"
+    # Registry eligibility is not measured Provider health or free inference.
+    assert model["health"] == "unknown"
+    assert model["avg_latency_ms"] is None
+    assert model["cost_per_1k_tokens_usd"] is None
+    registry.update_health("deepseek/deepseek-chat", {"status": "healthy"})
+    observed = handle_list_models()["data"]["models"][0]
+    assert observed["health"] == "healthy"
+    assert observed["id"] == model["id"]
 
 
 def test_sidecar_bundles_the_top_level_nki_client():
