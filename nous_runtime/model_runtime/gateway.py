@@ -629,6 +629,13 @@ class ModelGateway:
                     model_id = model_for_task[task]
                     try:
                         response = task.result()
+                    except asyncio.CancelledError:
+                        # A Provider child can end cancelled independently of
+                        # its caller. Only cancellation of the parent's awaits
+                        # should enter the outer parent-cleanup handler.
+                        failures.append(f"{model_id}: parallel child cancelled")
+                        account_unanswered(model_id)
+                        continue
                     except Exception as exc:
                         failures.append(f"{model_id}: {exc}")
                         account_unanswered(model_id)

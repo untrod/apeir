@@ -597,6 +597,66 @@ def test_parallel_deadline_does_not_report_dispatched_request_as_free(
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("budget", [None, 1])
+def test_parallel_child_cancellation_is_not_parent_cancellation(tmp_path, budget):
+    async def scenario():
+        class SelfCancellingAdapter(RecordingAdapter):
+            async def invoke(self, value, descriptor, instance):
+                if descriptor.model_id == "model":
+                    self.requests.append(value)
+                    raise asyncio.CancelledError("controlled child cancellation")
+                return await super().invoke(value, descriptor, instance)
+
+        gateway, adapter, controller = build_gateway(
+            tmp_path, adapter=SelfCancellingAdapter()
+        )
+        gateway.registry.register(
+            ModelDescriptor(
+                model_id="second",
+                display_name="Second fake model",
+                provider_id="provider",
+                endpoint_type=ModelEndpointType.CLOUD_API,
+                capabilities=frozenset({"chat"}),
+            )
+        )
+        gateway.registry.enable("second")
+        gateway.registry.register_instance(
+            ModelInstance(
+                instance_id="second-instance",
+                model_id="second",
+                node_id="fake-node",
+                backend=adapter.backend_id,
+                state=ModelInstanceState.READY,
+            )
+        )
+        controller.pricing = PricingCatalog(
+            {"provider/model": Pricing(1, 2), "provider/second": Pricing(1, 2)}
+        )
+        parent = asyncio.create_task(
+            gateway.invoke_parallel(
+                request(),
+                policy=ParallelInvocationPolicy(
+                    max_candidates=2, max_concurrency=1, max_total_cost_usd=budget
+                ),
+            )
+        )
+        result = await parent
+        assert not parent.cancelled()
+        assert len(adapter.requests) == (2 if budget is None else 1)
+        assert result.successful is (budget is None)
+        assert result.cancelled_models == (() if budget is None else ("second",))
+        assert result.total_cost_usd is None and result.total_tokens is None
+        assert "model: parallel child cancelled" in result.failures
+        summary = controller.summary()
+        assert summary["uncertain_calls"] == 1 and summary["reserved_tokens"] == 108
+        assert any(
+            event.event_type == "model.parallel.completed" for event in gateway.events
+        )
+        assert gateway.scheduler.active_leases() == () and gateway._active == {}
+
+    asyncio.run(scenario())
+
+
 def test_parallel_parent_cancellation_cleans_children_in_running_loop(tmp_path):
     async def scenario():
         started = asyncio.Event()

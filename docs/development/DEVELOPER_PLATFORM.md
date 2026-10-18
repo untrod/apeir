@@ -128,6 +128,10 @@ non-dispatch remains zero. Cancelling the parent cancels and joins its original
 children and retains their unsettled accounting. This does not qualify durable
 replay of an entire parallel parent request: do not resubmit a lost fan-out as a
 new invocation; inspect original request/Work evidence first.
+A child cancelled by its Provider is a failed child, not cancellation of the
+parent. Its original uncertain accounting still stops later budgeted admission;
+ordinary independent fan-out otherwise retains the existing minimum-success
+policy. Actual parent cancellation continues to cancel and join its children.
 Parallel numeric limits reject ambiguous types and non-finite values; a zero
 aggregate cost/token budget prevents even the first child dispatch. Positive
 aggregate budgets stop later admission and cancel pending work, but cannot undo

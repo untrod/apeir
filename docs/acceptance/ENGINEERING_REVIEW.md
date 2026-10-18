@@ -2553,6 +2553,14 @@ requests or a cost benchmark. Positive aggregate limits stop further admission;
 they cannot retroactively prevent charges for concurrent already-dispatched
 requests. Original CostController per-request/daily reservations remain separate.
 
+Independent review then reproduced a child `CancelledError` escaping through the
+parent-cancellation handler although the caller had not cancelled. Two retained
+regressions fail before correction. The Gateway now accounts for that failed
+child and preserves the existing fan-out/budget rules; actual parent cancellation
+still joins its children. Model Runtime **347 passed** on Python3.12 and
+Python3.11. No authority leak, repeated effect, orphan or paid incident was
+demonstrated by this in-memory/temporary-ledger case.
+
 Candidate28aa586 Multi-Arch run39119424955 failed the same Gateway fan-out test
 on Linux AMD64 and ARM64/Python3.11. Original raw logs are retained. A controlled
 75ms preparation stall reproduces the old assumption that zero-delay mock
