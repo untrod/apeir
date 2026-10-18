@@ -446,7 +446,15 @@ def test_gateway_parallel_expired_during_routing_never_dispatches(
 
 
 @pytest.mark.parametrize("minimum, successful", [(1, True), (2, False)])
-def test_gateway_parallel_partial_result_honors_minimum(minimum, successful) -> None:
+def test_gateway_parallel_partial_result_honors_minimum(
+    tmp_path, minimum, successful
+) -> None:
+    from nous_runtime.model_runtime.cost_control import (
+        CostController,
+        Pricing,
+        PricingCatalog,
+    )
+
     async def scenario() -> None:
         registry = ModelRuntimeRegistry()
         adapters = ModelAdapterRegistry()
@@ -463,7 +471,13 @@ def test_gateway_parallel_partial_result_honors_minimum(minimum, successful) -> 
         failing = SetupFailingAdapter()
         failing.backend_id = "b"
         adapters.register(failing)
-        gateway = ModelGateway(registry, adapters, max_retries_per_model=0)
+        controller = CostController(
+            tmp_path / "usage.sqlite3",
+            pricing=PricingCatalog({"a/a": Pricing(1, 2), "b/b": Pricing(1, 2)}),
+        )
+        gateway = ModelGateway(
+            registry, adapters, max_retries_per_model=0, cost_controller=controller
+        )
         result = await gateway.invoke_parallel(
             ModelRequest(task_id="task"),
             policy=ParallelInvocationPolicy(min_successes=minimum),

@@ -485,6 +485,247 @@ def test_parallel_unknown_billing_stops_later_budgeted_routes(tmp_path):
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("query_fails", [False, True])
+def test_parallel_lost_response_preserves_unknown_and_stops_next_budgeted_route(
+    tmp_path, monkeypatch, query_fails
+):
+    async def scenario():
+        class LostResponseAdapter(RecordingAdapter):
+            async def invoke(self, value, descriptor, instance):
+                self.requests.append(value)
+                raise ConnectionResetError("controlled response loss after dispatch")
+
+        gateway, adapter, controller = build_gateway(
+            tmp_path, adapter=LostResponseAdapter()
+        )
+        gateway.registry.register(
+            ModelDescriptor(
+                model_id="second",
+                display_name="Second fake model",
+                provider_id="provider",
+                endpoint_type=ModelEndpointType.CLOUD_API,
+                capabilities=frozenset({"chat"}),
+            )
+        )
+        gateway.registry.enable("second")
+        gateway.registry.register_instance(
+            ModelInstance(
+                instance_id="second-instance",
+                model_id="second",
+                node_id="fake-node",
+                backend=adapter.backend_id,
+                state=ModelInstanceState.READY,
+            )
+        )
+        controller.pricing = PricingCatalog(
+            {"provider/model": Pricing(1, 2), "provider/second": Pricing(1, 2)}
+        )
+        if query_fails:
+
+            def fail_query(_request_id):
+                raise RuntimeError("controlled owner query failure")
+
+            monkeypatch.setattr(controller, "request_usage", fail_query)
+        original = request()
+        result = await gateway.invoke_parallel(
+            original,
+            policy=ParallelInvocationPolicy(
+                max_candidates=2, max_concurrency=1, max_total_cost_usd=1
+            ),
+        )
+        assert len(adapter.requests) == 1
+        assert result.responses == ()
+        assert result.cancelled_models == ("second",)
+        assert result.total_cost_usd is None and result.total_tokens is None
+        assert "parallel invocation budget is unknown" in result.failures
+        summary = controller.summary()
+        assert summary["uncertain_calls"] == 1
+        assert summary["reserved_tokens"] == 108
+        assert summary["total_cost_usd"] is None and summary["total_tokens"] is None
+        receipt = summary["receipts"][0]
+        assert (
+            receipt["status"] == "uncertain" and receipt["dispatch_uncertain"] is True
+        )
+        assert receipt["request_id"] == adapter.requests[0].request_id
+        assert adapter.requests[0].metadata["parent_request_id"] == original.request_id
+        event = next(
+            e for e in gateway.events if e.event_type == "model.parallel.completed"
+        )
+        assert event.payload["total_cost_usd"] is None
+        assert event.payload["total_tokens"] is None
+        assert gateway.scheduler.active_leases() == () and gateway._active == {}
+
+    asyncio.run(scenario())
+
+
+def test_parallel_deadline_does_not_report_dispatched_request_as_free(
+    tmp_path, monkeypatch
+):
+    import nous_runtime.model_runtime.gateway as gateway_module
+
+    clock = {"now": 0.0}
+    monkeypatch.setattr(
+        gateway_module, "time", SimpleNamespace(monotonic=lambda: clock["now"])
+    )
+
+    async def scenario():
+        class PendingAdapter(RecordingAdapter):
+            async def invoke(self, value, descriptor, instance):
+                self.requests.append(value)
+                clock["now"] = 0.075
+                await asyncio.Event().wait()
+                raise AssertionError("pending response must not complete")
+
+        gateway, adapter, controller = build_gateway(tmp_path, adapter=PendingAdapter())
+        result = await gateway.invoke_parallel(
+            request(), policy=ParallelInvocationPolicy(max_candidates=1, timeout_s=0.05)
+        )
+        assert len(adapter.requests) == 1
+        assert result.responses == ()
+        assert result.total_cost_usd is None and result.total_tokens is None
+        summary = controller.summary()
+        assert summary["uncertain_calls"] == 1 and summary["reserved_tokens"] == 108
+        assert summary["receipts"][0]["status"] == "uncertain"
+        assert adapter.requests[0].request_id in adapter.cancelled
+        event = next(
+            e for e in gateway.events if e.event_type == "model.parallel.completed"
+        )
+        assert event.payload["total_cost_usd"] is None
+        assert event.payload["total_tokens"] is None
+        assert gateway.scheduler.active_leases() == () and gateway._active == {}
+
+    asyncio.run(scenario())
+
+
+def test_parallel_parent_cancellation_cleans_children_in_running_loop(tmp_path):
+    async def scenario():
+        started = asyncio.Event()
+        previous_tasks = asyncio.all_tasks()
+
+        class PendingAdapter(RecordingAdapter):
+            async def invoke(self, value, descriptor, instance):
+                self.requests.append(value)
+                started.set()
+                await asyncio.Event().wait()
+                raise AssertionError("pending response must not complete")
+
+        gateway, adapter, controller = build_gateway(tmp_path, adapter=PendingAdapter())
+        parent = asyncio.create_task(gateway.invoke_parallel(request()))
+        try:
+            await asyncio.wait_for(started.wait(), timeout=1)
+            parent.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await parent
+            # Inspect while this event loop is alive; asyncio.run shutdown must
+            # not accidentally provide the production parent-cancellation cleanup.
+            assert adapter.requests[0].request_id in adapter.cancelled
+            assert gateway.scheduler.active_leases() == () and gateway._active == {}
+            summary = controller.summary()
+            assert summary["uncertain_calls"] == 1
+            assert summary["reserved_tokens"] == 108
+            assert summary["receipts"][0]["status"] == "uncertain"
+        finally:
+            cleanup = asyncio.all_tasks() - previous_tasks
+            for task in cleanup:
+                task.cancel()
+            await asyncio.gather(*cleanup, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
+def test_parallel_proven_non_dispatch_keeps_zero_and_allows_next_route(tmp_path):
+    async def scenario():
+        class SetupFailingAdapter(RecordingAdapter):
+            async def load(self, instance):
+                raise ConnectionError("controlled preparation failure")
+
+        gateway, adapter, controller = build_gateway(
+            tmp_path, adapter=SetupFailingAdapter()
+        )
+        gateway.registry.get_instance(
+            "fake-instance"
+        ).state = ModelInstanceState.NOT_LOADED
+        gateway.registry.register(
+            ModelDescriptor(
+                model_id="second",
+                display_name="Second",
+                provider_id="provider",
+                endpoint_type=ModelEndpointType.CLOUD_API,
+                capabilities=frozenset({"chat"}),
+            )
+        )
+        gateway.registry.enable("second")
+        gateway.registry.register_instance(
+            ModelInstance(
+                instance_id="second-instance",
+                model_id="second",
+                node_id="fake-node",
+                backend=adapter.backend_id,
+                state=ModelInstanceState.READY,
+            )
+        )
+        controller.pricing = PricingCatalog(
+            {"provider/model": Pricing(1, 2), "provider/second": Pricing(1, 2)}
+        )
+        result = await gateway.invoke_parallel(
+            request(),
+            policy=ParallelInvocationPolicy(max_concurrency=1, max_total_cost_usd=1),
+        )
+        assert len(adapter.requests) == 1
+        assert [r.model_id for r in result.responses] == ["second"]
+        assert result.total_cost_usd == 0.000104 and result.total_tokens == 102
+        receipts = controller.summary()["receipts"]
+        failed = next(r for r in receipts if r["status"] == "not_dispatched")
+        assert controller.request_usage(failed["request_id"]) == (0.0, 0)
+        assert controller.summary()["uncertain_calls"] == 0
+
+    asyncio.run(scenario())
+
+
+def test_parallel_partial_response_does_not_hide_another_uncertain_charge(tmp_path):
+    async def scenario():
+        class PartialAdapter(RecordingAdapter):
+            async def invoke(self, value, descriptor, instance):
+                if descriptor.model_id == "second":
+                    self.requests.append(value)
+                    raise ConnectionResetError("controlled second response loss")
+                return await super().invoke(value, descriptor, instance)
+
+        gateway, adapter, controller = build_gateway(tmp_path, adapter=PartialAdapter())
+        gateway.registry.register(
+            ModelDescriptor(
+                model_id="second",
+                display_name="Second",
+                provider_id="provider",
+                endpoint_type=ModelEndpointType.CLOUD_API,
+                capabilities=frozenset({"chat"}),
+            )
+        )
+        gateway.registry.enable("second")
+        gateway.registry.register_instance(
+            ModelInstance(
+                instance_id="second-instance",
+                model_id="second",
+                node_id="fake-node",
+                backend=adapter.backend_id,
+                state=ModelInstanceState.READY,
+            )
+        )
+        controller.pricing = PricingCatalog(
+            {"provider/model": Pricing(1, 2), "provider/second": Pricing(1, 2)}
+        )
+        result = await gateway.invoke_parallel(request())
+        assert len(adapter.requests) == 2
+        assert result.successful is True
+        assert [r.model_id for r in result.responses] == ["model"]
+        assert result.responses[0].usage["total_tokens"] == 102
+        assert result.responses[0].metadata["usage_receipt"]["cost_usd"] == 0.000104
+        assert result.total_cost_usd is None and result.total_tokens is None
+        assert controller.summary()["uncertain_calls"] == 1
+
+    asyncio.run(scenario())
+
+
 def test_usage_violation_releases_gateway_tracking_but_preserves_actual_receipt(
     tmp_path,
 ):

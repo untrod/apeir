@@ -121,6 +121,13 @@ its dispatch to the remaining aggregate deadline. The requested `min_successes`
 controls aggregate success; a retained partial answer does not satisfy a larger
 threshold. Partial output and usage remain available for inspection. Cancellation
 and missing responses do not prove that a dispatched Provider incurred no cost.
+For failed or cancelled children, aggregate usage is projected from all original
+CostController attempts and unsettled reservations. Missing or corrupt evidence
+stays UNKNOWN and prevents later budgeted candidates from dispatching; confirmed
+non-dispatch remains zero. Cancelling the parent cancels and joins its original
+children and retains their unsettled accounting. This does not qualify durable
+replay of an entire parallel parent request: do not resubmit a lost fan-out as a
+new invocation; inspect original request/Work evidence first.
 
 The Desktop's public model list projects the active Gateway registry. Declared
 availability is not a successful health probe; absent benchmark price/latency

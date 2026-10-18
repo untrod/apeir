@@ -2523,6 +2523,26 @@ children were reaped and no owned children remain. This is initialized test
 environment evidence, not a new product sandbox or Scientific qualification.
 The bare-host failures remain retained separately from initialized/final CI.
 
+Initialized full regression at source22ceee8: **5545 passed,58 skipped**
+(691.76s);18 adopted children reaped, no owned children remaining. A subsequent
+targeted audit nevertheless proved a missing parallel-billing case: original
+CostController receipts correctly retained uncertain charges, while parallel
+results/events showed zero or omitted failed-child cost and could dispatch a
+second budgeted candidate. Controlled method-only22ceee8 reproduction against
+unchanged accounting semantics: **2 failed**; the original parent-cancel test
+also fails while its event loop remains alive. No paid Provider calls occurred.
+
+The same CostController now supplies an exact-request, transaction-consistent
+read of all original attempts/reservations, with binding validation and additive
+request-ID indexes. Gateway projects those facts on failure/cancellation, retains
+UNKNOWN and stops further budgeted admission; proven non-dispatch stays zero.
+Parent cancellation joins original children and retains unsettled accounting.
+No alternate ledger, credential authority, retry or execution store is added.
+Focused accounting/Gateway **94 passed**; broader model/Work/Context/Control
+Plane/Provider **1312 passed** (69.35s), Python3.11 Model Runtime **314 passed**
+(3.20s). Counts overlap. Final composed source qualification remains required.
+These changes do not qualify durable replay of a parent fan-out across restart.
+
 Candidate28aa586 Multi-Arch run39119424955 failed the same Gateway fan-out test
 on Linux AMD64 and ARM64/Python3.11. Original raw logs are retained. A controlled
 75ms preparation stall reproduces the old assumption that zero-delay mock
