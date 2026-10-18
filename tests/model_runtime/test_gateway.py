@@ -293,21 +293,91 @@ def test_gateway_parallel_fan_out_is_bounded_and_ordered() -> None:
     async def scenario() -> None:
         registry = ModelRuntimeRegistry()
         adapters = ModelAdapterRegistry()
-        for model_id, delay in (("a", 0.0), ("b", 0.0), ("c", 0.2)):
+        release_first = asyncio.Event()
+        active = peak_active = 0
+        completion_order = []
+        child_request_ids = set()
+        original_request = ModelRequest(
+            task_id="task",
+            required_capabilities=frozenset({"reasoning"}),
+            timeout_s=1,
+            metadata={"work_id": "original-work"},
+        )
+
+        class OrderedAdapter(MockModelAdapter):
+            async def invoke(self, request, descriptor, instance):
+                nonlocal active, peak_active
+                active += 1
+                peak_active = max(peak_active, active)
+                child_request_ids.add(request.request_id)
+                assert request.request_id != original_request.request_id
+                assert request.metadata == {
+                    "work_id": "original-work",
+                    "parent_request_id": original_request.request_id,
+                }
+                assert request.task_id == original_request.task_id
+                assert 0 < request.timeout_s <= original_request.timeout_s
+                try:
+                    if descriptor.model_id == "a":
+                        await release_first.wait()
+                    response = await super().invoke(request, descriptor, instance)
+                    completion_order.append(descriptor.model_id)
+                    if descriptor.model_id == "c":
+                        release_first.set()
+                    return response
+                finally:
+                    active -= 1
+
+        for model_id in ("a", "b", "c"):
             add_model(registry, model_id, model_id)
-            adapter = MockModelAdapter(
-                content=model_id,
-                delay_s=delay,
-            )
+            adapter = OrderedAdapter(content=model_id)
             adapter.backend_id = model_id
             adapters.register(adapter)
         gateway = ModelGateway(registry, adapters)
         result = await gateway.invoke_parallel(
-            ModelRequest(
-                task_id="task",
-                required_capabilities=frozenset({"reasoning"}),
-                timeout_s=1,
+            original_request,
+            policy=ParallelInvocationPolicy(
+                max_candidates=3,
+                max_concurrency=2,
+                min_successes=3,
             ),
+        )
+        # Ordering/concurrency are coordinated by events, not an assumption that
+        # routing, loading and callbacks finish within a 50ms wall-clock budget.
+        assert completion_order == ["b", "c", "a"]
+        assert peak_active == 2
+        assert active == 0
+        assert len(child_request_ids) == 3
+        assert original_request.metadata == {"work_id": "original-work"}
+        assert original_request.timeout_s == 1
+        assert [item.model_id for item in result.responses] == ["a", "b", "c"]
+        assert result.cancelled_models == ()
+        assert result.failures == ()
+        assert result.successful is True
+        assert gateway.scheduler.active_leases() == ()
+
+    asyncio.run(scenario())
+
+
+def test_gateway_parallel_deadline_cancels_pending_and_releases_leases() -> None:
+    async def scenario() -> None:
+        registry = ModelRuntimeRegistry()
+        adapters = ModelAdapterRegistry()
+
+        class WaitingAdapter(MockModelAdapter):
+            async def invoke(self, request, descriptor, instance):
+                self.invocations.append(request.request_id)
+                await asyncio.Event().wait()
+                raise AssertionError("pending invocation must be cancelled")
+
+        for model_id in ("a", "b", "c"):
+            add_model(registry, model_id, model_id)
+            adapter = WaitingAdapter()
+            adapter.backend_id = model_id
+            adapters.register(adapter)
+        gateway = ModelGateway(registry, adapters)
+        result = await gateway.invoke_parallel(
+            ModelRequest(task_id="task", timeout_s=1),
             policy=ParallelInvocationPolicy(
                 max_candidates=3,
                 max_concurrency=3,
@@ -315,9 +385,107 @@ def test_gateway_parallel_fan_out_is_bounded_and_ordered() -> None:
                 min_successes=2,
             ),
         )
-        assert [item.model_id for item in result.responses] == ["a", "b"]
-        assert result.cancelled_models == ("c",)
-        assert result.successful is True
+        assert result.responses == ()
+        terminal_models = set(result.cancelled_models)
+        terminal_models.update(
+            failure.split(":", 1)[0]
+            for failure in result.failures
+            if ":" in failure and "timed out" in failure
+        )
+        assert terminal_models == {"a", "b", "c"}
+        assert "parallel invocation did not reach minimum successes" in result.failures
+        assert result.successful is False
+        for adapter in adapters.list():
+            assert adapter.cancelled == set(adapter.invocations)
+        assert gateway.scheduler.active_leases() == ()
+        assert gateway._active == {}
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("model_ids", [("a",), ("a", "b", "c")])
+def test_gateway_parallel_expired_during_routing_never_dispatches(
+    monkeypatch, model_ids
+) -> None:
+    clock = {"now": 0.0}
+    monkeypatch.setattr(
+        gateway_module, "time", SimpleNamespace(monotonic=lambda: clock["now"])
+    )
+
+    async def scenario() -> None:
+        registry = ModelRuntimeRegistry()
+        adapters = ModelAdapterRegistry()
+        for model_id in model_ids:
+            add_model(registry, model_id, model_id)
+            adapter = MockModelAdapter(
+                content="must not dispatch after parallel expiry"
+            )
+            adapter.backend_id = model_id
+            adapters.register(adapter)
+
+        def exhaust_parallel_deadline(event):
+            if event.event_type == "model.route.selected":
+                clock["now"] = 0.075
+
+        gateway = ModelGateway(registry, adapters, event_sink=exhaust_parallel_deadline)
+        result = await gateway.invoke_parallel(
+            ModelRequest(task_id="task", timeout_s=1),
+            policy=ParallelInvocationPolicy(max_candidates=3, timeout_s=0.05),
+        )
+        assert result.responses == ()
+        assert result.successful is False
+        for adapter in adapters.list():
+            assert adapter.invocations == []
+            assert adapter.cancelled == set()
+        assert gateway.scheduler.active_leases() == ()
+        assert not any(
+            event.event_type == "model.invoke.completed" for event in gateway.events
+        )
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("minimum, successful", [(1, True), (2, False)])
+def test_gateway_parallel_partial_result_honors_minimum(minimum, successful) -> None:
+    async def scenario() -> None:
+        registry = ModelRuntimeRegistry()
+        adapters = ModelAdapterRegistry()
+        add_model(registry, "a", "a")
+        add_model(registry, "b", "b")
+        working = MockModelAdapter(content="partial", cost_usd=0.25, total_tokens=7)
+        working.backend_id = "a"
+        adapters.register(working)
+
+        class SetupFailingAdapter(MockModelAdapter):
+            async def load(self, instance):
+                raise ConnectionError("controlled failure before Provider dispatch")
+
+        failing = SetupFailingAdapter()
+        failing.backend_id = "b"
+        adapters.register(failing)
+        gateway = ModelGateway(registry, adapters, max_retries_per_model=0)
+        result = await gateway.invoke_parallel(
+            ModelRequest(task_id="task"),
+            policy=ParallelInvocationPolicy(min_successes=minimum),
+        )
+        assert result.successful is successful
+        assert [response.model_id for response in result.responses] == ["a"]
+        assert result.selected_response.content == "partial"
+        assert result.total_cost_usd == 0.25
+        assert result.total_tokens == 7
+        assert failing.invocations == []
+        assert gateway.scheduler.active_leases() == ()
+        assert (
+            "parallel invocation did not reach minimum successes" in result.failures
+        ) is (not successful)
+        completed = next(
+            event
+            for event in gateway.events
+            if event.event_type == "model.parallel.completed"
+        )
+        assert completed.payload["success_count"] == 1
+        assert completed.payload["min_successes"] == minimum
+        assert completed.payload["successful"] is successful
 
     asyncio.run(scenario())
 

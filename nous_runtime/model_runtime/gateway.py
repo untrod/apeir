@@ -86,10 +86,11 @@ class ParallelInvocationResult:
     cancelled_models: tuple[str, ...]
     total_cost_usd: float | None
     total_tokens: int | None
+    min_successes: int = 1
 
     @property
     def successful(self) -> bool:
-        return bool(self.responses)
+        return bool(self.responses) and len(self.responses) >= self.min_successes
 
     @property
     def selected_response(self) -> ModelResponse | None:
@@ -534,7 +535,17 @@ class ModelGateway:
                 ModelRequest.from_dict(payload),
                 _input_admission=request._input_admission,
             )
-            return await self.invoke(locked_request)
+            # Each child must obey the aggregate deadline at its own admission
+            # boundary. Outer cancellation alone cannot prevent dispatch after
+            # synchronous routing/loading has occupied the event loop.
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ModelInvocationError(
+                    "parallel invocation timed out before dispatch"
+                )
+            return await self.invoke(
+                replace(locked_request, timeout_s=min(request.timeout_s, remaining))
+            )
 
         timeout = min(
             request.timeout_s,
@@ -629,6 +640,8 @@ class ModelGateway:
             {
                 "candidate_count": len(candidates),
                 "success_count": len(ordered_responses),
+                "min_successes": active_policy.min_successes,
+                "successful": len(ordered_responses) >= active_policy.min_successes,
                 "failure_count": len(failures),
                 "cancelled_models": cancelled_models,
                 "total_cost_usd": None if unknown_cost else total_cost,
@@ -642,6 +655,7 @@ class ModelGateway:
             cancelled_models=tuple(cancelled_models),
             total_cost_usd=None if unknown_cost else total_cost,
             total_tokens=None if unknown_tokens else total_tokens,
+            min_successes=active_policy.min_successes,
         )
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[Any]:
