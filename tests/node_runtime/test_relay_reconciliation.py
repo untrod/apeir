@@ -3,16 +3,30 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 import json
 import logging
 import socket
 from pathlib import Path
 
 import pytest
+from websockets.asyncio.client import connect
+from websockets.exceptions import ConnectionClosed
 from websockets.exceptions import ConnectionClosedError
 from websockets.frames import Close
 
-from nous_runtime.node_runtime.protocol import NodeProtocolEnvelope, NodeProtocolError
+from nous_runtime.node_runtime.protocol import (
+    NODE_PROTOCOL_VERSION,
+    NodeProtocolEnvelope,
+    NodeProtocolError,
+)
+from nous_runtime.artifact import ContentAddressedArtifactStore
+from nous_runtime.node_runtime.distributed_work import (
+    DistributedWork,
+    DistributedWorkState,
+    WorkExecutionPolicy,
+    WorkRequirements,
+)
 from nous_runtime.node_runtime.relay import NodeRelayClient, NodeRelayServer
 from nous_runtime.node_runtime.service import NodeRuntimeConfig, NodeRuntimeService
 
@@ -27,6 +41,368 @@ def _binding(workload_id: str) -> dict[str, str]:
         "request_digest": "c" * 64,
         "provider_revision": "fake-1",
     }
+
+
+async def _record_verified_result(tmp_path, monkeypatch, *, first_stop=False):
+    state = tmp_path / "controller"
+    server = NodeRelayServer(
+        state_dir=state,
+        artifact_store=ContentAddressedArtifactStore(state / "artifacts"),
+    )
+    node = NodeRuntimeService(NodeRuntimeConfig(tmp_path / "node"))
+    node_id = node.identity.node_id
+    server.register_node(node_id, node.identity.public_key)
+    work_id = "original-terminal-evidence"
+    assert server.work_store is not None
+    server.work_store.create(
+        DistributedWork(
+            work_id=work_id,
+            intent="Preserve original terminal evidence before effect verification",
+            execution_capability="system.echo",
+            requirements=WorkRequirements(capabilities=("system.echo",)),
+            execution_arguments={"message": 1},
+            execution_policy=WorkExecutionPolicy(require_effect_verification=True),
+        )
+    )
+    server.work_store.transition(
+        work_id, DistributedWorkState.SCHEDULED, reason="controlled placement"
+    )
+    server.work_store.assign(work_id, node_id)
+    server.stage_work_dispatch(work_id)
+    request = json.loads((state / "provider-requests" / f"{work_id}.json").read_text())
+    await server.queue_workload(
+        node_id,
+        work_id,
+        request["capability"],
+        request["arguments"],
+        delivery_semantics="at_most_once",
+        binding=request["binding"],
+    )
+    result = node.execute_workload(
+        work_id,
+        request["capability"],
+        request["arguments"],
+        delivery_semantics="at_most_once",
+        binding=request["binding"],
+    )
+    if first_stop:
+        await server._queue_control(
+            node_id, "WORKLOAD_STOP", {"workload_id": work_id}, work_id
+        )
+        result = node.stop_workload(work_id)
+    first = NodeProtocolEnvelope(
+        message_type="WORKLOAD_STATUS",
+        source=node_id,
+        target="control_plane",
+        sequence=1,
+        payload=result,
+        idempotency_key=work_id,
+    ).sign(node.load_private_key())
+    assert first.verify(node.identity.public_key)
+    acknowledgements = []
+
+    async def record_ack(websocket, target, kind, payload, **kwargs):
+        acknowledgements.append((target, kind, payload, kwargs))
+
+    monkeypatch.setattr(server, "_send", record_ack)
+    await server._handle_message(None, node_id, first)
+    assert server.reconcile_work(work_id)["work"]["state"] == "VERIFIED"
+    return server, node, first, request, acknowledgements
+
+
+def test_repeated_terminal_result_preserves_first_envelope_and_verified_work(
+    tmp_path, monkeypatch
+):
+    async def scenario():
+        server, node, first, request, acknowledgements = await _record_verified_result(
+            tmp_path, monkeypatch
+        )
+        work_id = first.idempotency_key
+        node_id = node.identity.node_id
+        state_path = server.state_dir / "workload-state.json"
+        original_state = state_path.read_bytes()
+        result_path = server.provider_results / f"{work_id}.json"
+        original_result = result_path.read_bytes()
+        repeated = NodeProtocolEnvelope(
+            message_type="WORKLOAD_STATUS",
+            source=node_id,
+            target="control_plane",
+            sequence=2,
+            payload=deepcopy(first.payload),
+            idempotency_key=work_id,
+        ).sign(node.load_private_key())
+        assert repeated.verify(node.identity.public_key)
+        assert repeated.to_dict() != first.to_dict()
+        await server._handle_message(None, node_id, repeated)
+        assert server.result_envelopes[work_id] == first.to_dict()
+        assert server.results[work_id] == first.payload
+        assert state_path.read_bytes() == original_state
+        assert result_path.read_bytes() == original_result
+        assert acknowledgements[-1][1:3] == (
+            "ACK",
+            {"acknowledged": "WORKLOAD_STATUS"},
+        )
+        assert acknowledgements[-1][3]["reply_to"] == repeated.message_id
+        # Transport retries cannot restore a completed delivery to the queue.
+        await server.queue_workload(
+            node_id,
+            work_id,
+            request["capability"],
+            request["arguments"],
+            delivery_semantics="at_most_once",
+            binding=request["binding"],
+        )
+        assert work_id not in server.pending.get(node_id, {})
+        assert not (server.provider_requests / f"{work_id}.json").exists()
+        restarted = NodeRelayServer(
+            state_dir=server.state_dir,
+            artifact_store=ContentAddressedArtifactStore(
+                server.state_dir / "artifacts"
+            ),
+        )
+        reconciled = restarted.reconcile_work(work_id)
+        assert reconciled["work"]["state"] == "VERIFIED"
+        assert reconciled["idempotent"] is True
+        assert restarted.result_envelopes[work_id] == first.to_dict()
+        assert (
+            node.execute_workload(
+                work_id,
+                request["capability"],
+                request["arguments"],
+                delivery_semantics="at_most_once",
+                binding=request["binding"],
+            )
+            == first.payload
+        )
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["state", "output", "receipt", "binding", "source", "key", "bool", "float", "stop"],
+)
+def test_conflicting_terminal_replay_preserves_original_evidence(
+    tmp_path, monkeypatch, change
+):
+    async def scenario():
+        server, node, first, _request, acknowledgements = await _record_verified_result(
+            tmp_path, monkeypatch
+        )
+        payload = deepcopy(first.payload)
+        sender = node
+        idempotency_key = first.idempotency_key
+        if change == "source":
+            sender = NodeRuntimeService(NodeRuntimeConfig(tmp_path / "other-node"))
+            server.register_node(sender.identity.node_id, sender.identity.public_key)
+        elif change == "key":
+            idempotency_key = "different-work"
+        elif change == "state":
+            payload["state"] = "FAILED"
+        elif change == "output":
+            payload["output"] = {"echo": "changed"}
+        elif change == "receipt":
+            payload["receipt"]["effect_digest"] = "0" * 64
+        elif change in {"bool", "float"}:
+            payload["output"]["echo"] = True if change == "bool" else 1.0
+        elif change == "stop":
+            payload["stop_result"] = "arbitrary-control-value"
+        else:
+            payload["binding"]["intent_id"] = "changed-intent"
+        repeated = NodeProtocolEnvelope(
+            message_type="WORKLOAD_STATUS",
+            source=sender.identity.node_id,
+            target="control_plane",
+            sequence=2,
+            payload=payload,
+            idempotency_key=idempotency_key,
+        ).sign(sender.load_private_key())
+        assert repeated.verify(sender.identity.public_key)
+        original_state = (server.state_dir / "workload-state.json").read_bytes()
+        ack_count = len(acknowledgements)
+        with pytest.raises(NodeProtocolError):
+            await server._handle_message(None, sender.identity.node_id, repeated)
+        assert server.result_envelopes[first.idempotency_key] == first.to_dict()
+        assert server.results[first.idempotency_key] == first.payload
+        assert (server.state_dir / "workload-state.json").read_bytes() == original_state
+        assert len(acknowledgements) == ack_count
+        assert (
+            server.reconcile_work(first.idempotency_key)["work"]["state"] == "VERIFIED"
+        )
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("pending_stop", [False, True])
+def test_terminal_stop_response_preserves_execution_evidence(
+    tmp_path, monkeypatch, pending_stop
+):
+    async def scenario():
+        server, node, first, _request, acknowledgements = await _record_verified_result(
+            tmp_path, monkeypatch
+        )
+        node_id = node.identity.node_id
+        work_id = first.idempotency_key
+        if pending_stop:
+            await server._queue_control(
+                node_id, "WORKLOAD_STOP", {"workload_id": work_id}, work_id
+            )
+        response = NodeProtocolEnvelope(
+            message_type="WORKLOAD_STATUS",
+            source=node_id,
+            target="control_plane",
+            sequence=2,
+            payload=node.stop_workload(work_id),
+            idempotency_key=work_id,
+        ).sign(node.load_private_key())
+        assert response.payload["stop_result"] == "ALREADY_TERMINAL"
+        ack_count = len(acknowledgements)
+        if pending_stop:
+            await server._handle_message(None, node_id, response)
+            assert node_id not in server.pending_controls
+            assert len(acknowledgements) == ack_count + 1
+        else:
+            with pytest.raises(
+                NodeProtocolError, match="recorded workload result changed"
+            ):
+                await server._handle_message(None, node_id, response)
+            assert len(acknowledgements) == ack_count
+        assert server.result_envelopes[work_id] == first.to_dict()
+        assert server.results[work_id] == first.payload
+        assert server.reconcile_work(work_id)["work"]["state"] == "VERIFIED"
+        restarted = NodeRelayServer(state_dir=server.state_dir)
+        assert node_id not in restarted.pending_controls
+        assert restarted.result_envelopes[work_id] == first.to_dict()
+
+    asyncio.run(scenario())
+
+
+def test_terminal_stop_result_arrives_before_original_execution_response(
+    tmp_path, monkeypatch
+):
+    async def scenario():
+        server, node, first, request, _acks = await _record_verified_result(
+            tmp_path, monkeypatch, first_stop=True
+        )
+        work_id = first.idempotency_key
+        node_id = node.identity.node_id
+        assert first.payload["stop_result"] == "ALREADY_TERMINAL"
+        assert node_id not in server.pending_controls
+        original_state = (server.state_dir / "workload-state.json").read_bytes()
+        base_result = node.execute_workload(
+            work_id,
+            request["capability"],
+            request["arguments"],
+            delivery_semantics="at_most_once",
+            binding=request["binding"],
+        )
+        assert "stop_result" not in base_result
+        for sequence, payload in ((2, base_result), (3, deepcopy(first.payload))):
+            repeated = NodeProtocolEnvelope(
+                message_type="WORKLOAD_STATUS",
+                source=node_id,
+                target="control_plane",
+                sequence=sequence,
+                payload=payload,
+                idempotency_key=work_id,
+            ).sign(node.load_private_key())
+            await server._handle_message(None, node_id, repeated)
+            assert server.result_envelopes[work_id] == first.to_dict()
+            assert server.results[work_id] == first.payload
+            assert (
+                server.state_dir / "workload-state.json"
+            ).read_bytes() == original_state
+            assert server.reconcile_work(work_id)["work"]["state"] == "VERIFIED"
+        restarted = NodeRelayServer(
+            state_dir=server.state_dir,
+            artifact_store=ContentAddressedArtifactStore(
+                server.state_dir / "artifacts"
+            ),
+        )
+        assert restarted.result_envelopes[work_id] == first.to_dict()
+        assert restarted.reconcile_work(work_id)["work"]["state"] == "VERIFIED"
+
+    asyncio.run(scenario())
+
+
+def test_socket_reconnect_retransmits_original_terminal_evidence(tmp_path, monkeypatch):
+    async def scenario():
+        server, node, first, _request, _acks = await _record_verified_result(
+            tmp_path, monkeypatch
+        )
+        monkeypatch.setattr(server, "_send", NodeRelayServer._send.__get__(server))
+        node_id = node.identity.node_id
+        work_id = first.idempotency_key
+        key = node.load_private_key()
+
+        def signed(kind, sequence, payload, *, idempotency_key=""):
+            return NodeProtocolEnvelope(
+                message_type=kind,
+                source=node_id,
+                target="control_plane",
+                sequence=sequence,
+                payload=payload,
+                idempotency_key=idempotency_key,
+            ).sign(key)
+
+        url = await server.start()
+        session_id = ""
+        try:
+            for sequence in (10, 20):
+                async with connect(url) as socket:
+                    registration = signed(
+                        "REGISTER",
+                        sequence,
+                        {
+                            "node_id": node_id,
+                            "identity": node.identity.to_dict(),
+                            "supported_versions": [NODE_PROTOCOL_VERSION],
+                            "resume_session_id": session_id,
+                        },
+                    )
+                    await socket.send(registration.to_json())
+                    welcome = NodeProtocolEnvelope.from_json(await socket.recv())
+                    assert welcome.verify(server.public_key)
+                    assert welcome.payload["resumed"] is bool(session_id)
+                    session_id = welcome.payload["session_id"]
+                    repeated = signed(
+                        "WORKLOAD_STATUS",
+                        sequence + 1,
+                        deepcopy(first.payload),
+                        idempotency_key=work_id,
+                    )
+                    await socket.send(repeated.to_json())
+                    ack = NodeProtocolEnvelope.from_json(await socket.recv())
+                    assert ack.verify(server.public_key)
+                    assert ack.payload["acknowledged"] == "WORKLOAD_STATUS"
+                    assert ack.reply_to == repeated.message_id
+                    assert server.result_envelopes[work_id] == first.to_dict()
+                    assert server.reconcile_work(work_id)["work"]["state"] == "VERIFIED"
+                    if sequence == 20:
+                        changed = deepcopy(first.payload)
+                        changed["output"]["echo"] = True
+                        await socket.send(
+                            signed(
+                                "WORKLOAD_STATUS",
+                                sequence + 2,
+                                changed,
+                                idempotency_key=work_id,
+                            ).to_json()
+                        )
+                        error = NodeProtocolEnvelope.from_json(await socket.recv())
+                        assert error.message_type == "ERROR"
+                        assert error.payload["code"] == "PROTOCOL_ERROR"
+                        with pytest.raises(ConnectionClosed):
+                            await socket.recv()
+                        assert server.result_envelopes[work_id] == first.to_dict()
+                        assert (
+                            server.reconcile_work(work_id)["work"]["state"]
+                            == "VERIFIED"
+                        )
+        finally:
+            await server.stop()
+
+    asyncio.run(scenario())
 
 
 @pytest.mark.parametrize("delivery_semantics", ["idempotent", "at_most_once"])

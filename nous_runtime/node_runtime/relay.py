@@ -1621,6 +1621,50 @@ class NodeRelayServer:
                 )
             if envelope.idempotency_key != workload_id:
                 raise NodeProtocolError("workload status idempotency key is mismatched")
+            if prior is not None:
+                recorded = self.results.get(workload_id)
+                repeated = envelope.payload
+                recorded_stop = (recorded or {}).get(
+                    "stop_result"
+                ) == "ALREADY_TERMINAL"
+                if recorded_stop:
+                    recorded = {
+                        key: value
+                        for key, value in recorded.items()
+                        if key != "stop_result"
+                    }
+                if (stopped or recorded_stop) and repeated.get(
+                    "stop_result"
+                ) == "ALREADY_TERMINAL":
+                    # A stop response acknowledges an already terminal journal;
+                    # its control metadata is not replacement execution evidence.
+                    repeated = {
+                        key: value
+                        for key, value in repeated.items()
+                        if key != "stop_result"
+                    }
+                if _payload_digest(repeated) != _payload_digest(recorded):
+                    raise NodeProtocolError("recorded workload result changed")
+                # A retried delivery signs the original Node journal again.
+                # Keep the first envelope: VERIFIED Work and CAS evidence bind
+                # its exact digest, not the transport retry's new signature.
+                if assigned:
+                    staged_pending = {
+                        key: dict(value) for key, value in self.pending.items()
+                    }
+                    staged_pending.get(node_id, {}).pop(workload_id, None)
+                    self._save_workload_state(pending=staged_pending)
+                    self.pending = staged_pending
+                self._publish_provider_result(workload_id)
+                self._complete_control(node_id, "WORKLOAD_STOP", workload_id)
+                await self._send(
+                    websocket,
+                    node_id,
+                    "ACK",
+                    {"acknowledged": envelope.message_type},
+                    reply_to=envelope.message_id,
+                )
+                return
             if assignment and assignment.get("delivery_semantics") == "at_most_once":
                 _verify_at_most_once_result(node_id, assignment, envelope.payload)
             staged_pending = {key: dict(value) for key, value in self.pending.items()}

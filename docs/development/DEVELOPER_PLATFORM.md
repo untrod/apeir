@@ -108,6 +108,14 @@ Incremental snapshot updates require the same binding and supplied current
 source versions; they remain read data, not execution authority or a qualified
 cross-task cache.
 
+Work Harness decisions have a separate 96,000-character prepared-input bound.
+The complete compacted JSON must fit; it is never sliced in the middle of a
+Goal, constraint or decision schema. Overflow pauses the original Work in
+`WAITING_USER` before Provider dispatch, with a count/limit diagnostic and its
+original Goal/checkpoint retained. Reduce selected context or explicitly split
+the task rather than silently replacing its requirements. This is a character
+admission bound, not a Provider token measurement or automatic long-task summary.
+
 The current Chat handler supports text, model choice and execution mode. File
 attachments and Node/privacy/per-request-budget controls are disabled because
 this request path does not deliver them. Drop/paste and stale or crafted values

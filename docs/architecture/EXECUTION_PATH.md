@@ -45,6 +45,13 @@ before persistence. Polling happens outside the publication lock. Recovery reads
 the bound cached result without republishing a possibly completed effect; cached
 results still require exact Receipt binding and Kernel signature admission.
 
+Terminal Node execution evidence keeps its first accepted signed envelope.
+A reconnect may sign the same original journal again with a new message ID;
+that transport retry is acknowledged without replacing the envelope digest bound
+to Distributed Work and Artifact evidence. Changed result, receipt, binding or
+sender fails closed. A pending stop may acknowledge `ALREADY_TERMINAL` as control
+metadata; it cannot replace the original execution result or authorize replay.
+
 Compatibility APIs that invoke models must translate to an NKI request. They
 may not write the Kernel journal, grant a Kernel lease, select credentials or
 mark a model workload complete.
