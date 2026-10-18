@@ -2427,6 +2427,58 @@ performance gates, Node assertions and timeouts are unchanged. This is test
 input determinism, not a performance improvement or a Windows recovery fix.
 Exact-source CI remains required before integration.
 
+### Pre-installation audit and original-evidence repair, 2026-10-18
+
+Requeried main `e3cd2a20d75a711108285533cd83014bf6f9b69d`, remote heads,
+PRs, open Issues, workflows, releases, component lock and available toolchains.
+Main's four workflows and PR #81's five exact-source workflow runs are successful;
+GitHub still reports the PR blocked by three stale required check names. The
+administration endpoint returns 403. No protection change, administrator bypass,
+new tag or Release is performed. The 31 published tags and frozen Kernel remain
+untouched. The root checkout remains on main; candidate work is isolated.
+
+| Existing surface | Classification | Actual entry / remaining boundary |
+| --- | --- | --- |
+| Work, AgentSession, Workflow, Governance, CAS, EventStream | REUSE | Existing CLI/HTTP/SDK and durable owners; no competing state system. |
+| MCP Runtime | EXTEND | PR #81 official SDK stdio → authenticated Runtime HTTP, five tools and original human approval. Not yet main; direct official Codex MCP evidence is not a model turn. |
+| Prepared Work model input | FIX | A 96,000-character string slice could corrupt JSON and omit Goal constraints/schema. Complete compacted input now either dispatches whole or pauses the original Work before Provider invocation. |
+| Signed Node result recovery | FIX | Re-signing the same terminal journal could overwrite the envelope digest already bound to VERIFIED Work. Preserve first evidence, ACK canonical duplicates, reject conflicts; terminal stop control metadata is distinct from execution evidence. |
+| Reviewed Skill acquisition | REUSE | Main has original human-reviewed local/HTTPS catalog/Extension/CAS paths. Correct the stale example claim that all remote acquisition is rejected. Instruction loading is not executable Skill qualification. |
+| Model Center / Context / Workbench | EXTEND | Existing Gateway/Registry, saved-file admission, editor/proposals and original Work paths. Full authenticated Harness, all native filesystem paths and actual cloud/local model tasks require independent qualification. |
+| Terminal / Git / Environment | EXTEND | Existing process sessions, bounded profiles, read-only sandboxed Git and Environment service. Do not label fixed profiles as a qualified full PTY or bypass missing strict isolation. |
+| Automation | EXTEND | Existing manual/one-shot simulated consumer; recurring real-node health work, general executable Skills and Recorder remain missing. |
+| Embedded / Network / Scientific | EXTEND | Existing signed Node/Device, Serial host contracts and numerical reference. Physical/WAN and strict-isolation computation/report gates remain pending or blocked. |
+| Native Windows installation | FIX | Actual verifier still fails on missing locked `nousd` bytes; worker also absent. No Rust/MSVC/PowerShell/Windows SDK toolchain here. Kernel repository has no release/artifact archive; its CI has no dispatch or artifact upload. A different rebuild hash cannot replace the lock. |
+| Additional Harnesses / protocols / general engines | DEFER | See the dated official-source/license adoption table in the existing Provider contract; no copied Harness, scheduler, inference engine or workflow engine. |
+
+Defect evidence is retained privately outside source. Work overflow reproduction
+against accepted main: **2 failed, 1 passed** (0.38 s); the old path dispatched
+truncated input instead of rejecting it. Original Goal/constraint overflow,
+complete Unicode JSON/tail constraints, the exact inclusive bound and durable
+WAITING_USER/no-Provider/no-tool behavior now have regressions. Prepared input
+character count is not measured token usage; no cost-saving percentage is claimed.
+
+Node duplicate-terminal reproduction: **5 failed, 2 passed**. The first fixture
+omitted a capability requirement and was corrected before the defect baseline;
+those setup failures are retained separately. Initial preservation exposed a real
+compatibility failure in the existing reconnect test (pending retry not retired),
+which was corrected rather than skipped. Canonical comparison distinguishes bool,
+integer and float payload changes. Tests cover signed real-socket reconnect,
+conflicting result/binding/receipt/sender/key, persisted original envelope/CAS
+binding, pending queue cleanup and both ALREADY_TERMINAL stop/result orderings.
+No timeout increase, execution replay or weaker MATCH assertion is introduced.
+This proves a duplicate-envelope defect, not the historical cause of Issues
+#4/#8/#82; those remain open until their original failures are explained.
+
+Pre-composition checks: **275 Node tests passed**, **56 Work tests passed**.
+Original HTTP approval/MATCH selection: **2 passed**. Initial preservation's
+Reality/Automation selection: **169 passed**; this earlier patch scope is not
+presented as final combined qualification. Counts overlap. The candidate reuses
+PR #81 through a normal merge preserving its exact accepted source SHA; its
+own final combined regression, source CI and protected main integration remain
+required before claiming integration. Original Kernel, component lock, PID64,
+credential/sandbox boundaries and native release rules are unchanged.
+
 ### Scoped MCP / original Work submission software qualification
 
 Audit classification: **REUSE** existing MCP SDK, authenticated Runtime HTTP,
