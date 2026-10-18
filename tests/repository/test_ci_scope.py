@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.ci.test_scope import classify
+from scripts.ci.test_scope import classify, comparison_base
 
 
 @pytest.mark.parametrize(
@@ -71,3 +71,43 @@ def test_renamed_critical_file_is_not_hidden(tmp_path):
         check=True,
     )
     assert result.stdout.strip() == "full"
+
+
+def test_manual_formatting_covers_earlier_branch_commits(tmp_path, monkeypatch):
+    repo = tmp_path / "git"
+    repo.mkdir()
+
+    def git(*args):
+        return subprocess.check_output(
+            ["git", "-C", str(repo), *args], text=True
+        ).strip()
+
+    git("init", "-q")
+    git("config", "user.name", "Preview test")
+    git("config", "user.email", "test@example.invalid")
+    source = repo / "runtime.py"
+    source.write_text("value = 1\n")
+    git("add", ".")
+    git("commit", "-qm", "base")
+    original = git("rev-parse", "HEAD")
+    git("update-ref", "refs/remotes/origin/main", original)
+    source.write_text("value = 2\n")
+    git("commit", "-qam", "implementation")
+    (repo / "README.md").write_text("documentation follows implementation\n")
+    git("add", ".")
+    git("commit", "-qm", "docs")
+    monkeypatch.chdir(repo)
+    for supplied in ("", "0" * 40):
+        base = comparison_base(supplied)
+        assert base == original
+        assert "runtime.py" in git("diff", "--name-only", base, "HEAD").splitlines()
+    assert "runtime.py" not in git("diff", "--name-only", "HEAD^", "HEAD")
+    assert comparison_base("HEAD^") == "HEAD^"
+    git("update-ref", "-d", "refs/remotes/origin/main")
+    with pytest.raises(subprocess.CalledProcessError):
+        comparison_base()
+
+
+def test_comparison_base_rejects_git_options():
+    with pytest.raises(ValueError, match="explicit Git revisions"):
+        comparison_base("--help")

@@ -24,7 +24,7 @@ def test_model_center_api_uses_shared_workspace(monkeypatch, tmp_path):
     assert listed["ok"] is True
     assert listed["data"]["summary"]["total"] == 1
     model = listed["data"]["models"][0]
-    assert model["id"] == model["model_id"] == "model"
+    assert model["model_id"] == "model"
     assert model["provider_id"] == "mock"
     assert model["endpoint_type"] == "local_service"
     assert "avg_latency_ms" not in model
@@ -33,7 +33,7 @@ def test_model_center_api_uses_shared_workspace(monkeypatch, tmp_path):
         {"action": "enable", "model_id": "model"}
     )
     assert enabled["ok"] is True
-    assert enabled["data"]["id"] == enabled["data"]["model_id"] == "model"
+    assert enabled["data"]["model_id"] == "model"
     assert enabled["data"]["state"] == "enabled"
 
 

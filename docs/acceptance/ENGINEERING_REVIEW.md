@@ -2487,7 +2487,8 @@ probe must **not** be reported as proof that the public model list loses every
 model. The actual Control Plane adapter already supplies both identities. Its
 missing benchmark measurements were nevertheless rendered as zero and declared
 availability as measured health; review follows the actual HTTP producer through
-Desktop consumption. The ModelCenter action DTO alias is compatibility only.
+Desktop consumption. The legacy ModelCenter action DTO remains unchanged;
+identity regressions qualify the actual public HTTP projection instead.
 Protected HTTP tests now use the real active Gateway and persisted registry,
 including unauthenticated denial and reopen/removal. Missing or invalid benchmark
 values remain null, unobserved health is UNKNOWN, and only canonical enabled
@@ -2503,9 +2504,11 @@ software fixtures and authenticated loopback HTTP, not actual model inference.
 Pagination regression: **5 failed,12 passed** before, **17 passed** after.
 Current full Desktop: **40 files,239 tests passed**, with lint, typecheck and Vite
 build passing. Shared-redactor Governance/credential/usage regression: **264
-passed**. Full composed Python and exact-source CI remain required. One touched
-legacy ModelCenter file already fails whole-file Ruff formatting on the original
-baseline; its one additive alias does not reformat unrelated implementation.
+passed**. Full composed Python and exact-source CI remain required. A proposed
+unnecessary legacy DTO alias also exposed that file's original formatting failure
+in source0a75af7 Security CI. The alias is withdrawn instead of reformatting the
+unrelated legacy implementation or weakening the changed-file formatter. The
+failed run and baseline-format evidence are retained.
 
 Candidate28aa586 Multi-Arch run39119424955 failed the same Gateway fan-out test
 on Linux AMD64 and ARM64/Python3.11. Original raw logs are retained. A controlled

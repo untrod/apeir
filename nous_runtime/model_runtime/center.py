@@ -49,7 +49,7 @@ class ModelCenterModel:
     recoverable: bool
 
     def to_dict(self) -> dict[str, Any]:
-        return {**asdict(self), "id": self.model_id}
+        return asdict(self)
 
 
 class ModelCenterService:
