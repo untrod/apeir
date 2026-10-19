@@ -203,27 +203,119 @@ def test_pid_identity_change_fails_closed(tmp_path: Path) -> None:
 def test_recovery_binds_host_after_crash_between_spawn_and_running_fact(
     tmp_path: Path,
 ) -> None:
-    store = ProcessSessionStore(tmp_path)
-    started = _start(store, "import time; time.sleep(30)")
-    session_id = started["session_id"]
-    path = tmp_path / ".nous" / "process-sessions" / session_id / "session.json"
-    interrupted = json.loads(path.read_text(encoding="utf-8"))
-    interrupted.update(
-        state="STARTING",
-        process_identity={},
-        helper_identity={},
-        started_at="",
-        stdin_available=False,
-    )
-    path.write_text(json.dumps(interrupted), encoding="utf-8")
+    from tests.tools.test_process_session_startup import _cleanup_original_session
 
-    recovered = ProcessSessionStore(tmp_path).recover(session_id=session_id)
-    assert recovered["state"] == "RUNNING"
-    assert recovered["recovery_required"] is False
-    assert recovered["automatic_replay"] is False
-    assert recovered["process_identity"]["pid"] == started["process_identity"]["pid"]
-    store.kill(session_id)
-    _wait_state(store, session_id, {"KILLED"})
+    store = ProcessSessionStore(tmp_path)
+    # The test owns the process lifetime instead of assuming that recovery and
+    # durable I/O complete before a fixed sleep expires on every platform.
+    started = _start(store, "import sys; sys.stdin.readline()")
+    session_id = started["session_id"]
+    control_may_have_been_submitted = False
+    try:
+        assert started["state"] == "RUNNING"
+        path = tmp_path / ".nous" / "process-sessions" / session_id / "session.json"
+        interrupted = json.loads(path.read_text(encoding="utf-8"))
+        interrupted.update(
+            state="STARTING",
+            process_identity={},
+            helper_identity={},
+            started_at="",
+            stdin_available=False,
+        )
+        path.write_text(json.dumps(interrupted), encoding="utf-8")
+
+        recovered = ProcessSessionStore(tmp_path).recover(session_id=session_id)
+        assert recovered["state"] == "RUNNING"
+        assert recovered["recovery_required"] is False
+        assert recovered["automatic_replay"] is False
+        assert (
+            recovered["process_identity"]["pid"] == started["process_identity"]["pid"]
+        )
+        control_may_have_been_submitted = True
+        try:
+            store.kill(session_id)
+        except ValueError as exc:
+            if str(exc).startswith(
+                "process session is not running: RECOVERY_REQUIRED"
+            ) and not list((path.parent / "control").glob("*.json")):
+                # This exact rejection precedes writing any control request.
+                # Keep it as a test failure, while allowing verified cleanup.
+                control_may_have_been_submitted = False
+            raise
+        assert _wait_state(store, session_id, {"KILLED"})["state"] == "KILLED"
+    finally:
+        if control_may_have_been_submitted:
+            # A lost acknowledgement is not permission to submit another kill.
+            assert _wait_state(
+                store, session_id, {"EXITED", "INTERRUPTED", "TERMINATED", "KILLED"}
+            )["state"] in {"EXITED", "INTERRUPTED", "TERMINATED", "KILLED"}
+        else:
+            _cleanup_original_session(store, session_id)
+
+
+def test_unverified_control_denies_then_recovers_only_original_host(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from nous_runtime.tools import process_session
+    from tests.tools.test_process_session_startup import _cleanup_original_session
+
+    original_launch = process_session.ProcessSandboxHost.launch
+    launches = []
+
+    def launch(spec):
+        launches.append(spec)
+        return original_launch(spec)
+
+    monkeypatch.setattr(process_session.ProcessSandboxHost, "launch", launch)
+    store = ProcessSessionStore(tmp_path)
+    started = _start(store, "import sys; sys.stdin.readline()")
+    session_id = started["session_id"]
+    control_directory = store.root / session_id / "control"
+    control_may_have_been_submitted = False
+    try:
+        assert started["state"] == "RUNNING"
+        assert len(launches) == 1
+        with monkeypatch.context() as fault:
+            fault.setattr(process_session, "process_identity_matches", lambda _: False)
+            with pytest.raises(ValueError, match="process session is not running"):
+                store.kill(session_id)
+            current = store.status(session_id)
+            assert current["state"] == "RECOVERY_REQUIRED"
+            assert current["stdin_available"] is False
+            assert not list(control_directory.glob("*.json"))
+            assert len(launches) == 1
+        recovered = ProcessSessionStore(tmp_path).recover(session_id=session_id)
+        assert recovered["state"] == "RUNNING"
+        assert recovered["recovery_required"] is False
+        assert recovered["automatic_replay"] is False
+        assert recovered["process_identity"] == started["process_identity"]
+        assert recovered["helper_identity"] == started["helper_identity"]
+        assert len(launches) == 1
+        control_may_have_been_submitted = True
+        try:
+            store.kill(session_id)
+        except ValueError as exc:
+            if str(exc).startswith(
+                "process session is not running: RECOVERY_REQUIRED"
+            ) and not list(control_directory.glob("*.json")):
+                control_may_have_been_submitted = False
+            raise
+        assert _wait_state(store, session_id, {"KILLED"})["state"] == "KILLED"
+        requests = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in control_directory.glob("*.json")
+        ]
+        assert len(requests) == 1
+        assert requests[0]["action"] == "kill"
+        assert requests[0]["session_id"] == session_id
+        assert len(launches) == 1
+    finally:
+        if control_may_have_been_submitted:
+            assert _wait_state(
+                store, session_id, {"EXITED", "INTERRUPTED", "TERMINATED", "KILLED"}
+            )["state"] in {"EXITED", "INTERRUPTED", "TERMINATED", "KILLED"}
+        else:
+            _cleanup_original_session(store, session_id)
 
 
 def test_unknown_start_outcome_requires_recovery(tmp_path: Path) -> None:

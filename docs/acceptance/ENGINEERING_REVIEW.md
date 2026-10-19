@@ -2801,3 +2801,31 @@ checks plus related workspace/snapshot/selected-input regressions pass
 **127 tests,3 skipped** on both Python3.12 and3.11. The skips require actual
 Windows handle sharing and two owned alternate-stream cases; their presence is
 not native acceptance. Exact-source Windows CI remains required.
+
+Source `458e036` Multi-Arch then passes: Linux ARM64 **5317 passed,62 skipped,
+292 deselected** and Windows **5240 passed,139 skipped,292 deselected**. The
+owned alternate-stream rejection cases run and pass on Windows Server2025;
+this is not installed Desktop or Windows10 qualification. Core Linux3.12 passes
+**5640 tests,50 skipped**, Linux3.10/macOS each **5629 passed,61 skipped**.
+Windows Core retains **1 failed,5532 passed,157 skipped (2099.72s)**: original
+ProcessSession recovery is RUNNING with the same PID, but the subsequent fresh
+control admission refuses RECOVERY_REQUIRED. The whole ProcessSession module
+takes about9.27seconds in the log, so its30-second child lifetime is not evidence
+of the failure cause. This separate unresolved failure is
+[Issue85](https://github.com/untrod/apeir/issues/85), not an Automation verdict
+or Relay diagnosis. The original log omits the refusal reason; a passing rerun
+cannot identify whether the current host record or OS identity query failed.
+
+The existing ProcessSession control exception now reports allowlisted reason
+codes while preserving its ValueError contract and message prefix. Arbitrary
+host errors, commands, output and environment are not reflected. Five negative
+diagnostic cases fail before this change and pass after; control admission,
+identity checks, deadlines and execution are unchanged. The crash-rebind test
+now owns its child lifetime through stdin and checks terminal evidence during
+cleanup, without repeating an accepted or uncertain control. A real-host negative
+case denies an unverified control before any request is written, restores the
+same original target/helper identities without respawn, and submits exactly one
+valid kill. ProcessSession/startup/admission regressions: **28 passed** on
+Python3.12 (24.48s) and3.11 (24.32s); each owned test reaper collects four children
+with zero remaining. This improves diagnostics and fixture ownership; the
+historical Windows cause and complete product Gate remain unresolved.
