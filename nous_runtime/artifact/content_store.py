@@ -26,6 +26,7 @@ from nous_runtime.locking import file_lock
 
 _ARTIFACT_TYPES = frozenset(item.value for item in ArtifactType)
 _DIGEST = re.compile(r"^sha256:([0-9a-f]{64})$")
+_PIN_SCHEMA = "apeir.cas-pins/v2"
 
 
 def _utc_now() -> str:
@@ -262,25 +263,46 @@ class ContentAddressedArtifactStore:
                 hasher.update(chunk)
         return "sha256:" + hasher.hexdigest() == digest
 
-    def pin(self, digest: str, reason: str = "user") -> dict[str, Any]:
+    def pin(
+        self, digest: str, reason: str = "user", *, owner: str | None = None
+    ) -> dict[str, Any]:
+        """Retain content for one caller without replacing other retention holds.
+
+        The default hold preserves the existing user API and legacy records.
+        Component callers use opaque owner digests, never paths or credentials.
+        Repeating the same owner is idempotent, not a reference-count increment.
+        """
+        owner_key = _pin_owner(owner)
         with self._lock, file_lock(str(self.index_path) + ".lock"):
             self._index = self._load_index()
             self._pins = self._load_pins()
             self.resolve(digest)
-            self._pins[digest] = {
+            hold = {
                 "reason": redact_sensitive_text(reason),
                 "pinned_at": _utc_now(),
             }
-            _atomic_write_json(self.pins_path, self._pins)
+            previous = self._pins.get(digest)
+            owners = _pin_holds(previous) if previous is not None else {}
+            owners[owner_key] = hold
+            self._pins[digest] = {**hold, "owners": owners}
+            _atomic_write_json(self.pins_path, _pin_document(self._pins))
             return self._receipt("artifact.pin", digest, "COMPLETED")
 
-    def unpin(self, digest: str) -> dict[str, Any]:
+    def unpin(self, digest: str, *, owner: str | None = None) -> dict[str, Any]:
         _digest_hex(digest)
+        owner_key = _pin_owner(owner)
         with self._lock, file_lock(str(self.index_path) + ".lock"):
             self._index = self._load_index()
             self._pins = self._load_pins()
-            existed = self._pins.pop(digest, None) is not None
-            _atomic_write_json(self.pins_path, self._pins)
+            previous = self._pins.get(digest)
+            owners = _pin_holds(previous) if previous is not None else {}
+            existed = owners.pop(owner_key, None) is not None
+            if owners:
+                hold = next(iter(owners.values()))
+                self._pins[digest] = {**hold, "owners": owners}
+            else:
+                self._pins.pop(digest, None)
+            _atomic_write_json(self.pins_path, _pin_document(self._pins))
             return self._receipt(
                 "artifact.unpin", digest, "COMPLETED" if existed else "UNCHANGED"
             )
@@ -407,6 +429,10 @@ class ContentAddressedArtifactStore:
 
     def _load_pins(self) -> dict[str, dict[str, Any]]:
         value = _read_json(self.pins_path)
+        versioned = "schema" in value
+        schema = value.pop("schema", None)
+        if versioned and schema != _PIN_SCHEMA:
+            raise ArtifactError("artifact pin owners schema is unsupported")
         for digest, record in value.items():
             _digest_hex(digest)
             if (
@@ -416,6 +442,32 @@ class ContentAddressedArtifactStore:
                 or not record["pinned_at"]
             ):
                 raise ArtifactError("artifact pin record is invalid")
+            if "owners" in record:
+                if schema != _PIN_SCHEMA:
+                    raise ArtifactError(
+                        "artifact pin owners require the versioned schema"
+                    )
+                owners = record["owners"]
+                if not isinstance(owners, dict) or not owners:
+                    raise ArtifactError("artifact pin owners are invalid")
+                for owner, hold in owners.items():
+                    if owner != "default":
+                        _pin_owner(owner)
+                    if (
+                        not isinstance(hold, dict)
+                        or set(hold) != {"reason", "pinned_at"}
+                        or not isinstance(hold["reason"], str)
+                        or not isinstance(hold["pinned_at"], str)
+                        or not hold["pinned_at"]
+                    ):
+                        raise ArtifactError("artifact pin owner record is invalid")
+                if {
+                    "reason": record["reason"],
+                    "pinned_at": record["pinned_at"],
+                } not in owners.values():
+                    raise ArtifactError(
+                        "artifact pin summary does not match its owners"
+                    )
         return value
 
     def _transitive_pin_closure(self) -> set[str]:
@@ -461,6 +513,36 @@ class ContentAddressedArtifactStore:
         with self.receipts_path.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(receipt, ensure_ascii=False, sort_keys=True) + "\n")
         return receipt
+
+
+def _pin_owner(owner: str | None) -> str:
+    if owner is None:
+        return "default"
+    if (
+        not isinstance(owner, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", owner)
+        or contains_sensitive_value(owner)
+    ):
+        raise ArtifactError("artifact pin owner must be an opaque SHA-256 identity")
+    return owner
+
+
+def _pin_holds(record: dict[str, Any]) -> dict[str, dict[str, str]]:
+    if "owners" in record:
+        return dict(record["owners"])
+    # Historical single-value records may represent user or other-component
+    # retention. A new component must never infer ownership from their reason.
+    return {"default": {"reason": record["reason"], "pinned_at": record["pinned_at"]}}
+
+
+def _pin_document(pins: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    if any("owners" in record for record in pins.values()):
+        # Old writers validate every top-level key as a digest before mutating.
+        # A schema sentinel makes them reject owned records rather than silently
+        # discarding another caller's retention. The same authoritative file is
+        # retained; legacy digest-only maps remain readable by this version.
+        return {"schema": _PIN_SCHEMA, **pins}
+    return pins
 
 
 def _digest_hex(digest: str) -> str:

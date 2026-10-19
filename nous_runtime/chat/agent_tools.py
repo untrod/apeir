@@ -13,6 +13,7 @@ from typing import Any, Mapping
 from nous_runtime.agents.adapters.workspace_guard import WorkspaceGuard
 from nous_runtime.governance.effect_gate import EffectGate
 from nous_runtime.execution.executables import resolve_executable
+from nous_runtime.workspace.isolation import read_workspace_bytes
 
 _MAX_READ_BYTES = 262_144
 _MAX_WRITE_BYTES = 1_048_576
@@ -561,12 +562,7 @@ class WorkspaceToolRuntime:
         path = self._path(arguments.get("path"))
         if not path.is_file():
             raise ValueError("The requested workspace path is not a file.")
-        if path.stat().st_size > _MAX_READ_BYTES:
-            raise ValueError("The file exceeds the 256 KiB agent read limit.")
-        with path.open("rb") as stream:
-            data = stream.read(_MAX_READ_BYTES + 1)
-        if len(data) > _MAX_READ_BYTES:
-            raise ValueError("The file exceeds the 256 KiB agent read limit.")
+        data = read_workspace_bytes(self.root, path, max_bytes=_MAX_READ_BYTES)
         text = redact_sensitive_text(data.decode("utf-8"))
         relative = path.relative_to(self.root).as_posix()
         version = hashlib.sha256(data).hexdigest()
@@ -610,7 +606,10 @@ class WorkspaceToolRuntime:
                 continue
             try:
                 for line_number, line in enumerate(
-                    path.read_text(encoding="utf-8").splitlines(), 1
+                    read_workspace_bytes(self.root, path, max_bytes=_MAX_READ_BYTES)
+                    .decode("utf-8")
+                    .splitlines(),
+                    1,
                 ):
                     if query.casefold() in line.casefold():
                         matches.append(
@@ -622,7 +621,7 @@ class WorkspaceToolRuntime:
                         )
                         if len(matches) >= 100:
                             return {"ok": True, "matches": matches, "truncated": True}
-            except UnicodeError:
+            except (OSError, UnicodeError):
                 continue
         return {"ok": True, "matches": matches, "truncated": False}
 

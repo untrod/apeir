@@ -19,7 +19,10 @@ from uuid import uuid4
 from nous_runtime.capability.sandbox import run_process_strict
 from nous_runtime.events import EventStream, RunEvent, RunState
 from nous_runtime.locking import file_lock, runtime_locks
-from nous_runtime.workspace.isolation import normalize_workspace_path
+from nous_runtime.workspace.isolation import (
+    normalize_workspace_path,
+    read_workspace_bytes,
+)
 
 _MAX_READ_BYTES = 512 * 1024
 _MAX_WRITE_BYTES = 1024 * 1024
@@ -870,12 +873,11 @@ class DeveloperWorkbench:
                 if resolved.is_file():
                     yield resolved
 
-    @staticmethod
-    def _read_bytes(path: Path) -> bytes:
-        size = path.stat().st_size
-        if size > _MAX_READ_BYTES:
-            raise WorkbenchError("The file exceeds the 512 KiB workbench read limit.")
-        return path.read_bytes()
+    def _read_bytes(self, path: Path) -> bytes:
+        try:
+            return read_workspace_bytes(self.root, path, max_bytes=_MAX_READ_BYTES)
+        except PermissionError as exc:
+            raise WorkbenchError(str(exc)) from exc
 
     def _relative(self, path: Path) -> str:
         return path.relative_to(self.root).as_posix()

@@ -253,14 +253,16 @@ def test_stale_skill_review_cannot_toggle_changed_or_corrupt_installed_content(
     if fault == "digest":
         with (source / "SKILL.md").open("a", encoding="utf-8") as stream:
             stream.write("\nChanged reviewed instructions.\n")
-    original_lock = registry_module.file_lock
+    original_lock = SkillRegistry._writer_lock
     intervened = False
 
     @contextmanager
-    def intervening_lock(path):
+    def intervening_lock(owner):
         nonlocal intervened
-        with original_lock(path):
-            if path == registry.state_path.with_suffix(".lock") and not intervened:
+        # Invalidate the review after the actual lifecycle fence is acquired,
+        # including its same-thread ownership tracking, before admission.
+        with original_lock(owner):
+            if owner.state_path == registry.state_path and not intervened:
                 intervened = True
                 if fault == "corrupt":
                     package = registry.extensions.package_path(
@@ -272,7 +274,7 @@ def test_stale_skill_review_cannot_toggle_changed_or_corrupt_installed_content(
                     registry.install(source)
             yield
 
-    monkeypatch.setattr(registry_module, "file_lock", intervening_lock)
+    monkeypatch.setattr(SkillRegistry, "_writer_lock", intervening_lock)
     with pytest.raises((PermissionError, KeyError)):
         view.action(body(installed, action), context)
     assert intervened

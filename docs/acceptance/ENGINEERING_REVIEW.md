@@ -2748,3 +2748,32 @@ signed envelopes, retry the mutation, infer a verdict or extend a timeout. The
 Windows cause remains unresolved pending exact-source CI evidence. Successful
 Linux tests or simulated effect counts cannot qualify Windows recovery, a real
 Provider, physical hardware or native installation.
+
+The same follow-up also checks ordinary workspace reads and Skill retention,
+instead of inferring safety from registered APIs. Existing path admission was
+separate from pathname reopening in Workbench, Chat and Proposal observations.
+Nine controlled leaf/ancestor/hardlink replacement cases returned an owned
+benign private marker or its digest before correction; all nine fail closed
+after reusing one bounded reader in the existing isolation module. Root
+replacement, inode changes, descriptor cleanup and unavailable safe-open APIs
+are covered. Existing single-link/empty-file/internal-alias compatibility and
+selected-input hash, budget and transfer admission remain separate. Workspace/
+Proposal/selected-input integration: **182 passed,1 skipped (21.08s)** on
+Python3.12; related Python3.11 scope: **115 passed,1 skipped (2.73s)**. The skip
+requires real Windows native handles. Windows reader implementation is not yet
+Windows qualification; selected Provider input retains its existing POSIX-only
+eligibility. This does not claim adversarial-host mutation isolation.
+
+Three independent retention reproductions show rejected updates leaving an
+unnecessary permanent pin, Catalog updates retaining old pins, and uninstall
+collecting bytes still held by a user or another registry sharing the same CAS.
+The existing CAS now has additive opaque retention owners in the same pins.json,
+with legacy/default retention and a format guard that the actual frozen old
+loader rejects. Skill preparation, installation, update and removal release
+only their own holds under the existing lifecycle fences. Canonical Extension
+references take precedence over stale legacy projections. Failed promotion
+after publication and ambiguous historical/crash holds remain protected and
+require explicit review. Artifact/Skill/Extension-fence/HTTP regression:
+**217 passed (37.54s)**. The stale-review test injects its original mutation
+after the actual lifecycle fence is acquired; no review assertion is weakened.
+All scopes overlap. Exact composed-source CI remains required before integration.
