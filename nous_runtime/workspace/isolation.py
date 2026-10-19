@@ -22,6 +22,10 @@ class WorkspaceFileChangedError(PermissionError):
     """The opened inode changed while its bytes were being read."""
 
 
+class WorkspaceReadLimitError(PermissionError):
+    """An ordinary opened file exceeds the caller's allowed byte bounds."""
+
+
 @contextmanager
 def _workspace_read_descriptor(workspace: Path, relative: Path):
     """Pin directories and refuse link replacement at the actual open boundary."""
@@ -188,18 +192,19 @@ def read_workspace_bytes(
             raise WorkspaceHardLinkError(
                 "Ordinary workspace data requires single-link files."
             )
-        if (
-            not stat.S_ISREG(before.st_mode)
-            or not minimum_bytes <= before.st_size <= max_bytes
-        ):
-            raise PermissionError("Workspace file type or byte bound is not admitted.")
+        if not stat.S_ISREG(before.st_mode):
+            raise PermissionError("An ordinary workspace file is required.")
+        if not minimum_bytes <= before.st_size <= max_bytes:
+            raise WorkspaceReadLimitError("Workspace file byte bound is not admitted.")
         data = bytearray()
         while chunk := os.read(descriptor, min(8192, max_bytes + 1 - len(data))):
             if on_read is not None:
                 on_read()
             data.extend(chunk)
             if len(data) > max_bytes:
-                raise PermissionError("Workspace file exceeds its read byte bound.")
+                raise WorkspaceReadLimitError(
+                    "Workspace file exceeds its read byte bound."
+                )
         after = os.fstat(descriptor)
         if after.st_nlink != 1:
             raise WorkspaceHardLinkError(

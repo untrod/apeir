@@ -23,6 +23,7 @@ from nous_runtime.agents.adapters.workspace_guard import WorkspaceGuard
 from nous_runtime.workspace.isolation import (
     WorkspaceFileChangedError,
     WorkspaceHardLinkError,
+    WorkspaceReadLimitError,
     read_workspace_bytes,
 )
 from nous_runtime.context.exceptions import ContextPermissionError
@@ -410,6 +411,8 @@ class SelectedWorkspaceInput:
             raise SelectedInputError("source_link_refused") from None
         except WorkspaceFileChangedError:
             raise SelectedInputError("source_version_changed") from None
+        except WorkspaceReadLimitError:
+            raise SelectedInputError("source_byte_bound_or_type") from None
         except (OSError, ValueError, UnicodeError):
             raise SelectedInputError("source_unavailable_or_invalid") from None
 

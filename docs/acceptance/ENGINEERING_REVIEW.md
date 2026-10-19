@@ -2777,3 +2777,14 @@ require explicit review. Artifact/Skill/Extension-fence/HTTP regression:
 **217 passed (37.54s)**. The stale-review test injects its original mutation
 after the actual lifecycle fence is acquired; no review assertion is weakened.
 All scopes overlap. Exact composed-source CI remains required before integration.
+
+Frozen composed source `b7b17b4` full regression retains **2 failed,5637 passed,
+59 skipped,4 warnings (692.03s)**. Both snapshot fixtures still injected through
+Path.open, which the descriptor reader no longer uses; the intended mutation
+did not occur during the Runtime call. The snapshot test now changes the file
+after actual bounded acquisition and traps any subsequent pathname reopen for
+the digest, retaining its original successful content/hash assertions. The growth
+test changes the source before the real descriptor opens and retains the actual
+256KiB refusal. This also exposes and restores the old precise size diagnostic
+through a typed bounded-read error; strict inode/version checks are unchanged.
+Original failing logs remain retained, not relabelled successful qualification.

@@ -316,3 +316,49 @@ def test_windows_read_pins_ancestors_and_excludes_mutation(tmp_path):
             root.rename(tmp_path / "moved-workspace")
     assert read_workspace_bytes(root, source, max_bytes=128) == b"ordinary\n"
     root.rename(tmp_path / "moved-workspace")
+
+
+@pytest.mark.parametrize("content,minimum", [(b"too large", 0), (b"", 1)])
+def test_read_limit_error_classifies_opened_file_byte_bounds(
+    tmp_path, content, minimum
+):
+    from nous_runtime.workspace.isolation import WorkspaceReadLimitError
+
+    (tmp_path / "notes.txt").write_bytes(content)
+    with pytest.raises(WorkspaceReadLimitError):
+        read_workspace_bytes(tmp_path, "notes.txt", max_bytes=4, minimum_bytes=minimum)
+
+
+def test_read_limit_error_does_not_disguise_file_type_rejection(tmp_path):
+    from nous_runtime.workspace.isolation import WorkspaceReadLimitError
+
+    (tmp_path / "directory").mkdir()
+    with pytest.raises(PermissionError) as error:
+        read_workspace_bytes(tmp_path, "directory", max_bytes=128)
+    assert not isinstance(error.value, WorkspaceReadLimitError)
+
+
+@pytest.mark.skipif(
+    os.name == "nt", reason="Windows reader excludes concurrent writers"
+)
+def test_read_limit_error_classifies_growth_after_opened_size_check(
+    tmp_path, monkeypatch
+):
+    from nous_runtime.workspace import isolation
+
+    source = tmp_path / "notes.txt"
+    source.write_bytes(b"small")
+    original = os.read
+    grown = False
+
+    def grow_before_actual_read(*args):
+        nonlocal grown
+        if not grown:
+            grown = True
+            source.write_bytes(b"x" * 129)
+        return original(*args)
+
+    monkeypatch.setattr(isolation.os, "read", grow_before_actual_read)
+    with pytest.raises(isolation.WorkspaceReadLimitError):
+        read_workspace_bytes(tmp_path, "notes.txt", max_bytes=128)
+    assert grown

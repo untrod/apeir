@@ -13,7 +13,10 @@ from typing import Any, Mapping
 from nous_runtime.agents.adapters.workspace_guard import WorkspaceGuard
 from nous_runtime.governance.effect_gate import EffectGate
 from nous_runtime.execution.executables import resolve_executable
-from nous_runtime.workspace.isolation import read_workspace_bytes
+from nous_runtime.workspace.isolation import (
+    WorkspaceReadLimitError,
+    read_workspace_bytes,
+)
 
 _MAX_READ_BYTES = 262_144
 _MAX_WRITE_BYTES = 1_048_576
@@ -562,7 +565,10 @@ class WorkspaceToolRuntime:
         path = self._path(arguments.get("path"))
         if not path.is_file():
             raise ValueError("The requested workspace path is not a file.")
-        data = read_workspace_bytes(self.root, path, max_bytes=_MAX_READ_BYTES)
+        try:
+            data = read_workspace_bytes(self.root, path, max_bytes=_MAX_READ_BYTES)
+        except WorkspaceReadLimitError as exc:
+            raise ValueError("The file exceeds the 256 KiB agent read limit.") from exc
         text = redact_sensitive_text(data.decode("utf-8"))
         relative = path.relative_to(self.root).as_posix()
         version = hashlib.sha256(data).hexdigest()

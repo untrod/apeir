@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -17,60 +18,65 @@ def test_read_content_and_digest_stay_bound_during_a_concurrent_edit(
     before = b"original public input\n"
     after = b"new public input\n"
     target.write_bytes(before)
+    from nous_runtime.chat import agent_tools
+
+    original_reader = agent_tools.read_workspace_bytes
     original_open = Path.open
     reads = []
+    tool_active = True
 
-    class ReplacedAfterRead:
-        def __init__(self, stream, mode):
-            self.stream, self.mode = stream, mode
+    def replace_after_acquisition(*args, **kwargs):
+        # The real descriptor reader has finished its no-follow, link, bound and
+        # stability checks. An ordinary later edit cannot change acquired bytes.
+        captured = original_reader(*args, **kwargs)
+        reads.append(captured)
+        with original_open(target, "wb") as writer:
+            writer.write(after)
+        return captured
 
-        def __enter__(self):
-            self.stream.__enter__()
-            return self
+    def forbid_reopen(path, mode="r", *args, **kwargs):
+        if tool_active and path == target and "r" in mode:
+            raise AssertionError(
+                "The tool must hash its captured bytes, not reopen a path"
+            )
+        return original_open(path, mode, *args, **kwargs)
 
-        def __exit__(self, *args):
-            return self.stream.__exit__(*args)
-
-        def read(self, size=-1):
-            result = self.stream.read(size)
-            reads.append(self.mode)
-            with original_open(target, "wb") as writer:
-                writer.write(after)
-            return result
-
-    def replace_after_read(path, mode="r", *args, **kwargs):
-        stream = original_open(path, mode, *args, **kwargs)
-        if path == target and "r" in mode:
-            return ReplacedAfterRead(stream, mode)
-        return stream
-
-    monkeypatch.setattr(Path, "open", replace_after_read)
+    monkeypatch.setattr(agent_tools, "read_workspace_bytes", replace_after_acquisition)
+    monkeypatch.setattr(Path, "open", forbid_reopen)
     result = WorkspaceToolRuntime(tmp_path).execute("read_file", {"path": target.name})
+    tool_active = False
     assert result["ok"]
     assert result["content"] == "original public input"
     assert result["sha256"] == hashlib.sha256(before).hexdigest()
     assert target.read_bytes() == after
-    # Inspect the tool reads before the independent assertion's read above.
-    assert reads[:-1] == ["rb"]
+    assert reads == [before]
 
 
 def test_read_refuses_file_growth_after_the_size_precheck(tmp_path, monkeypatch):
+    from nous_runtime.workspace import isolation
+
     target = tmp_path / "source.txt"
     target.write_bytes(b"small input")
-    original_open = Path.open
+    original_descriptor = isolation._workspace_read_descriptor
     grown = False
+    admissions = []
 
-    def grow_before_read(path, mode="r", *args, **kwargs):
+    @contextmanager
+    def grow_before_read(workspace, relative):
         nonlocal grown
-        if path == target and "r" in mode and not grown:
+        admissions.append(relative)
+        if relative == Path(target.name) and not grown:
             grown = True
-            with original_open(target, "wb") as writer:
-                writer.write(b"x" * (256 * 1024 + 1))
-        return original_open(path, mode, *args, **kwargs)
+            target.write_bytes(b"x" * (256 * 1024 + 1))
+        # Mutation precedes the actual open, including Windows' no-write-share
+        # handle; the real opened-file fstat must reject the new oversized inode.
+        with original_descriptor(workspace, relative) as descriptor:
+            yield descriptor
 
-    monkeypatch.setattr(Path, "open", grow_before_read)
+    monkeypatch.setattr(isolation, "_workspace_read_descriptor", grow_before_read)
     result = WorkspaceToolRuntime(tmp_path).execute("read_file", {"path": target.name})
     assert grown
+    assert admissions == [Path(target.name)]
     assert result["ok"] is False
     assert "256 KiB" in result["error"]
     assert "content" not in result and "sha256" not in result

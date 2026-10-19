@@ -20,6 +20,7 @@ from nous_runtime.capability.sandbox import run_process_strict
 from nous_runtime.events import EventStream, RunEvent, RunState
 from nous_runtime.locking import file_lock, runtime_locks
 from nous_runtime.workspace.isolation import (
+    WorkspaceReadLimitError,
     normalize_workspace_path,
     read_workspace_bytes,
 )
@@ -876,6 +877,10 @@ class DeveloperWorkbench:
     def _read_bytes(self, path: Path) -> bytes:
         try:
             return read_workspace_bytes(self.root, path, max_bytes=_MAX_READ_BYTES)
+        except WorkspaceReadLimitError as exc:
+            raise WorkbenchError(
+                "The file exceeds the 512 KiB workbench read limit."
+            ) from exc
         except PermissionError as exc:
             raise WorkbenchError(str(exc)) from exc
 
