@@ -24,6 +24,8 @@ from nous_runtime.workspace.isolation import (
     WorkspaceFileChangedError,
     WorkspaceHardLinkError,
     WorkspaceReadLimitError,
+    WorkspaceReadUnavailableError,
+    _validate_windows_file_components,
     read_workspace_bytes,
 )
 from nous_runtime.context.exceptions import ContextPermissionError
@@ -78,6 +80,13 @@ class WorkspaceFileReference:
         ):
             raise SelectedInputError("invalid_relative_reference")
         parts = PurePosixPath(self.path).parts
+        if os.name == "nt":
+            if any("~" in part for part in parts):
+                raise SelectedInputError("windows_source_alias_refused")
+            try:
+                _validate_windows_file_components(PureWindowsPath(self.path))
+            except PermissionError:
+                raise SelectedInputError("windows_source_alias_refused") from None
         if (
             any(part.casefold() in _PRIVATE_PARTS for part in parts)
             or any(part.casefold().startswith(".env") for part in parts)
@@ -359,17 +368,17 @@ class SelectedWorkspaceInput:
         additionally prevents symlink replacement between validation and read.
         """
         try:
-            self._paths.validate_path(reference.path)
+            validated = Path(self._paths.validate_path(reference.path))
+            # Path admission returns the canonical location. Reapply source
+            # privacy rules there too: an OS alias is not a different source
+            # classification and cannot hide a private directory or filename.
+            WorkspaceFileReference(
+                validated.relative_to(self._root).as_posix(), reference.sha256
+            )
         except ValueError as exc:
             if isinstance(exc.__cause__, WorkspaceHardLinkError):
                 raise SelectedInputError("source_link_refused") from None
             raise
-        if (
-            os.open not in os.supports_dir_fd
-            or not hasattr(os, "O_NOFOLLOW")
-            or not hasattr(os, "O_DIRECTORY")
-        ):
-            raise SelectedInputError("safe_source_read_unavailable")
         try:
 
             def mark_read():
@@ -413,6 +422,8 @@ class SelectedWorkspaceInput:
             raise SelectedInputError("source_version_changed") from None
         except WorkspaceReadLimitError:
             raise SelectedInputError("source_byte_bound_or_type") from None
+        except WorkspaceReadUnavailableError:
+            raise SelectedInputError("safe_source_read_unavailable") from None
         except (OSError, ValueError, UnicodeError):
             raise SelectedInputError("source_unavailable_or_invalid") from None
 

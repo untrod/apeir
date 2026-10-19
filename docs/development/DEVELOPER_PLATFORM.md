@@ -64,13 +64,20 @@ workspace selection is an exact saved path/SHA-256 reference. **Send** carries
 read and Provider transfer admission; selection alone sends no file bytes. The
 inspector records selected/read/sent/rejected/budget-limited states without source
 text or raw paths. Sent identifies the Gateway Provider boundary, not confirmed
-Provider receipt. Native Windows delivery remains BLOCKED where safe no-follow
-file descriptors are unavailable.
+Provider receipt. Saved-file delivery reuses the safe workspace reader on POSIX
+and Windows; missing required APIs keep delivery BLOCKED without ordinary-file
+fallback. Canonical private-source checks and conservative Windows alias rejection
+precede bytes, and read permission never implies Provider transfer permission.
+The Windows implementation awaits exact-source saved-file/Context/HTTP
+qualification; ordinary Windows file-read tests alone do not qualify delivery.
 
 The stock Controller creates no file-sharing permissions. A trusted maintainer
 can explicitly select an owner-only policy under the current Governance `.nous`
 directory using `NOUS_PERMISSION_POLICY` before starting Runtime; see
 [configuration](../operations/configuration/CONFIG_REFERENCE.md#context-permission-policy).
+That file-policy bootstrap remains POSIX-only: safe Windows source reading does
+not qualify owner-file ACL admission. Windows host-configured SDK/API policies
+and the default installed-user permission setup are separate qualifications.
 This feeds the existing PermissionEngine, not a second authority. It is re-read
 at checks, so expiry, revocation or corrupt configuration blocks later dispatch.
 The permission-status API describes configuration with UNKNOWN grants when no

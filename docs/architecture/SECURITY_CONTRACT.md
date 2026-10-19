@@ -47,8 +47,11 @@ at open, and validate regular-file identity, version and single-link status arou
 the read. POSIX uses no-follow directory-relative opens; Windows uses held native
 handles without delete sharing and rejects reparse points. An unavailable safe
 reader fails closed. Platform qualification is separate from implementing these
-paths; selected Provider input retains its existing POSIX eligibility rather than
-implicitly enabling Windows Provider transfer. This is read-boundary hardening,
+paths. Selected Provider input explicitly reuses that same backend, rechecks its
+canonical source classification and refuses Windows tilde/namespace aliases.
+Missing native APIs fail closed; API availability grants neither file access nor
+Provider transfer. The Windows saved-file/Context/HTTP path is implemented pending
+exact-source Windows qualification. This is read-boundary hardening,
 not a complete filesystem sandbox or a
 claim that all mutations resist a malicious OS owner. Selected input still
 revalidates source and transfer authority at actual dispatch; reading a file
@@ -62,6 +65,8 @@ reloaded for checks; expiration, revocation or invalid state cannot reuse a cach
 allow. Conditions require present, exact-typed facts. Inspection reports
 configuration and UNKNOWN grants, not an authorization or new authority. Native
 Operation approvals, credential leases and execution/effect evidence stay distinct.
+The owner-file loader still denies Windows pending its separate ACL qualification;
+enabling the native source reader neither changes that policy nor seeds grants.
 
 ## Signed Node identity and trust persistence
 

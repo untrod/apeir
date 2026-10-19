@@ -2829,3 +2829,32 @@ valid kill. ProcessSession/startup/admission regressions: **28 passed** on
 Python3.12 (24.48s) and3.11 (24.32s); each owned test reaper collects four children
 with zero remaining. This improves diagnostics and fixture ownership; the
 historical Windows cause and complete product Gate remain unresolved.
+
+Frozen diagnostic source `c1272b8` full initialized Linux regression subsequently
+passes **5668 tests,61 skipped,4 warnings (719.93s)**, with18 adopted children
+reaped and zero owned children remaining. Fresh isolated Distribution/SDK wheels
+also pass the nine public Demo/Provider/instruction-Skill invocations; this is
+runtime-service/simulation, not a paid model, native installation or hardware.
+Desktop and Security pass; the exact-source Windows diagnostic remains separate.
+
+The next wiring audit classifies the shared safe workspace reader as REUSE and
+the saved-file input platform gate as EXTEND. SelectedInput still required POSIX
+descriptors even after the ordinary Windows native reader was exercised. It now
+uses the same backend, with typed unavailable errors and no pathname fallback.
+Source-private rules are reapplied to the canonical location, and Windows tilde
+and namespace spellings are refused before acquisition. Seven prequalification
+probes fail on the preceding methods and pass with these guards; Windows input
+was previously blocked, so this is not a reproduced Windows private-data leak.
+Read and Provider-transfer permissions, exact source/recipient/Work bindings,
+SHA, byte/token budgets and per-attempt revocation remain independent.
+
+Related source-reader/Context/HTTP tests pass **252 tests,7 skipped** on each of
+Python3.12/3.11. After adding explicit owner-policy scope, Context/Model Runtime/
+Governance/Work/Agent/workspace combination passes **1462 tests,8 skipped
+(44.38s)**. Counts overlap. Existing POSIX mid-read link assertions stay intact;
+native Windows equivalents check pre-open links, held-handle mutations and either
+OS-denied or detected mid-read links. Those native cases await Windows execution.
+Two existing default API bootstrap cases retain their POSIX owner-file scope;
+an added Windows negative must prove the owner-file loader remains denied. The
+safe reader does not qualify Windows ACL policy bootstrap, seed permissions,
+authenticate a remote human or complete installed Desktop/model qualification.

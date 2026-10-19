@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import threading
 import urllib.request
 from dataclasses import replace
@@ -42,6 +43,41 @@ from tests.context.test_selected_input import (
 from tests.model_runtime.test_gateway import add_model
 
 admitted_context = context_fixture
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows owner-policy denial contract")
+def test_windows_source_reader_does_not_qualify_owner_file_policy(
+    tmp_path, monkeypatch
+):
+    from nous_runtime.governance import permission
+
+    path = tmp_path / "permission-policy.json"
+    path.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {
+                        "subject": "api-service",
+                        "action": "workspace.read",
+                        "resource": "*",
+                    }
+                ]
+            }
+        )
+    )
+    with monkeypatch.context() as fault:
+        fault.setattr(
+            permission,
+            "os",
+            SimpleNamespace(
+                name=os.name,
+                open=lambda *_, **__: pytest.fail(
+                    "Unqualified owner policy reached file opening"
+                ),
+            ),
+        )
+        with pytest.raises(PermissionError, match="not qualified on this host"):
+            permission.PermissionEngine.from_owner_file(path)
 
 
 @pytest.fixture
@@ -199,6 +235,10 @@ def test_saved_reference_crosses_real_api_and_http_provider(
 
 
 @requires_safe_read
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Owner-file permission bootstrap requires qualified POSIX controls",
+)
 @pytest.mark.parametrize("revoke_after_setup", [False, True])
 def test_explicit_host_policy_bootstraps_real_api_without_engine_injection(
     admitted_context, endpoint, monkeypatch, revoke_after_setup

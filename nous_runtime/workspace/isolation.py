@@ -26,6 +26,45 @@ class WorkspaceReadLimitError(PermissionError):
     """An ordinary opened file exceeds the caller's allowed byte bounds."""
 
 
+class WorkspaceReadUnavailableError(PermissionError):
+    """The platform cannot supply the required safe file-reading API."""
+
+
+def _windows_read_api():
+    """Resolve the existing native backend APIs without opening any file."""
+    try:
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        for name in ("CreateFileW", "CloseHandle", "GetFileInformationByHandle"):
+            if not callable(getattr(kernel, name)):
+                raise AttributeError(name)
+        if not callable(msvcrt.open_osfhandle) or not hasattr(os, "O_BINARY"):
+            raise AttributeError("native binary file descriptors")
+    except (ImportError, AttributeError, OSError):
+        raise WorkspaceReadUnavailableError(
+            "Safe Windows workspace file reads are unavailable."
+        ) from None
+    return ctypes, msvcrt, wintypes, kernel
+
+
+def workspace_read_backend_available() -> bool:
+    """Report API availability, not file authority or platform qualification."""
+    if os.name == "nt":
+        try:
+            _windows_read_api()
+        except WorkspaceReadUnavailableError:
+            return False
+        return True
+    return bool(
+        _POSIX_SAFE_OPEN_AVAILABLE
+        and hasattr(os, "O_NOFOLLOW")
+        and hasattr(os, "O_DIRECTORY")
+    )
+
+
 def _validate_windows_file_components(path):
     """Exclude stream syntax and ambiguous ordinary Win32 component names."""
     for component in path.parts:
@@ -44,8 +83,10 @@ def _workspace_read_descriptor(workspace: Path, relative: Path):
         with _windows_read_descriptor(workspace, relative) as descriptor:
             yield descriptor
         return
-    if not _POSIX_SAFE_OPEN_AVAILABLE:
-        raise PermissionError("Safe workspace file reads are unavailable.")
+    if not workspace_read_backend_available():
+        raise WorkspaceReadUnavailableError(
+            "Safe workspace file reads are unavailable."
+        )
     descriptors = []
     try:
         directory = os.open(
@@ -80,11 +121,7 @@ def _windows_read_descriptor(workspace: Path, relative: Path):
     """
     _validate_windows_file_components(workspace)
     _validate_windows_file_components(relative)
-    import ctypes
-    import msvcrt
-    from ctypes import wintypes
-
-    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    ctypes, msvcrt, wintypes, kernel = _windows_read_api()
     create = kernel.CreateFileW
     create.argtypes = (
         wintypes.LPCWSTR,

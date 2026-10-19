@@ -417,3 +417,12 @@ Linux or descendant CI does not resolve it. Runtime product delivery remains
 PARTIAL, and Issues4/8 remain open. The [consolidation record](docs/acceptance/REPOSITORY_CONSOLIDATION.md#unified-main-integration--2026-10-16)
 records exact accepted sources, retained failures and ref retirement. Current
 milestone status remains the closure matrix above; this adds no milestone.
+
+The separate [ProcessSession follow-up85](https://github.com/untrod/apeir/issues/85)
+retains a Windows control refusal after original-host recovery; safe diagnostics
+and explicit test-process lifetime do not establish its historical cause. Saved
+file input now explicitly reuses the native Windows reader and existing Context/
+Gateway admission, pending exact-source Windows qualification. Default Windows
+owner-file permission bootstrap still denies until its ACL controls are qualified;
+host-configured SDK/API software coverage is not default installation acceptance.
+Runtime product delivery remains PARTIAL; no hardware or release Gate is upgraded.

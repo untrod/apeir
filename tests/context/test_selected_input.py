@@ -21,6 +21,7 @@ from nous_runtime.context.selected_input import (
 )
 from nous_runtime.context.types import BuildRequest
 from nous_runtime.governance.permission import PermissionRule
+from nous_runtime.workspace.isolation import workspace_read_backend_available
 from tests.context.test_guard_admission import admitted_context as context_fixture
 
 base_admission = context_fixture
@@ -44,10 +45,8 @@ RECIPIENT_B = ProviderRecipient(
 
 
 requires_safe_read = pytest.mark.skipif(
-    os.open not in os.supports_dir_fd
-    or not hasattr(os, "O_NOFOLLOW")
-    or not hasattr(os, "O_DIRECTORY"),
-    reason="Host lacks no-follow descriptors; selected source delivery is BLOCKED",
+    os.name != "nt" and not workspace_read_backend_available(),
+    reason="Host lacks a safe workspace reader; selected source delivery is BLOCKED",
 )
 
 
@@ -174,25 +173,29 @@ def test_absent_permission_engine_and_wrong_workspace_fail_closed(admitted_conte
 
 
 @pytest.mark.parametrize(
-    "content",
+    "content,reason,was_read",
     [
-        b"\x00binary",
-        b"bad\xffutf8",
-        b'{"password":"FAKE_PRIVATE_PASSWORD"}',
-        b"password=FAKE_TEST_SECRET_VALUE",
-        b"x" * (MAX_FILE_BYTES + 1),
+        (b"\x00binary", "binary_source_refused", True),
+        (b"bad\xffutf8", "source_unavailable_or_invalid", True),
+        (b'{"password":"FAKE_PRIVATE_PASSWORD"}', "secret_source_refused", True),
+        (b"password=FAKE_TEST_SECRET_VALUE", "secret_source_refused", True),
+        (b"x" * (MAX_FILE_BYTES + 1), "source_byte_bound_or_type", False),
     ],
     ids=["binary", "invalid-utf8", "json-secret", "text-secret", "over-byte-bound"],
 )
-def test_binary_secret_and_byte_bounds_refused(admitted_context, content):
+@requires_safe_read
+def test_binary_secret_and_byte_bounds_refused(
+    admitted_context, content, reason, was_read
+):
 
     guard, _, _ = admitted_context
     value = reader(
         admitted_context, [reference(Path(guard._workspace), content=content)]
     )
-    with pytest.raises(SelectedInputError):
+    with pytest.raises(SelectedInputError, match=reason):
         value.collect()
     assert value.provenance()[0]["status"] == "rejected"
+    assert value.provenance()[0]["was_read"] is was_read
 
 
 @requires_safe_read
@@ -250,6 +253,9 @@ def test_hard_link_cannot_alias_protected_or_external_input(admitted_context, or
 
 
 @requires_safe_read
+@pytest.mark.skipif(
+    os.name == "nt", reason="Windows uses the actual pre-open link fault"
+)
 def test_link_created_during_read_cannot_publish_context(admitted_context, monkeypatch):
     guard, _, _ = admitted_context
     root = Path(guard._workspace)
@@ -275,12 +281,23 @@ def test_link_created_during_read_cannot_publish_context(admitted_context, monke
 
 
 def test_unsupported_descriptor_host_denies(admitted_context, monkeypatch):
+    from nous_runtime.workspace import isolation
 
     guard, _, _ = admitted_context
     value = reader(admitted_context, [reference(Path(guard._workspace))])
-    monkeypatch.setattr(os, "supports_dir_fd", set())
+    if os.name == "nt":
+
+        def unavailable():
+            raise isolation.WorkspaceReadUnavailableError("owned missing native API")
+
+        monkeypatch.setattr(isolation, "_windows_read_api", unavailable)
+    else:
+        monkeypatch.setattr(isolation, "_POSIX_SAFE_OPEN_AVAILABLE", False)
+    assert workspace_read_backend_available() is False
     with pytest.raises(SelectedInputError, match="safe_source_read_unavailable"):
         value.collect()
+    assert value.provenance()[0]["was_read"] is False
+    assert value.provenance()[0]["status"] == "rejected"
 
 
 @requires_safe_read
@@ -625,3 +642,218 @@ def test_source_specific_transfer_cannot_widen_to_second_file(admitted_context):
     )
     with pytest.raises(SelectedInputError, match="provider_transfer_denied"):
         source.authorize_transfer(snapshot, RECIPIENT_A)
+
+
+def test_missing_native_api_cannot_fall_back_to_ordinary_read(
+    admitted_context, monkeypatch
+):
+    from nous_runtime.workspace import isolation
+
+    guard, _, _ = admitted_context
+    value = reader(admitted_context, [reference(Path(guard._workspace))])
+
+    def unavailable():
+        raise isolation.WorkspaceReadUnavailableError("owned missing native API")
+
+    monkeypatch.setattr(isolation, "_windows_read_api", unavailable)
+    monkeypatch.setattr(
+        isolation, "_workspace_read_descriptor", isolation._windows_read_descriptor
+    )
+    with pytest.raises(SelectedInputError, match="safe_source_read_unavailable"):
+        value.collect()
+    assert value.provenance()[0]["was_read"] is False
+    assert value.provenance()[0]["status"] == "rejected"
+
+
+@pytest.mark.parametrize(
+    "missing",
+    ["CreateFileW", "CloseHandle", "GetFileInformationByHandle", "open_osfhandle"],
+)
+def test_missing_native_symbol_is_explicitly_unavailable(monkeypatch, missing):
+    import sys
+    from types import SimpleNamespace
+    from nous_runtime.workspace import isolation
+
+    functions = {
+        name: lambda *_, **__: None
+        for name in ("CreateFileW", "CloseHandle", "GetFileInformationByHandle")
+        if name != missing
+    }
+    kernel = SimpleNamespace(**functions)
+    native = SimpleNamespace()
+    if missing != "open_osfhandle":
+        native.open_osfhandle = lambda *_, **__: None
+    with monkeypatch.context() as patch:
+        patch.setitem(
+            sys.modules,
+            "ctypes",
+            SimpleNamespace(WinDLL=lambda *_, **__: kernel, wintypes=SimpleNamespace()),
+        )
+        patch.setitem(sys.modules, "msvcrt", native)
+        patch.setattr(isolation, "os", SimpleNamespace(name="nt", O_BINARY=0x8000))
+        with pytest.raises(isolation.WorkspaceReadUnavailableError):
+            isolation._windows_read_api()
+        assert isolation.workspace_read_backend_available() is False
+
+
+@pytest.mark.parametrize(
+    "canonical", [".ssh/notes.txt", "secrets/notes.txt", "source/credentials.txt"]
+)
+def test_canonical_location_reapplies_private_source_rules(
+    admitted_context, monkeypatch, canonical
+):
+    from nous_runtime.context import selected_input
+
+    guard, _, _ = admitted_context
+    root = Path(guard._workspace)
+    value = reader(admitted_context, [reference(root)])
+    monkeypatch.setattr(value._paths, "validate_path", lambda _: str(root / canonical))
+    monkeypatch.setattr(
+        selected_input,
+        "read_workspace_bytes",
+        lambda *_, **__: pytest.fail("Canonical private source reached byte reading"),
+    )
+    with pytest.raises(SelectedInputError, match="unsupported_or_private_source"):
+        value.collect()
+    assert value.provenance()[0]["was_read"] is False
+    assert value.provenance()[0]["status"] == "rejected"
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["notes~1.txt", "source~1/notes.txt", "source./notes.txt", "source /notes.txt"],
+)
+def test_windows_reference_alias_spelling_is_refused_before_selection(
+    path, monkeypatch
+):
+    from types import SimpleNamespace
+    from nous_runtime.context import selected_input
+
+    monkeypatch.setattr(selected_input, "os", SimpleNamespace(name="nt"))
+    with pytest.raises(SelectedInputError, match="windows_source_alias_refused"):
+        WorkspaceFileReference(path, "0" * 64)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX tilde filename compatibility")
+@requires_safe_read
+def test_posix_tilde_source_is_still_supported(admitted_context):
+    guard, _, _ = admitted_context
+    value = reader(admitted_context, [reference(Path(guard._workspace), "notes~1.txt")])
+    assert value.collect()[0].content == "exact saved middle constraint\n"
+
+
+@pytest.mark.skipif(
+    os.name != "nt", reason="Native Windows selected-file qualification"
+)
+def test_windows_reader_has_required_backend_apis():
+    assert workspace_read_backend_available(), "Windows safe selected reads are BLOCKED"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows pre-open link fault")
+def test_windows_link_created_before_open_cannot_publish_context(
+    admitted_context, monkeypatch
+):
+    from contextlib import contextmanager
+    from nous_runtime.workspace import isolation
+
+    guard, _, _ = admitted_context
+    root = Path(guard._workspace)
+    ref = reference(root)
+    value = reader(admitted_context, [ref])
+    original = isolation._workspace_read_descriptor
+    linked = False
+
+    @contextmanager
+    def link_before_open(workspace, relative):
+        nonlocal linked
+        os.link(root / ref.path, root / "late-alias.txt")
+        linked = True
+        with original(workspace, relative) as descriptor:
+            yield descriptor
+
+    monkeypatch.setattr(isolation, "_workspace_read_descriptor", link_before_open)
+    with pytest.raises(SelectedInputError, match="source_link_refused"):
+        value.collect()
+    assert linked
+    assert value.provenance()[0]["was_read"] is False
+    assert value.provenance()[0]["status"] == "rejected"
+    assert value._items == ()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows held source handle")
+def test_windows_held_file_blocks_write_and_later_change_denies_transfer(
+    admitted_context, monkeypatch
+):
+    guard, _, _ = admitted_context
+    root = Path(guard._workspace)
+    ref = reference(root)
+    value = reader(admitted_context, [ref], transfer=True)
+    original = os.read
+    blocked = False
+
+    def attempt_write_during_read(descriptor, size):
+        nonlocal blocked
+        data = original(descriptor, size)
+        if data and not blocked:
+            with pytest.raises(PermissionError):
+                (root / ref.path).write_bytes(b"must not replace held source")
+            blocked = True
+        return data
+
+    monkeypatch.setattr(os, "read", attempt_write_during_read)
+    snapshot = build(value)
+    assert blocked
+    assert snapshot.items[0].content == "exact saved middle constraint\n"
+    value.authorize_transfer(snapshot, RECIPIENT_A)
+    (root / ref.path).write_bytes(b"changed after completed acquisition")
+    with pytest.raises(SelectedInputError, match="source_version_changed"):
+        value.authorize_transfer(snapshot, RECIPIENT_A)
+    assert value.provenance()[0]["status"] == "rejected"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows in-read link behavior")
+def test_windows_mid_read_link_is_denied_or_caught_before_context_publication(
+    admitted_context, monkeypatch
+):
+    from nous_runtime.context.models import ContextSnapshot
+
+    guard, _, _ = admitted_context
+    root = Path(guard._workspace)
+    ref = reference(root)
+    target = root / ref.path
+    alias = root / "late-alias.txt"
+    original_content = target.read_bytes()
+    value = reader(admitted_context, [ref])
+    original = os.read
+    outcome = None
+
+    def attempt_link_during_read(descriptor, size):
+        nonlocal outcome
+        data = original(descriptor, size)
+        if data and outcome is None:
+            try:
+                os.link(target, alias)
+            except PermissionError:
+                outcome = "system-denied"
+            else:
+                outcome = "created"
+        return data
+
+    monkeypatch.setattr(os, "read", attempt_link_during_read)
+    try:
+        items = value.collect()
+    except SelectedInputError as error:
+        assert outcome == "created"
+        assert str(error) == "source_link_refused"
+        assert alias.exists() and target.stat().st_nlink == 2
+        assert value._items == ()
+        assert value.provenance()[0]["status"] == "rejected"
+    else:
+        assert outcome == "system-denied"
+        assert not alias.exists() and target.stat().st_nlink == 1
+        assert target.read_bytes() == original_content
+        assert items[0].content.encode() == original_content
+        # Even a successful protected read supplies no Provider transfer grant.
+        with pytest.raises(SelectedInputError, match="provider_transfer_denied"):
+            value.authorize_transfer(ContextSnapshot(items=tuple(items)), RECIPIENT_A)
+    assert value.provenance()[0]["was_read"] is True
