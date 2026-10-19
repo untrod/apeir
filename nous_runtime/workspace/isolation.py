@@ -26,6 +26,17 @@ class WorkspaceReadLimitError(PermissionError):
     """An ordinary opened file exceeds the caller's allowed byte bounds."""
 
 
+def _validate_windows_file_components(path):
+    """Exclude stream syntax and ambiguous ordinary Win32 component names."""
+    for component in path.parts:
+        if component == path.anchor or component in {".", ".."}:
+            continue
+        if ":" in component or component.endswith((".", " ")):
+            raise PermissionError(
+                "Windows streams and ambiguous names are not ordinary workspace data."
+            )
+
+
 @contextmanager
 def _workspace_read_descriptor(workspace: Path, relative: Path):
     """Pin directories and refuse link replacement at the actual open boundary."""
@@ -67,6 +78,8 @@ def _windows_read_descriptor(workspace: Path, relative: Path):
     An unavailable API or incompatible existing writer denies the read; there is
     no pathname-only fallback.
     """
+    _validate_windows_file_components(workspace)
+    _validate_windows_file_components(relative)
     import ctypes
     import msvcrt
     from ctypes import wintypes
@@ -226,8 +239,14 @@ def normalize_workspace_path(
     *,
     protect_runtime_state: bool = False,
 ) -> Path:
-    workspace = Path(workspace_path).resolve()
+    workspace_input = Path(workspace_path)
     candidate = Path(candidate_path)
+    if protect_runtime_state and os.name == "nt":
+        # Validate raw names before Win32 resolution can erase an alias spelling.
+        # The compatibility mode and POSIX filename rules remain unchanged.
+        _validate_windows_file_components(workspace_input)
+        _validate_windows_file_components(candidate)
+    workspace = workspace_input.resolve()
     if not candidate.is_absolute():
         candidate = workspace / candidate
     resolved = candidate.resolve()

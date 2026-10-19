@@ -2788,3 +2788,16 @@ test changes the source before the real descriptor opens and retains the actual
 256KiB refusal. This also exposes and restores the old precise size diagnostic
 through a typed bounded-read error; strict inode/version checks are unchanged.
 Original failing logs remain retained, not relabelled successful qualification.
+
+Frozen composed source `7a9c3af` subsequently passes **5643 tests,59 skipped,
+4 warnings (699.92s)** with a process-local child reaper:18 adopted children
+reaped,zero owned children remaining. This Linux result is not Windows
+qualification. A subsequent minimal Windows-only ordinary-name guard rejects
+colon/stream syntax and trailing dots/spaces before protected path resolution
+and before native file opening. It preserves anchors, existing traversal
+admission,POSIX filenames and explicit legacy scope. No private-state bypass has
+been reproduced on Windows. Pure Windows-name/pre-resolution/native-preflight
+checks plus related workspace/snapshot/selected-input regressions pass
+**127 tests,3 skipped** on both Python3.12 and3.11. The skips require actual
+Windows handle sharing and two owned alternate-stream cases; their presence is
+not native acceptance. Exact-source Windows CI remains required.

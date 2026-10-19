@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
@@ -362,3 +362,100 @@ def test_read_limit_error_classifies_growth_after_opened_size_check(
     with pytest.raises(isolation.WorkspaceReadLimitError):
         read_workspace_bytes(tmp_path, "notes.txt", max_bytes=128)
     assert grown
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "notes.txt:owned-stream",
+        "notes.txt::$DATA",
+        ".nous::$INDEX_ALLOCATION/private.txt",
+        ".git::$INDEX_ALLOCATION/config",
+        ".nous./private.txt",
+        ".git /config",
+        "sources./notes.txt",
+        "notes.txt.",
+        "notes.txt ",
+    ],
+)
+def test_windows_name_rejection_precedes_native_file_api(name, monkeypatch):
+    from types import SimpleNamespace
+    from nous_runtime.workspace import isolation
+    from nous_runtime.workspace.isolation import (
+        _validate_windows_file_components,
+        _windows_read_descriptor,
+    )
+
+    relative = PureWindowsPath(name)
+    with pytest.raises(PermissionError, match="not ordinary workspace data"):
+        _validate_windows_file_components(relative)
+    # This also runs on POSIX: denial must precede msvcrt import/CreateFileW.
+    with pytest.raises(PermissionError, match="not ordinary workspace data"):
+        with _windows_read_descriptor(PureWindowsPath("C:/workspace"), relative):
+            pytest.fail("An ambiguous Windows name reached a native file reader")
+
+    class UnresolvedWindowsPath(PureWindowsPath):
+        def resolve(self):
+            raise AssertionError("Raw ambiguous names must be refused before resolve")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(isolation, "Path", UnresolvedWindowsPath)
+        patch.setattr(isolation, "os", SimpleNamespace(name="nt"))
+        with pytest.raises(PermissionError, match="not ordinary workspace data"):
+            normalize_workspace_path("C:/workspace", name, protect_runtime_state=True)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "source.py",
+        "sources/notes.txt",
+        "C:/workspace/source.py",
+        "//server/share/workspace/source.py",
+        ".",
+        "..",
+        "sources/../notes.txt",
+    ],
+)
+def test_windows_name_guard_preserves_anchors_and_existing_traversal_policy(name):
+    from nous_runtime.workspace.isolation import _validate_windows_file_components
+
+    # Accepting a component spelling is not path admission. Existing root and
+    # traversal checks still decide whether these paths can actually be read.
+    _validate_windows_file_components(PureWindowsPath(name))
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX ordinary filename compatibility")
+@pytest.mark.parametrize("name", ["notes:version.txt", "notes.txt.", "notes.txt "])
+def test_windows_name_guard_does_not_change_posix_file_names(tmp_path, name):
+    content = b"ordinary POSIX filename\n"
+    (tmp_path / name).write_bytes(content)
+    assert read_workspace_bytes(tmp_path, name, max_bytes=128) == content
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Real Windows alternate-stream contract")
+@pytest.mark.parametrize("suffix", [":owned-stream", "::$DATA"])
+def test_windows_ordinary_reader_refuses_real_owned_alternate_stream(tmp_path, suffix):
+    from nous_runtime.workspace.isolation import _windows_read_descriptor
+
+    root = tmp_path.resolve()
+    source = root / "notes.txt"
+    ordinary = b"owned ordinary source\n"
+    source.write_bytes(ordinary)
+    stream = Path(str(source) + suffix)
+    marker = b"OWNED_BENIGN_WINDOWS_STREAM_MARKER\n"
+    if suffix == ":owned-stream":
+        stream.write_bytes(marker)
+    else:
+        marker = ordinary
+    assert stream.read_bytes() == marker
+    with pytest.raises(PermissionError, match="not ordinary workspace data"):
+        normalize_workspace_path(str(root), stream.name, protect_runtime_state=True)
+    with pytest.raises(PermissionError, match="not ordinary workspace data"):
+        read_workspace_bytes(root, stream.name, max_bytes=128)
+    with pytest.raises(PermissionError, match="not ordinary workspace data"):
+        with _windows_read_descriptor(root, Path(stream.name)):
+            pytest.fail("An alternate stream reached the native ordinary file reader")
+    # Legacy explicit scope remains a distinct compatibility contract.
+    assert normalize_workspace_path(str(root), stream.name).read_bytes() == marker
+    assert read_workspace_bytes(root, source.name, max_bytes=128) == ordinary
