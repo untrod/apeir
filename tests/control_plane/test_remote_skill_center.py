@@ -327,9 +327,20 @@ def test_http_revalidation_after_actual_tls_acquisition_blocks_publication(
         return content
 
     monkeypatch.setattr(SkillRegistry, "_remote_bytes", staticmethod(interrupt))
+    installs = []
+    original_install = SkillRegistry.install
+
+    def install(self, *args, **kwargs):
+        installs.append(True)
+        return original_install(self, *args, **kwargs)
+
+    monkeypatch.setattr(SkillRegistry, "install", install)
     response = mutate(body)
     assert not response["ok"], response
     assert not SkillRegistry(view.root).extensions.list()
+    # Revoked authority or a changed review is already knowable when the
+    # download returns. Do not prepare CAS objects/SBOMs before rejecting it.
+    assert len(installs) == (1 if fault == "package_changed" else 0)
 
 
 @pytest.mark.parametrize("fault", ["cas", "publication", "revoked"])

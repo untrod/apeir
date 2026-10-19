@@ -360,6 +360,10 @@ class SkillRegistry:
                 archive = Path(temporary) / "package.zip"
                 archive.write_bytes(content)
                 with file_lock(self.state_path.with_suffix(".lock")):
+                    # Acquisition can outlive authority or the reviewed catalog.
+                    # Reject before local CAS/Extension/SBOM preparation, while
+                    # retaining the final publication check below for later races.
+                    revalidate()
                     try:
                         return self.install(
                             archive, expected=entry, before_publish=revalidate

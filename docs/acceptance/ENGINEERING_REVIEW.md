@@ -2719,3 +2719,32 @@ hash/AST equivalence. Small-sample p99 is the observed maximum, not a stable
 production tail estimate. This does not establish Windows timeout root cause,
 Node end-to-end improvement, model cost savings or physical qualification.
 Exact updated source must run fresh full Core/Multi-Arch before integration.
+
+### Windows negative-path follow-up — 2026-10-19
+
+Candidate `0cb8257` retains two actual Windows failures. Core run39146298658
+has **1 failed,5464 passed,149 skipped**: the UNKNOWN independent-observation
+case has no persisted verdict, while the original mutation is VERIFIED and its
+effect count is one. Multi-Arch run39146301822 has **1 failed,5171 passed,
+131 skipped,292 deselected**: an HTTP Skill acquisition negative case times out.
+Its retained thread stack is preparing the Extension SBOM before the final
+publication check. Neither run is PASS; Issues4/8/82 remain open.
+
+Review of that Skill path proves avoidable preparation after the download has
+already invalidated the original authority or catalog review. Strengthening the
+existing HTTP/TLS negative cases to require no install preparation gives
+**6 failed,1 passed** before correction. The same existing Skill Registry now
+revalidates under its existing state lock immediately after acquisition, before
+CAS/Extension/SBOM preparation, and retains the final publication callback for
+later revocation/races. Skill/HTTP-TLS/Extension regression: **309 passed,
+17 skipped (46.93s)**. No deadline, TLS, permission or supply-chain check changes.
+This establishes the unnecessary-preparation defect; it does not prove every
+cause of the Windows filesystem stall or claim measured latency improvement.
+
+The independent-observation test retains its original verdict assertion and now
+reports bounded/redacted run errors, observation Work states and Node journal
+phases only when the verdict is missing. It does not dump output, credentials or
+signed envelopes, retry the mutation, infer a verdict or extend a timeout. The
+Windows cause remains unresolved pending exact-source CI evidence. Successful
+Linux tests or simulated effect counts cannot qualify Windows recovery, a real
+Provider, physical hardware or native installation.

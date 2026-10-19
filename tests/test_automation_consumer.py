@@ -410,6 +410,46 @@ def test_effect_then_response_loss_reconciles_original_receipt_without_another_e
         )
 
 
+def _independent_observation_phase_diagnostic(consumer, result):
+    """Expose failure phases without dumping device output or signed payloads."""
+    from nous_runtime.core.redaction import redact_sensitive_text
+    from nous_runtime.node_runtime.distributed_work import DistributedWorkStore
+
+    diagnostic = {
+        "run_state": result["state"],
+        "run_error": redact_sensitive_text(str(result.get("error") or ""))[:2000],
+        "step_states": result["step_states"],
+        "independent_observations": [
+            {
+                "work_id": work.work_id,
+                "state": work.state.value,
+                "has_result_receipt": bool(
+                    work.result_summary.get("remote_execution_receipt")
+                ),
+            }
+            for work in DistributedWorkStore(consumer.controller_state).list()
+            if work.work_id.startswith("observe_")
+        ],
+    }
+    journal_path = (
+        consumer.root / ".nous" / "automation-simulation" / "node" / "workloads.json"
+    )
+    try:
+        journal = json.loads(journal_path.read_text(encoding="utf-8"))
+        diagnostic["independent_node_journals"] = [
+            {
+                "work_id": work_id,
+                "state": entry.get("state"),
+                "receipt_result": (entry.get("receipt") or {}).get("result"),
+            }
+            for work_id, entry in journal.items()
+            if work_id.startswith("observe_")
+        ]
+    except (OSError, ValueError, TypeError, AttributeError) as exc:
+        diagnostic["journal_read_error"] = type(exc).__name__
+    return json.dumps(diagnostic, sort_keys=True)
+
+
 @pytest.mark.parametrize("verdict", ["UNKNOWN", "MISMATCH"])
 def test_negative_independent_observation_never_commits_the_original_effect(
     consumer, monkeypatch, verdict
@@ -435,6 +475,9 @@ def test_negative_independent_observation_never_commits_the_original_effect(
     work_id = pending["outputs"]["mutate"]["work_id"]
     assert result["effect_counts"][work_id] == 1
     assert result["works"][-1]["state"] == "VERIFIED"
+    assert "verdict" in result["works"][-1]["effect_verification"], (
+        _independent_observation_phase_diagnostic(consumer, result)
+    )
     assert result["works"][-1]["effect_verification"]["verdict"] == verdict
     assert result["reconciliation_required"] is (verdict == "UNKNOWN")
     monkeypatch.setattr(SimulatedDeviceProvider, "read_state", original_read)
