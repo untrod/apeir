@@ -285,7 +285,7 @@ def _windows_owner_acl_is_current_user_only(descriptor: int) -> bool:
         ace = ctypes.cast(ace_pointer, ctypes.POINTER(AccessAllowedAce)).contents
         if (
             ace.header.ace_type != 0  # ACCESS_ALLOWED_ACE_TYPE
-            or ace.header.ace_flags & 0x10  # INHERITED_ACE
+            or ace.header.ace_flags != 0  # no inherited or inherit-only semantics
             or ace.header.ace_size < AccessAllowedAce.sid_start.offset + 8
             or not ace.mask & 0x00000001  # FILE_READ_DATA
             or not ace.mask & 0x00020000  # READ_CONTROL
