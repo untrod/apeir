@@ -57,6 +57,9 @@ def test_current_user_only_policy_loads_and_reloads_revocation(tmp_path):
 
 def test_inherited_or_broadened_policy_acl_fails_closed(tmp_path):
     path = _policy(tmp_path)
+    engine = PermissionEngine.from_owner_file(path)
+    request = PermissionRequest("api-service", "context.read", "snapshot-1")
+    assert engine.check(request).allowed is True
     result = subprocess.run(
         ["icacls", str(path), "/inheritance:e"],
         capture_output=True,
@@ -67,6 +70,9 @@ def test_inherited_or_broadened_policy_acl_fails_closed(tmp_path):
     assert result.returncode == 0, result.stderr
     with pytest.raises(PermissionError):
         PermissionEngine.from_owner_file(path)
+    assert engine.check(request).allowed is False
+    with pytest.raises(PermissionError):
+        engine.configuration_status()
 
 
 def test_additional_system_ace_fails_closed(tmp_path):
