@@ -94,16 +94,22 @@ def _set_current_user_only_windows_acl(path: str) -> None:
         sid_pointer = ctypes.cast(buffer, ctypes.POINTER(wintypes.LPVOID))[0]
         if not advapi32.ConvertSidToStringSidW(sid_pointer, ctypes.byref(sid_text)):
             raise ctypes.WinError(ctypes.get_last_error())
-        sddl = f"D:P(A;;FA;;;{sid_text.value})"
+        # Set both ownership and the protected DACL.  A DACL alone is not an
+        # owner-only contract when an elevated token creates a group-owned
+        # file; the policy reader checks the same current-user owner below.
+        sddl = f"O:{sid_text.value}D:P(A;;FA;;;{sid_text.value})"
         if not advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
             sddl, 1, ctypes.byref(descriptor), None
         ):
             raise ctypes.WinError(ctypes.get_last_error())
+        owner_security_information = 0x00000001
         dacl_security_information = 0x00000004
         protected_dacl_security_information = 0x80000000
         if not advapi32.SetFileSecurityW(
             path,
-            dacl_security_information | protected_dacl_security_information,
+            owner_security_information
+            | dacl_security_information
+            | protected_dacl_security_information,
             descriptor,
         ):
             raise ctypes.WinError(ctypes.get_last_error())
