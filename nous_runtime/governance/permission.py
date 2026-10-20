@@ -69,50 +69,63 @@ class PermissionEngine:
         path = self._policy_path
         if path is None:
             return tuple(self._rules), ""
-        if os.name == "nt" or not hasattr(os, "O_NOFOLLOW"):
+        if os.name == "nt":
+            from nous_runtime.security.private_files import (
+                read_current_user_only_windows_file,
+            )
+
+            data = read_current_user_only_windows_file(
+                path,
+                max_bytes=65536,
+                subject="Owner permission policy",
+            )
+        elif not hasattr(os, "O_NOFOLLOW"):
             raise PermissionError(
                 "Owner policy file access is not qualified on this host"
             )
-        parent = path.parent.lstat()
-        if (
-            not stat.S_ISDIR(parent.st_mode)
-            or parent.st_uid != os.getuid()
-            or parent.st_mode & 0o022
-        ):
-            raise PermissionError("Owner policy requires a protected state directory")
-        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-        try:
-            before = os.fstat(descriptor)
+        else:
+            parent = path.parent.lstat()
             if (
-                not stat.S_ISREG(before.st_mode)
-                or before.st_nlink != 1
-                or before.st_uid != os.getuid()
-                or before.st_mode & 0o077
-                or not 0 < before.st_size <= 65536
+                not stat.S_ISDIR(parent.st_mode)
+                or parent.st_uid != os.getuid()
+                or parent.st_mode & 0o022
             ):
                 raise PermissionError(
-                    "Owner policy requires a bounded owner-only single-link file"
+                    "Owner policy requires a protected state directory"
                 )
-            data = bytearray()
-            while chunk := os.read(descriptor, min(8192, 65537 - len(data))):
-                data.extend(chunk)
-                if len(data) > 65536:
-                    raise PermissionError("Owner policy exceeds its byte bound")
-            after = os.fstat(descriptor)
-            if (
-                before.st_size,
-                before.st_mtime_ns,
-                before.st_ctime_ns,
-                before.st_nlink,
-            ) != (
-                after.st_size,
-                after.st_mtime_ns,
-                after.st_ctime_ns,
-                after.st_nlink,
-            ) or len(data) != before.st_size:
-                raise PermissionError("Owner policy changed during inspection")
-        finally:
-            os.close(descriptor)
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            try:
+                before = os.fstat(descriptor)
+                if (
+                    not stat.S_ISREG(before.st_mode)
+                    or before.st_nlink != 1
+                    or before.st_uid != os.getuid()
+                    or before.st_mode & 0o077
+                    or not 0 < before.st_size <= 65536
+                ):
+                    raise PermissionError(
+                        "Owner policy requires a bounded owner-only single-link file"
+                    )
+                data = bytearray()
+                while chunk := os.read(descriptor, min(8192, 65537 - len(data))):
+                    data.extend(chunk)
+                    if len(data) > 65536:
+                        raise PermissionError("Owner policy exceeds its byte bound")
+                after = os.fstat(descriptor)
+                if (
+                    before.st_size,
+                    before.st_mtime_ns,
+                    before.st_ctime_ns,
+                    before.st_nlink,
+                ) != (
+                    after.st_size,
+                    after.st_mtime_ns,
+                    after.st_ctime_ns,
+                    after.st_nlink,
+                ) or len(data) != before.st_size:
+                    raise PermissionError("Owner policy changed during inspection")
+            finally:
+                os.close(descriptor)
         try:
 
             def unique_object(pairs):

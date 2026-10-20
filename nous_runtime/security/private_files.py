@@ -115,6 +115,253 @@ def _set_current_user_only_windows_acl(path: str) -> None:
         kernel32.CloseHandle(token)
 
 
+def _windows_owner_acl_is_current_user_only(descriptor: int) -> bool:
+    """Verify the owner and protected DACL on the already-open file handle.
+
+    This checks the handle whose bytes will be consumed.  It intentionally
+    accepts exactly one explicit allow ACE for the current user.  Broader,
+    inherited, null, malformed, or group-owned ACLs fail closed.
+    """
+    if os.name != "nt":
+        raise OSError("Windows ACL verification is unavailable on this host")
+    import msvcrt
+
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    handle = wintypes.HANDLE(msvcrt.get_osfhandle(descriptor))
+
+    class SidAndAttributes(ctypes.Structure):
+        _fields_ = (("sid", wintypes.LPVOID), ("attributes", wintypes.DWORD))
+
+    class TokenUser(ctypes.Structure):
+        _fields_ = (("user", SidAndAttributes),)
+
+    class AclSizeInformation(ctypes.Structure):
+        _fields_ = (
+            ("ace_count", wintypes.DWORD),
+            ("acl_bytes_in_use", wintypes.DWORD),
+            ("acl_bytes_free", wintypes.DWORD),
+        )
+
+    class AceHeader(ctypes.Structure):
+        _fields_ = (
+            ("ace_type", ctypes.c_ubyte),
+            ("ace_flags", ctypes.c_ubyte),
+            ("ace_size", wintypes.WORD),
+        )
+
+    class AccessAllowedAce(ctypes.Structure):
+        _fields_ = (
+            ("header", AceHeader),
+            ("mask", wintypes.DWORD),
+            ("sid_start", wintypes.DWORD),
+        )
+
+    advapi32.OpenProcessToken.argtypes = (
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.HANDLE),
+    )
+    advapi32.OpenProcessToken.restype = wintypes.BOOL
+    advapi32.GetTokenInformation.argtypes = (
+        wintypes.HANDLE,
+        ctypes.c_int,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+    )
+    advapi32.GetTokenInformation.restype = wintypes.BOOL
+    advapi32.GetSecurityInfo.argtypes = (
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.LPVOID),
+        ctypes.POINTER(wintypes.LPVOID),
+        ctypes.POINTER(wintypes.LPVOID),
+        ctypes.POINTER(wintypes.LPVOID),
+        ctypes.POINTER(wintypes.LPVOID),
+    )
+    advapi32.GetSecurityInfo.restype = wintypes.DWORD
+    advapi32.GetSecurityDescriptorControl.argtypes = (
+        wintypes.LPVOID,
+        ctypes.POINTER(wintypes.WORD),
+        ctypes.POINTER(wintypes.DWORD),
+    )
+    advapi32.GetSecurityDescriptorControl.restype = wintypes.BOOL
+    advapi32.GetAclInformation.argtypes = (
+        wintypes.LPVOID,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        ctypes.c_int,
+    )
+    advapi32.GetAclInformation.restype = wintypes.BOOL
+    advapi32.IsValidAcl.argtypes = (wintypes.LPVOID,)
+    advapi32.IsValidAcl.restype = wintypes.BOOL
+    advapi32.GetAce.argtypes = (
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.LPVOID),
+    )
+    advapi32.GetAce.restype = wintypes.BOOL
+    advapi32.IsValidSid.argtypes = (wintypes.LPVOID,)
+    advapi32.IsValidSid.restype = wintypes.BOOL
+    advapi32.GetLengthSid.argtypes = (wintypes.LPVOID,)
+    advapi32.GetLengthSid.restype = wintypes.DWORD
+    advapi32.EqualSid.argtypes = (wintypes.LPVOID, wintypes.LPVOID)
+    advapi32.EqualSid.restype = wintypes.BOOL
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.LocalFree.argtypes = (wintypes.HLOCAL,)
+    kernel32.LocalFree.restype = wintypes.HLOCAL
+
+    token = wintypes.HANDLE()
+    security_descriptor = wintypes.LPVOID()
+    owner = wintypes.LPVOID()
+    dacl = wintypes.LPVOID()
+    if not advapi32.OpenProcessToken(
+        kernel32.GetCurrentProcess(), 0x0008, ctypes.byref(token)
+    ):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        required = wintypes.DWORD()
+        advapi32.GetTokenInformation(token, 1, None, 0, ctypes.byref(required))
+        if not required.value:
+            raise ctypes.WinError(ctypes.get_last_error())
+        token_buffer = ctypes.create_string_buffer(required.value)
+        if not advapi32.GetTokenInformation(
+            token, 1, token_buffer, required, ctypes.byref(required)
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        current_sid = ctypes.cast(
+            token_buffer, ctypes.POINTER(TokenUser)
+        ).contents.user.sid
+        result = advapi32.GetSecurityInfo(
+            handle,
+            1,  # SE_FILE_OBJECT
+            0x00000001 | 0x00000004,  # OWNER and DACL security information
+            ctypes.byref(owner),
+            None,
+            ctypes.byref(dacl),
+            None,
+            ctypes.byref(security_descriptor),
+        )
+        if result:
+            raise ctypes.WinError(result)
+        if (
+            not owner
+            or not dacl
+            or not advapi32.IsValidSid(owner)
+            or not advapi32.EqualSid(owner, current_sid)
+        ):
+            return False
+        control = wintypes.WORD()
+        revision = wintypes.DWORD()
+        if (
+            not advapi32.GetSecurityDescriptorControl(
+                security_descriptor, ctypes.byref(control), ctypes.byref(revision)
+            )
+            or not control.value & 0x1000
+        ):  # SE_DACL_PROTECTED
+            return False
+        details = AclSizeInformation()
+        if (
+            not advapi32.IsValidAcl(dacl)
+            or not advapi32.GetAclInformation(
+                dacl, ctypes.byref(details), ctypes.sizeof(details), 2
+            )
+            or details.ace_count != 1
+        ):
+            return False
+        ace_pointer = wintypes.LPVOID()
+        if not advapi32.GetAce(dacl, 0, ctypes.byref(ace_pointer)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        ace = ctypes.cast(ace_pointer, ctypes.POINTER(AccessAllowedAce)).contents
+        if (
+            ace.header.ace_type != 0  # ACCESS_ALLOWED_ACE_TYPE
+            or ace.header.ace_flags & 0x10  # INHERITED_ACE
+            or ace.header.ace_size < AccessAllowedAce.sid_start.offset + 8
+            or not ace.mask & 0x00000001  # FILE_READ_DATA
+            or not ace.mask & 0x00020000  # READ_CONTROL
+        ):
+            return False
+        ace_sid = ctypes.cast(
+            ctypes.addressof(ace) + AccessAllowedAce.sid_start.offset,
+            wintypes.LPVOID,
+        )
+        if not advapi32.IsValidSid(ace_sid):
+            return False
+        sid_length = advapi32.GetLengthSid(ace_sid)
+        return bool(
+            sid_length
+            and AccessAllowedAce.sid_start.offset + sid_length <= ace.header.ace_size
+            and advapi32.EqualSid(ace_sid, current_sid)
+        )
+    finally:
+        if security_descriptor:
+            kernel32.LocalFree(security_descriptor)
+        kernel32.CloseHandle(token)
+
+
+def read_current_user_only_windows_file(
+    path: str | os.PathLike[str],
+    *,
+    max_bytes: int,
+    subject: str,
+) -> bytes:
+    """Read one bounded Windows file after same-handle owner/DACL admission."""
+    if os.name != "nt":
+        raise OSError("Windows owner-only file access is unavailable on this host")
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1:
+        raise ValueError("A positive owner-file byte bound is required")
+    from nous_runtime.workspace.isolation import (
+        WorkspaceFileChangedError,
+        WorkspaceHardLinkError,
+        WorkspaceReadLimitError,
+        _workspace_read_descriptor,
+    )
+
+    target = Path(os.path.abspath(os.fspath(path)))
+    if any("~" in component for component in target.parts):
+        raise PermissionError(
+            f"{subject} cannot use an ambiguous Windows short-name component"
+        )
+    try:
+        relative = Path(target.name)
+        with _workspace_read_descriptor(target.parent, relative) as descriptor:
+            before = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or not 0 < before.st_size <= max_bytes
+                or not _windows_owner_acl_is_current_user_only(descriptor)
+            ):
+                raise PermissionError(
+                    f"{subject} requires a bounded current-user-only file"
+                )
+            data = bytearray()
+            while chunk := os.read(descriptor, min(8192, max_bytes + 1 - len(data))):
+                data.extend(chunk)
+                if len(data) > max_bytes:
+                    raise PermissionError(f"{subject} exceeds its byte bound")
+            after = os.fstat(descriptor)
+            if (
+                before.st_size,
+                before.st_mtime_ns,
+                before.st_ctime_ns,
+                before.st_nlink,
+            ) != (
+                after.st_size,
+                after.st_mtime_ns,
+                after.st_ctime_ns,
+                after.st_nlink,
+            ) or len(data) != before.st_size:
+                raise PermissionError(f"{subject} changed during inspection")
+            return bytes(data)
+    except (WorkspaceFileChangedError, WorkspaceHardLinkError, WorkspaceReadLimitError):
+        raise PermissionError(f"{subject} is not an admitted owner-only file") from None
+
+
 def validate_private_database_path(path: str | os.PathLike[str]) -> None:
     """Reject static links and nonregular SQLite state before a connection.
 

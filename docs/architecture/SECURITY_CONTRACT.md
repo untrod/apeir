@@ -60,13 +60,15 @@ never grants permission to send its contents to a Provider.
 The trusted host may explicitly select `NOUS_PERMISSION_POLICY` under its current
 Governance private-state directory. This feeds the existing PermissionEngine;
 file existence is not trust, and model/request data cannot select it. POSIX
-owner-only, single-link and bounded JSON checks precede admission. Rules are
-reloaded for checks; expiration, revocation or invalid state cannot reuse a cached
-allow. Conditions require present, exact-typed facts. Inspection reports
-configuration and UNKNOWN grants, not an authorization or new authority. Native
-Operation approvals, credential leases and execution/effect evidence stay distinct.
-The owner-file loader still denies Windows pending its separate ACL qualification;
-enabling the native source reader neither changes that policy nor seeds grants.
+owner-only, single-link and bounded JSON checks precede admission. Windows uses
+the existing pinned no-reparse reader and admits only a current-user-owned,
+single-link file with a protected DACL containing exactly one explicit allow ACE
+for that same user. Rules are reloaded for checks; expiration, revocation or
+invalid state cannot reuse a cached allow. Conditions require present,
+exact-typed facts. Inspection reports configuration and UNKNOWN grants, not an
+authorization or new authority. Native Operation approvals, credential leases
+and execution/effect evidence stay distinct. Reading an admitted policy seeds no
+grant and does not qualify Provider, native installation or physical execution.
 
 ## Signed Node identity and trust persistence
 
