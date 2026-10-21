@@ -102,8 +102,11 @@ API, `ChatView`/`Composer` and canonical EventStream. It is an Operations view,
 not a second editor backend or Agent executor. File writes and fixed-profile runs
 keep the existing service requester separate from human approval cookies; decisions
 reuse the bound nonce and Governance admission. The same distinction applies to
-read-only preview and Chat requests. Controller changes invalidate the original
-file reference and pending action instead of retargeting them.
+read-only preview and Chat requests. Controller address/token changes invalidate the original
+file reference and pending action instead of retargeting them. The existing
+connection epoch also fences same-address identity replacement and A→B→A changes.
+Unmounted Workspace views cannot continue approval-to-execution sequences; this
+does not cancel an already admitted backend effect.
 
 Workspace tabs retain unsaved drafts in memory during view changes. New panel
 preferences contain only font size and collaboration/activity visibility, not

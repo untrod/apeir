@@ -1,6 +1,6 @@
 /** Real runtime operations; every mutation returns to the existing Governance gate. */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, captureRuntimeConnection, getConfig, humanMutation, setConfig, subscribeRuntimeConfig } from "../lib/api";
+import { api, captureRuntimeConnection, getConfig, getRuntimeConfigVersion, humanMutation, setConfig, subscribeRuntimeConfig } from "../lib/api";
 import { DeveloperWorkbench } from "./DeveloperWorkbench";
 import { AutomationInspector } from "./AutomationInspector";
 import { DeveloperPlatform } from "./DeveloperPlatform";
@@ -92,6 +92,7 @@ export function OperationsConsole() {
   const [snapshot, setSnapshot] = useState<OperationsSnapshot | null>(null);
   const collection = layout.active;
   const [workspaceOpened, setWorkspaceOpened] = useState(layout.tabs.includes("workspace"));
+  const [connectionEpoch, setConnectionEpoch] = useState(getRuntimeConfigVersion);
   const [automationsOpened, setAutomationsOpened] = useState(layout.tabs.includes("automations"));
   const [workspaceDraft, setWorkspaceDraft] = useState(false);
   const [query, setQuery] = useState("");
@@ -236,7 +237,7 @@ export function OperationsConsole() {
   }
   useEffect(() => {
     active.current = true;
-    const unsubscribe = subscribeRuntimeConfig(() => { refreshSequence.current++; updateHuman(null); setSnapshot(null); setDetails(null); setSkillContent(null); setInvitation(null); sequence.current = 0; });
+    const unsubscribe = subscribeRuntimeConfig(() => { setConnectionEpoch(getRuntimeConfigVersion()); refreshSequence.current++; updateHuman(null); setSnapshot(null); setDetails(null); setSkillContent(null); setInvitation(null); sequence.current = 0; });
     return () => { active.current = false; liveHuman.current = null; unsubscribe(); };
   }, [updateHuman]);
   const enabled = !!human && human.expires_at * 1000 > Date.now() && !busy;
@@ -259,7 +260,7 @@ export function OperationsConsole() {
     <div className="operations-tabs" role="tablist" aria-label="Open views">{layout.tabs.map(key => <div key={key}><button role="tab" tabIndex={collection === key ? 0 : -1} aria-selected={collection === key} aria-controls="operations-records" onClick={() => selectCollection(key)} onKeyDown={event => { if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) { event.preventDefault(); const index = event.key === "Home" ? 0 : event.key === "End" ? layout.tabs.length - 1 : (layout.tabs.indexOf(key) + (event.key === "ArrowRight" ? 1 : layout.tabs.length - 1)) % layout.tabs.length; selectCollection(layout.tabs[index]); (event.currentTarget.closest('[role="tablist"]')?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[index])?.focus(); } }}>{layout.locale === "zh" ? t(key) : label(key)}</button>{layout.tabs.length > 1 && <button aria-label={`Close ${label(key)} view`} disabled={key === "workspace" && workspaceDraft} onClick={() => { if (key === "workspace") setWorkspaceOpened(false); const tabs = layout.tabs.filter(item => item !== key); setLayout(current => ({ ...current, tabs, active: current.active === key ? tabs[0] : current.active })); if (collection === key) { setDetails(null); setSkillContent(null); selectedId.current = null; setQuery(""); } }}>×</button>}</div>)}</div>
     {collection !== "environments" && collection !== "workspace" && collection !== "usage" && collection !== "automations" && <label className="operations-search">{t("Search records")}<input ref={searchRef} aria-label="Search records" value={query} onChange={event => setQuery(event.target.value)} placeholder="Ctrl / ⌘ F" /></label>}
     <section id="operations-records" role="tabpanel" aria-label={label(collection)} className="operations-records">
-      {workspaceOpened && <div hidden={collection !== "workspace"}><DeveloperWorkbench key={getConfig().url} onDraftChange={setWorkspaceDraft} onOpenEnvironments={() => selectCollection("environments")} /></div>}
+      {workspaceOpened && <div hidden={collection !== "workspace"}><DeveloperWorkbench key={connectionEpoch} onDraftChange={setWorkspaceDraft} onOpenEnvironments={() => selectCollection("environments")} /></div>}
       {automationsOpened && <div hidden={collection !== "automations"}><AutomationInspector human={human} approvals={snapshot?.approvals ?? []} /></div>}
       {collection === "workspace" || collection === "automations" ? null : collection === "usage" ? <DeveloperPlatform modelsOnly /> : collection === "environments" ? <EnvironmentInspector key={getConfig().url} /> : !snapshot ? <p>{t("Waiting for authoritative runtime data.")}</p> : (snapshot[collection]?.length ?? 0) === 0 ? <p>{layout.locale === "zh" ? `暂无${t(collection)}记录。` : `No ${label(collection)} recorded.`}</p> : rows.length === 0 ? <p>{t("No matching records.")}</p> : rows.map((row, index) => {
         const id = rowId(row);

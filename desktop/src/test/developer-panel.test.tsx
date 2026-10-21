@@ -281,3 +281,34 @@ describe("existing workspace developer panel", () => {
     expect(writeWorkbenchFile).not.toHaveBeenCalled(); expect(runWorkbenchProfile).not.toHaveBeenCalled();
   });
 });
+
+it.each(["save", "run"])("a same-address credential change during %s approval cannot resume execution", async kind => {
+  if (kind === "save") {
+    vi.mocked(writeWorkbenchFile).mockRejectedValueOnce(new ApiError("NOUS_APPROVAL_REQUIRED", "Approval required", { approval_request_id: "apr_original" }));
+    await edit(); await requestSave();
+  } else {
+    vi.mocked(runWorkbenchProfile).mockRejectedValueOnce(new ApiError("NOUS_APPROVAL_REQUIRED", "Approval required", { approval_request_id: "apr_original" }));
+    render(<DeveloperWorkbench />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run in sandbox" }));
+  }
+  const approve = await screen.findByRole("button", { name: `Approve once and ${kind}` });
+  vi.mocked(approvalAction).mockImplementation(async () => {
+    setConfig({ url: "http://localhost:8770", token: "different.fake.service" });
+    return {};
+  });
+  fireEvent.click(approve);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Controller changed");
+  expect(kind === "save" ? writeWorkbenchFile : runWorkbenchProfile).toHaveBeenCalledTimes(1);
+});
+
+it("an unmounted Workbench cannot resume a command after an approval response", async () => {
+  let finish!: (value: unknown) => void;
+  vi.mocked(approvalAction).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  vi.mocked(runWorkbenchProfile).mockRejectedValueOnce(new ApiError("NOUS_APPROVAL_REQUIRED", "Approval required", { approval_request_id: "apr_original" }));
+  const view = render(<DeveloperWorkbench />);
+  fireEvent.click(await screen.findByRole("button", { name: "Run in sandbox" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Approve once and run" }));
+  await waitFor(() => expect(approvalAction).toHaveBeenCalledOnce());
+  view.unmount(); finish({}); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(runWorkbenchProfile).toHaveBeenCalledTimes(1);
+});

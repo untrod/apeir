@@ -508,3 +508,34 @@ describe("generic Operations original response handling", () => {
     expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/operations/actions"))).toHaveLength(0);
   });
 });
+
+it("reopens Workspace state on a same-address identity change without carrying old drafts", async () => {
+  const originalScroll = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = vi.fn();
+  let close = () => {};
+  try {
+    const fetcher = vi.fn().mockImplementation(async (url: string) => {
+      let data: unknown = fixture;
+      if (url.includes("/workspace/files")) data = { workspace: "/owned", path: ".", total: 1, truncated: false, files: [{ path: "a.py", size_bytes: 3, modified_at: "", language: "python" }], profiles: [] };
+      else if (url.includes("/workspace/file?")) data = { path: "a.py", content: "old", sha256: "a".repeat(64), size_bytes: 3, language: "python" };
+      else if (url.includes("/workspace/proposals")) data = { proposals: [], total: 0 };
+      else if (url.endsWith("/developer/capabilities")) data = { available: [], unavailable: [], summary: { available: 0, unavailable: 0, registered: 0 } };
+      else if (url.includes("/developer/runs")) data = { runs: [], total: 0 };
+      return { ok: true, json: async () => ({ ok: true, data }) };
+    });
+    vi.stubGlobal("fetch", fetcher);
+    setConfig({ url: "http://localhost:8770", token: "fake.original" });
+    const view = render(<OperationsConsole />); close = view.unmount;
+    fireEvent.click(await screen.findByRole("button", { name: "workspace" }));
+    fireEvent.click(await screen.findByRole("button", { name: "a.py" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue("old"));
+    fireEvent.change(screen.getByRole("textbox", { name: "Code editor" }), { target: { value: "private original draft" } });
+    act(() => {
+      setConfig({ url: "http://localhost:8770", token: "fake.other" });
+      setConfig({ url: "http://localhost:8770", token: "fake.original" });
+    });
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue(""));
+    expect(screen.queryByRole("tab", { name: /a.py/ })).not.toBeInTheDocument();
+    expect(JSON.stringify(localStorage)).not.toContain("private original draft");
+  } finally { close(); Element.prototype.scrollIntoView = originalScroll; }
+});

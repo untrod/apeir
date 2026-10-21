@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { btnPrimary, btnSecondary } from "../design";
 import {
-  approvalAction, fetchWorkspaceProposal, fetchWorkspaceProposals, getConfig,
+  approvalAction, captureRuntimeConnection, fetchWorkspaceProposal, fetchWorkspaceProposals,
   prepareWorkspaceProposal, workspaceProposalAction,
   type WorkspaceProposal, type WorkspaceProposalInput,
 } from "../lib/api";
@@ -17,53 +17,55 @@ export function WorkspaceProposals({ drafts = [], disabled = false, onApplied, o
 }) {
   const [records, setRecords] = useState<WorkspaceProposal[]>([]);
   const [selected, setSelected] = useState<WorkspaceProposal | null>(null);
-  const [controller, setController] = useState(getConfig().url);
+  const [connection] = useState(captureRuntimeConnection);
+  const active = useRef(true);
+  const assertConnection = useCallback(() => {
+    connection();
+    if (!active.current) throw new Error("Workspace closed; inspect the original proposal before continuing.");
+  }, [connection]);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const generation = useRef(0);
   useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
-  const assertController = (original: string) => {
-    if (getConfig().url !== original) throw new Error("Controller changed; inspect the original proposal before continuing.");
-  };
   const refresh = useCallback(async () => {
-    const original = getConfig().url;
+    assertConnection();
     const read = ++generation.current;
     const result = await fetchWorkspaceProposals();
-    if (getConfig().url !== original) throw new Error("Controller changed; reopen the original proposals.");
+    assertConnection();
     if (read !== generation.current) return;
-    setRecords(result.proposals); setController(original);
-  }, []);
+    setRecords(result.proposals);
+  }, [assertConnection]);
   useEffect(() => { void refresh().catch(cause => setError(errorMessage(cause, "Proposals are unavailable."))); }, [refresh]);
   useEffect(() => {
     if (!focusProposalId) return;
     let active = true;
-    const original = getConfig().url;
-    void fetchWorkspaceProposal(focusProposalId).then(result => {
+    void Promise.resolve().then(() => { assertConnection(); return fetchWorkspaceProposal(focusProposalId); }).then(result => {
       if (!active) return;
-      if (getConfig().url !== original) throw new Error("Controller changed; inspect the original proposal.");
-      setController(original); setSelected(result); return refresh();
+      assertConnection();
+      setSelected(result); return refresh();
     }).catch(cause => { if (active) setError(errorMessage(cause, "Original model proposal is unavailable.")); });
     return () => { active = false; };
-  }, [focusProposalId, refresh]);
+  }, [focusProposalId, refresh, assertConnection]);
 
   const inspect = async (record: WorkspaceProposal) => {
     if (busy) return;
     setBusy(true); setError("");
     try {
-      assertController(controller);
+      assertConnection();
       const result = await fetchWorkspaceProposal(record.proposal_id);
-      assertController(controller); setSelected(result);
+      assertConnection(); setSelected(result);
     } catch (cause) { setError(errorMessage(cause, "Original proposal could not be read.")); }
     finally { setBusy(false); }
   };
 
   const prepare = async (files: WorkspaceProposalInput[]) => {
     if (busy || disabled || !files.length) return;
-    const original = getConfig().url;
     setBusy(true); setError("");
     try {
+      assertConnection();
       const result = await prepareWorkspaceProposal(files, "Reviewed workspace edits");
-      assertController(original); setController(original); setSelected(result);
+      assertConnection(); setSelected(result);
       await refresh();
     } catch (cause) { setError(errorMessage(cause, "Proposal could not be prepared. No automatic retry.")); }
     finally { setBusy(false); }
@@ -71,18 +73,18 @@ export function WorkspaceProposals({ drafts = [], disabled = false, onApplied, o
 
   const act = async (action: "approve" | "deny" | "reconcile" | "apply") => {
     if (!selected || busy || disabled) return;
-    const original = controller;
     const proposal = selected;
     setBusy(true); setError("");
     try {
-      assertController(original);
+      assertConnection();
       if (action === "approve" || action === "deny") {
         await approvalAction(proposal.approval_request_id, action);
-        assertController(original);
+        assertConnection();
       }
       const result = action === "deny" ? await fetchWorkspaceProposal(proposal.proposal_id)
         : await workspaceProposalAction(proposal.proposal_id, action === "reconcile" ? "reconcile" : "apply");
-      assertController(original); setSelected(result); await refresh();
+      assertConnection(); setSelected(result); await refresh();
+      assertConnection();
       if (result.applied && result.verification.verdict === "MATCH") await onApplied?.(result);
     } catch (cause) {
       setError(`${errorMessage(cause, "Original action could not be confirmed.")} Inspect or reconcile this proposal; do not create a replacement to repeat an uncertain write.`);
