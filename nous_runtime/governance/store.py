@@ -38,7 +38,8 @@ def _sqlite_phase(phase: str, readonly: bool):
 @contextmanager
 def _db_connect(db_path: str, readonly: bool = False):
     path = Path(db_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if not readonly:
+        path.parent.mkdir(parents=True, exist_ok=True)
     conn = None
     try:
         with _sqlite_phase("connect", readonly):

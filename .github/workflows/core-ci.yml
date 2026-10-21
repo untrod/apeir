@@ -99,4 +99,4 @@ jobs:
       - name: Exercise original owned HTTP and TLS paths
         env:
           APEIR_SKILL_HTTP_DIAGNOSTIC: '1'
-        run: python -m pytest -q tests/control_plane/test_remote_skill_center.py --tb=short --timeout=60 -rA
+        run: python -m pytest -q tests/governance/test_sqlite_connection_lifecycle.py tests/control_plane/test_remote_skill_center.py --tb=short --timeout=60 -rA

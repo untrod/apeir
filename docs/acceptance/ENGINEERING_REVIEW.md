@@ -2518,3 +2518,26 @@ resolution, not zero I/O cost. The fixture now uses high-resolution local
 `perf_counter()` for phase intervals. Original deadlines/SQLite runtime diagnostics
 stay unchanged. Related Linux owned HTTP/TLS/privacy cases still have **33 passed
 (23.43s)**; new Windows precision evidence and full-suite qualification are separate.
+
+
+### Governance read-only connection admission — 2026-10-21
+
+FIX the existing SQLite connection owner: a read-only connection no longer
+initializes parent directories. An absent/removed database still raises the
+original SQLite failure without recreating its workspace; normal existing reads
+retain original rows and need no directory-creation permission. Write-path
+initialization, transaction/rollback/close behavior, WAL and durability remain
+unchanged. This does not claim SQLite has no internal WAL sidecar activity.
+
+Both original filesystem contracts failed before the correction (**2 failed,
+12 deselected,0.14s**). Related Governance/Control Plane/Skill/permission cases
+now have **555 passed (45.91s)**; collection confirms555 distinct cases. These
+counts overlap earlier evidence. No authority, retry, timeout or Kernel change.
+The explicit Windows diagnostic now also includes these existing lifecycle cases.
+
+A paired same-host, same-database Linux ABBA probe has5000 samples per variant:
+p50/p95/p99 **120.291/257.848/411.920µs → 109.155/245.329/387.744µs**;
+thread CPU **0.7362s → 0.6737s**. Every lookup returns the same original row;
+integrity remains `ok`, row count1. This removes redundant directory operations
+in the read helper, not evidence of a whole-Runtime or Windows/HTTP speedup.
+It does not establish a correction for the unresolved full-suite Issue #88.

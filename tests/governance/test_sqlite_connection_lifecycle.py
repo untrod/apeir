@@ -8,6 +8,32 @@ import pytest
 from nous_runtime.governance import store
 
 
+def test_readonly_missing_database_does_not_initialize_directories(tmp_path):
+    parent = tmp_path / "removed-workspace" / ".nous"
+    with pytest.raises(sqlite3.OperationalError):
+        with store._db_connect(str(parent / "governance.db"), readonly=True):
+            pytest.fail("missing database admitted a read")
+    assert not parent.exists()
+
+
+def test_readonly_existing_database_needs_no_directory_creation(tmp_path, monkeypatch):
+    path = tmp_path / "governance.db"
+    with store._db_connect(str(path)) as connection:
+        connection.execute("CREATE TABLE entries (value TEXT)")
+        connection.execute("INSERT INTO entries VALUES ('recorded')")
+
+    def mkdir(*_args, **_kwargs):
+        pytest.fail("read-only lookup attempted directory initialization")
+
+    with monkeypatch.context() as readonly:
+        readonly.setattr(store.Path, "mkdir", mkdir)
+        with store._db_connect(str(path), readonly=True) as connection:
+            assert (
+                connection.execute("SELECT value FROM entries").fetchone()[0]
+                == "recorded"
+            )
+
+
 @pytest.mark.parametrize(
     "pragma",
     ["PRAGMA busy_timeout=5000", "PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON"],
