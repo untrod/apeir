@@ -2921,3 +2921,42 @@ actual created record with zero page errors; screenshots are source-browser
 records, not installed APEIR.exe captures. No OCI workload ran; strong isolation,
 real IdP/model, hardware and native installation remain separately unqualified.
 Required source and resulting-main CI remain separate integration gates.
+
+
+### Original mutation result delivery before tamper qualification — 2026-10-21
+
+Windows Core [39689311331](https://github.com/untrod/apeir/actions/runs/39689311331/job/119531250658)
+at `90b44845` retains **1 failed,5647 passed,88 skipped,4 warnings (2250.03s)**.
+The semantic-device-tamper case fails before tampering: Workflow failed,
+mutation Work RUNNING, verification absent, reconciliation required and effect
+count1. Linux/macOS passes do not resolve that failure. A controlled local drop
+of the first original mutation terminal message reproduces the same failed
+precondition (**1 failed,6.08s**); its exact error identifies the original
+mutation Work timeout. This establishes a delivery-loss failure class, not the
+reason the hosted Windows message was late or lost. Issue #82 remains open.
+
+REUSE existing Automation consumer, Node journal signature/binding validation,
+reconciler and independent observation. FIX only the acceptance precondition:
+for that exact original mutation timeout, require RUNNING with no Controller
+receipt/verification, one effect, reconciliation required and the original bound
+signed terminal journal before opening recovery transport. Perform one explicit
+reconcile/resume of the same Work/run, with mutation invocation forbidden during
+recovery. The existing observation-loss continuation uses that same no-mutation
+assertion. Missing/changed evidence still fails; all final COMMITTED/MATCH,
+wrong-device and semantic tamper assertions remain. No Runtime deadline, retry,
+result state, execution policy, authority or Kernel code changes.
+
+Existing Automation plus Verified Demo regressions: **130 passed (211.17s)**,
+including the new controlled mutation-result-loss case, original observation
+loss, corrupted journals/evidence, denied authority, restart and effect_count1.
+Current-source cross-platform CI and resulting-main qualification remain required;
+this is not a claim to have fixed Windows transport timing or closed #4/#8/#82.
+
+The unchanged Environment view correction also passed an actual sandbox-enabled
+Chromium/Runtime HTTP negative: hold its real human nonce response, leave the
+Environment view, then deliver that response. The original approval stays
+PENDING; no decision POST, service continuation or additional environment occurs,
+with zero page errors. Verification uses the existing legacy approval projection
+`/api/v1/control/approvals`; `/api/v1/approvals` and Operations expose the distinct
+Operation approval projection. Private fixture/locator corrections are not
+reported as product defects. No OCI workload, actual IdP or native UI is qualified.
