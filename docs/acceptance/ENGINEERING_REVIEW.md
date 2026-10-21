@@ -2858,3 +2858,38 @@ Two existing default API bootstrap cases retain their POSIX owner-file scope;
 an added Windows negative must prove the owner-file loader remains denied. The
 safe reader does not qualify Windows ACL policy bootstrap, seed permissions,
 authenticate a remote human or complete installed Desktop/model qualification.
+
+
+### Workspace connection lifetime and source-browser qualification — 2026-10-21
+
+REUSE the existing connection epoch, Workbench/Proposal HTTP APIs, Governance,
+Workflow, CAS and EventStream. FIX the Workspace view lifetime and original
+approval continuation; no execution authority or store is added. The original
+component reproduced four failing cases: same-address token replacement,
+Controller/token ABA and view closure during an outstanding approval. The
+bounded fix checks the captured connection before dispatch/after responses and
+before follow-on actions, and resets Workspace state on connection-epoch change.
+A late response cannot publish success or start reads against the new connection.
+Closing the view is not proof that an admitted backend operation was cancelled.
+
+A sandbox-enabled Chromium run used the actual Vite frontend and Runtime HTTP
+server, a deterministic fake ModelWorkDeliberator adapter and the existing signed
+fake-OIDC test fixture. The original Work read both existing files before
+preparing one two-file proposal. Browser review and Approve Once changed both
+files, with the original admission and fresh CAS-backed file MATCH. Reload and a
+new Runtime process retained the original proposal/authorization/manifest;
+explicit reconciliation reported no replay. Both browser runs had zero page
+errors. No real account credentials, installed executable or physical device was
+used. The first fixture attempt correctly refused to propose unread existing
+files; its original recovery record is retained, not retried as another effect.
+
+Related Work/proposal/API/Context regressions: **221 passed (9.94s)**. Final
+Desktop regression: **40 files / 248 passed (64.74s)**; lint, typecheck, build,
+Ruff, compile, documentation and repository checks pass. Security has **0 HIGH,
+5 existing MEDIUM** findings. Component-lock contracts have **3 passed**; the
+actual native-byte verifier still fails at the missing locked Windows nousd. The real
+strict-sandbox probe returned `STRICT_SANDBOX_UNAVAILABLE`; no unrestricted host
+fallback ran. Therefore the complete model→edit→test product Gate remains PARTIAL:
+file-byte MATCH does not verify tests, and the source Work is not declared
+completed merely because its proposal was applied. Native binaries, deployed
+human identity, real model/provider and physical qualifications remain separate.

@@ -70,3 +70,40 @@ it("an applied flag with MISMATCH cannot notify successful effect verification",
   fireEvent.click(screen.getByRole("button", { name: "Approve once and apply original" }));
   await waitFor(() => expect(workspaceProposalAction).toHaveBeenCalledTimes(1)); expect(onApplied).not.toHaveBeenCalled();
 });
+it.each(["token", "controller-aba", "token-aba"])("%s changes during approval cannot dispatch the original write", async change => {
+  vi.mocked(approvalAction).mockImplementation(async () => {
+    if (change === "controller-aba") setConfig({ url: "http://other-controller", token: "fake.other" });
+    else setConfig({ url: "http://localhost:8770", token: "fake.other" });
+    if (change !== "token") setConfig({ url: "http://localhost:8770", token: "fake.service" });
+    return {};
+  });
+  render(<WorkspaceProposals />); await inspect();
+  fireEvent.click(screen.getByRole("button", { name: "Approve once and apply original" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Controller changed");
+  expect(workspaceProposalAction).not.toHaveBeenCalled();
+  expect(prepareWorkspaceProposal).not.toHaveBeenCalled();
+});
+it("closing the workspace during approval cannot continue the write", async () => {
+  let finish!: (value: unknown) => void;
+  vi.mocked(approvalAction).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  const view = render(<WorkspaceProposals />); await inspect();
+  fireEvent.click(screen.getByRole("button", { name: "Approve once and apply original" }));
+  await waitFor(() => expect(approvalAction).toHaveBeenCalledOnce());
+  view.unmount(); finish({});
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(workspaceProposalAction).not.toHaveBeenCalled();
+});
+it("a late apply response from the old identity cannot publish success or read new-scope records", async () => {
+  let finish!: (value: WorkspaceProposal) => void;
+  vi.mocked(workspaceProposalAction).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  const onApplied = vi.fn(); render(<WorkspaceProposals onApplied={onApplied} />); await inspect();
+  fireEvent.click(screen.getByRole("button", { name: "Approve once and apply original" }));
+  await waitFor(() => expect(workspaceProposalAction).toHaveBeenCalledOnce());
+  const reads = vi.mocked(fetchWorkspaceProposals).mock.calls.length;
+  setConfig({ url: "http://localhost:8770", token: "fake.changed.identity" });
+  finish({ ...original, applied: true, verification: { verdict: "MATCH" } });
+  expect(await screen.findByRole("alert")).toHaveTextContent("Controller changed");
+  expect(onApplied).not.toHaveBeenCalled();
+  expect(fetchWorkspaceProposals).toHaveBeenCalledTimes(reads);
+  expect(workspaceProposalAction).toHaveBeenCalledOnce();
+});

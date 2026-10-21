@@ -147,6 +147,11 @@ outside APEIR, close its tab (explicitly discard if needed), then reopen it.
 Drafts also remain in memory when switching Console tabs; a dirty or pending
 workspace tab cannot be closed directly. Browser reload/exit asks before losing
 any active or inactive draft where the browser supports that prompt.
+Changing the Controller address or service credential resets the Workspace view,
+including same-address credential changes and A→B→A switches. Save drafts before
+changing that connection. Old views cannot continue an approval/save/run sequence;
+an already admitted operation may still have happened. Reopen its original
+Controller and inspect persisted evidence before trying another operation.
 Editor contents are not stored in layout preferences. Font size, collaboration
 visibility and activity visibility are the only new saved preferences; existing
 Chat conversation/draft persistence retains its existing behavior.
