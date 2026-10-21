@@ -2869,9 +2869,11 @@ Linux/macOS, but Windows recorded **2 failed,5633 passed,88 skipped,4 warnings
 Win32 normalization removed the ambiguous spelling before file admission.
 The reader now checks the supplied spelling with the existing Windows component
 validator before `abspath`, then retains the same pinned-handle ACL/owner checks.
-Four host-independent negative cases prove normalization is never reached for
-ambiguous names; the native tests retain their original assertions. Related
-policy/selected-input regression: **59 passed,9 skipped (14.04s)** on Linux.
+The trusted-host `NOUS_PERMISSION_POLICY` entrypoint performs that admission
+before its own `.absolute()` call. Eight host-independent negative cases prove
+neither entrypoint reaches normalization for ambiguous names. Native loader and
+host-bootstrap tests retain the same deny requirement. Related policy/selected-
+input regression: **63 passed,12 skipped (14.21s)** on Linux.
 New native Windows execution is still required before policy qualification.
 
 An uninitialized container full run on `d5b20ef` recorded **2 failed,5681 passed,

@@ -110,3 +110,15 @@ def test_ambiguous_policy_name_fails_before_content_admission(tmp_path, name):
     ambiguous = ordinary.with_name(name)
     with pytest.raises((OSError, PermissionError)):
         PermissionEngine.from_owner_file(ambiguous)
+
+
+@pytest.mark.parametrize(
+    "name", ["permission-policy.json.", "permission-policy.json ", "PERMIS~1.JSO"]
+)
+def test_host_bootstrap_rejects_ambiguous_policy_name(tmp_path, monkeypatch, name):
+    from nous_runtime.governance import ExecutionAuthorizationGate, GovernanceStore
+
+    ordinary = _policy(tmp_path)
+    monkeypatch.setenv("NOUS_PERMISSION_POLICY", str(ordinary.with_name(name)))
+    with pytest.raises(PermissionError):
+        ExecutionAuthorizationGate(GovernanceStore(tmp_path / ".nous"))
