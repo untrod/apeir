@@ -51,7 +51,7 @@ class _HTTPPhases:
 
         @wraps(original)
         def observed(*args, **kwargs):
-            started = time.monotonic()
+            started = time.perf_counter()
             with self.lock:
                 self.sequence += 1
                 sequence = self.sequence
@@ -68,7 +68,7 @@ class _HTTPPhases:
                         {
                             "phase": phase,
                             "request": request,
-                            "elapsed_ms": (time.monotonic() - started) * 1000,
+                            "elapsed_ms": (time.perf_counter() - started) * 1000,
                             "complete": True,
                         }
                     )
@@ -79,7 +79,7 @@ class _HTTPPhases:
 
     def snapshot(self):
         with self.lock:
-            now = time.monotonic()
+            now = time.perf_counter()
             return list(self.completed) + [
                 {
                     "phase": phase,

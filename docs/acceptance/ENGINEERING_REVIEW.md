@@ -2506,3 +2506,15 @@ Diagnostics use the failing Windows/Python3.11 Tier1 dependency scope and origin
 tests. Their result cannot qualify full Core, fix Issue #88 or certify release.
 The workflow passes official actionlint1.7.12 validation. Frozen Kernel, component
 lock, durability, timeouts and retry policy are unchanged.
+
+
+The first actual [Windows diagnostic39689950082](https://github.com/untrod/apeir/actions/runs/39689950082)
+on `154c110` passed **33 tests (62.42s)**. Its32 fixture snapshots contain200
+completed HTTP requests (mixed endpoints): observed p50/p95/p99 **47/625/641ms**,
+maximum **891ms**, with no incomplete phases. This fresh subset does not reproduce
+the full-suite deadline failure and cannot close Issue #88. Python3.11 Windows
+`monotonic()` quantizes some short phases to0ms; those values are below the timer
+resolution, not zero I/O cost. The fixture now uses high-resolution local
+`perf_counter()` for phase intervals. Original deadlines/SQLite runtime diagnostics
+stay unchanged. Related Linux owned HTTP/TLS/privacy cases still have **33 passed
+(23.43s)**; new Windows precision evidence and full-suite qualification are separate.
