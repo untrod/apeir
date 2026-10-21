@@ -11,6 +11,7 @@ import argparse
 import base64
 import binascii
 import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -126,6 +127,36 @@ def process_identity_matches(identity: Mapping[str, Any]) -> bool:
     return bool(pid > 0 and expected and process_creation_token(pid) == expected)
 
 
+def _enable_linux_child_subreaper() -> None:
+    """Make this isolated host the reaper for descendants of its workload.
+
+    A container PID 1 is not guaranteed to reap orphaned processes.  The
+    ProcessSandboxHost owns one process tree, so Linux can safely reparent that
+    tree's orphaned descendants here and let the host wait for them before it
+    exits.  Refusing startup when the Linux primitive is unavailable is safer
+    than knowingly leaking an unowned workload process.
+    """
+    if not sys.platform.startswith("linux"):
+        return
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        prctl = libc.prctl
+    except (AttributeError, OSError) as exc:
+        raise OSError("Linux child subreaper control is unavailable") from exc
+    prctl.argtypes = (
+        ctypes.c_int,
+        ctypes.c_ulong,
+        ctypes.c_ulong,
+        ctypes.c_ulong,
+        ctypes.c_ulong,
+    )
+    prctl.restype = ctypes.c_int
+    ctypes.set_errno(0)
+    if prctl(36, 1, 0, 0, 0) != 0:  # PR_SET_CHILD_SUBREAPER
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error))
+
+
 class ProcessSandboxHost:
     """The single subprocess boundary for persistent development commands."""
 
@@ -224,6 +255,7 @@ class ProcessSandboxHost:
         job_handle: int = 0
         last_control = ""
         try:
+            _enable_linux_child_subreaper()
             with (
                 stdout_path.open("ab", buffering=0) as stdout,
                 stderr_path.open("ab", buffering=0) as stderr,
@@ -361,9 +393,12 @@ class ProcessSandboxHost:
                 _atomic_json(state_path, state)
                 return 0
         except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
-            if process is not None and process.poll() is None:
+            if process is not None:
                 try:
-                    ProcessSandboxHost._hard_kill(process, job_handle)
+                    if process.poll() is None:
+                        ProcessSandboxHost._hard_kill(process, job_handle)
+                        process.wait(timeout=5)
+                    ProcessSandboxHost._cleanup_descendants(process, job_handle)
                 except (OSError, RuntimeError, subprocess.SubprocessError):
                     state["cleanup_error"] = "process cleanup could not be confirmed"
             state.update(
@@ -530,12 +565,35 @@ class ProcessSandboxHost:
         try:
             os.killpg(process.pid, signal.SIGTERM)
         except ProcessLookupError:
-            return
+            pass
         time.sleep(0.05)
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        ProcessSandboxHost._reap_process_group(process.pid)
+
+    @staticmethod
+    def _reap_process_group(process_group: int, *, timeout: float = 1.0) -> None:
+        """Reap adopted POSIX descendants from the original process group."""
+        if sys.platform == "win32" or not hasattr(os, "waitpid"):
+            return
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                while True:
+                    pid, _ = os.waitpid(-process_group, os.WNOHANG)
+                    if pid == 0:
+                        break
+            except ChildProcessError:
+                return
+            except OSError as exc:
+                if exc.errno == errno.ECHILD:
+                    return
+                raise
+            if time.monotonic() >= deadline:
+                raise RuntimeError("process-group cleanup could not be confirmed")
+            time.sleep(0.01)
 
 
 def main(argv: list[str] | None = None) -> int:

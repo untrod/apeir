@@ -2426,3 +2426,33 @@ the original observed case BLOCK. Production timing, comparator tolerances,
 performance gates, Node assertions and timeouts are unchanged. This is test
 input determinism, not a performance improvement or a Windows recovery fix.
 Exact-source CI remains required before integration.
+
+### Linux ProcessSession descendant reaping — 2026-10-21
+
+**REUSE / FIX** the existing Distribution ProcessSandboxHost and durable
+ProcessSession projection. On main `e3cd2a2`, the original
+`test_child_process_is_cleaned_up_with_parent` and
+`test_natural_parent_exit_does_not_leave_child` both fail in this container
+with PID1 `tail -f /dev/null`. The original child creation tokens remain in
+`/proc` because dead children are zombies adopted by a non-reaping PID1.
+The same pair fails on `ae75148` and `d5b20ef`; no assertion or timeout changed.
+
+The isolated Linux host now enables `PR_SET_CHILD_SUBREAPER` before workload
+spawn, then reaps only adopted children in the original workload process group
+after the existing termination signals. Startup without that Linux primitive
+fails closed before spawning. Unconfirmed reaping cannot publish terminal
+success. The exception path also waits for the original process and cleans its
+group before recording recovery; it never launches a replacement command.
+The frozen Rust Kernel, NKI, component lock, Governance and sandbox limits are
+unchanged. The Python module's historical `nous_runtime.kernel` package name
+does not change its Distribution runtime-service execution scope.
+
+The original failing pair passes **2 tests (1.54s)** in the same bare-PID1
+environment. ProcessSession/startup/reaping regression passes **29 tests
+(27.00s)** before adding the real post-spawn persistence-failure case; the final
+new reaping suite passes **8 tests (2.25s)**, including three-generation process
+exit/terminate/kill, recovery after host failure, unavailable startup control,
+group-only waiting, and fail-closed wait errors/timeouts. Counts overlap.
+Full regression and source/main CI remain required. Container init is still
+needed for detached host processes and arbitrary process groups outside this
+bounded ownership contract; no complete PTY or isolation qualification is added.
