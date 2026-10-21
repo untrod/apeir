@@ -119,6 +119,15 @@ There is no operating-system desktop/keystroke recorder or unrestricted containe
 launcher. See the [Quick Start](../operations/getting-started/QUICK_START.md#workspace-developer-panel)
 for the actual user path and qualified scope.
 
+Environment views also bind the existing URL/token/configuration epoch and their
+mounted lifetime. Connection changes remount the original panel rather than
+reusing approvals or output from another connection. Approval nonce acquisition,
+decision and service continuation check the same original view; a late response
+cannot start another environment operation or refresh an unmounted panel.
+Environment reads, logs and Artifact metadata retain those same connection checks.
+Closing a view does not prove an admitted workload stopped; recover its original
+Runtime evidence before repeating an operation. Strong isolation remains required.
+
 ## Build commands
 
 Web asset validation:

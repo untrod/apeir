@@ -2893,3 +2893,31 @@ fallback ran. Therefore the complete model→edit→test product Gate remains PA
 file-byte MATCH does not verify tests, and the source Work is not declared
 completed merely because its proposal was applied. Native binaries, deployed
 human identity, real model/provider and physical qualifications remain separate.
+
+
+### Environment continuation connection binding — 2026-10-21
+
+REUSE `EnvironmentInspector`, Runtime API, existing connection epoch, human nonce
+and Governance. FIX the URL-only view checks: token rotation, A→B→A and unmount
+could continue a reviewed Environment request. Four controlled pre-change cases
+fail (**4 failed,8 passed,1.91s**), including an extra refresh after unmount. The
+existing URL/token/epoch guard now binds the panel lifetime, all read/result
+publication and each service continuation. Connection changes remount the panel
+and clear old approvals/output. Approval nonce acquisition receives the same
+view guard; an additional client-boundary case proves closing the view prevents
+the decision POST after its nonce arrives. Original exact-body continuation,
+service-cookie separation, lost-response/no-retry and fail-closed isolation
+assertions remain. No backend authority, Environment, process store or Kernel is
+added or changed.
+
+Focused frontend cases: **16 passed (2.77s)**. Full Desktop regression:
+**40 files,253 passed (57.51s)**. Related existing Environment/HTTP/target-binding
+regression: **132 passed,2 skipped (2.40s)**. Lint, TypeScript and production web
+asset build pass; the existing Tauri static/dynamic import warning remains.
+Sandbox-enabled Chromium with actual Vite/Runtime HTTP and signed fake OIDC
+exercised denial without host permission, exact human nonce/approval, service
+resubmission and persisted OCI environment contract creation. Reload reads the
+actual created record with zero page errors; screenshots are source-browser
+records, not installed APEIR.exe captures. No OCI workload ran; strong isolation,
+real IdP/model, hardware and native installation remain separately unqualified.
+Required source and resulting-main CI remain separate integration gates.

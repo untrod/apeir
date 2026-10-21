@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EnvironmentInspector } from "../components/EnvironmentInspector";
@@ -115,7 +115,7 @@ describe("environment inspector", () => {
     expect(await screen.findByText("Explicit approval required")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Approve once and create" }));
 
-    await waitFor(() => expect(approvalAction).toHaveBeenCalledWith("apr_environment", "approve"));
+    await waitFor(() => expect(approvalAction).toHaveBeenCalledWith("apr_environment", "approve", expect.any(Function)));
     await waitFor(() => expect(createEnvironment).toHaveBeenCalledTimes(2));
     expect(vi.mocked(createEnvironment).mock.calls[1][0]).toBe(vi.mocked(createEnvironment).mock.calls[0][0]);
   });
@@ -159,7 +159,7 @@ describe("environment inspector", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Create governed environment" }));
     await screen.findByText("Explicit approval required");
     fireEvent.click(screen.getByRole("button", { name: "Deny original request" }));
-    await waitFor(() => expect(approvalAction).toHaveBeenCalledWith("apr_denied", "deny"));
+    await waitFor(() => expect(approvalAction).toHaveBeenCalledWith("apr_denied", "deny", expect.any(Function)));
     expect(createEnvironment).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByText("Explicit approval required")).not.toBeInTheDocument());
   });
@@ -168,9 +168,9 @@ describe("environment inspector", () => {
     render(<EnvironmentInspector />);
     fireEvent.click(await screen.findByRole("button", { name: "Create governed environment" }));
     await screen.findByText("Explicit approval required");
-    setConfig({ url: "https://other-controller.example", token: "" });
-    fireEvent.click(screen.getByRole("button", { name: "Approve once and create" }));
-    expect(await screen.findByText(/Controller changed; review/)).toBeInTheDocument();
+    await act(async () => { setConfig({ url: "https://other-controller.example", token: "" }); });
+    expect(screen.queryByText("Explicit approval required")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve once and create" })).not.toBeInTheDocument();
     expect(approvalAction).not.toHaveBeenCalled();
     expect(createEnvironment).toHaveBeenCalledTimes(1);
   });
@@ -229,6 +229,57 @@ describe("environment inspector", () => {
     expect(approvalAction).toHaveBeenCalledTimes(1);
     expect(runEnvironment).toHaveBeenCalledTimes(2);
     expect(vi.mocked(runEnvironment).mock.calls[1]).toEqual(vi.mocked(runEnvironment).mock.calls[0]);
+  });
+
+  it.each(["token", "ABA", "unmount"] as const)("does not continue approval after %s changes the original environment view", async change => {
+    vi.mocked(createEnvironment).mockRejectedValueOnce(new ApiError("NOUS_APPROVAL_REQUIRED", "Approval required", { approval_request_id: "apr_bound_environment" }));
+    let finish!: (value: unknown) => void;
+    vi.mocked(approvalAction).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const view = render(<EnvironmentInspector />);
+    fireEvent.click(await screen.findByRole("button", { name: "Create governed environment" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve once and create" }));
+    await waitFor(() => expect(approvalAction).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      if (change === "unmount") view.unmount();
+      else if (change === "token") setConfig({ url: "http://localhost:8770", token: "environment.fake.changed" });
+      else {
+        setConfig({ url: "https://temporary.example.test", token: "environment.fake.temporary" });
+        setConfig({ url: "http://localhost:8770", token: "environment.fake.service" });
+      }
+      finish({});
+    });
+    expect(createEnvironment).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refresh an old command result after its environment view is unmounted", async () => {
+    vi.mocked(fetchEnvironments).mockResolvedValue({ environments: [readyEnvironment], total: 1 });
+    let finish!: (value: Awaited<ReturnType<typeof runEnvironment>>) => void;
+    vi.mocked(runEnvironment).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const view = render(<EnvironmentInspector />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run in environment" }));
+    await waitFor(() => expect(runEnvironment).toHaveBeenCalledTimes(1));
+    const readsBefore = vi.mocked(fetchEnvironments).mock.calls.length;
+    view.unmount();
+    await act(async () => { finish({ environment_id: readyEnvironment.environment_id, state: "ready" } as Awaited<ReturnType<typeof runEnvironment>>); });
+    expect(fetchEnvironments).toHaveBeenCalledTimes(readsBefore);
+  });
+
+  it("does not submit a human decision when the view closes while its nonce is pending", async () => {
+    const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
+    vi.mocked(approvalAction).mockImplementationOnce(actual.approvalAction);
+    vi.mocked(createEnvironment).mockRejectedValueOnce(new ApiError("NOUS_APPROVAL_REQUIRED", "Approval required", { approval_request_id: "apr_nonce_environment" }));
+    let finish!: (value: unknown) => void;
+    const fetcher = vi.fn().mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    vi.stubGlobal("fetch", fetcher);
+    const view = render(<EnvironmentInspector />);
+    fireEvent.click(await screen.findByRole("button", { name: "Create governed environment" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve once and create" }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    expect(fetcher.mock.calls[0][0]).toContain("/api/v1/control/human/nonce");
+    view.unmount();
+    await act(async () => { finish({ ok: true, json: async () => ({ ok: true, data: { nonce: "environment-fake-nonce" } }) }); });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(createEnvironment).toHaveBeenCalledTimes(1);
   });
 
 });
