@@ -324,14 +324,20 @@ def read_current_user_only_windows_file(
         WorkspaceFileChangedError,
         WorkspaceHardLinkError,
         WorkspaceReadLimitError,
+        _validate_windows_file_components,
         _workspace_read_descriptor,
     )
 
-    target = Path(os.path.abspath(os.fspath(path)))
-    if any("~" in component for component in target.parts):
+    supplied = Path(path)
+    # GetFullPathNameW (used by Windows abspath) can discard trailing dots or
+    # spaces. Check the user's spelling before any Win32 normalization so an
+    # ambiguous name cannot become an apparently ordinary admitted file.
+    _validate_windows_file_components(supplied)
+    if any("~" in component for component in supplied.parts):
         raise PermissionError(
             f"{subject} cannot use an ambiguous Windows short-name component"
         )
+    target = Path(os.path.abspath(os.fspath(supplied)))
     try:
         relative = Path(target.name)
         with _workspace_read_descriptor(target.parent, relative) as descriptor:

@@ -2858,3 +2858,24 @@ Two existing default API bootstrap cases retain their POSIX owner-file scope;
 an added Windows negative must prove the owner-file loader remains denied. The
 safe reader does not qualify Windows ACL policy bootstrap, seed permissions,
 authenticate a remote human or complete installed Desktop/model qualification.
+
+### Windows owner-policy spelling admission — 2026-10-21
+
+**REUSE / FIX** the existing PermissionEngine, native handle reader and private
+file ACL helper. Source `d5b20ef` Core run
+[39457023307](https://github.com/untrod/apeir/actions/runs/39457023307) passed
+Linux/macOS, but Windows recorded **2 failed,5633 passed,88 skipped,4 warnings
+(2613.44s)**. Both failures are the unchanged trailing-dot/space negative tests:
+Win32 normalization removed the ambiguous spelling before file admission.
+The reader now checks the supplied spelling with the existing Windows component
+validator before `abspath`, then retains the same pinned-handle ACL/owner checks.
+Four host-independent negative cases prove normalization is never reached for
+ambiguous names; the native tests retain their original assertions. Related
+policy/selected-input regression: **59 passed,9 skipped (14.04s)** on Linux.
+New native Windows execution is still required before policy qualification.
+
+An uninitialized container full run on `d5b20ef` recorded **2 failed,5681 passed,
+74 skipped,4 warnings (730.83s)**. Both failures are ProcessSession orphan
+reaping assertions; the same pair fails on main `e3cd2a2` and parent `ae75148`.
+Actual child status is zombie under the environment's non-reaping `tail` PID1.
+This is retained baseline evidence, independent of Windows owner-policy changes.
