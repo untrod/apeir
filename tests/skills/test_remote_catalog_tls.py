@@ -38,7 +38,8 @@ server=http.server.ThreadingHTTPServer(("127.0.0.1",0),Handler)
 context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.load_cert_chain(root/"test.pem",root/"test.key")
 server.socket=context.wrap_socket(server.socket,server_side=True)
-(root/"port").write_text(str(server.server_port))
+(root/"port.pending").write_text(str(server.server_port))
+(root/"port.pending").replace(root/"port")
 server.serve_forever()
 """
 

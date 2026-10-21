@@ -2426,3 +2426,48 @@ the original observed case BLOCK. Production timing, comparator tolerances,
 performance gates, Node assertions and timeouts are unchanged. This is test
 input determinism, not a performance improvement or a Windows recovery fix.
 Exact-source CI remains required before integration.
+
+### Governance SQLite connection lifetime and timing — 2026-10-21
+
+**REUSE** GovernanceStore, its original SQLite transactions, logger, HTTP/Skill
+owners and security checks. **FIX** connection cleanup after failed setup;
+**EXTEND** safe phase diagnostics. This creates no store, pool, authority,
+scheduler or event system. Kernel, component lock, busy timeout, WAL,
+synchronous durability, approval/revocation checks and effect retry rules stay
+unchanged.
+
+Main `e3cd2a2` performs three setup PRAGMAs before its cleanup `try/finally`.
+Injecting an error in each PRAGMA while retaining the actual SQLite connection
+reproduces **3 failed tests (0.18s)**: transaction bodies are denied, but the
+connections remain open. The same connection owner now covers connect, setup,
+commit/rollback and close with cleanup. Twelve lifecycle contracts pass
+**12 tests (0.09s)**, including readonly failure, failed commit rollback,
+post-commit close failure without body replay, and diagnostic privacy.
+
+The existing logger warns only when a local monotonic connect/configure/commit/
+rollback/close phase takes at least one second. Messages contain only fixed
+phase names, elapsed time and readonly state, with normal logging thread fields;
+they do not include paths, SQL, row values or exception text. This threshold is
+observability, not a deadline change. A committed fact followed by close failure
+remains readable as original evidence; no retry is added.
+
+Affected Governance/ControlPlane/Skill/SQLite/path-binding regression initially
+has **573 passed,1 setup error (51.59s)**: the owned TLS fixture saw its port file
+after creation but before its port number was written. The child now writes a
+temporary file and atomically publishes readiness; the original five-second
+deadline and assertions remain. The final affected scope has **574 passed
+(50.76s)**. This fixture correction is not a Runtime network timing fix.
+
+Same-host A/B/B/A measurement of 1000 durable short transactions per variant
+records p50/p95/p99 **0.1216/0.3105/0.5357ms** before and
+**0.1459/0.3241/0.5431ms** after; CPU **0.1632s to0.1801s**. Every database has
+500 expected rows per block, integrity_check=ok, WAL, foreign_keys=1 and
+synchronous=2. This measures diagnostic overhead on a shared Linux host, not a
+speedup, Windows result, whole-Runtime benchmark or Token saving.
+
+[Issue88](https://github.com/untrod/apeir/issues/88) remains open. Windows
+Python3.11 run39453407331 captured a Skill HTTP timeout during commit;
+Python3.12 run39541361099 captured another during close after the completion
+audit. The deterministic setup leak is not yet proven to cause either timeout.
+Full regression and exact-source/current-main platform CI remain required;
+the original five-second HTTP assertion and durable audit are preserved.
