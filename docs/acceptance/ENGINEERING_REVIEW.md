@@ -2916,3 +2916,70 @@ fallback ran. Therefore the complete model→edit→test product Gate remains PA
 file-byte MATCH does not verify tests, and the source Work is not declared
 completed merely because its proposal was applied. Native binaries, deployed
 human identity, real model/provider and physical qualifications remain separate.
+
+
+### Environment continuation connection binding — 2026-10-21
+
+REUSE `EnvironmentInspector`, Runtime API, existing connection epoch, human nonce
+and Governance. FIX the URL-only view checks: token rotation, A→B→A and unmount
+could continue a reviewed Environment request. Four controlled pre-change cases
+fail (**4 failed,8 passed,1.91s**), including an extra refresh after unmount. The
+existing URL/token/epoch guard now binds the panel lifetime, all read/result
+publication and each service continuation. Connection changes remount the panel
+and clear old approvals/output. Approval nonce acquisition receives the same
+view guard; an additional client-boundary case proves closing the view prevents
+the decision POST after its nonce arrives. Original exact-body continuation,
+service-cookie separation, lost-response/no-retry and fail-closed isolation
+assertions remain. No backend authority, Environment, process store or Kernel is
+added or changed.
+
+Focused frontend cases: **16 passed (2.77s)**. Full Desktop regression:
+**40 files,253 passed (57.51s)**. Related existing Environment/HTTP/target-binding
+regression: **132 passed,2 skipped (2.40s)**. Lint, TypeScript and production web
+asset build pass; the existing Tauri static/dynamic import warning remains.
+Sandbox-enabled Chromium with actual Vite/Runtime HTTP and signed fake OIDC
+exercised denial without host permission, exact human nonce/approval, service
+resubmission and persisted OCI environment contract creation. Reload reads the
+actual created record with zero page errors; screenshots are source-browser
+records, not installed APEIR.exe captures. No OCI workload ran; strong isolation,
+real IdP/model, hardware and native installation remain separately unqualified.
+Required source and resulting-main CI remain separate integration gates.
+
+
+### Original mutation result delivery before tamper qualification — 2026-10-21
+
+Windows Core [39689311331](https://github.com/untrod/apeir/actions/runs/39689311331/job/119531250658)
+at `90b44845` retains **1 failed,5647 passed,88 skipped,4 warnings (2250.03s)**.
+The semantic-device-tamper case fails before tampering: Workflow failed,
+mutation Work RUNNING, verification absent, reconciliation required and effect
+count1. Linux/macOS passes do not resolve that failure. A controlled local drop
+of the first original mutation terminal message reproduces the same failed
+precondition (**1 failed,6.08s**); its exact error identifies the original
+mutation Work timeout. This establishes a delivery-loss failure class, not the
+reason the hosted Windows message was late or lost. Issue #82 remains open.
+
+REUSE existing Automation consumer, Node journal signature/binding validation,
+reconciler and independent observation. FIX only the acceptance precondition:
+for that exact original mutation timeout, require RUNNING with no Controller
+receipt/verification, one effect, reconciliation required and the original bound
+signed terminal journal before opening recovery transport. Perform one explicit
+reconcile/resume of the same Work/run, with mutation invocation forbidden during
+recovery. The existing observation-loss continuation uses that same no-mutation
+assertion. Missing/changed evidence still fails; all final COMMITTED/MATCH,
+wrong-device and semantic tamper assertions remain. No Runtime deadline, retry,
+result state, execution policy, authority or Kernel code changes.
+
+Existing Automation plus Verified Demo regressions: **130 passed (211.17s)**,
+including the new controlled mutation-result-loss case, original observation
+loss, corrupted journals/evidence, denied authority, restart and effect_count1.
+Current-source cross-platform CI and resulting-main qualification remain required;
+this is not a claim to have fixed Windows transport timing or closed #4/#8/#82.
+
+The unchanged Environment view correction also passed an actual sandbox-enabled
+Chromium/Runtime HTTP negative: hold its real human nonce response, leave the
+Environment view, then deliver that response. The original approval stays
+PENDING; no decision POST, service continuation or additional environment occurs,
+with zero page errors. Verification uses the existing legacy approval projection
+`/api/v1/control/approvals`; `/api/v1/approvals` and Operations expose the distinct
+Operation approval projection. Private fixture/locator corrections are not
+reported as product defects. No OCI workload, actual IdP or native UI is qualified.

@@ -1339,7 +1339,33 @@ def test_committed_history_rejects_changed_original_semantic_evidence(
     document = json.loads(path.read_text(encoding="utf-8"))
     work = document["works"][work_id]
     prefix = "distributed Workflow Work timed out: observe_"
-    if completed["state"] == "failed" and completed.get("error", "").startswith(prefix):
+    mutation_result_timeout = (
+        completed["state"] == "failed"
+        and completed.get("error", "")
+        == f"distributed Workflow Work timed out: {work_id}"
+    )
+    observation_timeout = completed["state"] == "failed" and completed.get(
+        "error", ""
+    ).startswith(prefix)
+    if mutation_result_timeout:
+        from nous_runtime.reality.preview import create_automation_simulation_components
+
+        assert work["state"] == "RUNNING"
+        assert not work["result_summary"].get("remote_execution_receipt")
+        assert not work["effect_verification"]
+        assert completed["effect_counts"][work_id] == 1
+        assert completed["reconciliation_required"]
+        components = create_automation_simulation_components(
+            consumer.root, governance=consumer.gate
+        )
+        try:
+            # Result delivery is distinct from Node completion. Require the
+            # original signed terminal journal before opening recovery transport.
+            assert consumer._terminal_journals_match(components, [work])
+            assert components.server._server is None
+        finally:
+            asyncio.run(components.close())
+    elif observation_timeout:
         from nous_runtime.node_runtime.distributed_work import DistributedWorkStore
 
         acquisition_id = completed["error"].removeprefix(
@@ -1358,10 +1384,21 @@ def test_committed_history_rejects_changed_original_semantic_evidence(
         assert not work["effect_verification"]
         assert completed["effect_counts"][work_id] == 1
         assert completed["reconciliation_required"]
+    if mutation_result_timeout or observation_timeout:
+        from nous_runtime.reality.provider import SimulatedDeviceProvider
+
         # One explicit recovery of the original effect, not another mutation or
         # a retry-until-success fixture. Unknown/mismatched evidence still fails.
-        consumer.reconcile(binding["id"], pending["run_id"])
-        completed = consumer.resume(binding["id"], pending["run_id"])
+        with pytest.MonkeyPatch.context() as recovery:
+            recovery.setattr(
+                SimulatedDeviceProvider,
+                "apply_operation",
+                lambda *_args, **_kwargs: pytest.fail(
+                    "tamper precondition recovery cannot repeat the original effect"
+                ),
+            )
+            consumer.reconcile(binding["id"], pending["run_id"])
+            completed = consumer.resume(binding["id"], pending["run_id"])
         assert completed["run_id"] == pending["run_id"]
         assert completed["outputs"]["mutate"]["work_id"] == work_id
         document = json.loads(path.read_text(encoding="utf-8"))
@@ -1488,6 +1525,31 @@ def test_committed_history_recovers_original_read_loss_before_tamper_check(
     monkeypatch.setattr(NodeRelayClient, "_send", lose_first_observation)
     test_committed_history_rejects_changed_original_semantic_evidence(
         consumer, "receipt"
+    )
+    assert len(dropped) == 1
+
+
+def test_committed_history_recovers_original_mutation_result_loss_before_tamper_check(
+    consumer, monkeypatch
+):
+    from nous_runtime.node_runtime.relay import NodeRelayClient
+
+    dropped = []
+    send = NodeRelayClient._send
+
+    async def lose_first_mutation(self, websocket, message_type, payload, **kwargs):
+        if (
+            message_type == "WORKLOAD_STATUS"
+            and (payload.get("output") or {}).get("effect_applied") is True
+            and not dropped
+        ):
+            dropped.append(payload["workload_id"])
+            return
+        return await send(self, websocket, message_type, payload, **kwargs)
+
+    monkeypatch.setattr(NodeRelayClient, "_send", lose_first_mutation)
+    test_committed_history_rejects_changed_original_semantic_evidence(
+        consumer, "device"
     )
     assert len(dropped) == 1
 
