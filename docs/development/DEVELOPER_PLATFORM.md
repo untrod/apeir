@@ -447,6 +447,14 @@ The provider's 100 ms delay, production timeouts, retry policy and runtime code
 are unchanged. This test correction does not qualify Windows network timing or
 close issues #4 and #8; their separate Relay failure evidence remains open.
 
+For an explicit Windows Skill HTTP investigation, the existing Core workflow also
+accepts `gh workflow run core-ci.yml --ref <reviewed-branch> -f diagnostic=windows-skill-http`.
+It runs the original owned HTTP/TLS cases with bounded payload-free phase traces.
+This diagnostic has separate check names and never supplies `Core gate` evidence;
+default dispatch and main/release regression keep their existing full selection.
+A passing fresh fixture cannot close the unresolved full-suite Windows timing
+issue. See the [engineering review](../acceptance/ENGINEERING_REVIEW.md#windows-skill-http-phase-investigation--2026-10-21).
+
 ### Packaging and compatibility
 
 Controller, Node and CLI share the existing `apeir-distribution` wheel and its

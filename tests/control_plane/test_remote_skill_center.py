@@ -3,9 +3,13 @@
 import http.client
 import io
 import json
+import os
+from collections import deque
+from functools import wraps
 from pathlib import Path
 import socket
 import threading
+import time
 import zipfile
 
 import pytest
@@ -32,9 +36,106 @@ tls_catalog = tls_catalog_fixture
 ACTION_PATH = "/api/v1/control/operations/actions"
 
 
+class _HTTPPhases:
+    """Bounded fixture-only timings; never retain arguments, paths or results."""
+
+    def __init__(self):
+        self.completed = deque(maxlen=128)
+        self.active = {}
+        self.lock = threading.Lock()
+        self.sequence = 0
+        self.local = threading.local()
+
+    def watch(self, monkeypatch, owner, name, phase):
+        original = getattr(owner, name)
+
+        @wraps(original)
+        def observed(*args, **kwargs):
+            started = time.monotonic()
+            with self.lock:
+                self.sequence += 1
+                sequence = self.sequence
+                request = getattr(self.local, "request", sequence)
+                if phase == "http":
+                    self.local.request = request = sequence
+                self.active[sequence] = (phase, request, started)
+            try:
+                return original(*args, **kwargs)
+            finally:
+                with self.lock:
+                    self.active.pop(sequence)
+                    self.completed.append(
+                        {
+                            "phase": phase,
+                            "request": request,
+                            "elapsed_ms": (time.monotonic() - started) * 1000,
+                            "complete": True,
+                        }
+                    )
+                if phase == "http":
+                    del self.local.request
+
+        monkeypatch.setattr(owner, name, observed)
+
+    def snapshot(self):
+        with self.lock:
+            now = time.monotonic()
+            return list(self.completed) + [
+                {
+                    "phase": phase,
+                    "request": request,
+                    "elapsed_ms": (now - started) * 1000,
+                    "complete": False,
+                }
+                for phase, request, started in self.active.values()
+            ]
+
+
+def test_phase_diagnostic_preserves_results_errors_and_excludes_payloads(monkeypatch):
+    private = "FAKE_ONLY_DIAGNOSTIC_PRIVATE_VALUE"
+    phases = _HTTPPhases()
+    calls = []
+
+    class Subject:
+        def run(self, value, *, fail=False):
+            calls.append(value)
+            assert any(not item["complete"] for item in phases.snapshot())
+            if fail:
+                raise ValueError(value)
+            return value
+
+    phases.watch(monkeypatch, Subject, "run", "cas_receipt")
+    subject = Subject()
+    assert subject.run(private) == private
+    with pytest.raises(ValueError, match=private):
+        subject.run(private, fail=True)
+    assert calls == [private, private]
+    records = phases.snapshot()
+    assert len(records) == 2 and all(item["complete"] for item in records)
+    assert all(item["elapsed_ms"] >= 0 for item in records)
+    assert private not in json.dumps(records)
+    for _ in range(140):
+        assert subject.run(private) == private
+    assert len(phases.snapshot()) == 128 and not phases.active
+
+
 @pytest.fixture
 def remote_http(plane, tls_catalog, monkeypatch):
     from nous_runtime.evidence import web_gateway
+    from nous_runtime.artifact import content_store
+
+    phases = _HTTPPhases()
+    for owner, name, phase in (
+        (RuntimeAPIHandler, "_dispatch", "http"),
+        (OperationsPlane, "_admit", "governance_admission"),
+        (SkillRegistry, "install_from_catalog", "catalog_install"),
+        (SkillRegistry, "install", "skill_install"),
+        (ExtensionRegistry, "_install", "extension_publish"),
+        (ContentAddressedArtifactStore, "_commit", "cas_commit"),
+        (ContentAddressedArtifactStore, "_receipt", "cas_receipt"),
+        (content_store, "_atomic_write_bytes", "cas_durable_write"),
+    ):
+        phases.watch(monkeypatch, owner, name, phase)
 
     # Each owned server is a separate test environment. Keep the real limiter
     # and its default budget, with a fresh window rather than prior test traffic.
@@ -92,6 +193,7 @@ def remote_http(plane, tls_catalog, monkeypatch):
             import faulthandler
 
             faulthandler.dump_traceback()
+            print("SKILL_HTTP_PHASES=" + json.dumps(phases.snapshot()), flush=True)
             raise
         finally:
             connection.close()
@@ -119,6 +221,8 @@ def remote_http(plane, tls_catalog, monkeypatch):
     server.shutdown()
     server.server_close()
     thread.join(timeout=5)
+    if os.environ.get("APEIR_SKILL_HTTP_DIAGNOSTIC") == "1":
+        print("SKILL_HTTP_PHASES=" + json.dumps(phases.snapshot()), flush=True)
 
 
 def catalog_body(source, action="catalog_add"):

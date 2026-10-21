@@ -2471,3 +2471,38 @@ Python3.12 run39541361099 captured another during close after the completion
 audit. The deterministic setup leak is not yet proven to cause either timeout.
 Full regression and exact-source/current-main platform CI remain required;
 the original five-second HTTP assertion and durable audit are preserved.
+
+
+### Windows Skill HTTP phase investigation — 2026-10-21
+
+The SQLite lifecycle repair is independent of the unresolved HTTP deadline.
+Source `cffb64d` Multi-Arch run [39635213958](https://github.com/untrod/apeir/actions/runs/39635213958)
+recorded Windows **1 failed,5026 passed,131 skipped,302 deselected,4 warnings
+(2353.08s)**. Initial installation in the revoked-update case times out before
+fault injection. Safe SQLite diagnostics show commit **1562ms**; the handler
+has progressed to opening the CAS receipt append file at the client timeout.
+This does not show that receipt open alone consumed five seconds, nor prove
+SQLite setup/close is the sole cause. Linux amd64/ARM64 pass; the issue stays OPEN.
+
+REUSE existing Core CI and owned HTTP/TLS tests; EXTEND only fixture diagnostics.
+Bounded snapshots retain phase names, request ordinals, elapsed milliseconds and
+completion flags, never arguments, paths, SQL, results or exception messages.
+Completed entries are bounded at128; active phases remain distinguishable.
+Nested timings overlap and must not be added as exclusive costs. Existing effects,
+exceptions, human/nonce admission and five-second HTTP assertions are unchanged.
+Related owned HTTP/TLS/privacy cases: **33 passed (23.48s)**; existing conservative
+CI-scope cases: **17 passed**. The combined repository/SQLite/owned HTTP selection
+has **321 passed (23.42s)**; these counts overlap. A same-host ABBA trivial-boundary
+probe (2000 samples per variant) measures diagnostic p50/p95/p99 overhead from
+0.120/0.160/0.180µs to1.111/1.172/1.383µs. This is instrumentation cost, not a
+product speedup or Windows/HTTP latency estimate. A real local fixture trace has25 completed phase
+records for12 HTTP requests; it is neither Windows qualification nor a speedup.
+
+The optional `windows-skill-http` input on existing Core CI selects a separately
+named diagnostic. Default dispatch, PR, main and release selection are unchanged.
+Diagnostic-only skipped jobs also receive different names: GitHub treats skipped
+checks as passing, so they must never replace `Core gate` or platform evidence.
+Diagnostics use the failing Windows/Python3.11 Tier1 dependency scope and original
+tests. Their result cannot qualify full Core, fix Issue #88 or certify release.
+The workflow passes official actionlint1.7.12 validation. Frozen Kernel, component
+lock, durability, timeouts and retry policy are unchanged.
