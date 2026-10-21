@@ -73,6 +73,18 @@ def test_subreaper_failure_prevents_workload_spawn(tmp_path, monkeypatch):
     def unavailable():
         raise OSError("subreaper refused")
 
+    # macOS obtains the helper's creation token through /bin/ps. Observe that
+    # actual identity before blocking Popen, so this guard targets workload
+    # dispatch rather than the independent read-only host observation.
+    helper_pid = os.getpid()
+    helper_token = host.process_creation_token(helper_pid)
+    assert helper_token
+
+    def observed_helper(pid):
+        assert pid == helper_pid
+        return helper_token
+
+    monkeypatch.setattr(host, "process_creation_token", observed_helper)
     monkeypatch.setattr(host, "_enable_linux_child_subreaper", unavailable)
     monkeypatch.setattr(
         host.subprocess, "Popen", lambda *a, **k: pytest.fail("spawned without reaper")

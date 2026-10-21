@@ -2456,3 +2456,22 @@ group-only waiting, and fail-closed wait errors/timeouts. Counts overlap.
 Full regression and source/main CI remain required. Container init is still
 needed for detached host processes and arbitrary process groups outside this
 bounded ownership contract; no complete PTY or isolation qualification is added.
+
+Source `525e7ec` full local regression is **5453 passed,58 skipped,4 warnings
+(693.02s)**. Its four-platform Core run
+[39541361099](https://github.com/untrod/apeir/actions/runs/39541361099) passes both
+Linux versions, but macOS has **1 failed,5414 passed,62 skipped (999.73s)**:
+the new startup-denial test blocked the `ps` subprocess used to observe the
+helper's own creation token. The test now acquires that actual token before
+installing its strict no-workload-spawn guard; the original guard and
+RECOVERY_REQUIRED assertions remain unchanged. Final focused regression:
+**30 passed (27.34s)**. New exact-source macOS CI remains required.
+
+Windows in that same run has **1 failed,5320 passed,156 skipped (2034.45s)**:
+an initial remote Skill install exceeds its unchanged five-second HTTP deadline.
+The captured request-handler stack is GovernanceStore connection close at line42,
+after `skill.management.completed`, rather than the commit at line36 seen in
+the earlier Python3.11 failure. This is additional evidence for
+[Issue88](https://github.com/untrod/apeir/issues/88), not a confirmed reaper
+regression or proof of its timing cause. No timeout, durability, Skill authority
+or assertion is weakened and the failed run remains retained.
