@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { colors, typo, radius, shadow, space, card, btnSecondary, fadeIn } from "../design";
+import { useRuntimeConfigVersion } from "../store";
 import { fixedNumber } from "../lib/format";
 import {
   fetchStatus, fetchMemory, fetchInspectorRuntime, subscribeRuntimeEvents,
@@ -306,10 +307,11 @@ function MiniStat({ label, value }: { label: string; value: string | number }) {
 
 
 export function Inspector({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const connectionVersion = useRuntimeConfigVersion();
   if (!visible) return null;
 
   return (
-    <>
+    <React.Fragment key={connectionVersion}>
       <div onClick={onClose} style={{
         position: "fixed", inset: 0, zIndex: 98,
       }} />
@@ -369,6 +371,6 @@ export function Inspector({ visible, onClose }: { visible: boolean; onClose: () 
           </div>
         </div>
       </div>
-    </>
+    </React.Fragment>
   );
 }

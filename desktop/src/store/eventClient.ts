@@ -10,7 +10,7 @@
  */
 
 import { entityStore } from "./entityStore";
-import { fetchEventStream, type RuntimeEventEnvelope } from "../lib/api";
+import { captureRuntimeConnection, fetchEventStream, type RuntimeEventEnvelope } from "../lib/api";
 import type { SequenceNumber } from "./types";
 
 
@@ -40,22 +40,31 @@ class EventClientImpl {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private config: EventClientConfig = { baseUrl: "ws://localhost:8770", mode: "polling" };
-  private stopped = false;
+  private stopped = true;
+  private generation = 0;
 
   start(config?: Partial<EventClientConfig>): void {
+    this.stop();
     if (config) this.config = { ...this.config, ...config };
     this.stopped = false;
     this.reconnectAttempt = 0;
+    const generation = this.generation;
+    const connection = captureRuntimeConnection();
+    const current = () => {
+      if (this.stopped || this.generation !== generation) return false;
+      try { connection(); return true; } catch { this.stop(); return false; }
+    };
 
     if (this.config.mode === "websocket") {
-      this.connectWebSocket();
+      this.connectWebSocket(current);
     } else {
-      this.startPolling();
+      this.startPolling(current);
     }
   }
 
   stop(): void {
     this.stopped = true;
+    this.generation++;
     if (this.ws) { this.ws.close(); this.ws = null; }
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     if (this.pollTimer) { clearTimeout(this.pollTimer); this.pollTimer = null; }
@@ -63,84 +72,93 @@ class EventClientImpl {
 
   // WebSocket
 
-  private connectWebSocket(): void {
-    if (this.stopped) return;
+  private connectWebSocket(current: () => boolean): void {
+    if (!current()) return;
     const wsUrl = this.config.baseUrl.replace(/^http/, "ws") + "/api/v1/events/ws";
     try {
-      this.ws = new WebSocket(wsUrl);
-      this.ws.onopen = () => {
+      const ws = new WebSocket(wsUrl);
+      this.ws = ws;
+      ws.onopen = () => {
+        if (!current() || this.ws !== ws) return;
         this.reconnectAttempt = 0;
-        this.backfill();
+        void this.backfill(current);
       };
-      this.ws.onmessage = (evt) => {
+      ws.onmessage = (evt) => {
+        if (!current() || this.ws !== ws) return;
         try {
           const event: RuntimeEventEnvelope = JSON.parse(evt.data);
           entityStore.ingestEvent(event);
         } catch { /* skip malformed */ }
       };
-      this.ws.onclose = () => {
+      ws.onclose = () => {
+        if (!current() || this.ws !== ws) return;
         this.ws = null;
-        this.scheduleReconnect();
+        this.scheduleReconnect(current);
       };
-      this.ws.onerror = () => {
-        this.ws?.close();
+      ws.onerror = () => {
+        if (current() && this.ws === ws) ws.close();
       };
     } catch {
-      this.scheduleReconnect();
+      this.scheduleReconnect(current);
     }
   }
 
-  private scheduleReconnect(): void {
-    if (this.stopped) return;
+  private scheduleReconnect(current: () => boolean): void {
+    if (!current()) return;
     const delay = Math.min(
       WS_RECONNECT_MAX_MS,
       WS_RECONNECT_BASE_MS * Math.pow(2, this.reconnectAttempt),
     );
     this.reconnectAttempt++;
-    this.reconnectTimer = setTimeout(() => this.connectWebSocket(), delay);
+    this.reconnectTimer = setTimeout(() => this.connectWebSocket(current), delay);
   }
 
   // Polling fallback
 
-  private startPolling(): void {
-    if (this.stopped) return;
-    this.backfill().then(() => {
-      this.pollLoop();
+  private startPolling(current: () => boolean): void {
+    if (!current()) return;
+    this.backfill(current).then(() => {
+      if (current()) this.pollLoop(current);
     });
   }
 
-  private pollLoop(): void {
-    if (this.stopped) return;
+  private pollLoop(current: () => boolean): void {
+    if (!current()) return;
     const domain = this.config.domains?.[0] || "";
     const cursor = entityStore.getState().cursors[domain] || 0;
     fetchEventStream(domain, String(cursor), BACKFILL_BATCH_SIZE)
       .then((result) => {
+        if (!current()) return;
         if (result?.events) {
           for (const event of result.events) {
+            if (!current()) return;
             entityStore.ingestEvent(event);
           }
         }
       })
       .catch(() => { /* retry next poll */ })
       .finally(() => {
-        if (!this.stopped) {
-          this.pollTimer = setTimeout(() => this.pollLoop(), POLL_INTERVAL_MS);
+        if (current()) {
+          this.pollTimer = setTimeout(() => this.pollLoop(current), POLL_INTERVAL_MS);
         }
       });
   }
 
   // Backfill
 
-  private async backfill(): Promise<void> {
+  private async backfill(current: () => boolean): Promise<void> {
     const state = entityStore.getState();
     for (const [domain, cursor] of Object.entries(state.cursors)) {
       try {
         let afterSeq = cursor;
         let batch: { events: RuntimeEventEnvelope[] } | null;
         do {
+          if (!current()) return;
           batch = await fetchEventStream(domain, String(afterSeq), BACKFILL_BATCH_SIZE);
+          if (!current()) return;
           if (batch?.events) {
             for (const event of batch.events) {
+              if (!current()) return;
               entityStore.ingestEvent(event);
             }
             if (batch.events.length > 0) {
