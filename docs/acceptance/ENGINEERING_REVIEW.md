@@ -2960,3 +2960,51 @@ with zero page errors. Verification uses the existing legacy approval projection
 `/api/v1/control/approvals`; `/api/v1/approvals` and Operations expose the distinct
 Operation approval projection. Private fixture/locator corrections are not
 reported as product defects. No OCI workload, actual IdP or native UI is qualified.
+
+### Chat response and view lifetime binding — 2026-10-22
+
+REUSE the existing Chat/Conversation Runtime, shared Desktop API, connection epoch,
+EventStream, human nonce and original proposal owner. FIX two observed gaps.
+First, a late model result/history/event replay could publish callbacks or data
+after same-URL token rotation, A→B→A, conversation navigation or panel closure.
+Six controlled pre-change Chat cases fail (**6 failed,9 passed,1.65s**); three
+shared-client delayed-response/body cases fail (**3 failed,981ms**). The shared
+API now checks its captured connection before parsing and after reading a body,
+returning the existing structured `NOUS_CONTROLLER_CHANGED` error. Four existing
+Node/Usage negatives now require that exact code rather than their former
+helper-specific strings; they still reject all original connection changes.
+
+Chat binds pending results and history to the original mounted conversation and
+connection epoch. It aborts only its client request and closes its event
+subscription on closure/replacement; these actions do not prove Runtime
+execution stopped. Old callbacks cannot open a proposal/conversation or clear a
+new request's loading state. Chat approval passes the same mounted-view guard to
+existing nonce acquisition, so a late nonce cannot cause a decision POST after
+closure, navigation or credential rotation. No automatic mutation/model retry,
+new execution authority, backend record store or Kernel change is introduced.
+
+Second, the canonical Chat HTTP response retains the Runtime result under
+`data.result`, while the client expected only top-level `result`. The original
+proposal navigation contract fails (**1 failed,3 passed,874ms**). The existing
+client now projects that original nested result, preserving proposal and approval
+IDs and its previous top-level compatibility. The original waiting-approval state
+and human approval are unchanged; a proposal reference is not a grant or success.
+
+Focused Chat/API/Node/Usage regression: **48 passed (5.97s)**. Full Desktop:
+**41 files,267 passed (53.74s)**. Existing related Chat, selected-input, proposal
+and Work flow regressions: **133 passed,1 skipped (21.98s)**. ESLint, TypeScript
+and production web assets pass, retaining the existing Tauri mixed-import warning.
+Security scan has **0 HIGH,5 unchanged MEDIUM** findings.
+
+Sandbox-enabled Chromium with actual Vite and authenticated Runtime HTTP rejects
+a held original conversation read after credential rotation. A real Chat request
+then persists its original conversation before its HTTP response is released;
+closing the actual Workspace view does not resubmit it. Exactly one Chat POST,
+two persisted conversation messages and zero browser page errors are observed.
+No model is configured: the actual original request status is `failed`, not a
+coding success. This qualifies software response/history boundaries only, not
+real model execution, installed Desktop, native bytes, IdP or physical effects.
+Earlier browser qualification scripts initially selected no Chat view and then
+the disabled code-editor textarea; those selector failures are retained as
+qualification-fixture errors, not Runtime defects or passing product evidence.
+Source PR and resulting-main qualification remain separate integration gates.

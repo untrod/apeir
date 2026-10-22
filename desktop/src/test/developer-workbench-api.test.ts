@@ -77,4 +77,18 @@ describe("developer workbench API", () => {
       credentials: "omit", method: "POST", body: expect.stringContaining('"agent_mode":"read_only"'),
     }));
   });
+  it("preserves the original proposal from the canonical nested Chat response", async () => {
+    const original = { proposal_id: "proposal-original", approval_request_id: "approval-original" };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: {
+      conversation_id: "conversation-original", status: "waiting_approval", message: "Review original proposal",
+      data: { status: "waiting_approval", result: original },
+    } }) });
+    vi.stubGlobal("fetch", fetchMock);
+    setConfig({ url: "http://localhost:8770", token: "chat.fake.service" });
+    const response = await runPrompt("Propose reviewed changes", undefined, undefined, "agent");
+    expect(response.status).toBe("waiting_approval");
+    expect(response.result).toEqual(original);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
 });
