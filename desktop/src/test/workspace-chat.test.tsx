@@ -1,11 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatView } from "../components/ChatView";
-import { fetchRunEvents, runPrompt, setConfig, subscribeRunEvents } from "../lib/api";
+import { fetchConversation, fetchRunEvents, runPrompt, setConfig, subscribeRunEvents } from "../lib/api";
 import type { ComposerAttachment, ComposerConstraints } from "../components/Composer";
 
 vi.mock("../lib/api", async importOriginal => ({ ...await importOriginal<typeof import("../lib/api")>(),
-  runPrompt: vi.fn(), fetchRunEvents: vi.fn(), subscribeRunEvents: vi.fn(),
+  runPrompt: vi.fn(), fetchConversation: vi.fn(), fetchRunEvents: vi.fn(), subscribeRunEvents: vi.fn(),
 }));
 vi.mock("../store", async importOriginal => ({
   ...await importOriginal<typeof import("../store")>(),
@@ -24,11 +24,12 @@ beforeEach(() => {
   vi.resetAllMocks(); sessionStorage.clear();
   setConfig({ url: "http://localhost:8770", token: "chat.fake.service" });
   vi.mocked(runPrompt).mockResolvedValue({ conversation_id: "", message: "Reference received", status: "completed" });
+  vi.mocked(fetchConversation).mockResolvedValue({ id: "conversation", messages: [] } as unknown as Awaited<ReturnType<typeof fetchConversation>>);
   vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: "request", events: [], next_after_sequence: 0 });
   vi.mocked(subscribeRunEvents).mockReturnValue({ close: vi.fn(), cursor: () => 0 });
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
 });
-afterEach(() => { delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView; });
+afterEach(() => { delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView; vi.unstubAllGlobals(); });
 
 describe("workspace collaboration through the existing Chat Runtime", () => {
   it("rejects unsupported attachments before any model or event subscription", async () => {
@@ -97,4 +98,106 @@ describe("workspace collaboration through the existing Chat Runtime", () => {
     view.unmount(); expect(signal?.aborted).toBe(true);
     await waitFor(() => expect(vi.mocked(subscribeRunEvents).mock.results[0].value.close).toHaveBeenCalled());
   });
+  it.each(["token", "ABA", "unmount", "conversation"] as const)("rejects a late model result after %s changes the original Chat view", async change => {
+    let finish!: (value: Awaited<ReturnType<typeof runPrompt>>) => void;
+    vi.mocked(runPrompt).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const created = vi.fn(), proposal = vi.fn();
+    const props = { readOnly: true, onCardClick: vi.fn(), onTraceClick: vi.fn(), onConversationCreated: created, onProposalCreated: proposal };
+    const view = render(<ChatView {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    await waitFor(() => expect(runPrompt).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      if (change === "unmount") view.unmount();
+      else if (change === "conversation") view.rerender(<ChatView {...props} conversationId="other-conversation" />);
+      else if (change === "token") setConfig({ url: "http://localhost:8770", token: "chat.fake.changed" });
+      else {
+        setConfig({ url: "https://temporary.example.test", token: "chat.fake.temporary" });
+        setConfig({ url: "http://localhost:8770", token: "chat.fake.service" });
+      }
+    });
+    // Commit the navigation before delivering the old network result.
+    await act(async () => {
+      finish({ conversation_id: "old-conversation", message: "Old private reply", status: "waiting_approval", result: { proposal_id: "old-proposal" } });
+    });
+    expect(proposal).not.toHaveBeenCalled();
+    expect(created).not.toHaveBeenCalled();
+    expect(fetchRunEvents).not.toHaveBeenCalled();
+    expect(screen.queryByText("Old private reply")).not.toBeInTheDocument();
+  });
+
+  it("does not publish a reply when its event replay finishes after connection rotation", async () => {
+    let finish!: (value: Awaited<ReturnType<typeof fetchRunEvents>>) => void;
+    vi.mocked(runPrompt).mockResolvedValueOnce({ conversation_id: "", message: "Old replay reply", status: "completed" });
+    vi.mocked(fetchRunEvents).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    await waitFor(() => expect(fetchRunEvents).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      setConfig({ url: "http://localhost:8770", token: "chat.fake.changed" });
+      finish({ run_id: "old-run", events: [], next_after_sequence: 0 });
+    });
+    expect(screen.queryByText("Old replay reply")).not.toBeInTheDocument();
+  });
+
+  it("does not ingest old history after a same-URL token change", async () => {
+    const { entityStore } = await import("../store");
+    let finish!: (value: Awaited<ReturnType<typeof fetchConversation>>) => void;
+    vi.mocked(fetchConversation).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    render(<ChatView conversationId="original" readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
+    await waitFor(() => expect(fetchConversation).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      setConfig({ url: "http://localhost:8770", token: "chat.fake.changed" });
+      finish({ id: "original", messages: [{ id: "old-message", content: "Old history" }] } as unknown as Awaited<ReturnType<typeof fetchConversation>>);
+    });
+    expect(vi.mocked(entityStore.upsertMessages).mock.calls.some(([rows]) => rows.some(row => row.id === "old-message"))).toBe(false);
+  });
+
+  it.each(["unmount", "conversation", "token"] as const)("does not approve after %s while its human nonce is pending", async change => {
+    vi.mocked(fetchRunEvents).mockResolvedValueOnce({ run_id: "request", next_after_sequence: 1, events: [{
+      event_id: "approval-event", sequence: 1, event_type: "approval.requested", payload: { request_id: "apr_original_chat" },
+    }] } as unknown as Awaited<ReturnType<typeof fetchRunEvents>>);
+    let finish!: (value: unknown) => void;
+    const fetcher = vi.fn().mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    vi.stubGlobal("fetch", fetcher);
+    const props = { readOnly: true, onCardClick: vi.fn(), onTraceClick: vi.fn() };
+    const view = render(<ChatView {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    fireEvent.click(await screen.findByText("apr_original_chat"));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    expect(fetcher.mock.calls[0][0]).toContain("/api/v1/control/human/nonce");
+    await act(async () => {
+      if (change === "unmount") view.unmount();
+      else if (change === "conversation") view.rerender(<ChatView {...props} conversationId="other" />);
+      else setConfig({ url: "http://localhost:8770", token: "chat.fake.changed" });
+    });
+    await act(async () => { finish({ ok: true, json: async () => ({ ok: true, data: { nonce: "chat-fake-nonce" } }) }); });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("✓ Done")).not.toBeInTheDocument();
+  });
+
+  it("keeps a replacement request active when the old request finishes", async () => {
+    let finishOld!: (value: Awaited<ReturnType<typeof runPrompt>>) => void;
+    let finishNew!: (value: Awaited<ReturnType<typeof runPrompt>>) => void;
+    const oldClose = vi.fn(), newClose = vi.fn();
+    vi.mocked(runPrompt).mockReturnValueOnce(new Promise(resolve => { finishOld = resolve; }))
+      .mockReturnValueOnce(new Promise(resolve => { finishNew = resolve; }));
+    vi.mocked(subscribeRunEvents).mockReturnValueOnce({ close: oldClose, cursor: () => 0 })
+      .mockReturnValueOnce({ close: newClose, cursor: () => 0 });
+    render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    expect(vi.mocked(runPrompt).mock.calls[0][4]?.aborted).toBe(true);
+    expect(oldClose).toHaveBeenCalled();
+    await act(async () => { finishOld({ conversation_id: "", status: "completed", message: "Superseded reply" }); });
+    expect(screen.getByText("Running", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText("Superseded reply")).not.toBeInTheDocument();
+    expect(newClose).not.toHaveBeenCalled();
+    await act(async () => { finishNew({ conversation_id: "", status: "completed", message: "Current reply" }); });
+    expect(await screen.findByText("Current reply")).toBeInTheDocument();
+    expect(screen.queryByText("Running", { exact: true })).not.toBeInTheDocument();
+    expect(newClose).toHaveBeenCalledTimes(1);
+    expect(runPrompt).toHaveBeenCalledTimes(2);
+  });
+
 });

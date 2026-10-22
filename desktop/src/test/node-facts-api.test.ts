@@ -40,7 +40,7 @@ describe("canonical Node facts in the existing desktop store", () => {
     const read = fetchNodes();
     setConfig({ url: "http://127.0.0.1:8770", token: "fake-node-fact-replacement" });
     release(reply([row("node-one")]));
-    await expect(read).rejects.toThrow(/Controller configuration changed/);
+    await expect(read).rejects.toMatchObject({ code: "NOUS_CONTROLLER_CHANGED" });
   });
 });
 

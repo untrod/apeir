@@ -281,6 +281,7 @@ export async function api<T = unknown>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const current = captureRuntimeConnection();
   const { url, token } = getConfig();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -289,17 +290,26 @@ export async function api<T = unknown>(
   };
 
   const response = await fetch(`${url}${path}`, { credentials: "include", ...options, headers });
-  const envelope = (await response.json()) as ApiEnvelope<T>;
-
-  if (!response.ok || !envelope.ok) {
-    throw new ApiError(
-      envelope.error?.code || `HTTP_${response.status}`,
-      envelope.error?.message || `Request failed with status ${response.status}`,
-      envelope.error?.details,
-    );
+  try {
+    current();
+    const envelope = (await response.json()) as ApiEnvelope<T>;
+    current();
+    if (!response.ok || !envelope.ok) {
+      throw new ApiError(
+        envelope.error?.code || `HTTP_${response.status}`,
+        envelope.error?.message || `Request failed with status ${response.status}`,
+        envelope.error?.details,
+      );
+    }
+    return envelope.data as T;
+  } catch (error) {
+    if (!response.bodyUsed && response.body) {
+      // Dispose only this response; cancellation does not prove an effect stopped.
+      void response.body.cancel().catch(() => {});
+    }
+    current();
+    throw error;
   }
-
-  return envelope.data as T;
 }
 
 async function apiSafe<T = unknown>(
@@ -345,7 +355,7 @@ export const fetchConversation = (conversationId: string) =>
     `/api/v1/conversations/${encodeURIComponent(conversationId)}`,
   );
 
-export const runPrompt = (
+export const runPrompt = async (
   text: string,
   modelId?: string,
   conversationId?: string,
@@ -353,8 +363,8 @@ export const runPrompt = (
   signal?: AbortSignal,
   requestId?: string,
   workspaceFileRefs?: readonly { path: string; sha256: string }[],
-) =>
-  api<{
+) => {
+  const response = await api<{
     conversation_id: string;
     message: string;
     status: string;
@@ -362,6 +372,7 @@ export const runPrompt = (
     run_id?: string;
     task_promoted?: boolean;
     result?: { proposal_id?: string; approval_request_id?: string };
+    data?: { result?: { proposal_id?: string; approval_request_id?: string } };
   }>(
     "/api/v1/chat",
     {
@@ -379,6 +390,10 @@ export const runPrompt = (
       }),
     },
   );
+  // Chat wraps the original Runtime response in data; this grants no authority.
+  if (response.data?.result) response.result = response.data.result;
+  return response;
+};
 
 // Models
 export async function fetchModels() {
