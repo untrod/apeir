@@ -1317,27 +1317,37 @@ export function subscribeRuntimeEvents(
   options: { domain?: string; intervalMs?: number } = {},
 ) {
   let active = true;
+  let timer: ReturnType<typeof window.setTimeout> | undefined;
+  const connection = captureRuntimeConnection();
+  const close = () => { active = false; if (timer !== undefined) window.clearTimeout(timer); };
+  const current = () => {
+    if (!active) return false;
+    try { connection(); return true; } catch { close(); return false; }
+  };
   let lastEventId = "";
   const intervalMs = Math.max(500, options.intervalMs || 1500);
 
   const poll = async () => {
-    if (!active) return;
+    if (!current()) return;
     try {
       const result = await fetchEventStream(options.domain || "", lastEventId, 100);
+      if (!current()) return;
       if (result.events) {
         for (const event of result.events) {
+          if (!current()) return;
           onEvent(normalizeRuntimeEvent(event));
+          if (!current()) return;
           if (event.event_id) lastEventId = event.event_id;
         }
       }
     } catch {
       // Retry on next poll
     } finally {
-      if (active) window.setTimeout(poll, intervalMs);
+      if (current()) timer = window.setTimeout(poll, intervalMs);
     }
   };
   void poll();
-  return { close: () => { active = false; }, lastEventId: () => lastEventId };
+  return { close, lastEventId: () => lastEventId };
 }
 
 export function subscribeRunEvents(
@@ -1346,23 +1356,35 @@ export function subscribeRunEvents(
   options: { intervalMs?: number; afterSequence?: number } = {},
 ) {
   let active = true;
+  let timer: ReturnType<typeof window.setTimeout> | undefined;
+  const connection = captureRuntimeConnection();
+  const close = () => { active = false; if (timer !== undefined) window.clearTimeout(timer); };
+  const current = () => {
+    if (!active) return false;
+    try { connection(); return true; } catch { close(); return false; }
+  };
   let afterSequence = Math.max(0, options.afterSequence || 0);
   const intervalMs = Math.max(250, options.intervalMs || 1000);
 
   const poll = async () => {
-    if (!active) return;
+    if (!current()) return;
     try {
       const page = await fetchRunEvents(runId, afterSequence);
-      for (const event of page.events) onEvent(normalizeRuntimeEvent(event));
+      if (!current()) return;
+      for (const event of page.events) {
+        if (!current()) return;
+        onEvent(normalizeRuntimeEvent(event));
+      }
+      if (!current()) return;
       afterSequence = page.next_after_sequence;
     } catch {
       // Retry on transient failures
     } finally {
-      if (active) window.setTimeout(poll, intervalMs);
+      if (current()) timer = window.setTimeout(poll, intervalMs);
     }
   };
   void poll();
-  return { close: () => { active = false; }, cursor: () => afterSequence };
+  return { close, cursor: () => afterSequence };
 }
 
 // Document Workbench

@@ -3031,3 +3031,43 @@ Earlier browser qualification scripts initially selected no Chat view and then
 the disabled code-editor textarea; those selector failures are retained as
 qualification-fixture errors, not Runtime defects or passing product evidence.
 Source PR and resulting-main qualification remain separate integration gates.
+
+### Event consumer lifetime qualification — 2026-10-22
+
+REUSE existing EventClient, Runtime/Run subscription helpers, shared API,
+EntityStore, Inspector and connection epoch. FIX retired consumer publication:
+closing a subscription while a page is pending still delivered callbacks;
+changing credentials between polls reused the original cursor on a new
+connection; a stop/start race could publish an old page and create another loop.
+Original subscription contracts retain **10 failed,2 passed (1.43s)**. Corrected
+original EventClient fixture retains **4 failed,1 passed (1.02s)**, including old
+backfill and WebSocket callback ownership. An earlier incomplete fixture exhausted
+its mocked transport and raised TypeError; that fixture failure is retained
+separately and is not attributed to production transport.
+
+The existing helpers now validate the original connection and active lifetime
+before dispatch, after a page and between callbacks; close clears its scheduled
+timer. EventClient generations bind polling, backfill, socket callbacks and
+reconnect scheduling to one original start. Retired completions cannot ingest
+entities, disconnect a replacement socket or schedule another loop. Inspector
+remounts its existing panels on connection change. Original transient read retries
+and bounded polling intervals remain; none submits or retries an execution.
+This changes no authority, EventStore, backend database, Work, Kernel or lock.
+
+Focused Chat/API/event-consumer regression: **39 passed (4.38s)**. Full Desktop:
+**43 files,284 passed (60.37s)**. Lint, TypeScript and production web assets pass;
+the existing Tauri mixed-import warning remains. Actual sandbox-enabled Chromium,
+Vite and authenticated Runtime HTTP read two persisted diagnostic Run events:
+closing the held original subscription delivers zero callbacks, a fresh
+subscription receives both, and credential rotation causes zero additional
+requests from that old subscription. Browser page errors: zero. These are real
+HTTP/event-consumption observations, not model, execution, native WebSocket,
+installed Desktop, IdP or physical qualification.
+
+DEFER the separate compatibility cursor alignment audit: the global Event Bus
+HTTP endpoint accepts event IDs, while the older EventClient backfill uses
+per-domain numeric sequence values. Lifetime tests preserve that existing path;
+they do not establish complete historical replay, retention-gap handling or
+uniform ordering across Event Bus and per-Run EventStream. No full event-history
+or overall product PASS follows from these bounded lifecycle checks. Source CI
+and protected resulting-main integration remain separate required gates.
