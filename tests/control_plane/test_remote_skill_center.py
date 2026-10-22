@@ -5,6 +5,7 @@ import io
 import json
 import os
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from pathlib import Path
 import socket
@@ -119,6 +120,53 @@ def test_phase_diagnostic_preserves_results_errors_and_excludes_payloads(monkeyp
     assert len(phases.snapshot()) == 128 and not phases.active
 
 
+def test_phase_diagnostic_binds_concurrent_authentication_and_denial(monkeypatch):
+    phases = _HTTPPhases()
+    entered = threading.Barrier(2)
+    private = "FAKE_ONLY_PRIVATE_HUMAN_COOKIE_AND_NONCE"
+    calls = []
+
+    class Request:
+        def dispatch(self, denied):
+            return self.authenticate(denied, private)
+
+        def authenticate(self, denied, cookie):
+            entered.wait(timeout=5)
+            return self.admit(denied, cookie)
+
+        def admit(self, denied, cookie):
+            calls.append(denied)
+            if denied:
+                raise PermissionError(cookie)
+            return cookie
+
+    for method, phase in (
+        ("dispatch", "http"),
+        ("authenticate", "human_authentication"),
+        ("admit", "human_nonce_admission"),
+    ):
+        phases.watch(monkeypatch, Request, method, phase)
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        allowed = workers.submit(Request().dispatch, False)
+        denied = workers.submit(Request().dispatch, True)
+        assert allowed.result(timeout=5) == private
+        with pytest.raises(PermissionError, match=private):
+            denied.result(timeout=5)
+    assert sorted(calls) == [False, True]
+    records = phases.snapshot()
+    assert len(records) == 6 and not phases.active
+    requests = {row["request"] for row in records if row["phase"] == "http"}
+    assert len(requests) == 2
+    for request in requests:
+        assert {row["phase"] for row in records if row["request"] == request} == {
+            "http",
+            "human_authentication",
+            "human_nonce_admission",
+        }
+    assert all(row["complete"] for row in records)
+    assert private not in json.dumps(records)
+
+
 @pytest.fixture
 def remote_http(plane, tls_catalog, monkeypatch):
     from nous_runtime.evidence import web_gateway
@@ -127,6 +175,9 @@ def remote_http(plane, tls_catalog, monkeypatch):
     phases = _HTTPPhases()
     for owner, name, phase in (
         (RuntimeAPIHandler, "_dispatch", "http"),
+        (HumanSessionAuth, "authenticate", "human_authentication"),
+        (HumanSessionAuth, "nonce", "human_nonce_issue"),
+        (HumanSessionAuth, "admit_request", "human_nonce_admission"),
         (OperationsPlane, "_admit", "governance_admission"),
         (SkillRegistry, "install_from_catalog", "catalog_install"),
         (SkillRegistry, "install", "skill_install"),

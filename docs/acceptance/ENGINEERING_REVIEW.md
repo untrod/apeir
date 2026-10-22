@@ -2541,3 +2541,27 @@ thread CPU **0.7362s → 0.6737s**. Every lookup returns the same original row;
 integrity remains `ok`, row count1. This removes redundant directory operations
 in the read helper, not evidence of a whole-Runtime or Windows/HTTP speedup.
 It does not establish a correction for the unresolved full-suite Issue #88.
+
+
+### Human admission timing within the existing Skill HTTP diagnostic — 2026-10-22
+
+REUSE the existing owned HTTP/TLS fixture, `HumanSessionAuth`, nonce admission
+and bounded phase recorder. EXTEND only its instrumentation to authentication,
+nonce issuance and nonce consumption. Earlier Windows evidence has total HTTP
+2784.6ms but business admission37.1ms; attributing the remainder to SQLite close
+or CAS would be unsupported. The existing SQLite phase warnings and new nested
+method spans can now distinguish those admission stages without changing them.
+Fixed phase names, local request ordinals, elapsed milliseconds and completion
+flags remain the only retained fields. Cookies, nonces, identities, arguments,
+results and exception strings are excluded. Nested timings overlap; setup calls
+outside HTTP have their own ordinal and are not HTTP request latency.
+
+A concurrent positive/denied contract verifies separate request correlation,
+original return/exception behavior, exactly one call per operation and exclusion
+of fake private cookie/nonce material. Existing owned HTTP/TLS/lifecycle/privacy
+regression: **53 passed (25.70s)**. A real local denied-request trace observes
+both authentication and nonce-admission spans; no additional authority, SQL,
+retry, timeout, durability setting, storage owner or production behavior changes.
+This diagnostic does not itself fix or close Issue #88. Windows measurements and
+resulting-main qualification remain separate; a passing isolated run cannot
+replace the original full-suite failure evidence.
