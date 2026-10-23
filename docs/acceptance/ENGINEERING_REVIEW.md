@@ -37,6 +37,15 @@ with the original60-second bound. It cannot produce the required `Core gate`
 context; full combined-source Windows Core must qualify independently. No timing
 Issue is closed on a single passing rerun.
 
+The composed `18f032e` Windows Python3.12 diagnostic
+[39986761379](https://github.com/untrod/apeir/actions/runs/39986761379), matching
+the original failing Core interpreter, passes the original focused **102 tests
+(34.38s)** and broader Governance/ControlPlane **474 passed,18 skipped
+(118.44s)**. The earlier Python3.11 subset is retained separately. Neither
+diagnostic substitutes for full Windows Core or closes the timing Issues.
+After normal synchronization with accepted MCP main `ad773890`, the focused
+Linux schema/human/context combination still passes **102 tests**.
+
 Paired Linux constructor measurement used the same interpreter/filesystem,
 alternating order,5 warmups and20 measured fresh databases per variant. Before
 PR #89 baseline `d9c0505`: p50/p95/p99 **13.52/16.80/18.57 ms**, mean CPU3.89 ms;
