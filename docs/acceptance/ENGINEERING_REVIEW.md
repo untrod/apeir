@@ -78,6 +78,26 @@ zero browser page errors. Full Desktop checks pass **326 tests/46 files
 (57.33s)**; lint, typecheck and source build pass. These are source software
 results, not Windows native installation or live-provider qualification.
 
+Minimum-version validation found another real packaging gap: an independent
+Python3.10 base/dev install failed API imports with missing `async_timeout`
+(**7 failed,58 passed**). The API imports the existing extension facade even
+without the optional MCP SDK. Its already-used Python3.10 timeout backport is
+now a conditional base dependency instead of being declared only in the MCP
+extra; no replacement timeout, direct SDK path or unguarded execution is added.
+The same affected selection passes **65 tests (3.11s)** afterward. A second fresh
+Python3.10 environment installed only the actual wheel/base dependencies and
+passed the public strict/model-free API, authentication, unknown-usage and
+interrupt/session-cleanup checks. Its installed lost-response simulated Demo
+also retains effect count1 and reaches COMMITTED/MATCH without Kernel traversal.
+
+The existing manual Source Preview workflow still builds on Python3.12, then
+installs only the wheel/base dependencies with Python3.10, the minimum supported
+version. It now checks isolated API import/bind/close before the existing Demo,
+records consumer and builder versions, and preserves the same artifact name,
+seven-day retention and explicit non-native qualification. This adds no PR/main
+matrix or release bypass. Workflow actionlint1.7.12 and repository contracts
+pass; exact-source remote qualification remains separate.
+
 ## Saved Provider lifecycle integration — 2026-10-23
 
 Starting parent PR #83 was `e8a0913`, while main remained `e3cd2a20`.

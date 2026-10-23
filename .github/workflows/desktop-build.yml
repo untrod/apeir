@@ -66,6 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+        id: source-builder
         with:
           python-version: '3.12'
       - name: Verify versions and build the existing Python package
@@ -73,18 +74,22 @@ jobs:
           python scripts/ci/verify_release_versions.py
           python -m pip install build
           python -m build --wheel --outdir artifacts/source-preview
+      - name: Select the minimum supported Python for the base-package consumer
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
       - name: Install and exercise the built wheel in isolation
         run: |
           python -m venv "$RUNNER_TEMP/apeir-source-consumer"
           "$RUNNER_TEMP/apeir-source-consumer/bin/python" -m pip install artifacts/source-preview/*.whl
           cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I -c "import nous_runtime; assert 'site-packages' in nous_runtime.__file__"
+          "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I -c "import nous_runtime; from nous_runtime.api.server import create_server; assert 'site-packages' in nous_runtime.__file__; server = create_server('127.0.0.1', 0); server.server_close()"
           "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I "$RUNNER_TEMP/apeir-source-consumer/bin/apeir" version
           "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I "$RUNNER_TEMP/apeir-source-consumer/bin/apeir" demo --workspace "$RUNNER_TEMP/apeir-source-demo" --scenario lost-response --approve-once --json > "$RUNNER_TEMP/source-demo.json"
       - name: Record scoped installed-package evidence
         run: |
           python - <<'PY'
-          import json, os
+          import json, os, platform
           from pathlib import Path
           result = json.loads((Path(os.environ["RUNNER_TEMP"]) / "source-demo.json").read_text())
           before = result["before_recovery"]
@@ -94,6 +99,8 @@ jobs:
           assert before["receipt"] is None and before["effect_count"] == result["effect_count"] == 1
           report = {
               "source_wheel_installation": "PASS",
+              "consumer_python": platform.python_version(),
+              "isolated_api_import_bind_and_close": "PASS",
               "simulated_lost_response_recovery": "PASS",
               "execution_scope": result["execution_scope"],
               "kernel_traversed": False,
@@ -109,6 +116,7 @@ jobs:
       - name: Record measured wheel hashes and qualification limits
         env:
           SOURCE_REVISION: ${{ github.sha }}
+          BUILD_PYTHON_VERSION: ${{ steps.source-builder.outputs.python-version }}
         run: |
           python - <<'PY'
           import email, hashlib, json, os, platform, zipfile
@@ -129,6 +137,7 @@ jobs:
               "distribution_name": metadata["Name"],
               "distribution_version": metadata["Version"],
               "python": platform.python_version(),
+              "build_python": os.environ["BUILD_PYTHON_VERSION"],
               "kind": "Python source preview; not native Desktop or a verified release",
               "verified_release": False,
               "kernel_reference": json.loads(lock.read_text())["components"]["nous-kernel"]["revision"],
