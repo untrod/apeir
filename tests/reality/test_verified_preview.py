@@ -38,6 +38,9 @@ def test_real_demo_paths(tmp_path, scenario, work_state, verdict, effects):
     assert result["execution_scope"] == "runtime-service" and result["simulated"]
     assert result["kernel_traversed"] is False
     assert result["artifact_integrity_checked"] >= 1
+    projected = result["agent_session"]["observations"]
+    encoded = [json.dumps(item, sort_keys=True) for item in projected]
+    assert len(encoded) == len(set(encoded))
     assert (
         work["provenance"]["agent_session_id"] == result["agent_session"]["session_id"]
     )

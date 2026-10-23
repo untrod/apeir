@@ -346,13 +346,17 @@ class AgentSessionCoordinator:
                 if isinstance(output, Mapping) and output.get("work_id")
             )
         )
+        # Resume loads the original durable stream and prior step outputs again.
+        # Append only new projections; changed evidence remains a distinct item.
+        observations = list(session.observations)
+        for observation in (*events, *reality_evidence):
+            if observation not in observations:
+                observations.append(observation)
         session = replace(
             session,
             workflow_run_id=run.run_id,
             active_work=work_ids,
-            observations=(*session.observations, *events, *reality_evidence)[
-                -_OBSERVATION_LIMIT:
-            ],
+            observations=tuple(observations[-_OBSERVATION_LIMIT:]),
             updated_at=session_timestamp(),
         )
         if run.state is WorkflowState.COMPLETED:
