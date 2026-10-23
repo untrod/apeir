@@ -144,6 +144,14 @@ Runtime evidence before repeating an operation. Strong isolation remains require
 
 ## Build commands
 
+Manual **Desktop CI** also builds the existing Python Distribution wheel after
+frontend validation. Its `apeir-python-source-preview-<commit>` Actions artifact
+contains the wheel, measured SHA-256 and a source manifest, retained for seven
+days. It contains no native Desktop/Kernel binaries or Runtime state. The manifest
+marks native integrity, installation and release qualification NOT_RUN; this
+source package is independent of the gated native build jobs and publishes no
+GitHub Release. A successful source-package job cannot satisfy native acceptance.
+
 Web asset validation:
 
 ```powershell

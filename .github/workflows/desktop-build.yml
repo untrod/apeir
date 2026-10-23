@@ -58,6 +58,59 @@ jobs:
         working-directory: .
         run: python scripts/markdown_link_check.py
 
+  source-preview:
+    name: Python source preview (not native release)
+    if: github.event_name == 'workflow_dispatch'
+    needs: [frontend-tests]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify versions and build the existing Python package
+        run: |
+          python scripts/ci/verify_release_versions.py
+          python -m pip install build
+          python -m build --wheel --outdir artifacts/source-preview
+      - name: Record measured wheel hashes and qualification limits
+        env:
+          SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, platform, zipfile
+          from pathlib import Path
+          root = Path("artifacts/source-preview")
+          wheels = sorted(root.glob("*.whl"))
+          assert len(wheels) == 1, "Expected the existing Distribution wheel only"
+          wheel = wheels[0]
+          with zipfile.ZipFile(wheel) as archive:
+              assert not any(name.endswith((".exe", ".db", ".sqlite", ".sqlite3", ".jsonl", ".pem", ".key")) or "/.nous/" in name or "/.git/" in name for name in archive.namelist()), "Runtime state or native binary entered source wheel"
+          digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+          lock = Path("runtime-components.lock.json")
+          manifest = {
+              "distribution_revision": os.environ["SOURCE_REVISION"],
+              "python": platform.python_version(),
+              "kind": "Python source preview; not native Desktop or a verified release",
+              "verified_release": False,
+              "kernel_reference": json.loads(lock.read_text())["components"]["nous-kernel"]["revision"],
+              "component_lock_sha256": hashlib.sha256(lock.read_bytes()).hexdigest(),
+              "native_binary_hash_verification": "NOT_RUN",
+              "native_installation": "NOT_RUN",
+              "signing_and_release_qualification": "NOT_RUN",
+              "wheel": {"filename": wheel.name, "sha256": digest},
+          }
+          (root / "source-preview-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+          (root / "SHA256SUMS.txt").write_text(f"{digest}  {wheel.name}\n")
+          PY
+          echo 'Python source package only. No EXE/NSIS, native hash, installation, signing or production release qualification is claimed.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apeir-python-source-preview-${{ github.sha }}
+          path: artifacts/source-preview/
+          if-no-files-found: error
+          retention-days: 7
+
   # Windows x86_64 Build
   build-windows-x64:
     if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true'
