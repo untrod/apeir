@@ -8,6 +8,57 @@ This record distinguishes reproduced defects, inspected risks and unqualified
 external dependencies. It is not an exhaustive proof that the repository is
 bug-free, a physical acceptance, or production certification.
 
+## Saved Provider lifecycle integration — 2026-10-23
+
+Starting parent PR #83 was `e8a0913`, while main remained `e3cd2a20`.
+**REUSE** Provider setup/configuration, Registry, Gateway, existing file locks and
+Governance routes; **FIX/EXTEND** saved update/removal and setup model selection;
+**BLOCKED/PENDING** remains protected integration, native release and live-model
+qualification. There is no second Registry, credential store or execution path.
+
+Original regressions retained **4 failed / 3 passed**: deletion left saved
+configuration behind, update failed after removing the original adapter, the
+current Gateway retained stale discovery, and corrupt JSON was replaced by an
+empty mapping. Original setup selection retained **1 failed / 7 skipped**:
+Gateway identities and unrelated Providers were offered as vendor model IDs.
+
+Create/update/remove now share the existing JSON owner with advisory file and
+in-process locking, unique temporary files and atomic replacement. Invalid edits
+and failed writes preserve the original adapter; corrupt records deny mutation.
+Successful edits preserve unedited settings and refresh the original Registry
+and current strict Gateway. A refresh failure after persistence clears the
+Gateway and reports failure, without claiming rollback or retrying inference.
+Deletion survives reload, leaves credentials in their separate store and does
+not cancel already admitted requests. Other running processes are not broadcast
+synchronized; this is not a distributed transaction or an authority revocation.
+Unsupported `enabled` edits are rejected rather than falsely reported applied.
+
+The existing catalog exposes a recorded vendor `provider_model`, or null when
+unknown. The wizard reuses its bounded reader, exact selected Provider and
+connection/lifetime fences. It never substitutes a Gateway ID/display label or
+strips namespace prefixes from vendor IDs. Suggestions remain unqualified until
+an explicit actual inference through the existing Gateway/NKI.
+
+Initial focused lifecycle checks: **12 passed** (2.35 s), including new-interpreter reload,
+four-process writers, failed writes/refresh and authenticated Runtime HTTP.
+Unauthenticated PATCH returns401; an admitted PATCH changes persisted config and
+the actual model catalog; DELETE still returns403/NOUS_APPROVAL_REQUIRED without
+changing state. Full Desktop: **323 passed**, 46 files (75.50 s); lint, typecheck
+and web build pass with the retained mixed Tauri import warning. These use fake
+references/IPC and no real model or installed Windows executable.
+
+The first related regression retained **1391 passed,5 skipped,1 error** (78.30 s).
+The error is the unchanged local TLS fixture reading an empty `port` file while
+its child was still publishing via `write_text`. Its producer now closes a
+`port.pending` file before atomic replacement. The original five-second bound,
+TLS/security checks and parent assertions remain unchanged; no Runtime timeout
+or retry policy changes. The affected TLS/Skill HTTP suites then pass **37 tests**
+(25.48 s). The original error remains distinct from the Windows timing Issues;
+passing these tests does not close those Issues or qualify remote publishers.
+Final related Provider/Model/Governance/ControlPlane/Context/no-intelligence
+regression: **1393 passed,5 skipped** (65.71 s); repository contracts: **278 passed**.
+Counts overlap the narrower checks and are not a product maturity percentage.
+
 ## Native session destination audit — 2026-10-23
 
 The starting PR #83 source was `48a6cc1`; current main was still `e3cd2a20`.

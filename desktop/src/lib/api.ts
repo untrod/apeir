@@ -114,6 +114,7 @@ export interface CheckpointDiagnostics {
 export interface ModelView {
   id: string;
   model_id: string;
+  provider_model?: string | null;
   display_name: string;
   provider_id: string;
   provider_kind?: "openai" | "anthropic" | "local" | "custom";

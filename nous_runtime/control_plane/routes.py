@@ -98,6 +98,9 @@ def _adapt_model_record(record) -> dict[str, Any]:
     return {
         "id": d.model_id,
         "model_id": d.model_id,
+        "provider_model": d.metadata.get("provider_model")
+        if isinstance(d.metadata.get("provider_model"), str)
+        else None,
         "display_name": d.display_name,
         "provider_id": d.provider_id,
         "provider_kind": provider_kind,
@@ -582,26 +585,11 @@ def handle_validate_provider(body: dict) -> dict[str, Any]:
 
 
 def handle_update_provider(provider_id: str, body: dict) -> dict[str, Any]:
-    """PATCH /api/v1/providers/{provider_id} — remove + re-register (no update API)."""
+    """PATCH the saved configuration and refresh existing dispatch discovery."""
     try:
-        from nous_runtime.provider.registry import ProviderRegistry
+        from nous_runtime.cli.provider_setup import update_provider_from_config
 
-        registry = ProviderRegistry()
-        existing = registry.get(provider_id)
-        if not existing:
-            return err_response("NOUS_NOT_FOUND", f"Provider {provider_id} not found")
-        # Remove and re-register with updated config
-        registry.remove(provider_id)
-        from nous_runtime.compat.provider import create_simple_provider
-
-        name = body.get("name", getattr(existing, "name", provider_id))
-        capabilities = body.get("capabilities", getattr(existing, "capabilities", []))
-        api_base = body.get("api_base_url", getattr(existing, "api_base_url", ""))
-        cred_ref = body.get("credential_ref", getattr(existing, "credential_ref", None))
-        new_provider = create_simple_provider(
-            provider_id, name, api_base, capabilities, cred_ref
-        )
-        registry.install(new_provider)
+        update_provider_from_config(provider_id, body)
         return ok_response(
             {
                 "provider_id": provider_id,
@@ -613,35 +601,47 @@ def handle_update_provider(provider_id: str, body: dict) -> dict[str, Any]:
                         "name",
                         "api_base_url",
                         "credential_ref",
-                        "enabled",
                         "capabilities",
+                        "model",
+                        "capability_models",
                     )
                 ],
                 "message": f"Provider {provider_id} updated",
             }
         )
+    except KeyError:
+        return err_response("NOUS_NOT_FOUND", "Saved Provider configuration not found")
+    except ValueError as exc:
+        return err_response("NOUS_VALIDATION_ERROR", str(exc))
     except ImportError:
         return err_response(
             "NOUS_DEPENDENCY_MISSING", "Provider registry not available"
         )
-    except Exception as e:
-        return err_response("NOUS_INTERNAL_ERROR", str(e))
+    except Exception:
+        return err_response(
+            "NOUS_INTERNAL_ERROR",
+            "Provider update failed; inspect original configuration before retrying",
+        )
 
 
 def handle_delete_provider(provider_id: str) -> dict[str, Any]:
     """DELETE /api/v1/providers/{provider_id}"""
     try:
-        from nous_runtime.provider.registry import ProviderRegistry
+        from nous_runtime.cli.provider_setup import remove_provider_from_config
 
-        registry = ProviderRegistry()
-        if not registry.get(provider_id):
-            return err_response("NOUS_NOT_FOUND", f"Provider {provider_id} not found")
-        registry.remove(provider_id)
+        remove_provider_from_config(provider_id)
         return ok_response(
             {"provider_id": provider_id, "message": f"Provider {provider_id} removed"}
         )
-    except Exception as e:
-        return err_response("NOUS_INTERNAL_ERROR", str(e))
+    except KeyError:
+        return err_response("NOUS_NOT_FOUND", "Provider not found")
+    except ValueError as exc:
+        return err_response("NOUS_VALIDATION_ERROR", str(exc))
+    except Exception:
+        return err_response(
+            "NOUS_INTERNAL_ERROR",
+            "Provider removal failed; inspect original configuration before retrying",
+        )
 
 
 def handle_provider_test(provider_id: str, body: dict | None = None) -> dict[str, Any]:
