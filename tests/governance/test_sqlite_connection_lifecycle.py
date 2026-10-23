@@ -11,19 +11,17 @@ from nous_runtime.governance import store
 def test_schema_initialization_is_one_atomic_write_transaction(tmp_path, monkeypatch):
     original_connect = sqlite3.connect
     ddl_transactions = []
-    commits = []
-
-    class Connection(sqlite3.Connection):
-        def commit(self):
-            commits.append(self.in_transaction)
-            return super().commit()
+    transaction_boundaries = []
 
     def connect(*args, **kwargs):
-        connection = original_connect(*args, factory=Connection, **kwargs)
+        connection = original_connect(*args, **kwargs)
 
         def trace(sql):
-            if sql.lstrip().upper().startswith("CREATE "):
+            statement = sql.strip().rstrip(";").upper()
+            if statement.startswith("CREATE "):
                 ddl_transactions.append(connection.in_transaction)
+            if statement.startswith(("BEGIN", "COMMIT", "ROLLBACK")):
+                transaction_boundaries.append(statement)
 
         connection.set_trace_callback(trace)
         return connection
@@ -32,7 +30,9 @@ def test_schema_initialization_is_one_atomic_write_transaction(tmp_path, monkeyp
         trace.setattr(store.sqlite3, "connect", connect)
         governance = store.GovernanceStore(tmp_path)
     assert ddl_transactions and all(ddl_transactions)
-    assert commits == [True]
+    # Older CPython executescript() calls commit() even without an active
+    # transaction. Trace actual SQLite boundaries rather than that no-op call.
+    assert transaction_boundaries == ["BEGIN IMMEDIATE", "COMMIT"]
     with store._db_connect(governance.db_path, readonly=True) as connection:
         assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert connection.execute("PRAGMA synchronous").fetchone()[0] == 2
