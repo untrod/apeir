@@ -13,9 +13,10 @@
  *   9. Complete — save and enter dashboard
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { colors, typo, radius, space, card, input, btnPrimary, btnSecondary } from "../design";
-import { testConnection, api, getConfig, setConfig } from "../lib/api";
+import { testConnection, api } from "../lib/api";
+import { bindNativeRuntimeSession } from "../lib/nativeRuntime";
 
 /** Lazy-load Tauri invoke — never top-level import to avoid module-load crashes. */
 async function tauriInvoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -253,6 +254,11 @@ interface OnboardingWizardProps {
 type WizardStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) {
+  const active = useRef(false);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
   const [step, setStep] = useState<WizardStep>(1);
   const [language, setLanguage] = useState<"zh-CN" | "en">("zh-CN");
 
@@ -571,12 +577,12 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       setCredentialSaving(true);
       setSetupError("");
       try {
-        const token = await tauriInvoke<string>("store_provider_credential", {
+        const pending = bindNativeRuntimeSession("store_provider_credential", {
           environmentName: credentialEnvName,
           secret: credentialSecret,
-        });
-        setConfig({ ...getConfig(), token });
+        }, { isActive: () => active.current });
         setCredentialSecret("");
+        await pending;
         setCredentialStored(true);
       } catch (error) {
         setSetupError(

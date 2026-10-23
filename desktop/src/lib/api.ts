@@ -1323,7 +1323,7 @@ export function subscribeRuntimeEvents(
   options: { domain?: string; intervalMs?: number; onError?: () => void } = {},
 ) {
   let active = true;
-  let timer: ReturnType<typeof window.setTimeout> | undefined;
+  let timer: number | undefined;
   const connection = captureRuntimeConnection();
   const close = () => { active = false; if (timer !== undefined) window.clearTimeout(timer); };
   const current = () => {
@@ -1364,7 +1364,7 @@ export function subscribeRunEvents(
   options: { intervalMs?: number; afterSequence?: number } = {},
 ) {
   let active = true;
-  let timer: ReturnType<typeof window.setTimeout> | undefined;
+  let timer: number | undefined;
   const connection = captureRuntimeConnection();
   const close = () => { active = false; if (timer !== undefined) window.clearTimeout(timer); };
   const current = () => {

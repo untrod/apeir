@@ -25,7 +25,7 @@ import {
 } from "./store";
 import {
   api, testConnection, fetchTasks, fetchNodes, fetchModels, fetchApprovals, fetchConversations,
-  fetchStatus, setConfig, getConfig,
+  fetchStatus, getConfig, getRuntimeConfigVersion,
 } from "./lib/api";
 import type { GlobalSearchResult, RuntimeEventEnvelope } from "./lib/api";
 import {
@@ -58,6 +58,8 @@ import { SimulationWorkbench } from "./components/SimulationWorkbench";
 import { errorMessage, fixedNumber } from "./lib/format";
 import { usageMoney, usageNumber } from "./lib/usageAccounting";
 
+import { bindNativeRuntimeSession, isLocalRuntimeSelected, nativeRuntimeStatus } from "./lib/nativeRuntime";
+
 // Design token injection (run once)
 injectDesignTokens();
 
@@ -68,6 +70,7 @@ async function runBootstrap(
 ): Promise<void> {
   // Local mutable state for decisions later in the flow
   let workspaceCreated = false;
+  let localStartupAllowed = false;
 
   const setState = (state: BootstrapStatus["state"], progressMsg?: string) => {
     updateStatus((prev) => transitionBootstrap(prev, state, {
@@ -102,29 +105,22 @@ async function runBootstrap(
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("init_app_config");
-      if (config.autoCreateWorkspace) {
-        const workspacePath = await invoke<string>("get_default_workspace_path");
-        await invoke("create_default_workspace", { path: workspacePath });
-        workspaceCreated = true;
+      const version = getRuntimeConfigVersion();
+      const runtime = await nativeRuntimeStatus();
+      if (getRuntimeConfigVersion() !== version) throw new Error("Controller changed during startup.");
+      localStartupAllowed = isLocalRuntimeSelected(runtime.endpoint);
+      if (localStartupAllowed) {
+        if (config.autoCreateWorkspace) {
+          const workspacePath = await invoke<string>("get_default_workspace_path");
+          if (getRuntimeConfigVersion() !== version) throw new Error("Controller changed during startup.");
+          await invoke("create_default_workspace", { path: workspacePath });
+          workspaceCreated = true;
+        }
+        if (getRuntimeConfigVersion() !== version) throw new Error("Controller changed during startup.");
+        if (runtime.session_available && runtime.ready) {
+          await bindNativeRuntimeSession("load_runtime_session_token");
+        }
       }
-      const runtime = await invoke<{
-        endpoint: string;
-        ready: boolean;
-        session_available: boolean;
-      }>("get_runtime_process_status");
-      let token = getConfig().token;
-      if (runtime.session_available) {
-        token = await invoke<string>("load_runtime_session_token");
-      }
-      setConfig({ url: runtime.endpoint, token });
-      updateStatus((prev) => ({
-        ...prev,
-        runtime: { ...prev.runtime, reachable: runtime.ready, running: runtime.ready },
-        session: {
-          established: runtime.ready && !!token,
-          tokenFingerprint: tokenFingerprint(token),
-        },
-      }));
     } catch {
       // Non-critical — config dirs will be created on first write
     }
@@ -164,21 +160,17 @@ async function runBootstrap(
   }
 
   // Phase 4: Start runtime if needed
-  if (!connected && config.autoStartRuntime) {
+  if (!connected && config.autoStartRuntime && localStartupAllowed) {
     setState("starting_runtime", "Starting Runtime API...");
     updateStatus((prev) => ({ ...prev, progress: 40 }));
 
     if ("__TAURI_INTERNALS__" in window) {
       try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        const token = await invoke<string>("start_runtime_api");
-        if (token) {
-          setConfig({ url: getConfig().url, token });
-          updateStatus((prev) => ({
-            ...prev,
-            session: { ...prev.session, tokenFingerprint: tokenFingerprint(token) },
-          }));
-        }
+        const token = await bindNativeRuntimeSession("start_runtime_api");
+        updateStatus((prev) => ({
+          ...prev,
+          session: { ...prev.session, tokenFingerprint: tokenFingerprint(token) },
+        }));
 
         // Wait for runtime
         setState("waiting_runtime", "Waiting for Runtime API...");
@@ -240,36 +232,14 @@ async function runBootstrap(
   setState("establishing_session", "Establishing session...");
   updateStatus((prev) => ({ ...prev, progress: 60 }));
 
-  if ("__TAURI_INTERNALS__" in window) {
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const token = await invoke<string>("load_runtime_session_token");
-      if (token) {
-        setConfig({ url: getConfig().url, token });
-        updateStatus((prev) => ({
-          ...prev,
-          session: { established: true, tokenFingerprint: tokenFingerprint(token) },
-        }));
-      }
-    } catch {
-      // Token may not be available yet
-      updateStatus((prev) => ({
-        ...prev,
-        session: { ...prev.session, established: false },
-        warnings: [...prev.warnings, "Could not load session token. Some features may require re-authentication."],
-      }));
-    }
-  } else {
-    // Dev mode — session from sessionStorage
-    const cfg = getConfig();
-    updateStatus((prev) => ({
-      ...prev,
-      session: {
-        established: !!cfg.token,
-        tokenFingerprint: tokenFingerprint(cfg.token),
-      },
-    }));
-  }
+  const cfg = getConfig();
+  updateStatus((prev) => ({
+    ...prev,
+    session: {
+      established: connected && !!cfg.token,
+      tokenFingerprint: tokenFingerprint(cfg.token),
+    },
+  }));
 
   // Phase 6: Check workspace
   setState("checking_workspace", "Checking workspace...");
@@ -330,7 +300,7 @@ async function runBootstrap(
   updateStatus((prev) => ({ ...prev, progress: 90 }));
 
   // Phase 9: Auto-create workspace if needed
-  if ("__TAURI_INTERNALS__" in window && config.autoCreateWorkspace && !wsExists && !workspaceCreated) {
+  if ("__TAURI_INTERNALS__" in window && localStartupAllowed && config.autoCreateWorkspace && !wsExists && !workspaceCreated) {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       const wsPath: string = await invoke("get_default_workspace_path");
@@ -521,14 +491,20 @@ function WorkspacePage() {
     setError("");
     try {
       const { invoke } = await import("@tauri-apps/api/core");
+      const version = getRuntimeConfigVersion();
+      const local = await nativeRuntimeStatus();
+      if (getRuntimeConfigVersion() !== version || !isLocalRuntimeSelected(local.endpoint)) {
+        throw new Error("Select the local Runtime before changing its workspace.");
+      }
       const selected = await invoke<string | null>("select_workspace_directory");
       if (!selected) {
         setMessage("No changes were made.");
         return;
       }
+      if (getRuntimeConfigVersion() !== version) throw new Error("Controller changed; workspace selection was not applied.");
       const activated = await invoke<string>("create_default_workspace", { path: selected });
-      const token = await invoke<string>("restart_runtime_api");
-      setConfig({ url: getConfig().url, token });
+      if (getRuntimeConfigVersion() !== version) throw new Error("Controller changed; inspect local workspace settings before retrying.");
+      await bindNativeRuntimeSession("restart_runtime_api");
       let connected = false;
       for (let attempt = 0; attempt < 40; attempt++) {
         if (await testConnection()) {
@@ -921,8 +897,7 @@ function AppShell() {
         onStartRuntime={async () => {
           if ("__TAURI_INTERNALS__" in window) {
             try {
-              const { invoke } = await import("@tauri-apps/api/core");
-              await invoke("start_runtime_api");
+              await bindNativeRuntimeSession("start_runtime_api");
               retryBootstrap();
             } catch { /* Shown in UI */ }
           }
@@ -930,8 +905,7 @@ function AppShell() {
         onResetSession={async () => {
           if ("__TAURI_INTERNALS__" in window) {
             try {
-              const { invoke } = await import("@tauri-apps/api/core");
-              await invoke("load_runtime_session_token");
+              await bindNativeRuntimeSession("load_runtime_session_token");
               retryBootstrap();
             } catch { /* Shown in UI */ }
           }
@@ -957,8 +931,7 @@ function AppShell() {
         onStartRuntime={async () => {
           if ("__TAURI_INTERNALS__" in window) {
             try {
-              const { invoke } = await import("@tauri-apps/api/core");
-              await invoke("start_runtime_api");
+              await bindNativeRuntimeSession("start_runtime_api");
               retryBootstrap();
             } catch { /* Shown in UI */ }
           }
@@ -966,8 +939,7 @@ function AppShell() {
         onResetSession={async () => {
           if ("__TAURI_INTERNALS__" in window) {
             try {
-              const { invoke } = await import("@tauri-apps/api/core");
-              await invoke("load_runtime_session_token");
+              await bindNativeRuntimeSession("load_runtime_session_token");
             } catch { /* Shown in UI */ }
           }
         }}

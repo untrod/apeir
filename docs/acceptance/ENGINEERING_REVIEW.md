@@ -8,6 +8,45 @@ This record distinguishes reproduced defects, inspected risks and unqualified
 external dependencies. It is not an exhaustive proof that the repository is
 bug-free, a physical acceptance, or production certification.
 
+## Native session destination audit — 2026-10-23
+
+The starting PR #83 source was `48a6cc1`; current main was still `e3cd2a20`.
+**REUSE** the native process manager, Windows Credential Manager, Runtime API
+client and connection version; **FIX** local-session destination and late native
+response binding; **EXTEND** the existing startup/settings/diagnostic UI tests.
+No credential store, API, execution authority or startup daemon was added.
+Original component regressions retained **3 failures**: local startup used the
+connection form's address, late session loading replaced a changed connection,
+and local credential mutation proceeded for a selected remote Controller.
+
+The corrected UI binds native session results only to the manager's validated
+loopback endpoint and verified ready session, with original connection/version
+and view checks. Credential rotation/removal, diagnostic recovery and workspace
+restart require the selected local endpoint. Startup preserves a selected remote
+Controller. Session-reset failure does not silently restart another process.
+An action may already have completed when its response becomes unusable; no
+automatic action retry or process cancellation is inferred.
+
+New checks include the actual App bootstrap, remote/ABA/unmount negatives,
+invalid destination/readiness/session rejection, transient input clearing and
+the existing API client over two actual loopback HTTP servers. The authenticated
+request reaches only the endpoint returned by the simulated native IPC host;
+the other server receives no request. **22 focused tests** and the full Desktop
+suite (**314 passed**) exercise this software boundary. Node HTTP fixture types
+are development-only; the existing browser polling handles remain DOM numbers.
+Related Runtime startup, provider, launcher, component-lock and two-file proposal
+regressions have **39 passed**. This uses fake IPC/credentials, not an installed
+Windows executable, actual Credential Manager qualification or a real model.
+
+The preceding composed `7d0d88e` Core run `39880466334` completed on four
+platforms: Linux Python 3.12 **5684 passed / 66 skipped**, Linux Python 3.10
+and macOS Python 3.12 each **5673 passed / 77 skipped**, and Windows Python
+3.12 **5662 passed / 88 skipped**; each retained four warnings. Those exact-source
+results precede this frontend correction; new candidate CI and protected main
+integration remain separate requirements. Main protection inspection still
+returns administration HTTP 403. Native binary hashes, real model/IdP and
+installed product acceptance remain **BLOCKED/PENDING** at their own Gates.
+
 ## Product wiring audit — 2026-10-11
 
 Read-only starting main was `e5424305ec90fb0a072f21fbef371ebd5bc110f6`;

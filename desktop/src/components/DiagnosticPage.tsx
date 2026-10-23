@@ -3,16 +3,16 @@
  * and recovery options. Never renders a blank/white screen.
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { colors, typo, radius, space, card, btnPrimary, btnSecondary } from "../design";
 import {
   testConnection,
   fetchStatus,
   api,
-  getConfig,
-  setConfig,
   type RuntimeStatus,
 } from "../lib/api";
+
+import { bindNativeRuntimeSession } from "../lib/nativeRuntime";
 
 /** Lazy-load Tauri invoke — never top-level import to avoid module-load crashes. */
 async function tauriInvoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -57,6 +57,11 @@ interface ProviderDiag {
 }
 
 export function DiagnosticPage(props: DiagnosticState) {
+  const active = useRef(false);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
   const [showDetail, setShowDetail] = useState(false);
   const [runtimeDiag, setRuntimeDiag] = useState<RuntimeDiag>({
     running: false,
@@ -134,10 +139,7 @@ export function DiagnosticPage(props: DiagnosticState) {
     try {
       setChecking(true);
       setActionError("");
-      const token = await tauriInvoke<string>("restart_runtime_api");
-      // Store the token so subsequent requests use it
-      const cfg = getConfig();
-      setConfig({ url: cfg.url, token });
+      await bindNativeRuntimeSession("restart_runtime_api", undefined, { isActive: () => active.current });
       // Wait for runtime
       for (let i = 0; i < 30; i++) {
         if (await testConnection()) break;
@@ -156,15 +158,12 @@ export function DiagnosticPage(props: DiagnosticState) {
   const handleResetSession = async () => {
     if (!("__TAURI_INTERNALS__" in window)) return;
     try {
-      const token = await tauriInvoke<string>("load_runtime_session_token");
-      const cfg = getConfig();
-      setConfig({ url: cfg.url, token });
+      await bindNativeRuntimeSession("load_runtime_session_token", undefined, { isActive: () => active.current });
       const connected = await testConnection();
       setRuntimeDiag((prev) => ({ ...prev, reachable: connected }));
       if (connected) returnToApplication();
-    } catch {
-      // Token load failed, try full restart
-      await handleRestartRuntime();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Local session could not be verified. Inspect diagnostics before retrying.");
     }
   };
 

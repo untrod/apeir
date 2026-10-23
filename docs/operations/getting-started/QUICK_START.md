@@ -129,6 +129,16 @@ remove credentials and private paths. Report reproducible issues through
 
 ### Workspace developer panel
 
+For native local configuration, select the local Runtime before opening
+**Settings → Credentials**. Windows credentials use the existing system store;
+only reference names are persisted in configuration. The browser cannot store
+Provider keys. **Start Local Runtime** connects to the endpoint reported by the
+native manager, even if another Controller address is in the connection form.
+Credential rotation, session recovery and workspace restart never retarget that
+local session to a remote Controller. If the connection changes while an action
+is pending, inspect its original local state before retrying. These software
+guards do not qualify a Windows installer or a real model account.
+
 Open **workspace / 开发者面板** in the existing Operations Console. The panel
 combines the existing bounded workspace file API, diff editor, Chat Runtime and
 persisted EventStream. Select a file, edit it, choose **Preview diff**, then
