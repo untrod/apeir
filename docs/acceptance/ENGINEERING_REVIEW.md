@@ -59,6 +59,17 @@ Final related Provider/Model/Governance/ControlPlane/Context/no-intelligence
 regression: **1393 passed,5 skipped** (65.71 s); repository contracts: **278 passed**.
 Counts overlap the narrower checks and are not a product maturity percentage.
 
+The same first-use review reproduced **3 failures** for the desktop `anthropic`
+identity: it selected the custom/OpenAI adapter rather than the existing
+Anthropic implementation. The saved identity now maps to the existing `claude`
+preset, and root, `/v1` and full messages addresses retain one correct endpoint.
+Existing saved configurations are not automatically migrated. The native Gemini
+template, for which no adapter exists, is disabled with a compatible-endpoint
+explanation. Provider/factory/no-intelligence checks then pass **96 tests**
+(4.76 s), and the wizard's **8 tests** pass; no real account call is claimed.
+The final affected combination including this protocol correction is
+**1396 passed,5 skipped** (72.15 s).
+
 ## Native session destination audit — 2026-10-23
 
 The starting PR #83 source was `48a6cc1`; current main was still `e3cd2a20`.

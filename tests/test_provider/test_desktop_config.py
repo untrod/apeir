@@ -6,6 +6,29 @@ from nous_runtime.control_plane.routes import (
 from nous_runtime.model_runtime.factory import build_gateway_from_providers
 from nous_runtime.model_runtime.models import ModelDescriptor, ModelEndpointType
 from nous_runtime.model_runtime.registry import ModelRuntimeRegistry
+import pytest
+
+
+@pytest.mark.parametrize(
+    "base",
+    [
+        "https://api.anthropic.com",
+        "https://api.anthropic.com/v1",
+        "https://api.anthropic.com/v1/messages",
+    ],
+)
+def test_desktop_anthropic_identity_uses_existing_anthropic_adapter_protocol(base):
+    config = build_provider_config(
+        provider_id="anthropic",
+        name="Anthropic",
+        api_base_url=base,
+        credential_ref="env:FAKE_ANTHROPIC_KEY",
+        model="fixture-model",
+    )
+    assert config["provider_id"] == "anthropic"
+    assert config["service"] == "claude"
+    assert config["kind"] == "anthropic-compatible"
+    assert config["endpoint"] == "https://api.anthropic.com/v1/messages"
 
 
 def test_desktop_provider_config_preserves_selected_model_routes():

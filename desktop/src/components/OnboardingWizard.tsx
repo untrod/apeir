@@ -40,6 +40,7 @@ interface ProviderTemplate {
   timeout: number;
   retryPolicy: { maxRetries: number; backoffMs: number };
   documentationLabel: string;
+  unsupportedProtocol?: boolean;
 }
 
 const PROVIDER_TEMPLATES: ProviderTemplate[] = [
@@ -117,6 +118,7 @@ const PROVIDER_TEMPLATES: ProviderTemplate[] = [
   },
   {
     providerId: "gemini",
+    unsupportedProtocol: true,
     displayName: "Google Gemini",
     serviceType: "cloud",
     defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
@@ -927,6 +929,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
             {PROVIDER_TEMPLATES.map((p) => (
               <button
                 key={p.providerId}
+                disabled={p.unsupportedProtocol || !setupCurrent}
                 onClick={() => {
                   setSelectedProviderId(p.providerId);
                   setBaseUrl(p.defaultBaseUrl);
@@ -954,7 +957,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
                   {p.displayName}
                 </div>
                 <div style={{ fontSize: typo.xs, color: colors.textTertiary }}>
-                  {p.serviceType}
+                  {p.unsupportedProtocol ? t("Native protocol unavailable; use an OpenAI-compatible endpoint.", "原生协议尚未适配；请使用 OpenAI 兼容端点。") : p.serviceType}
                   {p.documentationLabel ? ` · ${p.documentationLabel}` : ""}
                 </div>
               </button>
