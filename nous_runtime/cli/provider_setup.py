@@ -418,7 +418,7 @@ def _request_endpoint(base_endpoint: str, preset: dict[str, Any]) -> str:
     if value.endswith(("/chat/completions", "/messages")):
         return value
     if str(preset["protocol"]) == "anthropic":
-        return value + "/v1/messages"
+        return value + ("/messages" if value.endswith("/v1") else "/v1/messages")
     return value + "/chat/completions"
 
 
@@ -594,7 +594,9 @@ def build_provider_config(
     elif reference and not reference.startswith("secret:"):
         raise ValueError("credential_ref must use env: or secret:")
 
-    service = provider_id if provider_id in SERVICE_PRESETS else "custom"
+    service = "claude" if provider_id == "anthropic" else provider_id
+    if service not in SERVICE_PRESETS:
+        service = "custom"
     preset = SERVICE_PRESETS[service]
     base_endpoint = str(api_base_url or preset["base_endpoint"]).strip().rstrip("/")
     try:

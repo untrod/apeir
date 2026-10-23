@@ -72,6 +72,13 @@ Setup uses that exact vendor model ID for the selected Provider, through the
 existing bounded catalog reader. It does not send a Gateway ID or display name
 as a vendor parameter, guess a missing ID, or mix another Provider's models.
 Template suggestions and saved model metadata do not prove remote availability.
+The desktop `anthropic` identity maps to the existing Claude/Anthropic adapter;
+root, `/v1` and full messages URLs normalize to the original messages endpoint.
+Previously saved configurations are not silently rewritten: explicitly review
+and resave an incorrectly configured template. The unimplemented native Gemini
+protocol template is disabled; compatible endpoints can use the existing
+OpenAI-compatible configuration. This is protocol configuration, not live-account
+qualification.
 
 Model tests retain the original request ID after dispatch failure and do not
 retry it automatically. Explicit completion is required; UNKNOWN is not healthy.
