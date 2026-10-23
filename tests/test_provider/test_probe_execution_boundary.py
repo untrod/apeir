@@ -300,6 +300,13 @@ def test_configuration_validation_over_authenticated_runtime_http(
     token = "provider.setup.fake.session"
     monkeypatch.setenv("NOUS_API_TOKEN", token)
     monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("NOUS_DATA_DIR", str(tmp_path / "capability-data"))
+    monkeypatch.setattr("nous_runtime.governance.gate._gate_instance", None)
+    # Match normal Runtime startup instead of inheriting a prior test's catalog.
+    from nous_runtime.services.lifecycle import run_migrations, seed_capabilities
+
+    run_migrations()
+    assert seed_capabilities() > 0
     monkeypatch.setattr(
         "nous_runtime.cli.provider_experience._probe_request",
         lambda *_: pytest.fail("Setup must not send an inference or endpoint probe"),
