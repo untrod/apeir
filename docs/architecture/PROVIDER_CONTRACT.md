@@ -782,3 +782,27 @@ through an isolated OpenAI-compatible HTTP fixture plus retry, fallback, stream,
 NKI contract and source/authority/lifecycle negatives, including source-derived
 review admission and billing. These use fake credentials
 and do not qualify a real model account, remote Provider or installed Desktop.
+
+
+## External Codex Harness versus model invocation
+
+A normal Model Gateway invocation is distinct from an external agent's
+Thread/Turn/tool lifecycle. The official Codex App Server owns its Harness;
+APEIR must not copy it. Any future adapter must bind those events, approvals,
+usage and artifacts to existing AgentSession/Work/Workflow/Governance/evidence,
+without acquiring approval authority or treating the vendor's success as an
+effect verification.
+
+Current qualification exercises official Codex0.163.0 account/model metadata
+and direct App Server calls through the existing Runtime's scoped MCP bridge.
+It includes thread start, discovery, real Node/Distributed Work inspection and
+original human approval required for new Work. **No model Turn or complete
+Harness execution/recovery/cost qualification is claimed.** Generated protocol
+schemas and actual native filesystem/credential restrictions must be qualified;
+a broad read-only host profile or an instruction prompt is insufficient.
+Unknown native tool/approval requests cannot become automatic APEIR authority.
+The [public MCP interface](../development/DEVELOPER_PLATFORM.md#mcp-access-to-the-existing-runtime)
+is a thin standard SDK transport over existing owners, not another Provider
+registry, worker, approval backend or verifier. Its delegated service credential
+stays in the bridge boundary; explicit tool scopes do not prove isolation of an
+unrestricted external process. Native hardware/IdP/release gates remain separate.

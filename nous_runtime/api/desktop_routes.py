@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -299,8 +300,22 @@ def handle_tasks_action(body: dict[str, Any]) -> dict[str, Any]:
         return err("TASKS_ACTION_ERROR", str(e))
 
 
-def handle_work_submit(body: dict[str, Any]) -> dict[str, Any]:
+def handle_work_submit(
+    body: dict[str, Any], *, authorization_context=None
+) -> dict[str, Any]:
     """Create and dispatch Work in the runtime process, not the UI process."""
+    return _work_submission(body, authorization_context=authorization_context)
+
+
+def find_original_work_submission(body, *, authorization_context):
+    if "idempotency_key" not in body:
+        return None
+    return _work_submission(
+        body, authorization_context=authorization_context, lookup_only=True
+    )
+
+
+def _work_submission(body, *, authorization_context=None, lookup_only=False):
     try:
         objective = str(body.get("objective") or "").strip()
         if not objective:
@@ -314,8 +329,29 @@ def handle_work_submit(body: dict[str, Any]) -> dict[str, Any]:
             )
         from nous_runtime.work import get_work_supervisor
 
+        submission_key = body.get("idempotency_key", "")
+        if "idempotency_key" in body and (
+            not isinstance(submission_key, str)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", submission_key)
+            is None
+        ):
+            return err(
+                "NOUS_INVALID_REQUEST",
+                "idempotency_key must be a nonempty bounded string",
+            )
+        if submission_key and authorization_context is None:
+            return err(
+                "NOUS_UNAUTHENTICATED",
+                "Original Work submission requires authenticated identity",
+            )
+        if (
+            lookup_only
+            and not (Path(_workspace()) / ".nous" / "checkpoints.db").exists()
+        ):
+            return None
         supervisor = get_work_supervisor(_workspace())
-        snapshot = supervisor.start(
+        submit = supervisor.find_submission if lookup_only else supervisor.start
+        snapshot = submit(
             objective,
             constraints=constraints,
             completion_criteria=tuple(str(item) for item in criteria),
@@ -324,7 +360,17 @@ def handle_work_submit(body: dict[str, Any]) -> dict[str, Any]:
             preferred_model=str(body.get("preferred_model") or ""),
             read_only=bool(body.get("read_only", False)),
             max_iterations=int(body.get("max_iterations") or 32),
+            submission_key=submission_key,
+            submission_actor=(
+                authorization_context.subject_type
+                + ":"
+                + authorization_context.subject_id
+                if submission_key
+                else ""
+            ),
         )
+        if snapshot is None:
+            return None
         return ok(
             {
                 "work": snapshot.to_dict(),

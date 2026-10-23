@@ -73,6 +73,7 @@ def connect(readonly: bool = False):
 # Inline bootstrap (for installed-package scenarios where
 # migrations/*.sql files may not be present on disk)
 
+
 def bootstrap_core_tables() -> int:
     """
     Create all required nous_core tables inline, without relying on
@@ -84,6 +85,9 @@ def bootstrap_core_tables() -> int:
     before = _existing_table_count()
 
     with connect() as db:
+        # DDL must share the version-record transaction. Otherwise SQLite
+        # autocommits every CREATE before a later bootstrap failure can roll back.
+        db.execute("BEGIN IMMEDIATE")
         # 001_initial
         db.execute("""
             CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -106,9 +110,15 @@ def bootstrap_core_tables() -> int:
             )
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_events_corr ON events(correlation_id)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_corr ON events(correlation_id)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id)"
+        )
 
         # 002_jobs
         db.execute("""
@@ -155,8 +165,12 @@ def bootstrap_core_tables() -> int:
                 updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
-        db.execute("CREATE INDEX IF NOT EXISTS idx_devices_type ON devices(device_type)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_devices_online ON devices(is_online)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_devices_type ON devices(device_type)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_devices_online ON devices(is_online)"
+        )
 
         # 004_notifications
         db.execute("""
@@ -176,10 +190,12 @@ def bootstrap_core_tables() -> int:
         """)
         db.execute(
             "CREATE INDEX IF NOT EXISTS idx_nfns_unread "
-            "ON notifications(target_client, target_session, read_at)")
+            "ON notifications(target_client, target_session, read_at)"
+        )
         db.execute(
             "CREATE INDEX IF NOT EXISTS idx_nfns_priority "
-            "ON notifications(priority DESC, created_at DESC)")
+            "ON notifications(priority DESC, created_at DESC)"
+        )
 
         # 005_automation
         db.execute("""
@@ -202,7 +218,8 @@ def bootstrap_core_tables() -> int:
         """)
         db.execute(
             "CREATE INDEX IF NOT EXISTS idx_arules_enabled "
-            "ON automation_rules(enabled, priority DESC)")
+            "ON automation_rules(enabled, priority DESC)"
+        )
         db.execute("""
             CREATE TABLE IF NOT EXISTS automation_log (
                 id            TEXT PRIMARY KEY,
@@ -214,8 +231,12 @@ def bootstrap_core_tables() -> int:
                 fired_at      TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
-        db.execute("CREATE INDEX IF NOT EXISTS idx_alog_rule ON automation_log(rule_id)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_alog_fired ON automation_log(fired_at)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_alog_rule ON automation_log(rule_id)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_alog_fired ON automation_log(fired_at)"
+        )
 
         # 006_audit
         db.execute("""
@@ -233,7 +254,9 @@ def bootstrap_core_tables() -> int:
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs(actor)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at)"
+        )
 
         # 007_inbox
         db.execute("""
@@ -294,11 +317,21 @@ def bootstrap_core_tables() -> int:
                 created_at     TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
-        db.execute("CREATE INDEX IF NOT EXISTS idx_ssn_status ON study_sessions(status)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_ssn_subject ON study_sessions(subject)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_ssn_date ON study_sessions(created_at)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_sq_session ON session_questions(session_id)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_sm_session ON session_mistakes(session_id)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ssn_status ON study_sessions(status)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ssn_subject ON study_sessions(subject)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ssn_date ON study_sessions(created_at)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sq_session ON session_questions(session_id)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sm_session ON session_mistakes(session_id)"
+        )
 
         # 009_capabilities
         # depends_on column is added by bootstrap 010 below; for a
@@ -322,9 +355,13 @@ def bootstrap_core_tables() -> int:
                 updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
-        db.execute("CREATE INDEX IF NOT EXISTS idx_cap_category ON capabilities(category)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cap_category ON capabilities(category)"
+        )
         db.execute("CREATE INDEX IF NOT EXISTS idx_cap_risk ON capabilities(risk)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_cap_enabled ON capabilities(enabled)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cap_enabled ON capabilities(enabled)"
+        )
         db.execute("""
             CREATE TABLE IF NOT EXISTS capability_executions (
                 id              TEXT PRIMARY KEY,
@@ -342,9 +379,15 @@ def bootstrap_core_tables() -> int:
                 completed_at    TEXT DEFAULT ''
             )
         """)
-        db.execute("CREATE INDEX IF NOT EXISTS idx_cex_cap ON capability_executions(capability_name)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_cex_status ON capability_executions(status)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_cex_created ON capability_executions(created_at)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cex_cap ON capability_executions(capability_name)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cex_status ON capability_executions(status)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cex_created ON capability_executions(created_at)"
+        )
 
         # 010_capability_graph
         # depends_on may already exist (included in 009 CREATE above);
@@ -352,7 +395,8 @@ def bootstrap_core_tables() -> int:
         # semantics handled via try/except.
         try:
             db.execute(
-                "ALTER TABLE capabilities ADD COLUMN depends_on TEXT NOT NULL DEFAULT '[]'")
+                "ALTER TABLE capabilities ADD COLUMN depends_on TEXT NOT NULL DEFAULT '[]'"
+            )
         except _sqlite3.OperationalError:
             pass  # column already exists
         db.execute("""
@@ -362,8 +406,12 @@ def bootstrap_core_tables() -> int:
                 PRIMARY KEY (source, target)
             )
         """)
-        db.execute("CREATE INDEX IF NOT EXISTS idx_cedges_source ON capability_edges(source)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_cedges_target ON capability_edges(target)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cedges_source ON capability_edges(source)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cedges_target ON capability_edges(target)"
+        )
 
         # 011_reasoning_trace
         db.execute("""
@@ -395,11 +443,21 @@ def bootstrap_core_tables() -> int:
                 created_at      TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
-        db.execute("CREATE INDEX IF NOT EXISTS idx_rtrace_session ON reasoning_traces(session_id)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_rtrace_cap ON reasoning_traces(capability)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_rtrace_outcome ON reasoning_traces(outcome)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_tstep_trace ON trace_steps(trace_id)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_tstep_type ON trace_steps(step_type)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rtrace_session ON reasoning_traces(session_id)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rtrace_cap ON reasoning_traces(capability)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rtrace_outcome ON reasoning_traces(outcome)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tstep_trace ON trace_steps(trace_id)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tstep_type ON trace_steps(step_type)"
+        )
 
         # 012_observer
         db.execute("""
@@ -416,9 +474,15 @@ def bootstrap_core_tables() -> int:
                 created_at      TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
-        db.execute("CREATE INDEX IF NOT EXISTS idx_obs_cap ON observer_logs(capability)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_obs_verified ON observer_logs(verified)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_obs_anomaly ON observer_logs(anomaly)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_obs_cap ON observer_logs(capability)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_obs_verified ON observer_logs(verified)"
+        )
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_obs_anomaly ON observer_logs(anomaly)"
+        )
 
         # 013_security
         db.execute("""
@@ -434,7 +498,9 @@ def bootstrap_core_tables() -> int:
             )
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_sec_risk ON security_events(risk)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_sec_decision ON security_events(decision)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sec_decision ON security_events(decision)"
+        )
 
         # 014_stability
         db.execute("""
@@ -453,7 +519,9 @@ def bootstrap_core_tables() -> int:
                 uptime_seconds      REAL NOT NULL DEFAULT 0
             )
         """)
-        db.execute("CREATE INDEX IF NOT EXISTS idx_stab_time ON stability_snapshots(timestamp)")
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_stab_time ON stability_snapshots(timestamp)"
+        )
 
         # Record that all file-based migrations are "applied"
         # so future file-based runs don't duplicate effort
@@ -462,7 +530,9 @@ def bootstrap_core_tables() -> int:
     after = _existing_table_count()
     created = after - before
     if created > 0:
-        _log.info("Bootstrap created %d new table(s); %d total now exist", created, after)
+        _log.info(
+            "Bootstrap created %d new table(s); %d total now exist", created, after
+        )
     else:
         _log.debug("Bootstrap: all tables already exist (%d total)", after)
     return created
@@ -494,6 +564,7 @@ def _existing_table_count() -> int:
 
 # Migration runner
 
+
 def run_migrations() -> int:
     """
     Run all pending migrations from nous_core/migrations/.
@@ -511,10 +582,14 @@ def run_migrations() -> int:
     """
     import re as _re
 
-    migrations_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "migrations")
+    migrations_dir = _os.path.join(
+        _os.path.dirname(_os.path.abspath(__file__)), "migrations"
+    )
 
     if not _os.path.isdir(migrations_dir):
-        _log.info("Migrations directory not found; bootstrapping inline: %s", migrations_dir)
+        _log.info(
+            "Migrations directory not found; bootstrapping inline: %s", migrations_dir
+        )
         return bootstrap_core_tables()
 
     # Ensure schema_migrations table exists first (it's in 001_initial.sql,
@@ -542,7 +617,10 @@ def run_migrations() -> int:
     # Read already-applied versions
     with connect(readonly=True) as db:
         try:
-            applied = {row["version"] for row in db.execute("SELECT version FROM schema_migrations")}
+            applied = {
+                row["version"]
+                for row in db.execute("SELECT version FROM schema_migrations")
+            }
         except _sqlite3.OperationalError:
             applied = set()
 
@@ -555,7 +633,10 @@ def run_migrations() -> int:
         with open(path, encoding="utf-8") as f:
             sql = f.read()
         with connect() as db:
-            db.executescript(sql)
+            # executescript otherwise commits DDL one statement at a time.
+            # Keep this existing owner's schema and version record atomic;
+            # the connection manager rolls back any interrupted script.
+            db.executescript("BEGIN IMMEDIATE;\n" + sql + "\nCOMMIT;")
         count += 1
 
     if count > 0:
