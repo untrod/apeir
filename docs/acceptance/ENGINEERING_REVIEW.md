@@ -46,6 +46,20 @@ diagnostic substitutes for full Windows Core or closes the timing Issues.
 After normal synchronization with accepted MCP main `ad773890`, the focused
 Linux schema/human/context combination still passes **102 tests**.
 
+Full composed `18f032e` Core subsequently retained a new test-probe failure on
+Linux/Python3.10: **1 failed,5739 passed,77 skipped (888.71s)**; Linux/Python3.12
+passed **5751 tests,66 skipped (898.35s)**. The new probe counted overridden
+`commit()` method calls and assumed one call. Actual Python3.10 reproduction
+shows `executescript()` first calls `commit()` without an active transaction,
+then the owner commits the real transaction: `[false,true]`, but exactly one
+SQLite BEGIN/COMMIT. The probe now traces actual SQLite boundaries and requires
+exactly `BEGIN IMMEDIATE`→`COMMIT`, with every DDL inside that transaction.
+Late-error rollback, existing-data retention, privacy, WAL/FULL and integrity
+assertions remain. No production code or timeout is changed for this correction.
+The original failing3.10 probe/log is retained; corrected focused checks pass
+**102 tests on Python3.10 (2.32s)** and **17 lifecycle tests on Python3.12**.
+Fresh exact-source full platform CI remains required.
+
 Paired Linux constructor measurement used the same interpreter/filesystem,
 alternating order,5 warmups and20 measured fresh databases per variant. Before
 PR #89 baseline `d9c0505`: p50/p95/p99 **13.52/16.80/18.57 ms**, mean CPU3.89 ms;
