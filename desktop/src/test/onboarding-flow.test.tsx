@@ -54,6 +54,18 @@ describe("first-use setup uses Runtime records", () => {
     expect(screen.queryByText("WebView2")).not.toBeInTheDocument();
   });
 
+  it("waits for original native workspace facts before enabling the next step", async () => {
+    const original = native.getMockImplementation()!;
+    let finish!: (value: string) => void;
+    native.mockImplementation(async (command: string, args?: { path?: string }) => command === "get_default_workspace_path" ?
+      new Promise<string>(resolve => { finish = resolve; }) : original(command, args));
+    begin();
+    await waitFor(() => expect(finish).toBeDefined());
+    expect(screen.getByRole("button", { name: /Next/ })).toBeDisabled();
+    finish(workspace);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Next/ })).toBeEnabled());
+  });
+
   it("activates the exact selected local workspace before advancing to Provider configuration", async () => {
     begin();
     await waitFor(() => expect(native.mock.calls.some(([command]) => command === "get_default_workspace_path")).toBe(true));
