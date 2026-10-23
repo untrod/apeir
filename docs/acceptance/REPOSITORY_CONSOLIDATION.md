@@ -435,3 +435,63 @@ scopes at `c3eeeaca434118565f09300e96e1e9663b749c6e`. Their shared commit is
 not grounds for deleting an acceptance record. The existing acceptance index
 now groups checkpoint families; no new tag, Release, roadmap or archive was
 created. Kernel and the component lock remain unchanged.
+
+
+## Unified main integration — 2026-10-16
+
+The next audit re-queried main `629b13f38a2b663b00596782c0e85be6731d2c5a`,
+all heads/tag refs, PRs, Issues, Actions and release/component availability.
+**REUSE** canonical Work/Workflow/Governance/Context/Node/Artifact/Device/SDK;
+**FIX** route/body Environment target binding and bounded Relay stop ownership;
+**EXTEND** existing selected-input and controlled Catalog paths; **DEFER**
+physical/native/complete Codex Harness qualification. No parallel authority or
+Runtime was introduced. Main integration uses normal merge commits:
+
+| PR | Exact qualified source | Resulting integration |
+| --- | --- | --- |
+| [78](https://github.com/untrod/apeir/pull/78) | `1a3be72739db82ad885aaccdc109805b983af590` | `d659ba3a51a7e085f3774bdb5894a37ee0df092d` |
+| [67](https://github.com/untrod/apeir/pull/67) | `e4ce6c800288977e546363f8fd795263b6392a6a` | `334c20c1439464586d3688fcc7cd85d587a2366c` |
+| [79](https://github.com/untrod/apeir/pull/79) | `2e9558ef98a7c78fc6ece8b9257c2174c7ae4a3a` | `ea7c2f4505a705e332a4edf6dffd0fadfe5f6cea` |
+| [68](https://github.com/untrod/apeir/pull/68), containing [80](https://github.com/untrod/apeir/pull/80) | `cf44488711af4d73b37bae6a41ba5b12a3dfd23e` | `e3cd2a20d75a711108285533cd83014bf6f9b69d` |
+
+Each listed qualification source passed Core, Desktop, Security and Multi-Arch
+before its normal integration. Exact tested tree equality was checked when
+main-only commits were content-preserving merge metadata. PR80's own source
+`97c9a8a` failed Windows Automation run `38939446275` (**1 failed,5014 passed,
+131 skipped,290 deselected**). Its same CAS implementation is contained in the
+passing PR68 combination; GitHub marked PR80 merged through that descendant.
+This does **not** fix, waive or relabel the failed run. Its cause/effect outcome
+remains unknown and is tracked in [Issue82](https://github.com/untrod/apeir/issues/82),
+separately from unresolved Issues4/8. The permanent test now retains strict MATCH
+and reports the failed original projection rather than only a missing-key error;
+it also requires the same original Work and effect count1. No timeout/retry or
+success criterion was relaxed. Resulting-main CI remains a separate gate.
+
+After current-main/remote equality, merged-PR/no-open-work, exact remote head and
+full ancestry checks, the five completed branches were retired:
+`fix/environment-operation-target`, `feature/governed-workspace-input`,
+`feature/controlled-skill-catalog`, `fix/artifact-validation-overhead` and
+`fix/oci-readiness-report`. At this audit point only permanent `main` and the
+short-lived [MCP PR81](https://github.com/untrod/apeir/pull/81) branch remain.
+PR81 must pass its own exact-source and resulting-main checks before retirement.
+Uncommitted historical worktrees were preserved, not reset or discarded.
+
+The abandoned `test/windows-recovery-trace` unique history was preserved before
+remote retirement in an owner-protected, independently restored/fsck-verified
+Git Bundle: **4,722,810bytes**, SHA-256
+`5734e938c6fda82ef395d91c0d51217bf767e7821a88cb4c89c1856c7276d967`.
+The bundle includes the original five queued branch tips and OCI continuation;
+its restoration manifest and raw diagnostic logs remain outside source control.
+Its two useful assertion sets were already present in main; temporary repeated
+trace loops and a reduced diagnostic matrix were not merged. A bundle covers
+committed objects, not dirty/untracked files; those were separately preserved.
+
+All **31 published tags** and all annotated tag objects/peeled refs still match
+the pre-cleanup remote refs byte-for-byte. No tag was moved/deleted/created and
+no Release was published. Existing main protection remains; administration API
+403 still prevents applying stronger rules or automatic branch deletion from
+this integration. The maintainer settings in ROADMAP remain manual work.
+Kernel stays `87fd1b2ff28ef14ab1a515a58162592b452fda2e`; component-lock file
+SHA-256 stays `fd841599a29861847e787b538b58dd2f4a67cf72b53f0144264fd267ce1e33a0`.
+The actual native verifier still fails for missing locked Windows bytes; neither
+source-wheel checksums nor lock contract tests substitute for those hashes.

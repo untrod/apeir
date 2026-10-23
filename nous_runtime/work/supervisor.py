@@ -7,11 +7,17 @@ canonical EventStream remain the sole source of lifecycle truth.
 from __future__ import annotations
 
 import threading
+import hashlib
+import json
+import re
+import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Mapping
 
 from nous_runtime.events import RunState
+from nous_runtime.checkpoint import Checkpoint
+from nous_runtime.locking import file_lock
 from nous_runtime.work.components import (
     WorkExecutionComponents,
     build_work_components,
@@ -59,12 +65,15 @@ class WorkSupervisor:
         preferred_model: str = "",
         read_only: bool = False,
         max_iterations: int = 32,
-    ) -> WorkSnapshot:
+        submission_key: str = "",
+        submission_actor: str = "",
+        _lookup_only: bool = False,
+    ) -> WorkSnapshot | None:
         harness = WorkHarness(self.root)
-        snapshot = harness.create(
-            objective,
-            constraints=constraints,
-            completion_criteria=completion_criteria,
+        arguments = dict(
+            objective=str(objective or "").strip(),
+            constraints=dict(constraints or {}),
+            completion_criteria=tuple(str(item) for item in completion_criteria),
             conversation_id=conversation_id,
             owner_id=owner_id,
             execution_options={
@@ -73,8 +82,116 @@ class WorkSupervisor:
                 "max_iterations": self._bounded_iterations(max_iterations),
             },
         )
+        if submission_key != "" or submission_actor != "":
+            return self._start_submission(
+                harness,
+                arguments,
+                submission_key,
+                submission_actor,
+                lookup_only=_lookup_only,
+            )
+        if _lookup_only:
+            raise ValueError("Original submission identity is required")
+        snapshot = harness.create(**arguments)
         self._submit(snapshot.run_id, recovering=False)
         return harness.require(snapshot.run_id)
+
+    def find_submission(self, objective: str, **options) -> WorkSnapshot | None:
+        """Read an authenticated original request without creating or resuming Work."""
+        return self.start(objective, **options, _lookup_only=True)
+
+    def _start_submission(self, harness, arguments, key, actor, *, lookup_only=False):
+        """Fence one admitted request in the existing checkpoint store.
+
+        A repeated key reads the original Work only. Even an incomplete first
+        initialization cannot cause automatic creation, resume or execution.
+        The caller must supply its authenticated actor; this is not a grant.
+        """
+        if (
+            not isinstance(key, str)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", key) is None
+            or not isinstance(actor, str)
+            or not actor.strip()
+            or len(actor) > 512
+        ):
+            raise ValueError("bounded submission key and authenticated actor required")
+        if not arguments["objective"]:
+            raise ValueError("work objective is required")
+
+        def canonical(value):
+            return json.dumps(
+                value, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode()
+
+        namespace = hashlib.sha256(
+            canonical({"workspace": str(self.root), "actor": actor, "key": key})
+        ).hexdigest()
+        request_bytes = canonical(arguments)
+        arguments = json.loads(request_bytes)
+        binding = hashlib.sha256(request_bytes).hexdigest()
+        checkpoint_id = "work_submission_" + namespace
+        metadata = {"kind": "work_submission", "schema": "apeir.work-submission/v1"}
+        with file_lock(self.root / ".nous" / (checkpoint_id + ".lock")):
+            previous = harness.checkpoints.load(checkpoint_id)
+            if previous is not None:
+                run_id = previous.state.get("run_id")
+                expected = {"run_id": run_id, "input_sha256": binding}
+                if (
+                    not isinstance(run_id, str)
+                    or re.fullmatch(r"work_[0-9a-f]{32}", run_id) is None
+                    or previous.task_id != run_id
+                    or previous.state != expected
+                    or previous.metadata != metadata
+                ):
+                    raise ValueError("original submission binding differs")
+                try:
+                    original = harness.require(run_id)
+                except KeyError as exc:
+                    raise RuntimeError(
+                        "original submission initialization is UNKNOWN; inspect evidence"
+                    ) from exc
+                if original.workspace_root != str(
+                    self.root
+                ) or original.execution_options.get("original_submission") != {
+                    "namespace_sha256": namespace,
+                    "input_sha256": binding,
+                }:
+                    raise ValueError("original submission binding differs")
+                return original
+            if lookup_only:
+                return None
+            with self._lock:
+                if self._closed:
+                    raise RuntimeError("work supervisor is closed")
+            # Keep globally random existing Work identities. The scoped marker
+            # selects the original UUID instead of deriving Work identity from a
+            # local path shared by potentially different Controllers.
+            run_id = "work_" + uuid.uuid4().hex
+            expected = {"run_id": run_id, "input_sha256": binding}
+            # This original request fence precedes creation or dispatch. A
+            # separate task identity preserves it under normal checkpoint
+            # retention; no second submission database or result cache exists.
+            harness.checkpoints.save(
+                Checkpoint(
+                    checkpoint_id=checkpoint_id,
+                    task_id=run_id,
+                    state=expected,
+                    metadata=metadata,
+                )
+            )
+            admitted = {
+                **arguments,
+                "execution_options": {
+                    **arguments["execution_options"],
+                    "original_submission": {
+                        "namespace_sha256": namespace,
+                        "input_sha256": binding,
+                    },
+                },
+            }
+            snapshot = harness.create(**admitted, _submission_run_id=run_id)
+            self._submit(snapshot.run_id, recovering=False)
+            return harness.require(snapshot.run_id)
 
     def resume(self, run_id: str) -> WorkSnapshot:
         snapshot = WorkHarness(self.root).require(run_id)
