@@ -8,6 +8,43 @@ This record distinguishes reproduced defects, inspected risks and unqualified
 external dependencies. It is not an exhaustive proof that the repository is
 bug-free, a physical acceptance, or production certification.
 
+## Governance schema admission — 2026-10-23
+
+R2 rechecked main `e3cd2a20`, composed candidate `c8ec9f3` and frozen Kernel.
+Core39960170078 Windows job120436212486 timed out during `human_env` construction,
+inside the original GovernanceStore schema `executescript`; its full log remains
+on GitHub and the failure is not replaced by the passing Multi-Arch39960173640.
+**REUSE** PR #89 connection ownership and phase diagnostics; **FIX** schema
+transaction/failure semantics; **EXTEND** its existing Windows diagnostic;
+**BLOCKED** remains protected-main integration and native locked components.
+
+Three deterministic original failures independently establish that schema DDL
+ran outside a transaction, a late injected syntax error left published partial
+tables, and initialization swallowed the error while logging private exception
+text. The existing connection now owns one `BEGIN IMMEDIATE` schema transaction:
+all DDL commits together, late failure rolls it back and propagates, and warnings
+contain no exception text. WAL, FULL synchronous behavior, busy timeout, grants,
+identity, approvals and normal transaction ownership are unchanged. There is no
+connection pool, successful-schema cache or second GovernanceStore.
+
+Focused lifecycle/human-session/context checks pass **102 tests**; related
+Governance/ControlPlane/Context/repository checks pass **1231 tests** (63.28 s).
+The original three failures and prior Windows initialization/commit stalls remain
+separate evidence: the atomicity repair alone does not prove every Windows stall
+has the same cause. The existing diagnostic can run `windows-governance` to
+exercise the original cases before the broader Governance/ControlPlane suite,
+with the original60-second bound. It cannot produce the required `Core gate`
+context; full combined-source Windows Core must qualify independently. No timing
+Issue is closed on a single passing rerun.
+
+Paired Linux constructor measurement used the same interpreter/filesystem,
+alternating order,5 warmups and20 measured fresh databases per variant. Before
+PR #89 baseline `d9c0505`: p50/p95/p99 **13.52/16.80/18.57 ms**, mean CPU3.89 ms;
+atomic schema candidate: **5.26/6.04/6.28 ms**, mean CPU1.89 ms. Both retain
+identical schema, WAL/FULL and integrity checks, with0 failures. These small
+sample tail estimates are exploratory, not Windows, model, UI or end-to-end
+performance qualification.
+
 ## Saved Provider lifecycle integration — 2026-10-23
 
 Starting parent PR #83 was `e8a0913`, while main remained `e3cd2a20`.
@@ -2618,6 +2655,145 @@ the original observed case BLOCK. Production timing, comparator tolerances,
 performance gates, Node assertions and timeouts are unchanged. This is test
 input determinism, not a performance improvement or a Windows recovery fix.
 Exact-source CI remains required before integration.
+
+### Governance SQLite connection lifetime and timing — 2026-10-21
+
+**REUSE** GovernanceStore, its original SQLite transactions, logger, HTTP/Skill
+owners and security checks. **FIX** connection cleanup after failed setup;
+**EXTEND** safe phase diagnostics. This creates no store, pool, authority,
+scheduler or event system. Kernel, component lock, busy timeout, WAL,
+synchronous durability, approval/revocation checks and effect retry rules stay
+unchanged.
+
+Main `e3cd2a2` performs three setup PRAGMAs before its cleanup `try/finally`.
+Injecting an error in each PRAGMA while retaining the actual SQLite connection
+reproduces **3 failed tests (0.18s)**: transaction bodies are denied, but the
+connections remain open. The same connection owner now covers connect, setup,
+commit/rollback and close with cleanup. Twelve lifecycle contracts pass
+**12 tests (0.09s)**, including readonly failure, failed commit rollback,
+post-commit close failure without body replay, and diagnostic privacy.
+
+The existing logger warns only when a local monotonic connect/configure/commit/
+rollback/close phase takes at least one second. Messages contain only fixed
+phase names, elapsed time and readonly state, with normal logging thread fields;
+they do not include paths, SQL, row values or exception text. This threshold is
+observability, not a deadline change. A committed fact followed by close failure
+remains readable as original evidence; no retry is added.
+
+Affected Governance/ControlPlane/Skill/SQLite/path-binding regression initially
+has **573 passed,1 setup error (51.59s)**: the owned TLS fixture saw its port file
+after creation but before its port number was written. The child now writes a
+temporary file and atomically publishes readiness; the original five-second
+deadline and assertions remain. The final affected scope has **574 passed
+(50.76s)**. This fixture correction is not a Runtime network timing fix.
+
+Same-host A/B/B/A measurement of 1000 durable short transactions per variant
+records p50/p95/p99 **0.1216/0.3105/0.5357ms** before and
+**0.1459/0.3241/0.5431ms** after; CPU **0.1632s to0.1801s**. Every database has
+500 expected rows per block, integrity_check=ok, WAL, foreign_keys=1 and
+synchronous=2. This measures diagnostic overhead on a shared Linux host, not a
+speedup, Windows result, whole-Runtime benchmark or Token saving.
+
+[Issue88](https://github.com/untrod/apeir/issues/88) remains open. Windows
+Python3.11 run39453407331 captured a Skill HTTP timeout during commit;
+Python3.12 run39541361099 captured another during close after the completion
+audit. The deterministic setup leak is not yet proven to cause either timeout.
+Full regression and exact-source/current-main platform CI remain required;
+the original five-second HTTP assertion and durable audit are preserved.
+
+
+### Windows Skill HTTP phase investigation — 2026-10-21
+
+The SQLite lifecycle repair is independent of the unresolved HTTP deadline.
+Source `cffb64d` Multi-Arch run [39635213958](https://github.com/untrod/apeir/actions/runs/39635213958)
+recorded Windows **1 failed,5026 passed,131 skipped,302 deselected,4 warnings
+(2353.08s)**. Initial installation in the revoked-update case times out before
+fault injection. Safe SQLite diagnostics show commit **1562ms**; the handler
+has progressed to opening the CAS receipt append file at the client timeout.
+This does not show that receipt open alone consumed five seconds, nor prove
+SQLite setup/close is the sole cause. Linux amd64/ARM64 pass; the issue stays OPEN.
+
+REUSE existing Core CI and owned HTTP/TLS tests; EXTEND only fixture diagnostics.
+Bounded snapshots retain phase names, request ordinals, elapsed milliseconds and
+completion flags, never arguments, paths, SQL, results or exception messages.
+Completed entries are bounded at128; active phases remain distinguishable.
+Nested timings overlap and must not be added as exclusive costs. Existing effects,
+exceptions, human/nonce admission and five-second HTTP assertions are unchanged.
+Related owned HTTP/TLS/privacy cases: **33 passed (23.48s)**; existing conservative
+CI-scope cases: **17 passed**. The combined repository/SQLite/owned HTTP selection
+has **321 passed (23.42s)**; these counts overlap. A same-host ABBA trivial-boundary
+probe (2000 samples per variant) measures diagnostic p50/p95/p99 overhead from
+0.120/0.160/0.180µs to1.111/1.172/1.383µs. This is instrumentation cost, not a
+product speedup or Windows/HTTP latency estimate. A real local fixture trace has25 completed phase
+records for12 HTTP requests; it is neither Windows qualification nor a speedup.
+
+The optional `windows-skill-http` input on existing Core CI selects a separately
+named diagnostic. Default dispatch, PR, main and release selection are unchanged.
+Diagnostic-only skipped jobs also receive different names: GitHub treats skipped
+checks as passing, so they must never replace `Core gate` or platform evidence.
+Diagnostics use the failing Windows/Python3.11 Tier1 dependency scope and original
+tests. Their result cannot qualify full Core, fix Issue #88 or certify release.
+The workflow passes official actionlint1.7.12 validation. Frozen Kernel, component
+lock, durability, timeouts and retry policy are unchanged.
+
+
+The first actual [Windows diagnostic39689950082](https://github.com/untrod/apeir/actions/runs/39689950082)
+on `154c110` passed **33 tests (62.42s)**. Its32 fixture snapshots contain200
+completed HTTP requests (mixed endpoints): observed p50/p95/p99 **47/625/641ms**,
+maximum **891ms**, with no incomplete phases. This fresh subset does not reproduce
+the full-suite deadline failure and cannot close Issue #88. Python3.11 Windows
+`monotonic()` quantizes some short phases to0ms; those values are below the timer
+resolution, not zero I/O cost. The fixture now uses high-resolution local
+`perf_counter()` for phase intervals. Original deadlines/SQLite runtime diagnostics
+stay unchanged. Related Linux owned HTTP/TLS/privacy cases still have **33 passed
+(23.43s)**; new Windows precision evidence and full-suite qualification are separate.
+
+
+### Governance read-only connection admission — 2026-10-21
+
+FIX the existing SQLite connection owner: a read-only connection no longer
+initializes parent directories. An absent/removed database still raises the
+original SQLite failure without recreating its workspace; normal existing reads
+retain original rows and need no directory-creation permission. Write-path
+initialization, transaction/rollback/close behavior, WAL and durability remain
+unchanged. This does not claim SQLite has no internal WAL sidecar activity.
+
+Both original filesystem contracts failed before the correction (**2 failed,
+12 deselected,0.14s**). Related Governance/Control Plane/Skill/permission cases
+now have **555 passed (45.91s)**; collection confirms555 distinct cases. These
+counts overlap earlier evidence. No authority, retry, timeout or Kernel change.
+The explicit Windows diagnostic now also includes these existing lifecycle cases.
+
+A paired same-host, same-database Linux ABBA probe has5000 samples per variant:
+p50/p95/p99 **120.291/257.848/411.920µs → 109.155/245.329/387.744µs**;
+thread CPU **0.7362s → 0.6737s**. Every lookup returns the same original row;
+integrity remains `ok`, row count1. This removes redundant directory operations
+in the read helper, not evidence of a whole-Runtime or Windows/HTTP speedup.
+It does not establish a correction for the unresolved full-suite Issue #88.
+
+
+### Human admission timing within the existing Skill HTTP diagnostic — 2026-10-22
+
+REUSE the existing owned HTTP/TLS fixture, `HumanSessionAuth`, nonce admission
+and bounded phase recorder. EXTEND only its instrumentation to authentication,
+nonce issuance and nonce consumption. Earlier Windows evidence has total HTTP
+2784.6ms but business admission37.1ms; attributing the remainder to SQLite close
+or CAS would be unsupported. The existing SQLite phase warnings and new nested
+method spans can now distinguish those admission stages without changing them.
+Fixed phase names, local request ordinals, elapsed milliseconds and completion
+flags remain the only retained fields. Cookies, nonces, identities, arguments,
+results and exception strings are excluded. Nested timings overlap; setup calls
+outside HTTP have their own ordinal and are not HTTP request latency.
+
+A concurrent positive/denied contract verifies separate request correlation,
+original return/exception behavior, exactly one call per operation and exclusion
+of fake private cookie/nonce material. Existing owned HTTP/TLS/lifecycle/privacy
+regression: **53 passed (25.70s)**. A real local denied-request trace observes
+both authentication and nonce-admission spans; no additional authority, SQL,
+retry, timeout, durability setting, storage owner or production behavior changes.
+This diagnostic does not itself fix or close Issue #88. Windows measurements and
+resulting-main qualification remain separate; a passing isolated run cannot
+replace the original full-suite failure evidence.
 
 ### Pre-installation audit and original-evidence repair, 2026-10-18
 

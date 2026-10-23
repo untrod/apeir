@@ -9,6 +9,7 @@ import logging
 import os
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable
@@ -18,28 +19,53 @@ _log = logging.getLogger("nous.governance.store")
 
 
 @contextmanager
+def _sqlite_phase(phase: str, readonly: bool):
+    """Observe slow local phases without SQL, paths, values or exception text."""
+    started = time.monotonic()
+    try:
+        yield
+    finally:
+        elapsed = time.monotonic() - started
+        if elapsed >= 1.0:
+            _log.warning(
+                "Slow governance SQLite phase: phase=%s elapsed_ms=%.3f readonly=%s",
+                phase,
+                elapsed * 1000,
+                readonly,
+            )
+
+
+@contextmanager
 def _db_connect(db_path: str, readonly: bool = False):
     path = Path(db_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if readonly:
-        conn = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)
-    else:
-        conn = sqlite3.connect(str(path))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA busy_timeout=5000")
     if not readonly:
-        conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
+        path.parent.mkdir(parents=True, exist_ok=True)
+    conn = None
     try:
+        with _sqlite_phase("connect", readonly):
+            if readonly:
+                conn = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)
+            else:
+                conn = sqlite3.connect(str(path))
+        with _sqlite_phase("configure", readonly):
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout=5000")
+            if not readonly:
+                conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
         yield conn
         if not readonly:
-            conn.commit()
+            with _sqlite_phase("commit", readonly):
+                conn.commit()
     except Exception:
-        if not readonly:
-            conn.rollback()
+        if conn is not None and not readonly:
+            with _sqlite_phase("rollback", readonly):
+                conn.rollback()
         raise
     finally:
-        conn.close()
+        if conn is not None:
+            with _sqlite_phase("close", readonly):
+                conn.close()
 
 
 class GovernanceStore:
@@ -66,7 +92,9 @@ class GovernanceStore:
         with self._lock:
             try:
                 with _db_connect(self.db_path) as db:
-                    db.executescript("""
+                    # executescript otherwise autocommits each DDL statement.
+                    # Keep schema publication atomic under the existing owner.
+                    db.executescript("""BEGIN IMMEDIATE;
                         CREATE TABLE IF NOT EXISTS governance_operations (
                             authorization_id TEXT PRIMARY KEY,
                             operation_id TEXT NOT NULL UNIQUE,
@@ -248,8 +276,9 @@ class GovernanceStore:
                             UNIQUE(authorization_id, handle_id)
                         );
                     """)
-            except Exception as e:
-                _log.warning("Failed to create governance tables: %s", e)
+            except Exception:
+                _log.warning("Failed to initialize Governance schema")
+                raise
 
     # Proposal
 
