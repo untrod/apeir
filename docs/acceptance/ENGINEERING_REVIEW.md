@@ -84,14 +84,28 @@ A four-interpreter cold-start/reload/integrity check also exercises cross-proces
 ownership. This is a software correction candidate until fresh platform CI passes;
 it does not close the unrelated Windows Relay/HTTP/Automation timing Issues.
 
+The subsequent `774e079` Windows Core job120431985987 passed all7 checkpoint
+cases, including the original16-owner and new cross-process checks. The full job
+then timed out at60 seconds in `test_private_remote_read_reuses_current_human_session`:
+the stack is inside Governance `_db_connect` → `conn.commit()` during human login.
+This is retained as a failed full job, not a full Windows PASS or proof of a
+connection-leak root cause. The independent PR #89 lifecycle/phase diagnostics
+remain under their original review; this observation does not justify increasing
+the timeout, reducing durability or weakening authentication.
+
 An installed-wheel lost-response Demo also exposed repeated full Workflow event
 projections in AgentSession history after resume. The original restart and
 approval scenarios reproduced **2 failures** (9 entries for6 unique events and
-10 for7 respectively). Coordination now appends only exact new projections;
-changed evidence remains distinct, and the existing256-entry bound, original
-EventStream, Work, receipt and observation records are unchanged. Existing saved
-history is not rewritten. This prevents repeat projections from occupying the
-bounded context window; no measured model-Token or end-to-end speedup is claimed.
+10 for7 respectively). Coordination now retains the newest exact distinct
+projections; changed evidence remains distinct, and the existing256-entry bound,
+original EventStream, Work, receipt and observation records are unchanged. There
+is no bulk history migration. A300-event approval-wait/replay case separately
+reproduced1 failure in the first deduplication candidate: filtering against the
+previous window before truncating could displace recent events with older ones.
+The final projection scans from the newest records and stops at256 distinct
+entries; repeated replay retains the canonical stream's recent window, with the
+original approval still pending. Comparison storage is bounded by that existing
+limit. No measured model-Token or end-to-end speedup is claimed.
 
 ## Native session destination audit — 2026-10-23
 
