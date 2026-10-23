@@ -5,6 +5,16 @@ Python 3.10–3.12 and a writable checkout. No model API key, GPU or real device
 is needed for source inspection and simulated examples. Current acceptance
 and blockers live only in [ROADMAP](../../../ROADMAP.md).
 
+A maintainer's manual **Desktop CI** run can provide the
+`apeir-python-source-preview-<commit>` artifact in
+[GitHub Actions](https://github.com/untrod/apeir/actions/workflows/desktop-build.yml).
+It expires after seven days. Check the source revision and `SHA256SUMS.txt` before
+installing the wheel with `python -m pip install path/to/apeir_distribution-0.1.0rc1-py3-none-any.whl`.
+This Python source package provides CLI/Runtime libraries, not APEIR.exe or a
+Windows installer. Desktop source still needs the checkout below; real model,
+Kernel, sandbox and native-release prerequisites remain separate. The manifest
+does not claim those Gates passed.
+
 ## Install
 
 ```bash
