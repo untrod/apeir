@@ -94,6 +94,16 @@ def test_malformed_measurements_are_redacted_as_a_whole(value):
     }
 
 
+@pytest.mark.parametrize("value", [None, 0, 2])
+def test_legacy_model_test_counter_keeps_only_null_or_nonnegative_integers(value):
+    assert redact_sensitive_data({"tokens_used": value}) == {"tokens_used": value}
+
+
+@pytest.mark.parametrize("value", [True, -1, 1.5, "fake-secret-material", {"value": 1}])
+def test_legacy_model_test_counter_cannot_become_a_secret_channel(value):
+    assert redact_sensitive_data({"tokens_used": value}) == {"tokens_used": REDACTED}
+
+
 def test_counter_names_cannot_carry_fake_secret_strings_or_unknown_null_fields(
     tmp_path,
 ):

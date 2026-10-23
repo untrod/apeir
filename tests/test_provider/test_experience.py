@@ -105,7 +105,7 @@ def test_provider_dashboard_marks_configured_but_unavailable_capabilities(
     assert "32768" in rendered
 
 
-def test_probe_uses_reference_and_returns_only_safe_metadata(monkeypatch):
+def test_endpoint_probe_uses_reference_and_returns_only_safe_metadata(monkeypatch):
     monkeypatch.setenv("SPRINT13_PROVIDER_KEY", "private-provider-value")
     captured = {}
 
@@ -123,9 +123,11 @@ def test_probe_uses_reference_and_returns_only_safe_metadata(monkeypatch):
             "model": "example-model",
             "credential_ref": "env:SPRINT13_PROVIDER_KEY",
         },
-        "test",
+        "ping",
     )
 
+    assert captured["request"].get_method() == "GET"
+    assert captured["request"].data is None
     assert result["ok"] is True
     assert result["status"] == "healthy"
     assert result["credential"] == "Environment variable - SPRINT13_PROVIDER_KEY"
@@ -212,13 +214,19 @@ def test_fetch_provider_models_accepts_openai_and_ollama_catalogs(monkeypatch):
             _Response({"models": [{"name": "qwen3:8b"}, {"model": "gemma3"}]}),
         )
     )
-    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: next(responses))
+    monkeypatch.setattr(
+        "urllib.request.urlopen", lambda request, timeout: next(responses)
+    )
 
-    assert fetch_provider_models({"models_endpoint": "https://example.invalid/models"}) == (
+    assert fetch_provider_models(
+        {"models_endpoint": "https://example.invalid/models"}
+    ) == (
         "alpha",
         "beta",
     )
-    assert fetch_provider_models({"models_endpoint": "http://localhost:11434/api/tags"}) == (
+    assert fetch_provider_models(
+        {"models_endpoint": "http://localhost:11434/api/tags"}
+    ) == (
         "qwen3:8b",
         "gemma3",
     )
@@ -348,12 +356,15 @@ def test_provider_wizard_does_not_save_failed_probe_by_default(
     assert "was not saved" in result
     assert "failed-provider" not in data
 
+
 def test_provider_quick_keeps_entered_key_process_scoped(monkeypatch, tmp_path):
     from nous_runtime.cli.provider_setup import run_provider_setup
     from nous_runtime.provider import unregister_adapter
 
     workspace = _write_config(tmp_path, {})
-    monkeypatch.setattr("nous_runtime.project.workspace.find_workspace", lambda: workspace)
+    monkeypatch.setattr(
+        "nous_runtime.project.workspace.find_workspace", lambda: workspace
+    )
     monkeypatch.setattr(
         "nous_runtime.cli.provider_setup.fetch_provider_models",
         lambda config: ("deepseek-v4-flash",),
@@ -407,7 +418,8 @@ def test_provider_doctor_reports_safe_diagnostics(monkeypatch, tmp_path):
     assert result["ok"] is True
     assert result["models_discovered"] == 1
     assert result["model_available"] is True
-    assert "Authentication  passed" in rendered
+    assert "Authentication  unknown (inference not run)" in rendered
+    assert result["model_inference"] == "NOT_RUN"
     assert "protocol-supported; not exercised" in rendered
     assert "private-doctor-value" not in json.dumps(result)
 
@@ -442,8 +454,9 @@ def test_provider_cli_doctor_runs_safe_diagnostics(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     assert "Provider Doctor" in result.stdout
-    assert "Authentication  passed" in result.stdout
+    assert "Authentication  unknown (inference not run)" in result.stdout
     assert "private-cli-doctor-value" not in result.stdout
+
 
 def test_provider_cli_dashboard_uses_configured_tree(monkeypatch, tmp_path):
     from nous_runtime.cli.main import app
@@ -488,7 +501,10 @@ def test_terminal_provider_completion_exposes_diagnostics():
         "/provider quick"
     ]
 
-def test_provider_registry_returns_id_and_cleans_owned_capabilities(tmp_path, monkeypatch):
+
+def test_provider_registry_returns_id_and_cleans_owned_capabilities(
+    tmp_path, monkeypatch
+):
     from nous_runtime.provider.base import Provider
     from nous_runtime.provider.registry import ProviderRegistry
     from remote_terminal.nous_core.capability import get_capability
@@ -501,7 +517,10 @@ def test_provider_registry_returns_id_and_cleans_owned_capabilities(tmp_path, mo
             return ["reference.greet"]
 
         def invoke(self, capability_id, **params):
-            return {"ok": capability_id == "reference.greet", "name": params.get("name", "World")}
+            return {
+                "ok": capability_id == "reference.greet",
+                "name": params.get("name", "World"),
+            }
 
         def health(self):
             return {"status": "ok"}

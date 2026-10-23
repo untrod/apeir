@@ -129,6 +129,14 @@ remove credentials and private paths. Report reproducible issues through
 
 ### Workspace developer panel
 
+In native first-use setup, environment facts come from the selected Runtime.
+Choose the workspace and continue only after its actual path is confirmed.
+Use **Configure model later** for keyless operation. Provider validation saves no
+secret and performs no inference; after saving, **Models → Test** uses the
+existing Gateway/NKI and reports original request/usage evidence. Missing Kernel
+or credentials remains BLOCKED/UNCONFIGURED. See the
+[configuration boundary](../../development/DEVELOPER_PLATFORM.md#first-use-configuration-and-model-tests).
+
 For native local configuration, select the local Runtime before opening
 **Settings → Credentials**. Windows credentials use the existing system store;
 only reference names are persisted in configuration. The browser cannot store

@@ -47,6 +47,46 @@ integration remain separate requirements. Main protection inspection still
 returns administration HTTP 403. Native binary hashes, real model/IdP and
 installed product acceptance remain **BLOCKED/PENDING** at their own Gates.
 
+## First-use and Provider test integration — 2026-10-23
+
+**REUSE** health/workspace APIs, native initializer/process manager, Provider
+configuration, Gateway/NKI, model-test application service, usage and redaction;
+**EXTEND/FIX** the original wizard and CLI adapters. No Registry, execution
+database, credential store or approval authority was added. Original targeted
+checks retained **7 backend failures** and **2 wizard failures**: direct setup
+inference/diagnostic POST, guessed readiness, ineffective workspace selection,
+UNKNOWN model completion, missing usage converted to zero and lost error binding.
+
+Configuration validation now performs no credential resolution/network/inference.
+Doctor/ping use GET metadata only. A saved explicit Provider test uses the
+existing model-test service only for the original matching strict NKI Gateway;
+changed mappings, compatibility Gateway or Gateway replacement cannot dispatch.
+The existing model-test route records original request IDs on failure, returns
+unknown usage/cost and accepts explicit completed outcomes. The legacy counter's
+redaction correction preserves only null/nonnegative integers and rejects secret
+strings/structures. Embedded-credential and unsupported base URLs are rejected
+without copying their contents into diagnostics.
+
+The wizard reads selected Runtime health instead of guessing architecture or
+WebView availability. It initializes/restarts the exact selected local workspace
+and confirms it through the original API, or keeps the remote Controller's scope.
+Keyless setup preserves existing Providers. Saving completes once before the
+completion screen; no conversation, inference or verified execution is invented.
+Connection-version changes invalidate setup; response loss does not retry native
+actions. Local HTTP/native IPC tests, fake Gateway replies and the real
+authenticated Runtime HTTP configuration route establish software boundaries.
+They do not qualify actual Windows Credential Manager, a real model invoice,
+installed EXE, strong sandbox or hardware.
+
+Affected backend regression: **504 passed**. Full Desktop: **321 passed** in
+46 files. The preceding first native-session correction retains its separate
+314-test full run. Changed-file format checking also required mechanical
+formatting of the previously unformatted Provider experience module/test; their
+pre-existing format failures were checked against the original Git contents.
+No scanner rule, execution timeout or safety assertion was relaxed. Current-source
+PR CI and protected main integration remain required; main and external product
+Gates are not upgraded by these local results.
+
 ## Product wiring audit — 2026-10-11
 
 Read-only starting main was `e5424305ec90fb0a072f21fbef371ebd5bc110f6`;

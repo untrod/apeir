@@ -79,6 +79,13 @@ real Provider or native binary hashes. See the existing
 [session audit](docs/acceptance/ENGINEERING_REVIEW.md#native-session-destination-audit--2026-10-23).
 Overall product delivery remains PARTIAL pending integration and external Gates.
 
+The first-use wizard now reads Runtime health, activates/confirms the selected
+local workspace and allows model configuration to be skipped. Setup validation
+does not infer; explicit Provider tests reuse the configured strict NKI Gateway
+and preserve original request/unknown usage. These are scoped software fixes,
+not native, real-model or production release qualification; see the existing
+[setup contract](docs/development/DEVELOPER_PLATFORM.md#first-use-configuration-and-model-tests).
+
 The existing global activity stream now distinguishes opaque Bus event IDs from
 per-Run numeric sequences, chronological retained replay from a cold recent
 window, and missing history from success. EventClient stops invalid replay and

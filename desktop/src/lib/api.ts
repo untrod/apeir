@@ -465,7 +465,10 @@ export interface ModelTestResult {
   latency_ms: number;
   response_preview?: string;
   finish_reason?: string;
-  tokens_used?: number;
+  tokens_used?: number | null;
+  usage?: Record<string, number | null>;
+  cost_usd?: number | null;
+  cost_measurement?: string;
   execution?: {
     path?: string;
     operation_id?: string;

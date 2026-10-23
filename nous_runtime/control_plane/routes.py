@@ -382,16 +382,21 @@ def handle_get_model(model_id: str) -> dict[str, Any]:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
 
-def handle_model_test(model_id: str, body: dict | None = None) -> dict[str, Any]:
+def handle_model_test(
+    model_id: str, body: dict | None = None, *, _expected_gateway=None
+) -> dict[str, Any]:
     """POST /api/v1/models/{model_id}/test — real gateway invoke test"""
     body = body or {}
     test_prompt = body.get("prompt", "Hello, this is a connectivity test. Reply 'OK'.")
+    request = None
     try:
         from nous_runtime.model_runtime.models import ModelRequest, RoutingMode
         from nous_runtime.model_runtime.factory import gateway_service
         import time
 
         gateway = gateway_service.get()
+        if _expected_gateway is not None and gateway is not _expected_gateway:
+            raise RuntimeError("Configured Gateway changed before model test")
         registry = getattr(gateway, "registry", None)
         record = registry.get(model_id) if registry is not None else None
         capabilities = set(record.descriptor.capabilities) if record else set()
@@ -423,11 +428,17 @@ def handle_model_test(model_id: str, body: dict | None = None) -> dict[str, Any]
                 "instance_id": getattr(response, "instance_id", ""),
                 "request_id": request.request_id,
                 "response_id": getattr(response, "response_id", ""),
-                "healthy": response.finish_reason not in ("error", "timeout"),
+                "healthy": response.finish_reason in {"completed", "stop", "end_turn"},
                 "latency_ms": round(latency_ms, 1),
                 "response_preview": (response.content or "")[:200],
                 "finish_reason": response.finish_reason,
-                "tokens_used": getattr(response, "usage", {}).get("total_tokens", 0),
+                "tokens_used": getattr(response, "usage", {}).get("total_tokens"),
+                "usage": dict(getattr(response, "usage", {}) or {}),
+                "cost_usd": response.cost_usd
+                if metadata.get("cost_measurement")
+                in {"reported", "derived", "estimated"}
+                else None,
+                "cost_measurement": metadata.get("cost_measurement", "unknown"),
                 "execution": {
                     "path": metadata.get("execution_path", "gateway"),
                     "operation_id": metadata.get("operation_id", ""),
@@ -436,10 +447,34 @@ def handle_model_test(model_id: str, body: dict | None = None) -> dict[str, Any]
                 },
             }
         )
-    except ImportError:
-        return err_response("NOUS_DEPENDENCY_MISSING", "Model runtime not available")
-    except Exception as e:
-        return ok_response({"model_id": model_id, "healthy": False, "error": str(e)})
+    except Exception as exc:
+        if isinstance(exc, ImportError) and request is None:
+            return err_response(
+                "NOUS_DEPENDENCY_MISSING", "Model runtime not available"
+            )
+        status = getattr(exc, "http_status", None)
+        diagnostic = (
+            {
+                401: "Provider authentication failed.",
+                402: "Provider account balance is insufficient.",
+                403: "Provider denied this model request.",
+                429: "Provider rate limit reached.",
+            }.get(status)
+            if type(status) is int
+            else None
+        )
+        return ok_response(
+            {
+                "model_id": model_id,
+                "healthy": False,
+                "request_id": request.request_id if request is not None else None,
+                "tokens_used": None,
+                "cost_usd": None,
+                "cost_measurement": "unknown",
+                "error": (diagnostic or "Model test did not complete.")
+                + " Inspect the original request and usage before retrying.",
+            }
+        )
 
 
 def handle_model_test_request(body: dict) -> dict[str, Any]:
@@ -518,7 +553,7 @@ def handle_create_provider(body: dict) -> dict[str, Any]:
 
 
 def handle_validate_provider(body: dict) -> dict[str, Any]:
-    """POST /api/v1/providers/validate - probe without saving configuration."""
+    """Validate unsaved configuration; authentication/inference are not exercised."""
     provider_id = str(body.get("provider_id") or "")
     name = str(body.get("name") or provider_id)
     if not provider_id or not name:

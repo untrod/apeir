@@ -42,7 +42,7 @@ export async function bindNativeRuntimeSession(
   command: SessionCommand,
   args?: Record<string, unknown>,
   options: { activateLocal?: boolean; isActive?: () => boolean } = {},
-): Promise<string> {
+): Promise<{ token: string; endpoint: string; version: number }> {
   const version = getRuntimeConfigVersion();
   const original = getConfig();
   const check = () => {
@@ -72,6 +72,11 @@ export async function bindNativeRuntimeSession(
       after.session_available !== true || typeof token !== "string" || !token.trim()) {
     throw new Error("Local Runtime session could not be verified. Inspect diagnostics before retrying; the original action may have completed.");
   }
+  const committedVersion = version + Number(original.url !== after.endpoint || original.token !== token);
   setConfig({ url: after.endpoint, token });
-  return token;
+  const committed = getConfig();
+  if (getRuntimeConfigVersion() !== committedVersion || committed.url !== after.endpoint || committed.token !== token) {
+    throw new Error("Runtime connection changed while publishing the native session. Inspect the original local Runtime state before retrying.");
+  }
+  return { token, endpoint: after.endpoint, version: committedVersion };
 }

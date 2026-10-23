@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectScreen } from "../components/ConnectScreen";
 import { CredentialSettings } from "../components/CredentialSettings";
-import { getConfig, setConfig } from "../lib/api";
+import { getConfig, setConfig, subscribeRuntimeConfig } from "../lib/api";
 import { bindNativeRuntimeSession } from "../lib/nativeRuntime";
 import App from "../App";
 import { eventClient } from "../store";
@@ -178,6 +178,21 @@ describe("native Runtime session destination", () => {
     expect(native.invoke).not.toHaveBeenCalled();
   });
 
+  it("refuses another connection change while publishing the native session", async () => {
+    const other = { url: "https://controller.example.test", token: remoteSession };
+    let changed = false;
+    const unsubscribe = subscribeRuntimeConfig(() => {
+      if (!changed) { changed = true; setConfig(other); }
+    });
+    try {
+      await expect(bindNativeRuntimeSession("start_runtime_api")).rejects.toThrow(/changed while publishing/);
+      expect(getConfig()).toEqual(other);
+      expect(native.invoke.mock.calls.filter(([command]) => command === "start_runtime_api")).toHaveLength(1);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it("boots the real App against the selected remote Controller without loading a local session or changing local workspace", async () => {
     const selected = { url: "https://controller.example.test", token: remoteSession };
     setConfig(selected);
@@ -187,7 +202,7 @@ describe("native Runtime session destination", () => {
     })));
     vi.stubGlobal("fetch", fetcher);
     render(<App />);
-    await waitFor(() => expect(screen.getByRole("heading", { name: /Welcome to Nous|欢迎使用 Nous/ })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: /Welcome to APEIR|欢迎使用 APEIR/ })).toBeInTheDocument());
     expect(getConfig()).toEqual(selected);
     const commands = native.invoke.mock.calls.map(([command]) => command);
     expect(commands).toContain("get_runtime_process_status");

@@ -32,7 +32,7 @@ export function ConnectScreen({ onConnected }: ConnectScreenProps) {
     bindNativeRuntimeSession("load_runtime_session_token", undefined, { isActive: () => current && active.current })
       .then(async (sessionToken) => {
         if (!current || !active.current) return;
-        setToken(sessionToken);
+        setToken(sessionToken.token);
         if (await testConnection() && current && active.current) onConnected();
       })
       .catch(() => undefined);
@@ -60,7 +60,7 @@ export function ConnectScreen({ onConnected }: ConnectScreenProps) {
       const sessionToken = await bindNativeRuntimeSession("start_runtime_api", undefined, {
         activateLocal: true, isActive: () => active.current,
       });
-      setToken(sessionToken);
+      setToken(sessionToken.token);
       for (let attempt = 0; attempt < 12; attempt += 1) {
         if (await testConnection()) {
           localStorage.setItem("nous_setup_complete", "1");

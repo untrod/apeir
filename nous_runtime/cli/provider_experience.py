@@ -36,15 +36,29 @@ _EXECUTABLE_BY_KIND = {
         "model.rerank",
     },
     "ollama": {"model.reason", "model.code", "model.embed", "model.vision"},
-    "local-http": {"model.reason", "model.code", "model.embed", "model.vision", "model.rerank"},
-    "custom": {"model.reason", "model.code", "model.embed", "model.vision", "model.rerank"},
+    "local-http": {
+        "model.reason",
+        "model.code",
+        "model.embed",
+        "model.vision",
+        "model.rerank",
+    },
+    "custom": {
+        "model.reason",
+        "model.code",
+        "model.embed",
+        "model.vision",
+        "model.rerank",
+    },
     "anthropic-compatible": {"model.reason", "model.code", "model.vision"},
 }
 
 
 def normalize_capability_mapping(values: Iterable[str]) -> tuple[str, ...]:
     """Normalize user-facing capability names to existing capability IDs."""
-    by_name = {name.lower(): capability for name, capability in CAPABILITY_MAPPING.items()}
+    by_name = {
+        name.lower(): capability for name, capability in CAPABILITY_MAPPING.items()
+    }
     by_id = set(CAPABILITY_MAPPING.values())
     result: list[str] = []
     for value in values:
@@ -57,10 +71,14 @@ def normalize_capability_mapping(values: Iterable[str]) -> tuple[str, ...]:
 
 def executable_capabilities(kind: str, configured: Iterable[str]) -> tuple[str, ...]:
     supported = _EXECUTABLE_BY_KIND.get(kind, _EXECUTABLE_BY_KIND["custom"])
-    return tuple(item for item in normalize_capability_mapping(configured) if item in supported)
+    return tuple(
+        item for item in normalize_capability_mapping(configured) if item in supported
+    )
 
 
-def read_provider_configs(workspace: str | Path | None = None) -> dict[str, dict[str, Any]]:
+def read_provider_configs(
+    workspace: str | Path | None = None,
+) -> dict[str, dict[str, Any]]:
     """Read non-secret Provider configuration from the active Workspace."""
     root = _workspace(workspace)
     if root is None:
@@ -89,7 +107,9 @@ def read_provider_configs(workspace: str | Path | None = None) -> dict[str, dict
     return result
 
 
-def configured_provider_rows(workspace: str | Path | None = None) -> list[dict[str, Any]]:
+def configured_provider_rows(
+    workspace: str | Path | None = None,
+) -> list[dict[str, Any]]:
     """Combine configured providers with public Registry health metadata."""
     from nous_runtime.services.providers import list_provider_summaries
 
@@ -102,8 +122,12 @@ def configured_provider_rows(workspace: str | Path | None = None) -> list[dict[s
     for provider_id, config in configs.items():
         registry_item = registered.pop(provider_id, {})
         health = dict(registry_item.get("health") or {})
-        configured = normalize_capability_mapping(config.get("capability_mapping") or ())
-        executable = tuple(registry_item.get("capabilities") or ()) or executable_capabilities(
+        configured = normalize_capability_mapping(
+            config.get("capability_mapping") or ()
+        )
+        executable = tuple(
+            registry_item.get("capabilities") or ()
+        ) or executable_capabilities(
             str(config.get("kind") or "openai-compatible"),
             configured or ("model.reason", "model.code"),
         )
@@ -167,7 +191,9 @@ def render_provider_dashboard(workspace: str | Path | None = None) -> str:
             elif capability in configured:
                 capabilities.append(f"{label} (configured only)")
         latency = row["latency_ms"]
-        latency_text = f"{float(latency):.0f} ms" if latency is not None else "Not measured"
+        latency_text = (
+            f"{float(latency):.0f} ms" if latency is not None else "Not measured"
+        )
         credential = row["credential"]
         lines.extend(
             (
@@ -202,7 +228,9 @@ def render_provider_status(rows: list[dict[str, Any]]) -> str:
     lines = ["Providers"]
     for row in rows:
         latency = row.get("latency_ms")
-        latency_text = f"{float(latency):.0f} ms" if latency is not None else "Not measured"
+        latency_text = (
+            f"{float(latency):.0f} ms" if latency is not None else "Not measured"
+        )
         credential = row["credential"]
         credential_state = _format_credential_state(credential)
         lines.extend(
@@ -224,7 +252,12 @@ def _format_credential_state(credential: Any) -> str:
         return credential.detail or "Not configured"
     source_label = credential.source
     state_label = "Available" if credential.available else "Missing"
-    if not credential.available and credential.detail and credential.detail not in ("Missing", "Reference configured; credential missing"):
+    if (
+        not credential.available
+        and credential.detail
+        and credential.detail
+        not in ("Missing", "Reference configured; credential missing")
+    ):
         state_label = credential.detail
     return f"{source_label} - {state_label}"
 
@@ -273,7 +306,7 @@ def diagnose_provider(
     reference = _credential_ref(config)
     credential = credential_status(reference)
     models = fetch_provider_models(config)
-    probe = probe_provider_config(provider_id, config, "test")
+    probe = probe_provider_config(provider_id, config, "ping")
     selected_model = str(config.get("model") or "")
     authentication_required = bool(
         config.get("authentication_required", bool(reference))
@@ -281,11 +314,11 @@ def diagnose_provider(
     authentication = (
         "not required"
         if not authentication_required
-        else "passed"
-        if probe.get("ok") and reference
-        else "failed"
-        if reference
         else "not configured"
+        if not reference
+        else "failed"
+        if probe.get("http_status") in {401, 403}
+        else "unknown (inference not run)"
     )
     try:
         credential_reference = describe_credential_reference(reference)
@@ -302,6 +335,8 @@ def diagnose_provider(
         "credential_available": credential.available,
         "credential_fix": credential_fix_suggestion(credential),
         "authentication": authentication,
+        "model_inference": "NOT_RUN",
+        "validation_scope": "endpoint",
         "model": selected_model or "not configured",
         "model_available": selected_model in models if models else None,
         "models_discovered": len(models),
@@ -365,6 +400,81 @@ def probe_provider_config(
     config: dict[str, Any],
     operation: str,
 ) -> dict[str, Any]:
+    if operation != "ping":
+        # A saved, exactly bound configuration may use the existing model-test
+        # application service. Never construct a direct adapter or Gateway here.
+        from nous_runtime.model_runtime.factory import gateway_service
+        from nous_runtime.model_runtime.gateway import NKIEnabledModelGateway
+
+        gateway = gateway_service.get(required=False)
+        model = str(config.get("model") or "")
+        model_id = model if "/" in model else f"{provider_id}/{model}"
+        if (
+            operation == "test"
+            and isinstance(gateway, NKIEnabledModelGateway)
+            and gateway._strict_nki is True
+        ):
+            record = gateway.registry.get(model_id)
+            adapter = gateway.adapters.get(provider_id)
+            provider = getattr(adapter, "provider", None)
+            if (
+                record is not None
+                and record.descriptor.provider_id == provider_id
+                and provider is not None
+                and getattr(provider, "endpoint", None) == config.get("endpoint")
+                and getattr(provider, "model", None) == model
+                and getattr(provider, "credential_ref", None) == _credential_ref(config)
+                and dict(getattr(provider, "capability_models", {}) or {})
+                == dict(config.get("capability_models") or {})
+                and dict(getattr(provider, "capability_endpoints", {}) or {})
+                == dict(config.get("capability_endpoints") or {})
+            ):
+                from nous_runtime.control_plane.routes import handle_model_test
+
+                response = handle_model_test(
+                    model_id, {"prompt": "Reply with OK"}, _expected_gateway=gateway
+                )
+                data = response.get("data") or {}
+                successful = (
+                    response.get("ok") is True
+                    and data.get("healthy") is True
+                    and (data.get("execution") or {}).get("path") == "kernel"
+                )
+                return {
+                    "ok": successful,
+                    "provider_id": provider_id,
+                    "operation": operation,
+                    "status": "healthy"
+                    if successful
+                    else data.get("error", "Model completion is UNKNOWN"),
+                    "model_inference": "COMPLETED"
+                    if successful
+                    else "UNKNOWN"
+                    if data.get("request_id")
+                    else "NOT_RUN",
+                    **{
+                        key: data.get(key)
+                        for key in (
+                            "request_id",
+                            "response_id",
+                            "latency_ms",
+                            "usage",
+                            "tokens_used",
+                            "cost_usd",
+                            "cost_measurement",
+                            "execution",
+                        )
+                    },
+                }
+        return {
+            "ok": False,
+            "provider_id": provider_id,
+            "operation": operation,
+            "code": "NOUS_PROVIDER_NKI_REQUIRED",
+            "status": "Save configuration, then use Models > Test through the Model Gateway/NKI; direct inference probes are unavailable",
+            "model_inference": "NOT_RUN",
+            "latency_ms": None,
+        }
     endpoint = str(config.get("endpoint") or "")
     if not endpoint:
         return {"ok": False, "provider_id": provider_id, "status": "endpoint missing"}
@@ -374,7 +484,11 @@ def probe_provider_config(
     except (RuntimeError, ValueError) as exc:
         return {"ok": False, "provider_id": provider_id, "status": str(exc)}
     if reference and not credential:
-        return {"ok": False, "provider_id": provider_id, "status": "credential unavailable"}
+        return {
+            "ok": False,
+            "provider_id": provider_id,
+            "status": "credential unavailable",
+        }
     started = time.perf_counter()
     request = _probe_request(config, endpoint, credential, operation)
     try:
@@ -428,30 +542,10 @@ def _probe_request(
     credential: str,
     operation: str,
 ) -> urllib.request.Request:
-    kind = str(config.get("kind") or "openai-compatible")
-    protocol = str(config.get("protocol") or ("anthropic" if kind == "anthropic-compatible" else "openai"))
     headers = _provider_headers(config, credential)
-    if operation == "ping":
-        return urllib.request.Request(endpoint, headers=headers, method="GET")
-    model = str(config.get("model") or "")
-    if protocol == "anthropic":
-        body = {
-            "model": model,
-            "max_tokens": 1,
-            "messages": [{"role": "user", "content": "Reply with OK"}],
-        }
-    else:
-        body = {
-            "model": model,
-            "messages": [{"role": "user", "content": "Reply with OK"}],
-            "max_tokens": 1,
-        }
-    return urllib.request.Request(
-        endpoint,
-        data=json.dumps(body).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
+    if operation != "ping":
+        raise ValueError("Inference requires the Model Gateway/NKI")
+    return urllib.request.Request(endpoint, headers=headers, method="GET")
 
 
 def _provider_headers(config: dict[str, Any], credential: str) -> dict[str, str]:
@@ -467,7 +561,9 @@ def _provider_headers(config: dict[str, Any], credential: str) -> dict[str, str]
         headers["anthropic-version"] = "2023-06-01"
     elif credential:
         header = str(config.get("credential_header") or "Authorization")
-        headers[header] = credential if header.lower() == "api-key" else f"Bearer {credential}"
+        headers[header] = (
+            credential if header.lower() == "api-key" else f"Bearer {credential}"
+        )
     return headers
 
 
@@ -482,7 +578,9 @@ def _model_ids(payload: Any) -> tuple[str, ...]:
         if isinstance(item, str):
             model_id = item
         elif isinstance(item, dict):
-            model_id = str(item.get("id") or item.get("model") or item.get("name") or "")
+            model_id = str(
+                item.get("id") or item.get("model") or item.get("name") or ""
+            )
         else:
             model_id = ""
         if model_id and model_id not in result:

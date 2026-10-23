@@ -169,7 +169,7 @@ async function runBootstrap(
         const token = await bindNativeRuntimeSession("start_runtime_api");
         updateStatus((prev) => ({
           ...prev,
-          session: { ...prev.session, tokenFingerprint: tokenFingerprint(token) },
+          session: { ...prev.session, tokenFingerprint: tokenFingerprint(token.token) },
         }));
 
         // Wait for runtime
