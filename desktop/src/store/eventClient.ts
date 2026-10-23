@@ -10,8 +10,7 @@
  */
 
 import { entityStore } from "./entityStore";
-import { captureRuntimeConnection, fetchEventStream, type RuntimeEventEnvelope } from "../lib/api";
-import type { SequenceNumber } from "./types";
+import { ApiError, captureRuntimeConnection, fetchEventStream, type RuntimeEventEnvelope } from "../lib/api";
 
 
 // Configuration
@@ -28,6 +27,7 @@ interface EventClientConfig {
   baseUrl: string;
   mode?: ConnectionMode;
   domains?: string[];
+  onError?: () => void;
 }
 
 
@@ -42,9 +42,13 @@ class EventClientImpl {
   private config: EventClientConfig = { baseUrl: "ws://localhost:8770", mode: "polling" };
   private stopped = true;
   private generation = 0;
+  private connection?: () => void;
+  private eventCursors = new Map<string, string>();
 
   start(config?: Partial<EventClientConfig>): void {
     this.stop();
+    try { this.connection?.(); } catch { this.eventCursors.clear(); }
+    this.connection = captureRuntimeConnection();
     if (config) this.config = { ...this.config, ...config };
     this.stopped = false;
     this.reconnectAttempt = 0;
@@ -125,52 +129,49 @@ class EventClientImpl {
   private pollLoop(current: () => boolean): void {
     if (!current()) return;
     const domain = this.config.domains?.[0] || "";
-    const cursor = entityStore.getState().cursors[domain] || 0;
-    fetchEventStream(domain, String(cursor), BACKFILL_BATCH_SIZE)
-      .then((result) => {
-        if (!current()) return;
-        if (result?.events) {
-          for (const event of result.events) {
-            if (!current()) return;
-            entityStore.ingestEvent(event);
-          }
-        }
-      })
-      .catch(() => { /* retry next poll */ })
+    this.readPage(domain, current)
+      .catch(error => this.handleReadFailure(error, current))
       .finally(() => {
-        if (current()) {
-          this.pollTimer = setTimeout(() => this.pollLoop(current), POLL_INTERVAL_MS);
-        }
+        if (current()) this.pollTimer = setTimeout(() => this.pollLoop(current), POLL_INTERVAL_MS);
       });
   }
 
-  // Backfill
+  private async readPage(domain: string, current: () => boolean): Promise<boolean> {
+    if (!current()) return false;
+    const afterId = this.eventCursors.get(domain) || "";
+    const result = await fetchEventStream(domain, afterId, BACKFILL_BATCH_SIZE);
+    if (!current()) return false;
+    const ids = result.events.map(event => event.event_id);
+    if (ids.some(id => typeof id !== "string" || !id || id === afterId) || new Set(ids).size !== ids.length) {
+      throw new ApiError("NOUS_EVENT_STREAM_INVALID", "Event history did not advance; reload current state");
+    }
+    for (const event of result.events) {
+      if (!current()) return false;
+      entityStore.ingestEvent(event);
+    }
+    if (!current()) return false;
+    if (ids.length) this.eventCursors.set(domain, ids[ids.length - 1]);
+    return result.events.length === BACKFILL_BATCH_SIZE;
+  }
+
+  private handleReadFailure(error: unknown, current: () => boolean): void {
+    if (!current()) return;
+    if (error instanceof ApiError && ["NOUS_EVENT_CURSOR_UNAVAILABLE", "NOUS_EVENT_STREAM_INVALID", "NOUS_EVENT_STREAM_UNAVAILABLE"].includes(error.code)) {
+      this.stop();
+      this.config.onError?.();
+    }
+    // Transient read failures retain the original cursor and bounded polling.
+  }
 
   private async backfill(current: () => boolean): Promise<void> {
-    const state = entityStore.getState();
-    for (const [domain, cursor] of Object.entries(state.cursors)) {
-      try {
-        let afterSeq = cursor;
-        let batch: { events: RuntimeEventEnvelope[] } | null;
-        do {
-          if (!current()) return;
-          batch = await fetchEventStream(domain, String(afterSeq), BACKFILL_BATCH_SIZE);
-          if (!current()) return;
-          if (batch?.events) {
-            for (const event of batch.events) {
-              if (!current()) return;
-              entityStore.ingestEvent(event);
-            }
-            if (batch.events.length > 0) {
-              afterSeq = batch.events[batch.events.length - 1].sequence;
-            }
-          }
-        } while (batch?.events && batch.events.length === BACKFILL_BATCH_SIZE);
-      } catch {
-        // Domain backfill failed — will retry on next reconnect
-      }
+    const domain = this.config.domains?.[0] || "";
+    try {
+      while (current() && await this.readPage(domain, current)) { /* Drain bounded pages by event ID. */ }
+    } catch (error) {
+      this.handleReadFailure(error, current);
     }
   }
+
 }
 
 

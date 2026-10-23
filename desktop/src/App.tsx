@@ -13,7 +13,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { injectDesignTokens, colors, typo, space, btnPrimary, btnSecondary } from "./design";
 import { ThemeProvider, useTheme } from "./theme";
-import { ToastProvider } from "./components/Toast";
+import { toast, ToastProvider } from "./components/Toast";
 import { ErrorBoundary, registerGlobalErrorHandlers } from "./components/ErrorBoundary";
 import { BootstrapScreen } from "./components/BootstrapScreen";
 import { DiagnosticPage, type DiagnosticState } from "./components/DiagnosticPage";
@@ -539,7 +539,7 @@ function WorkspacePage() {
       }
       if (!connected) throw new Error("Runtime did not restart with the selected workspace.");
       eventClient.stop();
-      eventClient.start({ mode: "polling" });
+      eventClient.start({ mode: "polling", onError: () => toast.error("Event history unavailable", "Reload current Runtime state before resuming.") });
       setWorkspacePath(activated);
       setMessage("Workspace activated. Runtime access is limited to this directory.");
     } catch (cause) {
@@ -814,7 +814,7 @@ function AppShell() {
           if (conversationsData.status === "fulfilled" && conversationsData.value?.conversations) {
             entityStore.upsertConversations(conversationsData.value.conversations);
           }
-          eventClient.start({ mode: "polling" });
+          eventClient.start({ mode: "polling", onError: () => toast.error("Event history unavailable", "Reload current Runtime state before resuming.") });
         });
         setConnected(true);
       });
@@ -899,7 +899,7 @@ function AppShell() {
                 if (modelsData.status === "fulfilled" && modelsData.value?.models) entityStore.upsertModels(modelsData.value.models as any);
                 if (approvalsData.status === "fulfilled" && approvalsData.value?.approvals) entityStore.upsertApprovals(approvalsData.value.approvals as any);
                 if (conversationsData.status === "fulfilled" && conversationsData.value?.conversations) entityStore.upsertConversations(conversationsData.value.conversations);
-                eventClient.start({ mode: "polling" });
+                eventClient.start({ mode: "polling", onError: () => toast.error("Event history unavailable", "Reload current Runtime state before resuming.") });
               });
           });
         }}

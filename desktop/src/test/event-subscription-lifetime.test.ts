@@ -51,3 +51,19 @@ describe.each(subscriptions)("$name subscription lifetime", ({ open }) => {
     expect(fetcher).toHaveBeenCalledTimes(2); expect(receive).toHaveBeenCalledTimes(1); sub.close();
   });
 });
+
+describe("global event history integrity", () => {
+  it.each(["duplicate IDs", "changed last ID", "unavailable cursor"] as const)("stops and reports %s before publication", async failure => {
+    const rows = failure === "duplicate IDs" ? [event("same", 0), event("same", 0)] : [event("original", 0)];
+    const fetcher = vi.fn().mockResolvedValue({ ok: failure !== "unavailable cursor", status: 409, json: async () => failure === "unavailable cursor"
+      ? { ok: false, error: { code: "NOUS_EVENT_CURSOR_UNAVAILABLE", message: "Reload current state" } }
+      : { ok: true, data: { events: rows, latest_event_id: failure === "changed last ID" ? "other" : "same" } } });
+    vi.stubGlobal("fetch", fetcher);
+    const receive = vi.fn(), onError = vi.fn();
+    const sub = subscribeRuntimeEvents(receive, { intervalMs: 500, onError });
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(receive).not.toHaveBeenCalled(); expect(onError).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(1); expect(sub.lastEventId()).toBe("");
+    expect(vi.getTimerCount()).toBe(0); sub.close();
+  });
+});

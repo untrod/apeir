@@ -1009,14 +1009,20 @@ export interface RuntimeEventEnvelope {
   dedup_key: string;
 }
 
-export const fetchEventStream = (domain = "", sinceEventId = "", limit = 200) => {
+export const fetchEventStream = async (domain = "", sinceEventId = "", limit = 200) => {
   const params = new URLSearchParams();
   if (domain) params.set("domain", domain);
   if (sinceEventId) params.set("since_event_id", sinceEventId);
   params.set("limit", String(limit));
-  return api<{ events: RuntimeEventEnvelope[]; count: number; domain: string; latest_event_id: string }>(
+  const page = await api<{ events: RuntimeEventEnvelope[]; count: number; domain: string; latest_event_id: string; ordering?: "oldest_first" }>(
     `/api/v1/events/stream?${params}`,
   );
+  const ids = Array.isArray(page?.events) ? page.events.map(event => event?.event_id) : null;
+  if (!ids || ids.length > limit || ids.some(id => typeof id !== "string" || !id || id === sinceEventId) || new Set(ids).size !== ids.length
+    || (page.latest_event_id !== undefined && page.latest_event_id !== (ids.at(-1) || ""))) {
+    throw new ApiError("NOUS_EVENT_STREAM_INVALID", "Event history did not advance; reload current state");
+  }
+  return page;
 };
 
 // New: Model Observations
@@ -1314,7 +1320,7 @@ function normalizeRuntimeEvent(event: Partial<RuntimeEventEnvelope>): RuntimeEve
 
 export function subscribeRuntimeEvents(
   onEvent: (event: RuntimeEventEnvelope) => void,
-  options: { domain?: string; intervalMs?: number } = {},
+  options: { domain?: string; intervalMs?: number; onError?: () => void } = {},
 ) {
   let active = true;
   let timer: ReturnType<typeof window.setTimeout> | undefined;
@@ -1340,8 +1346,10 @@ export function subscribeRuntimeEvents(
           if (event.event_id) lastEventId = event.event_id;
         }
       }
-    } catch {
-      // Retry on next poll
+    } catch (error) {
+      if (current() && error instanceof ApiError && ["NOUS_EVENT_CURSOR_UNAVAILABLE", "NOUS_EVENT_STREAM_INVALID", "NOUS_EVENT_STREAM_UNAVAILABLE"].includes(error.code)) {
+        close(); options.onError?.();
+      }
     } finally {
       if (current()) timer = window.setTimeout(poll, intervalMs);
     }

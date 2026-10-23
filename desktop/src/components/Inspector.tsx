@@ -21,12 +21,13 @@ import {
 function LiveEventStream() {
   const [events, setEvents] = useState<RuntimeEventEnvelope[]>([]);
   const [paused, setPaused] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (paused) return;
     const sub = subscribeRuntimeEvents((event) => {
       setEvents((prev) => [event, ...prev].slice(0, 200));
-    }, { intervalMs: 1500 });
+    }, { intervalMs: 1500, onError: () => setError("Event history unavailable. Reload current Runtime state before resuming.") });
     return () => sub.close();
   }, [paused]);
 
@@ -43,6 +44,7 @@ function LiveEventStream() {
         fontFamily: "'JetBrains Mono', monospace",
         fontSize: typo.xs,
       }}>
+        {error && <div role="alert" style={{ color: colors.danger }}>{error}</div>}
         {events.slice(0, 50).map((evt) => (
           <div key={evt.event_id} style={{
             padding: `${space.xs} 0`,
