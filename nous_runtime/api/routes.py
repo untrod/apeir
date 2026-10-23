@@ -46,6 +46,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from nous_runtime.api.responses import err_response, ok_response
+from nous_runtime.extensions.mcp_server import handle_mcp_call
 from nous_runtime.core.errors import ArtifactError
 
 log = logging.getLogger("nous.api")
@@ -1912,6 +1913,9 @@ except ImportError:
     AUTOMATION_AUTHENTICATED_ROUTES = set()
 
 # Task Center routes — timeline, graph, artifacts, verification
+
+ROUTES[("POST", "/api/v1/mcp/call")] = handle_mcp_call
+
 try:
     from nous_runtime.control_plane.operations import OPERATIONS_ROUTES
 
@@ -2171,6 +2175,16 @@ def _authorize_mutation_route(
         return None
     if authorization_context is None:
         return err_response("NOUS_UNAUTHENTICATED", "Authentication required")
+    if method == "POST" and route_path == "/api/v1/work":
+        from nous_runtime.api.desktop_routes import find_original_work_submission
+
+        original = find_original_work_submission(
+            body or {}, authorization_context=authorization_context
+        )
+        if original is not None:
+            # Authenticated lookup returns the bound original only. It cannot
+            # create, resume or execute Work or consume another human approval.
+            return original
     capability_id, side_effect_class, reversibility = governance
     if capability_id == "environment.run":
         from nous_runtime.api.environment_routes import environment_run_arguments
@@ -2536,6 +2550,9 @@ def route(
                 for name, value in request_params.items()
                 if name in parameters
             }
+            if "authorization_context" in parameters:
+                # Query/body actor claims cannot select the trusted identity.
+                accepted["authorization_context"] = authorization_context
             if "body" in parameters:
                 result = handler(**accepted, body=body)
             elif accepted:

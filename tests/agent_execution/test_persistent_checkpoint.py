@@ -21,12 +21,8 @@ from nous_runtime.model_runtime.bridges import GatewayChatHandler
 def test_sqlite_checkpoint_store_persists_across_instances(tmp_path) -> None:
     path = tmp_path / "agent-checkpoints.db"
     first_store = SQLiteCheckpointStore(path)
-    first = first_store.save(
-        Checkpoint(task_id="task-1", state={"step": 1})
-    )
-    second = first_store.save(
-        Checkpoint(task_id="task-2", state={"step": 2})
-    )
+    first = first_store.save(Checkpoint(task_id="task-1", state={"step": 1}))
+    second = first_store.save(Checkpoint(task_id="task-2", state={"step": 2}))
 
     restarted_store = SQLiteCheckpointStore(path)
 
@@ -41,9 +37,7 @@ def test_sqlite_checkpoint_store_persists_across_instances(tmp_path) -> None:
 def test_sqlite_checkpoint_store_fails_closed_on_tampering(tmp_path) -> None:
     path = tmp_path / "agent-checkpoints.db"
     store = SQLiteCheckpointStore(path)
-    checkpoint = store.save(
-        Checkpoint(task_id="task-1", state={"step": 1})
-    )
+    checkpoint = store.save(Checkpoint(task_id="task-1", state={"step": 1}))
     with closing(sqlite3.connect(path)) as connection:
         connection.execute(
             "UPDATE checkpoints SET payload_json = ? WHERE checkpoint_id = ?",
@@ -78,9 +72,7 @@ def test_agent_runtime_restores_budget_from_durable_checkpoint(
     )
 
     restarted_runtime = AgentExecutionRuntime(
-        checkpoints=AgentCheckpointManager(
-            SQLiteCheckpointStore(path)
-        )
+        checkpoints=AgentCheckpointManager(SQLiteCheckpointStore(path))
     )
     restored = restarted_runtime.restore(
         checkpoint.checkpoint_id,
@@ -89,9 +81,7 @@ def test_agent_runtime_restores_budget_from_durable_checkpoint(
 
     assert restored.run_id == execution.run_id
     assert restored.state is AgentExecutionState.CHECKPOINTED
-    assert restarted_runtime.budget_for(
-        restored.run_id
-    ).usage.tool_invocations == 1
+    assert restarted_runtime.budget_for(restored.run_id).usage.tool_invocations == 1
 
 
 def test_agent_checkpoint_redacts_handler_secret_before_persistence(
@@ -123,9 +113,9 @@ def test_agent_checkpoint_redacts_handler_secret_before_persistence(
             "SELECT payload_json FROM checkpoints WHERE checkpoint_id = ?",
             (checkpoint.checkpoint_id,),
         ).fetchone()[0]
-    restored = AgentCheckpointManager(
-        SQLiteCheckpointStore(path)
-    ).restore(checkpoint.checkpoint_id)
+    restored = AgentCheckpointManager(SQLiteCheckpointStore(path)).restore(
+        checkpoint.checkpoint_id
+    )
 
     assert invocation.status is InvocationStatus.FAILED
     assert secret not in payload
@@ -143,6 +133,29 @@ def test_gateway_handler_can_bind_workspace_durable_checkpoints(
 
     store = handler.agent_runtime.checkpoints.store
     assert isinstance(store, SQLiteCheckpointStore)
-    assert store.path == (
-        tmp_path / ".nous" / "agent-checkpoints.db"
-    ).resolve()
+    assert store.path == (tmp_path / ".nous" / "agent-checkpoints.db").resolve()
+
+
+def test_concurrent_checkpoint_initialization_preserves_every_owner(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    path = tmp_path / "shared-cold-checkpoints.db"
+    ready = Barrier(16)
+
+    def writer(index):
+        ready.wait(timeout=5)
+        store = SQLiteCheckpointStore(path)
+        row = store.save(Checkpoint(task_id=f"owner-{index}", state={"owner": index}))
+        assert store.load(row.checkpoint_id) == row
+        return row
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        rows = list(pool.map(writer, range(16)))
+    restored = SQLiteCheckpointStore(path)
+    assert {row.checkpoint_id for row in restored.list()} == {
+        row.checkpoint_id for row in rows
+    }
+    with closing(sqlite3.connect(path)) as connection:
+        assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"

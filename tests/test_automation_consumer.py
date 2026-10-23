@@ -650,10 +650,14 @@ def test_live_http_management_nonce_history_and_original_approval_chain(
             },
         )
         assert completed["ok"], completed
+        verification = completed["data"]["outputs"]["mutate"].get("effect_verification")
+        # Preserve the strict MATCH requirement and expose the original state,
+        # error and evidence on failure instead of losing them to KeyError (#82).
         assert (
-            completed["data"]["outputs"]["mutate"]["effect_verification"]["verdict"]
-            == "MATCH"
-        )
+            isinstance(verification, dict) and verification.get("verdict") == "MATCH"
+        ), completed
+        assert completed["data"]["outputs"]["mutate"]["work_id"] == work_id, completed
+        assert completed["data"]["effect_counts"][work_id] == 1, completed
         path = f"/api/v1/automations/{automation_id}/history"
         history, _ = human_request("GET", path)
         assert history["ok"], history
