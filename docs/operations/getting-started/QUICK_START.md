@@ -8,7 +8,9 @@ and blockers live only in [ROADMAP](../../../ROADMAP.md).
 A maintainer's manual **Desktop CI** run can provide the
 `apeir-python-source-preview-<commit>` artifact in
 [GitHub Actions](https://github.com/untrod/apeir/actions/workflows/desktop-build.yml).
-It expires after seven days. Check the source revision and `SHA256SUMS.txt` before
+It expires after seven days. The job installs its own wheel and exercises the
+existing simulated recovery Demo; `source-preview-validation.json` reports that
+scope. Check the source revision and `SHA256SUMS.txt` before
 installing the wheel with `python -m pip install path/to/apeir_distribution-0.1.0rc1-py3-none-any.whl`.
 This Python source package provides CLI/Runtime libraries, not APEIR.exe or a
 Windows installer. Desktop source still needs the checkout below; real model,

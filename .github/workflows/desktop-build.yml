@@ -73,12 +73,45 @@ jobs:
           python scripts/ci/verify_release_versions.py
           python -m pip install build
           python -m build --wheel --outdir artifacts/source-preview
+      - name: Install and exercise the built wheel in isolation
+        run: |
+          python -m venv "$RUNNER_TEMP/apeir-source-consumer"
+          "$RUNNER_TEMP/apeir-source-consumer/bin/python" -m pip install artifacts/source-preview/*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I -c "import nous_runtime; assert 'site-packages' in nous_runtime.__file__"
+          "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I "$RUNNER_TEMP/apeir-source-consumer/bin/apeir" version
+          "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I "$RUNNER_TEMP/apeir-source-consumer/bin/apeir" demo --workspace "$RUNNER_TEMP/apeir-source-demo" --scenario lost-response --approve-once --json > "$RUNNER_TEMP/source-demo.json"
+      - name: Record scoped installed-package evidence
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          result = json.loads((Path(os.environ["RUNNER_TEMP"]) / "source-demo.json").read_text())
+          before = result["before_recovery"]
+          assert result["execution_scope"] == "runtime-service" and result["kernel_traversed"] is False
+          assert result["simulated"] is True
+          assert result["work"]["state"] == "COMMITTED" and result["effect_verification"]["verdict"] == "MATCH"
+          assert before["receipt"] is None and before["effect_count"] == result["effect_count"] == 1
+          report = {
+              "source_wheel_installation": "PASS",
+              "simulated_lost_response_recovery": "PASS",
+              "execution_scope": result["execution_scope"],
+              "kernel_traversed": False,
+              "effect_count_before_recovery": before["effect_count"],
+              "effect_count_after_recovery": result["effect_count"],
+              "observation_count": len(result["observations"]),
+              "artifact_integrity_checks": result["artifact_integrity_checked"],
+              "real_model_and_physical_acceptance": "NOT_RUN",
+              "native_installation": "NOT_RUN",
+          }
+          Path("artifacts/source-preview/source-preview-validation.json").write_text(json.dumps(report, indent=2) + "\n")
+          PY
       - name: Record measured wheel hashes and qualification limits
         env:
           SOURCE_REVISION: ${{ github.sha }}
         run: |
           python - <<'PY'
-          import hashlib, json, os, platform, zipfile
+          import email, hashlib, json, os, platform, zipfile
           from pathlib import Path
           root = Path("artifacts/source-preview")
           wheels = sorted(root.glob("*.whl"))
@@ -86,10 +119,15 @@ jobs:
           wheel = wheels[0]
           with zipfile.ZipFile(wheel) as archive:
               assert not any(name.endswith((".exe", ".db", ".sqlite", ".sqlite3", ".jsonl", ".pem", ".key")) or "/.nous/" in name or "/.git/" in name for name in archive.namelist()), "Runtime state or native binary entered source wheel"
+              metadata_names = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
+              assert len(metadata_names) == 1
+              metadata = email.message_from_bytes(archive.read(metadata_names[0]))
           digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
           lock = Path("runtime-components.lock.json")
           manifest = {
               "distribution_revision": os.environ["SOURCE_REVISION"],
+              "distribution_name": metadata["Name"],
+              "distribution_version": metadata["Version"],
               "python": platform.python_version(),
               "kind": "Python source preview; not native Desktop or a verified release",
               "verified_release": False,
@@ -99,6 +137,7 @@ jobs:
               "native_installation": "NOT_RUN",
               "signing_and_release_qualification": "NOT_RUN",
               "wheel": {"filename": wheel.name, "sha256": digest},
+              "validation_report": "source-preview-validation.json",
           }
           (root / "source-preview-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
           (root / "SHA256SUMS.txt").write_text(f"{digest}  {wheel.name}\n")
