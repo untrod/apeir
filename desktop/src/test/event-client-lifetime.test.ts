@@ -51,7 +51,7 @@ describe("existing EventClient consumer lifetime", () => {
     const ingest = vi.spyOn(entityStore, "ingestEvent");
     eventClient.start({ mode: "polling" }); await vi.advanceTimersByTimeAsync(0);
     expect(ingest).toHaveBeenCalledTimes(201); expect(fetchEventStream).toHaveBeenCalledTimes(3);
-    expect(vi.mocked(fetchEventStream).mock.calls[1][1]).toBe("201");
+    expect(vi.mocked(fetchEventStream).mock.calls[1][1]).toBe("current-199");
     const calls = vi.mocked(fetchEventStream).mock.calls.length;
     await vi.advanceTimersByTimeAsync(2000); expect(fetchEventStream).toHaveBeenCalledTimes(calls + 1);
   });

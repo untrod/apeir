@@ -33,6 +33,10 @@ DEFAULT_MAX_LISTENERS_PER_PATTERN = 32
 DEFAULT_PERSIST_INTERVAL_SEC = 1.0
 
 
+class EventCursorUnavailable(ValueError):
+    """The original retained event is unavailable; a snapshot is not replay."""
+
+
 @dataclass
 class BusMetrics:
     """Runtime metrics for the event bus."""
@@ -119,9 +123,8 @@ class RuntimeEventBus:
             self._buffer.append(envelope)
             self._metrics.events_published += 1
             self._metrics.last_publish_timestamp = envelope.timestamp
-
-        # Persist (best-effort async)
-        self._pending_persist.append(envelope)
+            # Queue under the same owner lock as flushing; publication stays async.
+            self._pending_persist.append(envelope)
 
         # Notify matching subscribers (fire-and-forget)
         self._notify_subscribers(envelope)
@@ -234,7 +237,8 @@ class RuntimeEventBus:
         params.extend([max(1, min(int(limit), 1000)), max(0, int(offset))])
 
         try:
-            rows = self._db.execute(query_sql, params).fetchall()
+            with self._lock:
+                rows = self._db.execute(query_sql, params).fetchall()
         except sqlite3.OperationalError:
             return self._query_buffer(
                 event_type=event_type, domain=domain, source=source, limit=limit
@@ -279,9 +283,10 @@ class RuntimeEventBus:
 
         where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
         try:
-            row = self._db.execute(
-                f"SELECT COUNT(*) FROM event_bus{where}", params
-            ).fetchone()
+            with self._lock:
+                row = self._db.execute(
+                    f"SELECT COUNT(*) FROM event_bus{where}", params
+                ).fetchone()
             return int(row[0]) if row else 0
         except sqlite3.OperationalError:
             return len(self._buffer)
@@ -298,21 +303,61 @@ class RuntimeEventBus:
         """Get events suitable for SSE streaming to UI clients.
 
         Returns events newer than ``since_event_id``, up to ``limit``.
-        If ``since_event_id`` is empty, returns the most recent events.
+        Pages are chronological. An empty cursor selects the recent window;
+        an unavailable original cursor raises instead of claiming replay.
         """
-        if since_event_id:
-            # Find the event and return everything after it
-            events = self.query(domain=domain, limit=limit)
-            found = False
-            result = []
-            for evt in reversed(events):  # Chronological order
-                if found:
-                    result.append(evt)
-                elif evt["event_id"] == since_event_id:
-                    found = True
-            return result if found else events[:limit]
-        else:
-            return self.query(domain=domain, limit=limit)
+        size = max(1, min(int(limit), 500))
+        with self._lock:
+            self._ensure_db()
+            if not self._flush_pending() or self._db is None:
+                raise RuntimeError("Event history unavailable")
+            self._db.execute("BEGIN")
+            try:
+                params: list[Any] = []
+                conditions = []
+                if since_event_id:
+                    cursor = self._db.execute(
+                        "SELECT rowid FROM event_bus WHERE event_id = ?",
+                        (since_event_id,),
+                    ).fetchone()
+                    if cursor is None:
+                        raise EventCursorUnavailable(
+                            "Event cursor unavailable; reload current state"
+                        )
+                    conditions.append("rowid > ?")
+                    params.append(cursor[0])
+                if domain:
+                    conditions.append("event_type LIKE ?")
+                    params.append(
+                        domain.replace("\\", "\\\\")
+                        .replace("%", "\\%")
+                        .replace("_", "\\_")
+                        + ".%"
+                    )
+                    conditions[-1] += " ESCAPE '\\'"
+                where = " WHERE " + " AND ".join(conditions) if conditions else ""
+                order = "ASC" if since_event_id else "DESC"
+                rows = self._db.execute(
+                    "SELECT event_id, event_type, source, timestamp, payload, metadata "
+                    f"FROM event_bus{where} ORDER BY rowid {order} LIMIT ?",
+                    (*params, size),
+                ).fetchall()
+                if not since_event_id:
+                    rows.reverse()
+            finally:
+                # The cursor lookup and page share one read snapshot across writers.
+                self._db.rollback()
+        return [
+            {
+                "event_id": row[0],
+                "event_type": row[1],
+                "source": row[2],
+                "timestamp": row[3],
+                "payload": json.loads(row[4]),
+                "metadata": json.loads(row[5]),
+            }
+            for row in rows
+        ]
 
     # Metrics
 
@@ -415,81 +460,84 @@ class RuntimeEventBus:
 
     def _ensure_db(self) -> None:
         """Lazy-init the SQLite database."""
-        if self._db is not None:
-            return
-        try:
-            self._db_path.parent.mkdir(parents=True, exist_ok=True)
-            self._db = sqlite3.connect(
-                str(self._db_path),
-                check_same_thread=False,
-                timeout=5.0,
-            )
-            self._db.execute("PRAGMA journal_mode=WAL")
-            self._db.execute("PRAGMA synchronous=NORMAL")
-            self._db.execute("""
-                CREATE TABLE IF NOT EXISTS event_bus (
-                    event_id TEXT PRIMARY KEY,
-                    event_type TEXT NOT NULL,
-                    source TEXT NOT NULL DEFAULT 'runtime',
-                    timestamp TEXT NOT NULL,
-                    payload TEXT NOT NULL DEFAULT '{}',
-                    metadata TEXT NOT NULL DEFAULT '{}'
+        with self._lock:
+            if self._db is not None:
+                return
+            try:
+                self._db_path.parent.mkdir(parents=True, exist_ok=True)
+                self._db = sqlite3.connect(
+                    str(self._db_path),
+                    check_same_thread=False,
+                    timeout=5.0,
                 )
-            """)
-            self._db.execute("""
-                CREATE INDEX IF NOT EXISTS idx_event_bus_type
-                ON event_bus(event_type)
-            """)
-            self._db.execute("""
-                CREATE INDEX IF NOT EXISTS idx_event_bus_timestamp
-                ON event_bus(timestamp)
-            """)
-            self._db.execute("""
-                CREATE INDEX IF NOT EXISTS idx_event_bus_domain
-                ON event_bus(event_type)
-            """)
-            self._db.commit()
-        except Exception as e:
-            _log.warning("Failed to init event bus DB: %s (buffer-only mode)", e)
-            self._db = None
+                self._db.execute("PRAGMA journal_mode=WAL")
+                self._db.execute("PRAGMA synchronous=NORMAL")
+                self._db.execute("""
+                    CREATE TABLE IF NOT EXISTS event_bus (
+                        event_id TEXT PRIMARY KEY,
+                        event_type TEXT NOT NULL,
+                        source TEXT NOT NULL DEFAULT 'runtime',
+                        timestamp TEXT NOT NULL,
+                        payload TEXT NOT NULL DEFAULT '{}',
+                        metadata TEXT NOT NULL DEFAULT '{}'
+                    )
+                """)
+                self._db.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_event_bus_type
+                    ON event_bus(event_type)
+                """)
+                self._db.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_event_bus_timestamp
+                    ON event_bus(timestamp)
+                """)
+                self._db.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_event_bus_domain
+                    ON event_bus(event_type)
+                """)
+                self._db.commit()
+            except Exception as e:
+                _log.warning("Failed to init event bus DB: %s (buffer-only mode)", e)
+                failed = self._db
+                self._db = None
+                if failed is not None:
+                    failed.close()
 
-    def _flush_pending(self) -> None:
-        """Persist all pending events to SQLite."""
-        if not self._pending_persist or self._db is None:
+    def _flush_pending(self) -> bool:
+        """Persist the original queued batch; failures retain it for reconciliation."""
+        with self._lock:
+            if not self._pending_persist:
+                return True
+            self._ensure_db()
+            if self._db is None:
+                return False
+            batch = self._pending_persist[:]
             self._pending_persist.clear()
-            return
-
-        self._ensure_db()
-        if self._db is None:
-            self._pending_persist.clear()
-            return
-
-        batch = self._pending_persist[:]
-        self._pending_persist.clear()
-
-        try:
-            with self._db:
-                self._db.executemany(
-                    """INSERT OR IGNORE INTO event_bus
-                       (event_id, event_type, source, timestamp, payload, metadata)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    [
-                        (
-                            e.event_id,
-                            e.event_type,
-                            e.source,
-                            e.timestamp,
-                            json.dumps(e.payload, ensure_ascii=False),
-                            json.dumps(e.metadata, ensure_ascii=False),
-                        )
-                        for e in batch
-                    ],
-                )
-            self._metrics.events_persisted += len(batch)
-        except Exception as e:
-            _log.warning("Failed to persist %d events: %s", len(batch), e)
-            # Re-queue failed events (up to buffer limit)
-            self._pending_persist = (batch + self._pending_persist)[-self._max_buffer :]
+            try:
+                with self._db:
+                    self._db.executemany(
+                        """INSERT OR IGNORE INTO event_bus
+                           (event_id, event_type, source, timestamp, payload, metadata)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        [
+                            (
+                                e.event_id,
+                                e.event_type,
+                                e.source,
+                                e.timestamp,
+                                json.dumps(e.payload, ensure_ascii=False),
+                                json.dumps(e.metadata, ensure_ascii=False),
+                            )
+                            for e in batch
+                        ],
+                    )
+                self._metrics.events_persisted += len(batch)
+                return True
+            except Exception as e:
+                _log.warning("Failed to persist %d events: %s", len(batch), e)
+                self._pending_persist = (batch + self._pending_persist)[
+                    -self._max_buffer :
+                ]
+                return False
 
     def _start_persist_worker(self) -> None:
         """Start background thread that periodically flushes pending events."""
@@ -508,13 +556,16 @@ class RuntimeEventBus:
         """Remove events older than 7 days to prevent unbounded growth."""
         if self._db is None:
             return
-        try:
-            self._db.execute(
-                "DELETE FROM event_bus WHERE timestamp < datetime('now', '-7 days')"
-            )
-            self._db.commit()
-        except Exception:
-            pass
+        with self._lock:
+            if self._db is None:
+                return
+            try:
+                self._db.execute(
+                    "DELETE FROM event_bus WHERE timestamp < datetime('now', '-7 days')"
+                )
+                self._db.commit()
+            except Exception:
+                pass
 
 
 # Global singleton
@@ -551,6 +602,7 @@ atexit.register(reset_event_bus)
 __all__ = [
     "RuntimeEventBus",
     "BusMetrics",
+    "EventCursorUnavailable",
     "get_event_bus",
     "reset_event_bus",
 ]

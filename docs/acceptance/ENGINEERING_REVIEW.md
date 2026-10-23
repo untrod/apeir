@@ -3071,3 +3071,64 @@ they do not establish complete historical replay, retention-gap handling or
 uniform ordering across Event Bus and per-Run EventStream. No full event-history
 or overall product PASS follows from these bounded lifecycle checks. Source CI
 and protected resulting-main integration remain separate required gates.
+
+### Global Event Bus cursor and persistence alignment — 2026-10-23
+
+This follows up the explicitly deferred cursor audit above. REUSE the global
+RuntimeEventBus/SQLite owner, EventClient, existing API/Inspector, EntityStore and
+per-Run EventStream; FIX their incompatible cursor assumptions. Bus replay accepts
+an original event ID, while the old client sent a per-domain numeric sequence.
+The old server searched only the recent page, substituted a recent snapshot for
+an unavailable cursor and initially returned reverse order. Its first flush could
+also clear queued events before a database existed. Original backend contracts:
+**9 failed (0.12s)**; original client cursor contracts: **4 failed (1.22s)**.
+
+The existing Bus now queues publication and flushes under its owner lock. A first
+flush initializes the same database; unavailable persistence retains the queued
+batch and cannot certify empty history. Stream reads flush that original batch
+and use one SQLite read snapshot for event-ID lookup and chronological paging.
+The initial empty cursor explicitly selects only a recent bounded window;
+retained cursors page forward beyond that window. Missing/pruned cursors return
+`NOUS_EVENT_CURSOR_UNAVAILABLE`/HTTP409, and unavailable/corrupt history returns
+`NOUS_EVENT_STREAM_UNAVAILABLE`/HTTP503 with a fixed, payload-free diagnostic.
+There is no guessed cursor repair, new journal or schema, authority, execution
+retry or Kernel change. WAL, synchronous NORMAL and existing SQLite/HTTP timeout
+settings are unchanged. The global Bus remains a retained activity projection,
+not the authoritative Work/effect journal or a promise of indefinite retention.
+
+EventClient now retains opaque event IDs only for its current connection and
+resumes that cursor across stop/start. A changed connection discards that cursor;
+a cold process reads the current recent window and existing authoritative REST
+snapshots rather than claiming complete historical replay. Non-advancing pages
+and unavailable history stop and surface a fixed diagnostic through the existing
+Inspector/toast path. The shared HTTP client checks IDs, duplicates and last-ID
+consistency before publishing a page. Per-Run numeric sequence cursors remain
+unchanged. One earlier fixture asserted numeric `201` for the global API; it now
+requires the actual original event ID `current-199`, retaining its201-event and
+single-loop assertions. The server contract demonstrates why the old expectation
+was incorrect; no denial/no-retry assertion was relaxed.
+
+Final event/HTTP/task projection/AgentSession/Reality related regression:
+**122 passed (66.46s)**; final targeted backend contracts **13 passed (1.69s)**
+include actual authenticated HTTP, restart, pagination, concurrent writers, domain
+filtering, retained queue, missing cursor and payload-free storage failure. The
+last fixture-only credential spelling check reran these13 cases successfully
+(1.46s); the deterministic fake token remains identical in client and server.
+Client cursor/lifetime/integrity and Inspector cases: **26 passed (8.06s)**.
+Full Desktop: **44 files,292 passed (52.93s)**; lint/typecheck/web assets pass with the existing
+Tauri mixed-import warning. Repository checks pass, with0HIGH/5existingMEDIUM
+security findings. An inline deterministic fake Bearer header initially added a
+scanner match; the fixture now uses its single declared fake token in both the
+server and request. Scanner rules and negative assertions are unchanged. These
+counts overlap and are not added together.
+
+Actual sandbox-enabled Chromium/Vite/authenticated Runtime HTTP and the original
+SQLite Bus replayed239 diagnostic events across pages with zero duplicate IDs.
+The existing EventClient cold view consumed the recent200 in order. Another
+SQLite owner then removed its original cursor: HTTP409 was observed, the error
+callback fired, and no further requests followed the stopped consumer; browser
+page errors: zero. These are diagnostic projection events, not model, operation,
+physical-effect, native Desktop or IdP qualification. Original backend/client
+failure logs and private browser records are retained. Exact-source CI and
+protected resulting-main acceptance remain required; no performance percentage or
+overall product PASS is inferred from these correctness checks.

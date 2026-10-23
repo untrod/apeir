@@ -71,6 +71,13 @@ Legacy free-text enabled configuration is UNQUALIFIED. This software slice does 
 upgrade any physical, real-IdP, production-provider or Kernel/binary Gate; its
 contracts are in [Execution Path](docs/architecture/EXECUTION_PATH.md#bounded-automation-consumer).
 
+The existing global activity stream now distinguishes opaque Bus event IDs from
+per-Run numeric sequences, chronological retained replay from a cold recent
+window, and missing history from success. EventClient stops invalid replay and
+surfaces diagnostics; this software correction does not complete native release,
+physical acceptance or indefinite event retention. Protected integration and
+current-source CI remain separate; see the [cursor qualification record](docs/acceptance/ENGINEERING_REVIEW.md#global-event-bus-cursor-and-persistence-alignment--2026-10-23).
+
 `main` is the only permanent development branch. Keep one or two active branches
 at most; each branch completes one coherent Gate. Start from clean current main:
 

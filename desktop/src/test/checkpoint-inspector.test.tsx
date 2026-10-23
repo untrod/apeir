@@ -1,11 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CheckpointHealth } from "../components/Inspector";
-import { fetchInspectorCheckpoints } from "../lib/api";
+import { CheckpointHealth, Inspector } from "../components/Inspector";
+import { fetchInspectorCheckpoints, subscribeRuntimeEvents } from "../lib/api";
 
-vi.mock("../lib/api", () => ({
+vi.mock("../lib/api", async original => ({
+  ...await original<typeof import("../lib/api")>(),
   fetchInspectorCheckpoints: vi.fn(),
+  fetchStatus: vi.fn().mockResolvedValue(null),
+  fetchMemory: vi.fn().mockResolvedValue(null),
+  fetchModelRankings: vi.fn().mockResolvedValue({ rankings: [] }),
+  subscribeRuntimeEvents: vi.fn(),
 }));
 
 describe("checkpoint inspector", () => {
@@ -61,4 +66,15 @@ describe("checkpoint inspector", () => {
     expect(screen.queryByText(/must_not_leak/)).not.toBeInTheDocument();
     expect(screen.getByText(/governed API approval/)).toBeInTheDocument();
   });
+  it("shows an unavailable history diagnostic instead of claiming replay success", async () => {
+    const close = vi.fn();
+    vi.mocked(subscribeRuntimeEvents).mockImplementation((_receive, options) => {
+      options?.onError?.(); return { close, lastEventId: () => "" };
+    });
+    const view = render(<Inspector visible onClose={vi.fn()} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Event history unavailable. Reload current Runtime state before resuming.");
+    expect(screen.queryByText("Replay successful")).not.toBeInTheDocument();
+    view.unmount(); expect(close).toHaveBeenCalledTimes(1);
+  });
+
 });

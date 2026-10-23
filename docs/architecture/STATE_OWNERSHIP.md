@@ -73,6 +73,17 @@ without recreating the reader; corrupt current metadata raises an Artifact error
 instead of letting an older cache certify integrity. Readers do not rewrite or
 repair that evidence. This adds index reads, not a second cache or state owner.
 
+The global RuntimeEventBus is a retained cross-domain activity projection, distinct
+from durable per-Run EventStream sequence records. Its HTTP cursor is an original
+event ID, not a per-domain numeric sequence. A cold read returns a bounded recent
+window in chronological order; a retained cursor pages forward through persisted
+Bus records. Cursor lookup and page selection share one SQLite read snapshot.
+Missing/pruned cursors and unavailable persistence report an explicit error rather
+than substitute a recent snapshot for successful replay. Clients stop invalid
+replay and reload authoritative state explicitly. Ephemeral connection-bound Bus
+cursors confer no authority and cannot certify complete history after a cold
+restart. Bus retention, publication or delivery is not effect verification.
+
 ## Admission, durability and commitment
 
 1. Bind the current authenticated actor, Work, Operation, Node, Capability,
