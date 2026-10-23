@@ -70,6 +70,20 @@ explanation. Provider/factory/no-intelligence checks then pass **96 tests**
 The final affected combination including this protocol correction is
 **1396 passed,5 skipped** (72.15 s).
 
+The exact composed `018b175` Core and Multi-Arch runs subsequently failed, and
+their original logs are retained: all full platforms exposed the older credential
+test's mock of `_register_provider_runtime`, which the new prepare-before-save
+path no longer calls. That test now checks the actual published adapter, Gateway
+model and unchanged reference-only persistence assertions, restoring global state
+afterward. Windows Core additionally failed the existing 16-owner cold checkpoint
+test at `msvcrt.LK_LOCK` with `Resource deadlock avoided`. Initialization now queues
+local owners through the existing bounded Runtime lock before the unchanged OS
+file lock; separate processes still take that original lock. Neither Windows CRT
+retry bounds, SQLite timeouts nor the original concurrency assertions are raised.
+A four-interpreter cold-start/reload/integrity check also exercises cross-process
+ownership. This is a software correction candidate until fresh platform CI passes;
+it does not close the unrelated Windows Relay/HTTP/Automation timing Issues.
+
 ## Native session destination audit — 2026-10-23
 
 The starting PR #83 source was `48a6cc1`; current main was still `e3cd2a20`.
