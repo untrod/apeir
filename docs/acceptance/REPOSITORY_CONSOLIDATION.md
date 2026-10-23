@@ -495,3 +495,29 @@ Kernel stays `87fd1b2ff28ef14ab1a515a58162592b452fda2e`; component-lock file
 SHA-256 stays `fd841599a29861847e787b538b58dd2f4a67cf72b53f0144264fd267ce1e33a0`.
 The actual native verifier still fails for missing locked Windows bytes; neither
 source-wheel checksums nor lock contract tests substitute for those hashes.
+
+### Product R2 integration observation — 2026-10-23
+
+The ordinary REST merge request for PR81 was accepted at16:22:10 UTC, producing
+`ad77389045ea04270913a6513d4cdcc5232a1b3d` with parents `e3cd2a20` and
+`e99b12dd`. No force push, synthetic check, settings mutation or explicit admin
+override was requested. However, GitHub had previously reported the PR blocked,
+and the protection-read endpoint still returns403. It is therefore **not
+established** that GitHub enforced administrator protections for this merge.
+Further main merges are paused pending maintainer protection/audit review;
+acceptance does not claim that repository settings were fixed. History is
+preserved and resulting-main CI is a separate requirement. PR83 now targets
+main; the other unmerged reviews and their unique commits remain intact.
+
+The maintainer must inspect main's actual rules/ruleset and any bypass actors,
+require enforcement for administrators, and align stale required contexts with
+real workflow jobs. `Tier 1 — Windows ARM64` corresponds to the explicit
+`Windows ARM64 metadata (not native acceptance)` check; `Aggregate SBOM`
+corresponds to `Collect architecture SBOMs`. `Test 32-bit Rejection` has no
+standalone current check: verify its actual replacement/coverage before removing
+or restoring it. Keep real Core, Repository, Desktop, Security and platform gates,
+PR and conversation requirements, and force-push/deletion protections. A
+`blocked`/unknown protection state must stop subsequent merge attempts; a normal
+merge API call is not a safe test of protection when administrator enforcement
+cannot be inspected. No later PR merge, tag mutation or Release was performed
+in this R2 observation.
