@@ -159,6 +159,17 @@ seven-day retention and explicit non-native qualification. This adds no PR/main
 matrix or release bypass. Workflow actionlint1.7.12 and repository contracts
 pass; exact-source remote qualification remains separate.
 
+After normal composition of the existing PR83/PR86/PR89 histories, affected
+Governance, ControlPlane, Context, Work, public startup, credential, workspace
+proposal, checkpoint and repository checks pass **1549 tests,16 skipped
+(90.69s)**. Counts overlap the earlier narrower checks; skips are not PASS.
+Resulting MCP main `ad773890` separately passes Core39986188751,
+Desktop39986188830, Multi-Arch39986188775 and Security39986189013. Its Windows
+Core has **5369 passed,149 skipped (2351.96s)**; Windows Multi-Arch has
+**5073 passed,131 skipped,292 deselected (2111.40s)**. Those main results do
+not qualify the still-unmerged R2 combination or establish that repository
+administrator protection was enforced. No further main merge is attempted.
+
 
 ## Saved Provider lifecycle integration — 2026-10-23
 

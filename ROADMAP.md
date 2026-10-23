@@ -79,6 +79,17 @@ real Provider or native binary hashes. See the existing
 [session audit](docs/acceptance/ENGINEERING_REVIEW.md#native-session-destination-audit--2026-10-23).
 Overall product delivery remains PARTIAL pending integration and external Gates.
 
+Product R2 reuses those same owners. Candidate software now supports explicit
+production/model-free API startup and manual source-browser service-session
+entry, with wrong-session denial, connection-change fences and reload recovery.
+Independent Python3.10/3.12 base-wheel checks exercise public startup and the
+simulated lost-response Demo. The two-file browser review/apply/restart slice
+retains original Work/approval/CAS evidence and file MATCH, while test execution
+correctly remains BLOCKED without a qualified sandbox. No live-model or native
+installation qualification is implied. The [dated evidence](docs/acceptance/ENGINEERING_REVIEW.md#model-free-public-startup-and-product-recovery--2026-10-23)
+and unique [Quick Start](docs/operations/getting-started/QUICK_START.md) retain the
+actual scope. Complete product/native/release readiness remains PARTIAL/BLOCKED.
+
 The first-use wizard now reads Runtime health, activates/confirms the selected
 local workspace and allows model configuration to be skipped. Setup validation
 does not infer; explicit Provider tests reuse the configured strict NKI Gateway
@@ -118,13 +129,24 @@ BLOCKED. Preparation must never silently upgrade a milestone.
 
 On 2026-10-18 the actual main required checks still included the nonexistent
 `Test 32-bit Rejection`, `Tier 1 — Windows ARM64` and `Aggregate SBOM` names.
-PR #81 has successful exact-source Core/Desktop/Security/Multi-Arch evidence,
-but remains blocked. Remove the absent 32-bit workflow context; replace the
+PR #81 then had successful exact-source Core/Desktop/Security/Multi-Arch evidence
+but remained blocked. Verify coverage/replacement of the absent 32-bit context
+before changing it; replace the
 other two with `Windows ARM64 metadata (not native acceptance)` and
 `Collect architecture SBOMs`. Preserve the existing four Python/platform checks,
 frontend, hygiene and exercised Tier 1 checks; also require `Core gate` and
 `Repository checks`. Metadata is not native ARM64 qualification. An administrator
 exemption, synthetic status or disabled protection is not an integration path.
+
+On2026-10-23 PR #81's ordinary REST merge request was accepted as
+`ad77389045ea04270913a6513d4cdcc5232a1b3d`. No administrator override was requested,
+but the earlier blocked state and continuing protection-read403 leave actual
+administrator enforcement unverified. Further main merges are paused for
+maintainer protection/audit review (**BLOCKED_BY_REPOSITORY_SETTINGS**); do not
+repeat a merge request to test protection. Preserve the normal merge/history,
+require protection for administrators, and validate resulting-main CI separately.
+The [integration observation](docs/acceptance/REPOSITORY_CONSOLIDATION.md#product-r2-integration-observation--2026-10-23)
+records the actual action and precise limits. Repository settings are not fixed.
 
 The consolidation environment received administration API 403 responses.
 Existing main protection is present, but new rules were not applied. The
