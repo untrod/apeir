@@ -28,7 +28,7 @@ beforeEach(() => {
       provider_configured: false, kernel: { configured: true, connected: false, ready: false, state: "unavailable" },
     } : url.endsWith("/workspace/status") ? { exists: true, valid: true, path: workspace } :
     url.endsWith("/providers/validate") ? { ok: true, validation_scope: "configuration", authentication: "UNKNOWN", model_inference: "NOT_RUN" } :
-    url.endsWith("/models") ? { models: [] } : {},
+    new URL(url).pathname.endsWith("/models") ? { models: [] } : {},
   }))));
 });
 afterEach(() => {
@@ -45,6 +45,32 @@ function begin(onComplete = vi.fn()) {
 }
 
 describe("first-use setup uses Runtime records", () => {
+  it("offers only this Provider's exact vendor model IDs, preserving namespaces", async () => {
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (url, options) => new URL(String(url)).pathname.endsWith("/models") ?
+      new Response(JSON.stringify({ ok: true, data: { models: [
+        { id: "ollama/catalog-entry", model_id: "ollama/catalog-entry", provider_id: "ollama", provider_model: "org/vendor-model" },
+        { id: "other/unrelated", model_id: "other/unrelated", provider_id: "other", provider_model: "unrelated-vendor-model" },
+        { id: "ollama/unknown-target", model_id: "ollama/unknown-target", provider_id: "ollama" },
+      ] } })) : original(url, options));
+    begin();
+    await waitFor(() => expect(screen.getByRole("button", { name: /Next/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Ollama/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    await waitFor(() => expect(document.querySelector('#models-chat option[value="org/vendor-model"]')).not.toBeNull());
+    expect(document.querySelector('#models-chat option[value="ollama/catalog-entry"]')).toBeNull();
+    expect(document.querySelector('#models-chat option[value="unrelated-vendor-model"]')).toBeNull();
+    expect(document.querySelector('#models-chat option[value="ollama/unknown-target"]')).toBeNull();
+    fireEvent.change(screen.getByLabelText("Default Chat"), { target: { value: "org/vendor-model" } });
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
+    await waitFor(() => expect(screen.getByText(/NOT_RUN — save configuration/)).toBeInTheDocument());
+    const validation = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith("/providers/validate"));
+    expect(JSON.parse(String(validation?.[1]?.body)).model).toBe("org/vendor-model");
+  });
+
   it("reports observed Runtime architecture and blocked Kernel without fabricating WebView or sandbox success", async () => {
     begin();
     await waitFor(() => expect(screen.getByText(/aarch64/)).toBeInTheDocument());

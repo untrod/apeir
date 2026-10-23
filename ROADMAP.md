@@ -85,6 +85,11 @@ does not infer; explicit Provider tests reuse the configured strict NKI Gateway
 and preserve original request/unknown usage. These are scoped software fixes,
 not native, real-model or production release qualification; see the existing
 [setup contract](docs/development/DEVELOPER_PLATFORM.md#first-use-configuration-and-model-tests).
+Provider update/removal now reaches the existing saved configuration and current
+Gateway instead of changing only an in-memory registration. Setup distinguishes
+recorded vendor model IDs from Gateway identities and other Providers' models.
+This software correction preserves original Governance and separate credential
+ownership; it does not complete live-model, native or overall product acceptance.
 
 The existing global activity stream now distinguishes opaque Bus event IDs from
 per-Run numeric sequences, chronological retained replay from a cold recent

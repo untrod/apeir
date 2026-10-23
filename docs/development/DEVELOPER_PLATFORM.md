@@ -52,6 +52,27 @@ configurations return `NOUS_PROVIDER_NKI_REQUIRED`, without a direct POST fallba
 Save configuration and use **Models → Test** through the same existing Gateway.
 Kernel availability, credentials and actual Provider support are still required.
 
+Saved Provider creation, `PATCH /api/v1/providers/{provider_id}` and governed
+deletion now update the original `providers.json`, existing Registry and current
+Gateway. Gateway construction reads a locked snapshot of the original Registry
+without invoking adapter health/credential callbacks. Updates preserve unedited
+adapter settings; deletion does not remove a
+credential from its separate store or cancel already admitted requests. It takes
+effect in the current process and survives reload. Other running processes are
+not silently synchronized. The existing file lock serializes cooperating writers;
+invalid configuration is rejected instead of replaced with an empty mapping.
+Invalid edits and failed writes preserve the previous registration. If persistence
+succeeds but runtime refresh fails, the request reports failure and clears the
+current Gateway: inspect saved configuration before retrying. This is not a
+claim of transactional rollback across files, processes and in-flight effects.
+Unsupported `enabled` edits are rejected rather than falsely reported as applied.
+
+The model catalog exposes `provider_model` only when recorded in its descriptor.
+Setup uses that exact vendor model ID for the selected Provider, through the
+existing bounded catalog reader. It does not send a Gateway ID or display name
+as a vendor parameter, guess a missing ID, or mix another Provider's models.
+Template suggestions and saved model metadata do not prove remote availability.
+
 Model tests retain the original request ID after dispatch failure and do not
 retry it automatically. Explicit completion is required; UNKNOWN is not healthy.
 Missing Token usage and unmeasured cost remain null/unknown, including the legacy

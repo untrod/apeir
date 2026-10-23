@@ -15,7 +15,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { colors, typo, radius, space, card, input, btnPrimary, btnSecondary } from "../design";
-import { api, getRuntimeConfigVersion } from "../lib/api";
+import { api, fetchModels, getRuntimeConfigVersion } from "../lib/api";
 import { useRuntimeConfigVersion } from "../store";
 import { bindNativeRuntimeSession, isLocalRuntimeSelected, nativeRuntimeStatus } from "../lib/nativeRuntime";
 
@@ -348,36 +348,31 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     return () => { current = false; };
   }, [step, t]);
 
-  // Fetch models when provider selected
-  const fetchModelsForProvider = useCallback(async (providerId: string) => {
+  // Use the original bounded catalog reader. Gateway IDs are not vendor model
+  // parameters, and another Provider's models cannot configure this adapter.
+  useEffect(() => {
+    if (step !== 6 || !selectedProviderId || !setupCurrent) return;
+    let current = true;
+    const version = getRuntimeConfigVersion();
+    const valid = () => current && active.current && version === getRuntimeConfigVersion();
     setModelFetchError("");
     setAvailableModels([]);
-    const template = PROVIDER_TEMPLATES.find((p) => p.providerId === providerId);
-    if (!template) return;
-    try {
-      const result = await api<{ models?: { id?: string; model_id?: string; display_name?: string }[] }>(
-        "/api/v1/models",
-      );
-      if (result?.models) {
-        setAvailableModels(
-          result.models.map((m) => m.id || m.model_id || m.display_name || "").filter(Boolean),
+    void (async () => {
+      try {
+        const result = await fetchModels();
+        if (!valid()) return;
+        setAvailableModels(result.models
+          .filter(model => model.provider_id === selectedProviderId && typeof model.provider_model === "string" && model.provider_model.trim())
+          .map(model => model.provider_model!));
+      } catch {
+        if (valid()) setModelFetchError(
+          t("Saved model catalog unavailable. Enter vendor model IDs manually; availability is not tested.",
+            "已保存模型目录不可用。请手动输入服务商模型 ID；可用性尚未验证。"),
         );
       }
-    } catch {
-      setModelFetchError(
-        t(
-          "Could not fetch model list. You can enter model IDs manually.",
-          "无法获取模型列表。您可以手动输入模型 ID。",
-        ),
-      );
-    }
-  }, [t]);
-
-  useEffect(() => {
-    if (step === 6 && selectedProviderId) {
-      fetchModelsForProvider(selectedProviderId);
-    }
-  }, [step, selectedProviderId, fetchModelsForProvider]);
+    })();
+    return () => { current = false; };
+  }, [step, selectedProviderId, setupCurrent, t]);
 
   // Connection test
   const runConnectionTest = useCallback(async () => {
@@ -1143,7 +1138,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
           {stepIndicator}
           {stepHeader(
             t("Model Selection", "模型选择"),
-            t("Assign models for different capabilities", "为不同能力分配模型"),
+            t("Assign vendor model IDs. Saved models and template suggestions do not prove availability.", "分配服务商模型 ID。已保存模型与模板建议不代表可用性验证。"),
           )}
           {modelFetchError && (
             <div

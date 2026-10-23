@@ -57,9 +57,7 @@ class ProviderRegistry:
             TypeError: If provider does not implement the Provider ABC.
         """
         if not isinstance(provider, Provider):
-            raise TypeError(
-                f"{type(provider).__name__} must be a Provider subclass"
-            )
+            raise TypeError(f"{type(provider).__name__} must be a Provider subclass")
         if not register_adapter(provider):
             raise ProviderError("provider registration failed")
         provider_id = provider.provider_id
@@ -77,6 +75,15 @@ class ProviderRegistry:
     def get(self, provider_id: str) -> Provider | None:
         """Get a provider by ID."""
         return get_provider(provider_id)
+
+    def adapters(self) -> tuple[Provider, ...]:
+        """Snapshot registrations without invoking health or credential callbacks."""
+        from nous_runtime.compat.provider import _legacy_provider
+
+        if _legacy_provider._intelligence_disabled():
+            return ()
+        with _legacy_provider._provider_lock:
+            return tuple(_legacy_provider._providers.values())
 
     def list_all(self) -> list[dict[str, Any]]:
         """List all registered providers with metadata."""
@@ -124,7 +131,12 @@ class ProviderRegistry:
         return {
             "status": overall,
             "providers": results,
-            "summary": {"total": len(providers), "ok": ok, "degraded": warn, "down": down},
+            "summary": {
+                "total": len(providers),
+                "ok": ok,
+                "degraded": warn,
+                "down": down,
+            },
         }
 
     @staticmethod
@@ -138,7 +150,12 @@ class ProviderRegistry:
     def _emit_lifecycle(event_type: str, provider_name: str) -> None:
         try:
             from nous_runtime.compat.events import emit_event
-            emit_event(event_type, source="provider_registry", payload={"provider": provider_name})
+
+            emit_event(
+                event_type,
+                source="provider_registry",
+                payload={"provider": provider_name},
+            )
         except Exception:
             pass
 
