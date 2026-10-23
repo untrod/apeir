@@ -57,6 +57,27 @@ browser captures, not APEIR.exe. Proposal generation occurred in the fixture's
 real WorkHarness before browser review; it was not a live model call initiated
 inside Chat. These limits keep the complete developer/product Gate PARTIAL.
 
+That qualification also identified a public source entry gap: Operations Console
+accepted an address but had no service-session input. Scripts that preselected
+the session had masked this missing user interaction. The original three UI
+cases fail before the correction (**3 failed,37 passed**). The existing form now
+accepts an explicitly entered service session over its existing HTTPS/loopback
+admission. It clears the draft on address edits, connection changes and submit,
+never forwards the old session to a new Controller, and stores no credential in
+layout/localStorage. The existing session-only API connection owner and separate
+human approval authority are unchanged. Existing unsafe-address tests also check
+that entered sessions are neither sent nor included in refusal messages.
+
+Using the independently installed public CLI's production/model-free API,
+sandboxed Chromium opened the actual source UI with no injected session or
+native IPC: a wrong session returned401, explicit form entry recovered actual
+Operations data, and reload retained the selected endpoint/session. All model
+Providers remained disabled, Kernel readiness was false, and the UI kept observe
+mode rather than inventing a human identity. There were zero model calls and
+zero browser page errors. Full Desktop checks pass **326 tests/46 files
+(57.33s)**; lint, typecheck and source build pass. These are source software
+results, not Windows native installation or live-provider qualification.
+
 ## Saved Provider lifecycle integration — 2026-10-23
 
 Starting parent PR #83 was `e8a0913`, while main remained `e3cd2a20`.

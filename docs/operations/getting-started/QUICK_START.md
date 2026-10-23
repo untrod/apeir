@@ -138,8 +138,13 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-Open the loopback URL printed by Vite. Connect to `http://127.0.0.1:8770` using
-the session token from the owner-only local file. Treat it as a credential: do
+Open the loopback URL printed by Vite. Expand **Controller connection**, set
+**API URL** to `http://127.0.0.1:8770`, then enter the token from the owner-only
+local file in **Service session token** and select **Connect**. Set the address
+before entering the token: editing it clears the draft, and changing Controllers
+never reuses the old session automatically. The field clears after submission;
+the existing session-only connection state survives page reload. It is not a
+Provider API key or human approval identity. Treat it as a credential: do
 not include it in logs, screenshots or issue attachments. Existing externally
 managed authentication uses its own session instead. The browser cannot launch
 native sidecars or store Provider secrets. Keep both foreground processes open;
