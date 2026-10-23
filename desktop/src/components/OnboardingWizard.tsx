@@ -270,6 +270,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   // Step 1: Welcome
   // Step 2: Environment checks
   const [envChecks, setEnvChecks] = useState<EnvCheckItem[]>([]);
+  const [environmentChecking, setEnvironmentChecking] = useState(false);
 
   // Step 3: Workspace
   const [workspacePath, setWorkspacePath] = useState("");
@@ -308,6 +309,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     let current = true;
     const version = getRuntimeConfigVersion();
     const valid = () => current && active.current && version === getRuntimeConfigVersion();
+    setEnvironmentChecking(true);
     setEnvChecks([{ label: "APEIR Runtime", status: "checking", detail: t("Checking...", "检查中..."), fixable: false }]);
     setCanManageWorkspace(false);
     void (async () => {
@@ -339,6 +341,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
         }
       } catch {
         if (valid()) setEnvChecks([{ label: "APEIR Runtime", status: "error", detail: t("ERROR — Runtime health could not be read. Inspect connection diagnostics.", "ERROR — 无法读取 Runtime 健康状态，请检查连接诊断。"), fixable: false }]);
+      } finally {
+        if (valid()) setEnvironmentChecking(false);
       }
     })();
     return () => { current = false; };
@@ -553,7 +557,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     : "";
   const canContinue =
     setupCurrent &&
-    (step !== 2 || !envChecks.some(check => check.status === "checking")) &&
+    (step !== 2 || (!environmentChecking && !envChecks.some(check => check.status === "checking"))) &&
     (step !== 3 || Boolean(workspacePath.trim())) &&
     (step !== 4 || Boolean(selectedProviderId && baseUrl.trim())) &&
     (step !== 5 || (!credentialError && !credentialSecretError)) &&

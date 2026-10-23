@@ -87,6 +87,20 @@ No scanner rule, execution timeout or safety assertion was relaxed. Current-sour
 PR CI and protected main integration remain required; main and external product
 Gates are not upgraded by these local results.
 
+The source-browser qualification subsequently completed keyless first-use setup,
+entered the existing Workbench and reopened its persisted configuration after
+reload. Sandboxed Chromium used actual authenticated Runtime HTTP and its real
+workspace registry, with a fake native IPC host; no POST/model request occurred
+and there were zero page errors. Default proposal inspection remained denied,
+as displayed by the original Governance boundary. This is a read-only source UI
+qualification, not unrestricted developer mutation or Windows installation.
+The fixture's initial generic network-idle wait and exact tab-name selector
+failures remain retained; explicit readiness/tab locators resolved those harness
+errors without changing application timeouts. A separate controlled delayed
+native workspace reply exposed premature Next admission (**1 failed / 6 passed**).
+The wizard now awaits the original health/workspace facts, without sleeps or
+extra retries. Final full Desktop regression: **322 passed**, 46 files.
+
 ## Product wiring audit — 2026-10-11
 
 Read-only starting main was `e5424305ec90fb0a072f21fbef371ebd5bc110f6`;
