@@ -92,7 +92,9 @@ class GovernanceStore:
         with self._lock:
             try:
                 with _db_connect(self.db_path) as db:
-                    db.executescript("""
+                    # executescript otherwise autocommits each DDL statement.
+                    # Keep schema publication atomic under the existing owner.
+                    db.executescript("""BEGIN IMMEDIATE;
                         CREATE TABLE IF NOT EXISTS governance_operations (
                             authorization_id TEXT PRIMARY KEY,
                             operation_id TEXT NOT NULL UNIQUE,
@@ -274,8 +276,9 @@ class GovernanceStore:
                             UNIQUE(authorization_id, handle_id)
                         );
                     """)
-            except Exception as e:
-                _log.warning("Failed to create governance tables: %s", e)
+            except Exception:
+                _log.warning("Failed to initialize Governance schema")
+                raise
 
     # Proposal
 

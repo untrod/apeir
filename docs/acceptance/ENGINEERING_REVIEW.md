@@ -8,6 +8,43 @@ This record distinguishes reproduced defects, inspected risks and unqualified
 external dependencies. It is not an exhaustive proof that the repository is
 bug-free, a physical acceptance, or production certification.
 
+## Governance schema admission — 2026-10-23
+
+R2 rechecked main `e3cd2a20`, composed candidate `c8ec9f3` and frozen Kernel.
+Core39960170078 Windows job120436212486 timed out during `human_env` construction,
+inside the original GovernanceStore schema `executescript`; its full log remains
+on GitHub and the failure is not replaced by the passing Multi-Arch39960173640.
+**REUSE** PR #89 connection ownership and phase diagnostics; **FIX** schema
+transaction/failure semantics; **EXTEND** its existing Windows diagnostic;
+**BLOCKED** remains protected-main integration and native locked components.
+
+Three deterministic original failures independently establish that schema DDL
+ran outside a transaction, a late injected syntax error left published partial
+tables, and initialization swallowed the error while logging private exception
+text. The existing connection now owns one `BEGIN IMMEDIATE` schema transaction:
+all DDL commits together, late failure rolls it back and propagates, and warnings
+contain no exception text. WAL, FULL synchronous behavior, busy timeout, grants,
+identity, approvals and normal transaction ownership are unchanged. There is no
+connection pool, successful-schema cache or second GovernanceStore.
+
+Focused lifecycle/human-session/context checks pass **102 tests**; related
+Governance/ControlPlane/Context/repository checks pass **1231 tests** (63.28 s).
+The original three failures and prior Windows initialization/commit stalls remain
+separate evidence: the atomicity repair alone does not prove every Windows stall
+has the same cause. The existing diagnostic can run `windows-governance` to
+exercise the original cases before the broader Governance/ControlPlane suite,
+with the original60-second bound. It cannot produce the required `Core gate`
+context; full combined-source Windows Core must qualify independently. No timing
+Issue is closed on a single passing rerun.
+
+Paired Linux constructor measurement used the same interpreter/filesystem,
+alternating order,5 warmups and20 measured fresh databases per variant. Before
+PR #89 baseline `d9c0505`: p50/p95/p99 **13.52/16.80/18.57 ms**, mean CPU3.89 ms;
+atomic schema candidate: **5.26/6.04/6.28 ms**, mean CPU1.89 ms. Both retain
+identical schema, WAL/FULL and integrity checks, with0 failures. These small
+sample tail estimates are exploratory, not Windows, model, UI or end-to-end
+performance qualification.
+
 ## Product wiring audit — 2026-10-11
 
 Read-only starting main was `e5424305ec90fb0a072f21fbef371ebd5bc110f6`;
