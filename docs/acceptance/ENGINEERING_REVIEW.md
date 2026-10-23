@@ -84,6 +84,15 @@ A four-interpreter cold-start/reload/integrity check also exercises cross-proces
 ownership. This is a software correction candidate until fresh platform CI passes;
 it does not close the unrelated Windows Relay/HTTP/Automation timing Issues.
 
+An installed-wheel lost-response Demo also exposed repeated full Workflow event
+projections in AgentSession history after resume. The original restart and
+approval scenarios reproduced **2 failures** (9 entries for6 unique events and
+10 for7 respectively). Coordination now appends only exact new projections;
+changed evidence remains distinct, and the existing256-entry bound, original
+EventStream, Work, receipt and observation records are unchanged. Existing saved
+history is not rewritten. This prevents repeat projections from occupying the
+bounded context window; no measured model-Token or end-to-end speedup is claimed.
+
 ## Native session destination audit — 2026-10-23
 
 The starting PR #83 source was `48a6cc1`; current main was still `e3cd2a20`.

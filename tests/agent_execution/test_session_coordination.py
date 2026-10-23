@@ -155,6 +155,16 @@ def test_uncertain_effect_never_replans_or_replays_after_restart(tmp_path: Path)
     assert "reconciliation" in restored.error
     assert effects == [waiting.workflow_run_id]
     assert restored.result == {}
+    workflow_events = [
+        item for item in restored.observations if item.get("kind") == "workflow_event"
+    ]
+    identities = [(item["run_id"], item["event_id"]) for item in workflow_events]
+    assert len(identities) == len(set(identities))
+    assert {
+        item["event_id"]
+        for item in waiting.observations
+        if item.get("kind") == "workflow_event"
+    } <= {item["event_id"] for item in workflow_events}
     restarted.close()
 
 
@@ -191,6 +201,11 @@ def test_approval_gate_resumes_same_durable_workflow(tmp_path: Path):
     assert completed.state is AgentSessionState.COMPLETED
     assert completed.workflow_run_id == workflow_run_id
     assert completed.result["workflow_outputs"]["execute"] == {"ok": True}
+    workflow_events = [
+        item for item in completed.observations if item.get("kind") == "workflow_event"
+    ]
+    identities = [(item["run_id"], item["event_id"]) for item in workflow_events]
+    assert len(identities) == len(set(identities))
     coordinator.close()
 
 
