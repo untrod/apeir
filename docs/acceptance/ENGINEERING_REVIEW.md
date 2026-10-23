@@ -45,6 +45,78 @@ identical schema, WAL/FULL and integrity checks, with0 failures. These small
 sample tail estimates are exploratory, not Windows, model, UI or end-to-end
 performance qualification.
 
+
+## Model-free public startup and product recovery — 2026-10-23
+
+**REUSE** the existing `--no-intelligence` process mode, Runtime API, WorkHarness,
+Proposal service, human sessions and CAS; **FIX** public API startup in that
+explicit mode; **BLOCKED/PENDING** real inference, qualified test execution and
+native installation. No execution, approval or model authority is added.
+
+The actual `apeir --no-intelligence runtime-api start` command originally exited
+in production with `NOUS_KERNEL_ENDPOINT is required`, preventing independent
+Runtime-service inspection even after all models were explicitly disabled.
+Startup now activates the existing model-off guard before initialization and
+retains the ordinary Kernel preflight in model-enabled mode. Saved Providers
+remain untouched and unloaded, protected reads still require authentication,
+and unsuccessful model tests report unknown usage rather than zero.
+The subprocess/HTTP regression fails before the change and passes afterward.
+Startup, CLI, model-off, credential and Gateway checks pass **65 tests** (2.86 s).
+That combination also exposed an older CLI fixture leaving its workspace in the
+process environment: the original order retained **3 failed /20 passed**.
+Those CLI tests now use the existing temporary-workspace fixture and isolated
+capability storage; their assertions and production startup behavior are intact.
+
+A fresh wheel installed with only declared base dependencies in an independent
+Python3.12 environment was exercised outside the checkout with `python -I`.
+The public model-free API starts with a generated owner-only session, serves the
+actual selected workspace, rejects unauthenticated Provider reads and refuses
+model execution with unknown usage. Normal production startup without Kernel
+still refuses. Interrupt exits0, revokes the session and closes the listener.
+This qualifies source API operation, not an installed native executable.
+
+The composed software review used sandboxed Chromium, the actual source UI and
+authenticated Runtime HTTP with a deterministic fake deliberator/signed fake
+human identity. Original Work `work_e7e7fabef2c4454893450d006c3f3503` generated
+two-file Proposal `wfr_19f468faa14e46bcab121bac25321279` through WorkHarness.
+Browser review/Approve Once/apply yielded independently reread file MATCH.
+An initial missing service-read permission returned403 and left files unchanged;
+the fixture operator granted only the exact workspace read scope and resumed
+the same original approved proposal. No service approval authority was added.
+
+The existing pytest profile then admitted the separately approved original run
+`workbench-exec-f0eb3668891d4d51`, but returned exit-1 with
+`STRICT_SANDBOX_UNAVAILABLE`: tests did **not** execute. A new Runtime process
+restored the original proposal, authorization and CAS manifest; reconciliation
+reported `replayed=false`. Both file hashes and write timestamps stayed unchanged.
+Work remained `WAITING_USER`, requiring a qualified test backend. Browser review
+and restart had zero page errors; private screenshots/HTTP evidence are source
+browser captures, not APEIR.exe. Proposal generation occurred in the fixture's
+real WorkHarness before browser review; it was not a live model call initiated
+inside Chat. These limits keep the complete developer/product Gate PARTIAL.
+
+That qualification also identified a public source entry gap: Operations Console
+accepted an address but had no service-session input. Scripts that preselected
+the session had masked this missing user interaction. The original three UI
+cases fail before the correction (**3 failed,37 passed**). The existing form now
+accepts an explicitly entered service session over its existing HTTPS/loopback
+admission. It clears the draft on address edits, connection changes and submit,
+never forwards the old session to a new Controller, and stores no credential in
+layout/localStorage. The existing session-only API connection owner and separate
+human approval authority are unchanged. Existing unsafe-address tests also check
+that entered sessions are neither sent nor included in refusal messages.
+
+Using the independently installed public CLI's production/model-free API,
+sandboxed Chromium opened the actual source UI with no injected session or
+native IPC: a wrong session returned401, explicit form entry recovered actual
+Operations data, and reload retained the selected endpoint/session. All model
+Providers remained disabled, Kernel readiness was false, and the UI kept observe
+mode rather than inventing a human identity. There were zero model calls and
+zero browser page errors. Full Desktop checks pass **326 tests/46 files
+(57.33s)**; lint, typecheck and source build pass. These are source software
+results, not Windows native installation or live-provider qualification.
+
+
 ## Saved Provider lifecycle integration — 2026-10-23
 
 Starting parent PR #83 was `e8a0913`, while main remained `e3cd2a20`.

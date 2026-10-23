@@ -106,6 +106,54 @@ contracts, not internal Runtime modules. Their printed workspaces retain evidenc
 
 ## Development and optional components
 
+### Model-free Runtime API and source interface
+
+From the project directory you want to inspect, start the existing authenticated
+API in the foreground:
+
+```bash
+apeir --no-intelligence runtime-api start
+```
+
+This explicit process-wide mode keeps every model disabled, including saved
+Providers. It preserves production Governance and sandbox checks; independent
+Runtime-service features remain available without claiming a healthy Kernel.
+It does not erase Provider configuration. Stop this process before starting the
+normal model-enabled mode with its required authenticated Kernel. Do not set
+development mode to bypass that requirement.
+
+In another activated shell, check the API and locate its protected local session
+file (this prints the path, not the token):
+
+```bash
+apeir runtime-api status --json
+apeir runtime-api token-path
+```
+
+For the source web interface, use the same checkout and Node.js 22:
+
+```bash
+cd desktop
+npm ci
+npm run dev -- --host 127.0.0.1
+```
+
+Open the loopback URL printed by Vite. Expand **Controller connection**, set
+**API URL** to `http://127.0.0.1:8770`, then enter the token from the owner-only
+local file in **Service session token** and select **Connect**. Set the address
+before entering the token: editing it clears the draft, and changing Controllers
+never reuses the old session automatically. The field clears after submission;
+the existing session-only connection state survives page reload. It is not a
+Provider API key or human approval identity. Treat it as a credential: do
+not include it in logs, screenshots or issue attachments. Existing externally
+managed authentication uses its own session instead. The browser cannot launch
+native sidecars or store Provider secrets. Keep both foreground processes open;
+stop the interface and API when finished. This is source UI/HTTP operation,
+not an installed Windows executable. File approvals still require a separately
+enrolled authorized human; test execution remains BLOCKED without a qualified
+sandbox. An API health response does not establish model inference or execution
+qualification.
+
 For repository tests and the numerical reference task:
 
 ```bash

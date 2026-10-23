@@ -69,7 +69,9 @@ runtime_api_app = typer.Typer(
 @runtime_api_app.command("start")
 def start_runtime_api(
     host: str = typer.Option(DEFAULT_RUNTIME_API_HOST, help="Bind host."),
-    port: int = typer.Option(DEFAULT_RUNTIME_API_PORT, min=1, max=65535, help="Bind port."),
+    port: int = typer.Option(
+        DEFAULT_RUNTIME_API_PORT, min=1, max=65535, help="Bind port."
+    ),
 ) -> None:
     """Start the Runtime API in the foreground."""
     from nous_runtime.api.server import create_server
@@ -87,7 +89,17 @@ def start_runtime_api(
     # must see the same migrations, capabilities, workspace, and Providers.
     os.environ.setdefault("NOUS_WORKSPACE_ROOT", str(Path.cwd()))
     try:
-        _verify_kernel_ready()
+        from nous_runtime.runtime.no_intelligence import (
+            activate_no_intelligence,
+            no_intelligence_enabled,
+        )
+
+        if no_intelligence_enabled():
+            # This explicit process-wide mode disables every model path; it
+            # does not relax Governance or admit Kernel-managed execution.
+            activate_no_intelligence()
+        else:
+            _verify_kernel_ready()
 
         from nous_runtime.cli.provider_setup import load_providers_from_config
         from nous_runtime.services.lifecycle import run_migrations, seed_capabilities
@@ -96,7 +108,9 @@ def start_runtime_api(
         workspace_result = ensure_workspace(os.environ["NOUS_WORKSPACE_ROOT"])
         if not workspace_result.get("ok", False):
             raise RuntimeError(
-                str(workspace_result.get("message") or "workspace initialization failed")
+                str(
+                    workspace_result.get("message") or "workspace initialization failed"
+                )
             )
 
         run_migrations()
@@ -117,16 +131,15 @@ def start_runtime_api(
         raise typer.Exit(code=1) from exc
 
     session_auth = None
-    if not (
-        os.environ.get("NOUS_API_TOKEN")
-        or os.environ.get("NOUS_AUTH_TOKEN")
-    ):
+    if not (os.environ.get("NOUS_API_TOKEN") or os.environ.get("NOUS_AUTH_TOKEN")):
         try:
             session_auth = ControlPlaneAuth.get()
             session_auth.generate()
         except OSError as exc:
             server.server_close()
-            typer.echo(f"Runtime API could not establish a local session: {exc}", err=True)
+            typer.echo(
+                f"Runtime API could not establish a local session: {exc}", err=True
+            )
             raise typer.Exit(code=1) from exc
 
     address, actual_port = server.server_address[:2]
