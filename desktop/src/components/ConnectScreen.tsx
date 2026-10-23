@@ -2,19 +2,11 @@
  * ConnectScreen — Connection setup when APEIR Runtime is not reachable.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { colors, typo, radius, shadow, space, card, input, btnPrimary } from "../design";
 import { setConfig, testConnection } from "../lib/api";
 import { SetupWizard } from "./SetupWizard";
-
-/** Lazy-load Tauri invoke — never top-level import to avoid module-load crashes. */
-async function tauriInvoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (!("__TAURI_INTERNALS__" in window)) {
-    throw new Error("Not running inside Tauri");
-  }
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<T>(cmd, args);
-}
+import { bindNativeRuntimeSession } from "../lib/nativeRuntime";
 
 interface ConnectScreenProps {
   onConnected: () => void;
@@ -27,16 +19,24 @@ export function ConnectScreen({ onConnected }: ConnectScreenProps) {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
   const [showWizard, setShowWizard] = useState(false);
+  const active = useRef(false);
+
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
-    tauriInvoke<string>("load_runtime_session_token")
+    let current = true;
+    bindNativeRuntimeSession("load_runtime_session_token", undefined, { isActive: () => current && active.current })
       .then(async (sessionToken) => {
-        setToken(sessionToken);
-        setConfig({ url: "http://localhost:8770", token: sessionToken });
-        if (await testConnection()) onConnected();
+        if (!current || !active.current) return;
+        setToken(sessionToken.token);
+        if (await testConnection() && current && active.current) onConnected();
       })
       .catch(() => undefined);
+    return () => { current = false; };
   }, [onConnected]);
 
   const handleConnect = async () => {
@@ -57,10 +57,10 @@ export function ConnectScreen({ onConnected }: ConnectScreenProps) {
     setStarting(true);
     setError("");
     try {
-      const sessionToken = await tauriInvoke<string>("start_runtime_api");
-      setToken(sessionToken);
-      const normalizedUrl = url.replace(/\/$/, "");
-      setConfig({ url: normalizedUrl, token: sessionToken });
+      const sessionToken = await bindNativeRuntimeSession("start_runtime_api", undefined, {
+        activateLocal: true, isActive: () => active.current,
+      });
+      setToken(sessionToken.token);
       for (let attempt = 0; attempt < 12; attempt += 1) {
         if (await testConnection()) {
           localStorage.setItem("nous_setup_complete", "1");

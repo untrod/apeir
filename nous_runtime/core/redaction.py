@@ -203,6 +203,9 @@ def redact_sensitive_data(value: Any) -> Any:
             nullable_usage_counter = (
                 normalized in _USAGE_COUNTER_FIELDS and item is None
             )
+            legacy_model_test_counter = normalized == "tokens_used" and (
+                item is None or type(item) is int and item >= 0
+            )
             model_cost_measurement = normalized == "cost_per_1k_tokens_usd" and (
                 item is None
                 or isinstance(item, (int, float))
@@ -223,6 +226,7 @@ def redact_sensitive_data(value: Any) -> Any:
                 and normalized not in _SAFE_REFERENCE_KEYS
                 and not numeric_token_counter
                 and not nullable_usage_counter
+                and not legacy_model_test_counter
                 and not model_cost_measurement
                 and any(marker in normalized for marker in _SENSITIVE_MARKERS)
             ):

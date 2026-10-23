@@ -8,6 +8,85 @@ This record distinguishes reproduced defects, inspected risks and unqualified
 external dependencies. It is not an exhaustive proof that the repository is
 bug-free, a physical acceptance, or production certification.
 
+## Native session destination audit — 2026-10-23
+
+The starting PR #83 source was `48a6cc1`; current main was still `e3cd2a20`.
+**REUSE** the native process manager, Windows Credential Manager, Runtime API
+client and connection version; **FIX** local-session destination and late native
+response binding; **EXTEND** the existing startup/settings/diagnostic UI tests.
+No credential store, API, execution authority or startup daemon was added.
+Original component regressions retained **3 failures**: local startup used the
+connection form's address, late session loading replaced a changed connection,
+and local credential mutation proceeded for a selected remote Controller.
+
+The corrected UI binds native session results only to the manager's validated
+loopback endpoint and verified ready session, with original connection/version
+and view checks. Credential rotation/removal, diagnostic recovery and workspace
+restart require the selected local endpoint. Startup preserves a selected remote
+Controller. Session-reset failure does not silently restart another process.
+An action may already have completed when its response becomes unusable; no
+automatic action retry or process cancellation is inferred.
+
+New checks include the actual App bootstrap, remote/ABA/unmount negatives,
+invalid destination/readiness/session rejection, transient input clearing and
+the existing API client over two actual loopback HTTP servers. The authenticated
+request reaches only the endpoint returned by the simulated native IPC host;
+the other server receives no request. **22 focused tests** and the full Desktop
+suite (**314 passed**) exercise this software boundary. Node HTTP fixture types
+are development-only; the existing browser polling handles remain DOM numbers.
+Related Runtime startup, provider, launcher, component-lock and two-file proposal
+regressions have **39 passed**. This uses fake IPC/credentials, not an installed
+Windows executable, actual Credential Manager qualification or a real model.
+
+The preceding composed `7d0d88e` Core run `39880466334` completed on four
+platforms: Linux Python 3.12 **5684 passed / 66 skipped**, Linux Python 3.10
+and macOS Python 3.12 each **5673 passed / 77 skipped**, and Windows Python
+3.12 **5662 passed / 88 skipped**; each retained four warnings. Those exact-source
+results precede this frontend correction; new candidate CI and protected main
+integration remain separate requirements. Main protection inspection still
+returns administration HTTP 403. Native binary hashes, real model/IdP and
+installed product acceptance remain **BLOCKED/PENDING** at their own Gates.
+
+## First-use and Provider test integration — 2026-10-23
+
+**REUSE** health/workspace APIs, native initializer/process manager, Provider
+configuration, Gateway/NKI, model-test application service, usage and redaction;
+**EXTEND/FIX** the original wizard and CLI adapters. No Registry, execution
+database, credential store or approval authority was added. Original targeted
+checks retained **7 backend failures** and **2 wizard failures**: direct setup
+inference/diagnostic POST, guessed readiness, ineffective workspace selection,
+UNKNOWN model completion, missing usage converted to zero and lost error binding.
+
+Configuration validation now performs no credential resolution/network/inference.
+Doctor/ping use GET metadata only. A saved explicit Provider test uses the
+existing model-test service only for the original matching strict NKI Gateway;
+changed mappings, compatibility Gateway or Gateway replacement cannot dispatch.
+The existing model-test route records original request IDs on failure, returns
+unknown usage/cost and accepts explicit completed outcomes. The legacy counter's
+redaction correction preserves only null/nonnegative integers and rejects secret
+strings/structures. Embedded-credential and unsupported base URLs are rejected
+without copying their contents into diagnostics.
+
+The wizard reads selected Runtime health instead of guessing architecture or
+WebView availability. It initializes/restarts the exact selected local workspace
+and confirms it through the original API, or keeps the remote Controller's scope.
+Keyless setup preserves existing Providers. Saving completes once before the
+completion screen; no conversation, inference or verified execution is invented.
+Connection-version changes invalidate setup; response loss does not retry native
+actions. Local HTTP/native IPC tests, fake Gateway replies and the real
+authenticated Runtime HTTP configuration route establish software boundaries.
+They do not qualify actual Windows Credential Manager, a real model invoice,
+installed EXE, strong sandbox or hardware.
+
+Affected backend regression: **504 passed**. Full Desktop: **321 passed** in
+46 files. The preceding first native-session correction retains its separate
+314-test full run. Changed-file format checking also required mechanical
+formatting of the previously unformatted Provider experience module/test; their
+pre-existing format failures were checked against the original Git contents.
+No scanner rule, execution timeout or safety assertion was relaxed. Current-source
+PR CI and protected main integration remain required; main and external product
+Gates are not upgraded by these local results.
+
 ## Product wiring audit — 2026-10-11
 
 Read-only starting main was `e5424305ec90fb0a072f21fbef371ebd5bc110f6`;

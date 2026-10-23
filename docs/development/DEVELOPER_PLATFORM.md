@@ -20,6 +20,47 @@ The desktop `Develop` page provides the following views:
 
 Equivalent API endpoints are available under `/api/v1/developer/`.
 
+### First-use configuration and model tests
+
+The existing native setup wizard reads `/api/v1/health/detailed` from the selected
+Runtime. Platform/architecture are reported Runtime facts; rendering a page is
+not WebView, native package or sandbox qualification. Kernel, Provider and
+execution admission remain separate. Local workspace selection uses the existing
+native initializer/restart, then confirms the selected path through the Runtime
+workspace API. A remote Controller retains its existing workspace; the wizard
+does not manage that remote host through local filesystem commands.
+
+**Configure model later** leaves existing Providers unchanged and opens the
+workbench without an API key. Completion saves configuration once; it creates no
+conversation and performs no inference. A Controller/session version change
+invalidates the pending setup, including address/token changes that return to the
+original values. An uncertain restart stays unresolved without another mutation.
+
+`POST /api/v1/providers/validate` now validates reference-only configuration; it
+performs no network request, credential resolution or inference. It returns
+`validation_scope=configuration`, `authentication=UNKNOWN` and
+`model_inference=NOT_RUN`. This corrects the old direct inference probe.
+Provider base URLs must be HTTP(S), without embedded credentials, query parameters
+or fragments. Secrets belong in the existing credential reference path.
+
+Provider Doctor/catalog reads and `provider ping` are endpoint metadata probes;
+they do not prove authentication or inference. Explicit `provider test` uses the
+existing model-test service only when the current strict NKI Gateway and original
+Provider/model/endpoint/credential-reference/capability mappings agree. A changed
+Gateway is fenced before dispatch. Unregistered, changed or direct compatibility
+configurations return `NOUS_PROVIDER_NKI_REQUIRED`, without a direct POST fallback.
+Save configuration and use **Models → Test** through the same existing Gateway.
+Kernel availability, credentials and actual Provider support are still required.
+
+Model tests retain the original request ID after dispatch failure and do not
+retry it automatically. Explicit completion is required; UNKNOWN is not healthy.
+Missing Token usage and unmeasured cost remain null/unknown, including the legacy
+`tokens_used` projection. Its redaction exception accepts only null/nonnegative
+integers; strings and structured values remain redacted. Inspect original usage
+and request evidence before another potentially billed call. Software tests use
+fake responses and native IPC; they do not establish a real account, installed
+Windows credential store, native executable or release acceptance.
+
 ### Inspecting actual model input
 
 Chat and the Workbench's read-only assistant expose **Inspect model input** on

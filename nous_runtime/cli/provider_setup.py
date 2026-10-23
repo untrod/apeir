@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Sequence
+from urllib.parse import urlsplit
 
 from nous_runtime.cli.provider_experience import (
     executable_capabilities,
@@ -514,7 +515,28 @@ def build_provider_config(
 
     service = provider_id if provider_id in SERVICE_PRESETS else "custom"
     preset = SERVICE_PRESETS[service]
-    base_endpoint = (api_base_url or str(preset["base_endpoint"])).rstrip("/")
+    base_endpoint = str(api_base_url or preset["base_endpoint"]).strip().rstrip("/")
+    try:
+        parsed_endpoint = urlsplit(base_endpoint)
+        valid_endpoint = (
+            parsed_endpoint.scheme in {"http", "https"}
+            and bool(parsed_endpoint.hostname)
+            and parsed_endpoint.port != 0
+            and parsed_endpoint.username is None
+            and parsed_endpoint.password is None
+            and not parsed_endpoint.query
+            and not parsed_endpoint.fragment
+            and not any(
+                character.isspace() or ord(character) < 32
+                for character in base_endpoint
+            )
+        )
+    except ValueError:
+        valid_endpoint = False
+    if not valid_endpoint:
+        raise ValueError(
+            "Provider base URL must use HTTP(S) without embedded credentials, query parameters or fragments"
+        )
     configured = normalize_capability_mapping(capabilities or preset["capabilities"])
     if not configured:
         configured = normalize_capability_mapping(preset["capabilities"])
@@ -561,7 +583,7 @@ def validate_provider_from_config(
     model: str | None = None,
     capability_models: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Probe a proposed Provider configuration without persisting it."""
+    """Validate reference-only configuration without inference or network I/O."""
     config = build_provider_config(
         provider_id=provider_id,
         name=name,
@@ -571,7 +593,15 @@ def validate_provider_from_config(
         model=model,
         capability_models=capability_models,
     )
-    return probe_provider_config(provider_id, config, "test")
+    return {
+        "ok": True,
+        "provider_id": config["provider_id"],
+        "status": "Configuration accepted; authentication and inference not tested",
+        "validation_scope": "configuration",
+        "authentication": "UNKNOWN",
+        "model_inference": "NOT_RUN",
+        "latency_ms": None,
+    }
 
 
 def _save_provider_config(provider_id: str, config: dict[str, Any]) -> None:

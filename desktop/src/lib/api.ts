@@ -465,7 +465,10 @@ export interface ModelTestResult {
   latency_ms: number;
   response_preview?: string;
   finish_reason?: string;
-  tokens_used?: number;
+  tokens_used?: number | null;
+  usage?: Record<string, number | null>;
+  cost_usd?: number | null;
+  cost_measurement?: string;
   execution?: {
     path?: string;
     operation_id?: string;
@@ -1323,7 +1326,7 @@ export function subscribeRuntimeEvents(
   options: { domain?: string; intervalMs?: number; onError?: () => void } = {},
 ) {
   let active = true;
-  let timer: ReturnType<typeof window.setTimeout> | undefined;
+  let timer: number | undefined;
   const connection = captureRuntimeConnection();
   const close = () => { active = false; if (timer !== undefined) window.clearTimeout(timer); };
   const current = () => {
@@ -1364,7 +1367,7 @@ export function subscribeRunEvents(
   options: { intervalMs?: number; afterSequence?: number } = {},
 ) {
   let active = true;
-  let timer: ReturnType<typeof window.setTimeout> | undefined;
+  let timer: number | undefined;
   const connection = captureRuntimeConnection();
   const close = () => { active = false; if (timer !== undefined) window.clearTimeout(timer); };
   const current = () => {

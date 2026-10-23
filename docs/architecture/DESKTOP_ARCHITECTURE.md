@@ -55,8 +55,11 @@ can still be entered manually.
 - CORS allows only Tauri and numeric-port loopback origins.
 - Tauri exposes only the commands required to show the window and manage the
   local Runtime session; broad filesystem, HTTP, and shell plugins are disabled.
-- Provider credentials remain owned by the Runtime credential provider. The
-  Desktop setup flow never accepts or persists Provider API keys.
+- Provider credentials remain owned by the existing credential paths. Native
+  Windows setup/settings accept a transient password input through restricted
+  Tauri IPC into Windows Credential Manager. Configuration retains environment
+  reference names; keys are not stored in browser storage or ordinary Runtime
+  API payloads. Browser-only setup uses existing references and cannot store keys.
 - Desktop state is a cache of authoritative Runtime state.
 
 ## Operations workbench
@@ -84,6 +87,17 @@ it grants no execution authority.
 
 Source frontend tests/build are software validation. They do not qualify an
 installed Windows executable, NSIS lifecycle, real IdP or physical hardware.
+
+Native session commands bind their returned session to the loopback endpoint
+reported by the existing Tauri process manager. Endpoint, readiness and session
+availability are checked before publishing that connection; the original
+connection version and active view must still agree. Credential changes,
+diagnostic recovery and workspace restart require the selected local Runtime.
+Only the explicit **Start Local Runtime** action switches from another Controller
+to local. Native startup preserves a selected remote Controller and does not
+load a local token or create a local workspace for that remote connection.
+An uncertain native action is not retried automatically, including session-reset
+failure. Closing a view does not prove a dispatched native action was cancelled.
 
 The 2026-10-10 workbench audit reused the existing Console/API, ThemeProvider,
 UI-state reset and signed Relay projection. It extended presentation and added

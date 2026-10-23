@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { colors, typo, radius, space, btnPrimary, btnSecondary } from "../design";
-import { getConfig, setConfig } from "../lib/api";
+import { bindNativeRuntimeSession } from "../lib/nativeRuntime";
 
 export interface CredentialStatus {
   environment_name: string;
@@ -36,6 +36,12 @@ export function CredentialSettings() {
   const [removing, setRemoving] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const active = useRef(false);
+
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -60,13 +66,12 @@ export function CredentialSettings() {
     setError("");
     setMessage("");
     try {
-      const token = await invoke<string>("store_provider_credential", {
+      const pending = bindNativeRuntimeSession("store_provider_credential", {
         environmentName: environmentName.trim(),
         secret,
-      });
-      const config = getConfig();
-      setConfig({ ...config, token });
+      }, { isActive: () => active.current });
       setSecret("");
+      await pending;
       setMessage("Credential stored. Runtime restarted with the updated reference.");
       await refresh();
     } catch (reason) {
@@ -86,11 +91,9 @@ export function CredentialSettings() {
     setError("");
     setMessage("");
     try {
-      const token = await invoke<string>("remove_provider_credential", {
+      await bindNativeRuntimeSession("remove_provider_credential", {
         environmentName: name,
-      });
-      const config = getConfig();
-      setConfig({ ...config, token });
+      }, { isActive: () => active.current });
       setRemoving(null);
       setMessage("Credential reference revoked and Runtime restarted.");
       await refresh();
