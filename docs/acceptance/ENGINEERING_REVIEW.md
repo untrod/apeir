@@ -2602,3 +2602,139 @@ retry, timeout, durability setting, storage owner or production behavior changes
 This diagnostic does not itself fix or close Issue #88. Windows measurements and
 resulting-main qualification remain separate; a passing isolated run cannot
 replace the original full-suite failure evidence.
+
+
+### Scoped MCP / original Work submission software qualification
+
+Audit classification: **REUSE** existing MCP SDK, authenticated Runtime HTTP,
+Governance/PermissionEngine, OperationsPlane, DeviceRegistry, WorkSupervisor,
+DistributedWorkStore, checkpoint store, EventStream and redaction; **EXTEND** the
+existing extension CLI with a fixed stdio bridge and five tool adapters;
+**FIX** authenticated original Work submission/retry and concurrent cold SQLite
+initialization; **DEFER** complete Codex Harness, remote human identity, native
+installation, physical effects and unqualified Work Harness model disclosure.
+No second authority, Work/Artifact registry, scheduler, verifier or agent is added.
+
+Accepted-main `629b13f` ignored a supplied idempotency key: an actual HTTP test
+with original canonical human approval produced two Runs (1 failed1.21s).
+A test-only first fixture omitted approval and was correctly denied; it is not
+reported as an execution reproduction. The corrected fixture explicitly approves
+through the existing local-human boundary. A later combined run exposed cold
+SQLite `PRAGMA journal_mode=WAL` contention (1 failed220 passed19.20s). Both raw
+failure logs remain private. The canonical store now serializes initialization
+with existing file locking and closes connections on initialization errors.
+Ordinary 30-second SQLite limits, checksum checks and retention assertions remain.
+
+After the correction, MCP/Work/Agent regressions: **278 passed19.44s**.
+Broader Extension/Work/Agent/Governance/API regressions: **666 passed17 skipped
+30.79s**. Public CLI stdio/HTTP and original-submission suite, including two actual
+Runtime processes sharing the cold workspace: **38 passed13.33s**. Counts overlap.
+The model deliberator in these tests is an explicit fixture; no paid-provider,
+physical or native Desktop qualification is claimed. Exact final source and
+resulting-main CI are required before integration.
+
+Official Codex 0.163.0 App Server (native SHA-256
+`399ff69c431c066e40de318fba45c2b07f45a76b19939d247ee4828fc70c4215`)
+was also run against the real Runtime HTTP/MCP bridge: initialize, ephemeral
+read-only thread start, APEIR tool discovery, canonical Node list, original
+Distributed Work status, and new Work requiring human approval. Direct protocol
+qualification: **1 passed5.74s**; zero model Turns, no Work execution and no
+remaining owned process-group members. Private report
+`apeir-codex-mcp-direct-nkig8sul/report.json` retains calls, timings, module hash
+and cleanup without account identifiers or credentials. A separate metadata probe
+successfully read configured-account presence and five model descriptors.
+Configured authentication is not complete Harness qualification: generated
+0.163.0 schemas do not expose the scoped filesystem contract described by newer
+web documentation; disabling shell does not disable all native file tools.
+Do not start a model Turn before actual credential/filesystem isolation and
+approval mapping are qualified. This work does not change Kernel, component
+locks, PID64, sandbox boundaries, published tags or production-release status.
+
+Current additional admission/leakage checks: **807 passed17 skipped37.94s**
+(Extension/Work/Agent/Governance/public API freeze/Control Plane). A controlled
+scope change during original API admission must prevent Work creation; the
+initial unpublished prototype failed that assertion (1 failed1.32s), then gained
+an immediate pre-submit scope recheck. Sensitive credential registration stays
+at the new authenticated MCP execution boundary. A broader prototype registered
+all legacy API fixture tokens globally and collided with the six-character
+fixture value used in SecretHandle field names (1 failed32 setup errors774 passed);
+it is rejected without changing the redactor, legacy fixtures or their assertions.
+Raw failures remain separate from passing results. This is scoped software
+qualification; final composed source CI and actual-provider Gates remain separate.
+
+Composed candidate `08f2416` (including all queued integration dependencies):
+**1195 passed,19 skipped (76.91s)** across Extension/Work/Agent/Governance,
+Control Plane/Skill/Environment/Artifact/benchmark, API freeze and focused Node
+shutdown/reconciliation. Python3.10: **289 passed (24.86s)**. Gateway accounting,
+cost and Context combination: **560 passed (19.60s)**. These overlapping scopes
+are not added into a synthetic total.
+
+A further real-socket cancellation test fails the old blocking-thread bridge
+(**1 failed,7.08s**): cancelling the caller leaves its HTTP request running.
+The bridge now uses the MCP dependency's async HTTP client, a whole-call deadline,
+explicit no-redirect/no-retry and bounded uncompressed responses. Cancellation
+closes its own transport, not the original Runtime Work. The corrected focused
+CLI/MCP/submission set, with invalid keys rejected before requesting approval,
+is **50 passed (17.86s)**. This is correctness/resource ownership, not a measured
+speed improvement. Official Codex direct-MCP qualification against that async
+code: **1 passed (9.66s)**, report `apeir-codex-mcp-direct-duw7n7vt/report.json`,
+no model Turns and clean owned-process exit. Final composed CI remains required.
+
+Installed external MCP consumer: source `5bd50e5`, independently built wheel
+SHA-256 `d0ba3843f706b1338bc36bc0609bf6ca359e4f857f5eda86deb565cf139ad2b5`,
+installed with the existing MCP extra into a new isolated venv. From an empty
+working directory outside the checkout, public `apeir extension serve-mcp`
+initialized/discovered five described tools, read actual Node and Distributed
+Work state, and stopped Work submission at canonical human approval. **1 passed
+(4.03s)**; installed module resolved under venv site-packages, no model call,
+raw test credential leak or remaining owned process. The protected consumer
+manifest/report retains exact wheel/source/cleanup evidence. This is a source
+wheel, not native Windows installation or production supply-chain qualification.
+
+The separate Windows Automation failure at source97c9a8/run38939446275 is now
+[Issue82](https://github.com/untrod/apeir/issues/82). Its missing verdict must not
+be promoted to MATCH. Source5bd50e5 Linux Automation: **114 passed (195.36s)**;
+this does not identify or resolve the Windows cause. The same original assertion
+now emits the full failed projection and additionally checks original Work/effect
+count, without another attempt, more delay or a larger timeout. Original failure
+logs and the failed run remain retained; general reliability/product status is
+not upgraded on the strength of another passing candidate.
+
+
+### Distribution compatibility migration atomicity and Windows startup follow-up
+
+MCP source5bd50e5 manual full Core run38944737418: Linux3.12, Linux3.10 and
+macOS3.12 passed; Windows3.12 job117120890834 aborted at the unchanged60-second
+pytest limit during a Context fixture's legacy Capability schema migration,
+before MCP tests. The stack is retained. This is not relabelled a passed Windows
+run, and no claim is made that the Automation failure in Issue82 has the same cause.
+
+Audit identified a separate deterministic defect in Distribution's existing
+Python compatibility database (`remote_terminal/nous_core/db.py`): executescript
+committed each DDL before the version record; an injected later SQL error left
+a partial table behind (**1 failed0.08s**). Existing file migrations now each
+own one transaction, including their version record, and inline bootstrap is
+atomic as well. The old connection manager still commits/rolls back/closes;
+WAL, foreign keys, FULL synchronization and5-second busy timeout are unchanged.
+No migration SQL, native Rust Kernel repository/revision, NKI contract,
+`nous_runtime/kernel`, component lock or authority model is modified. Formatting
+of the touched legacy file preserves the measured implementation AST.
+
+The existing Pack test also assumed another test had imported its registry and
+leaked NOUS_DATA_DIR globally. Focused qualification exposed **1 failed71 passed**;
+it now explicitly imports the same owner and restores its temporary environment.
+No assertion was removed. Migrations/Context guard/API admission: **72 passed
+3.34s**. Wider Extension/Work/Agent/Governance/Context/migrations/Environment/
+Artifact/API freeze: **1356 passed19 skipped56.51s**. Python3.10 public MCP,
+submission,CLI,migrations and Context guard: **114 passed20.85s**. Counts overlap.
+
+Controlled cold-schema A12/B12/B12/A12,24 fresh databases per variant on one CPU
+of the shared Linux host: before p50/p95/p99 **51.455/56.662/62.573ms**, CPU
+**0.46595s**; atomic after **30.883/37.761/42.755ms**, CPU **0.34982s**.
+All databases pass integrity_check and contain all14 version records. Private
+`apeir-legacy-migration-ab-t5xxj7g7/report.json` retains raw samples and module
+hash/AST equivalence. Small-sample p99 is the observed maximum, not a stable
+production tail estimate. This does not establish Windows timeout root cause,
+Node end-to-end improvement, model cost savings or physical qualification.
+Exact updated source must run fresh full Core/Multi-Arch before integration.
+
