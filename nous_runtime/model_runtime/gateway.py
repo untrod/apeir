@@ -9,6 +9,7 @@ import inspect
 import ipaddress
 import json
 import logging
+import math
 import os
 import re
 import threading
@@ -64,18 +65,35 @@ class ParallelInvocationPolicy:
     min_successes: int = 1
 
     def __post_init__(self) -> None:
-        if self.max_candidates < 1 or self.max_concurrency < 1:
+        for name in ("max_candidates", "max_concurrency", "min_successes"):
+            value = getattr(self, name)
+            if type(value) is not int or value < 1:
+                raise ModelInvocationError(
+                    f"parallel {name} must be a positive integer"
+                )
+        if self.max_total_tokens is not None and (
+            type(self.max_total_tokens) is not int or self.max_total_tokens < 0
+        ):
             raise ModelInvocationError(
-                "parallel candidate and concurrency limits must be positive"
+                "parallel token budget must be a non-negative integer"
             )
-        if self.min_successes < 1:
-            raise ModelInvocationError("parallel min_successes must be positive")
-        if self.max_total_cost_usd is not None and self.max_total_cost_usd < 0:
-            raise ModelInvocationError("parallel cost budget must be non-negative")
-        if self.max_total_tokens is not None and self.max_total_tokens < 0:
-            raise ModelInvocationError("parallel token budget must be non-negative")
-        if self.timeout_s is not None and self.timeout_s <= 0:
-            raise ModelInvocationError("parallel timeout must be positive")
+        for name in ("max_total_cost_usd", "timeout_s"):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            try:
+                valid = (
+                    not isinstance(value, bool)
+                    and isinstance(value, (int, float))
+                    and math.isfinite(value)
+                    and (value > 0 if name == "timeout_s" else value >= 0)
+                )
+            except OverflowError:
+                valid = False
+            if not valid:
+                raise ModelInvocationError(
+                    f"parallel {name} has an invalid numeric bound"
+                )
 
 
 @dataclass(frozen=True)
@@ -86,10 +104,11 @@ class ParallelInvocationResult:
     cancelled_models: tuple[str, ...]
     total_cost_usd: float | None
     total_tokens: int | None
+    min_successes: int = 1
 
     @property
     def successful(self) -> bool:
-        return bool(self.responses)
+        return bool(self.responses) and len(self.responses) >= self.min_successes
 
     @property
     def selected_response(self) -> ModelResponse | None:
@@ -521,6 +540,7 @@ class ModelGateway:
             *decision.fallback_model_ids,
         )[: active_policy.max_candidates]
         model_for_task: dict[asyncio.Task[ModelResponse], str] = {}
+        child_request_ids: dict[str, str] = {}
 
         async def invoke_locked(model_id: str) -> ModelResponse:
             payload = request.to_dict()
@@ -534,7 +554,18 @@ class ModelGateway:
                 ModelRequest.from_dict(payload),
                 _input_admission=request._input_admission,
             )
-            return await self.invoke(locked_request)
+            # Each child must obey the aggregate deadline at its own admission
+            # boundary. Outer cancellation alone cannot prevent dispatch after
+            # synchronous routing/loading has occupied the event loop.
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ModelInvocationError(
+                    "parallel invocation timed out before dispatch"
+                )
+            child_request_ids[model_id] = locked_request.request_id
+            return await self.invoke(
+                replace(locked_request, timeout_s=min(request.timeout_s, remaining))
+            )
 
         timeout = min(
             request.timeout_s,
@@ -553,61 +584,104 @@ class ModelGateway:
                 model_for_task[task] = model_id
                 pending.add(task)
 
-        launch_available()
         responses_by_model: dict[str, ModelResponse] = {}
         failures: list[str] = []
         total_cost = 0.0
         total_tokens = 0
         unknown_cost = unknown_tokens = False
-        budget_exhausted = False
-        while pending:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            completed, pending = await asyncio.wait(
-                pending,
-                timeout=remaining,
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            if not completed:
-                break
-            for task in completed:
-                model_id = model_for_task[task]
-                try:
-                    response = task.result()
-                except Exception as exc:
-                    failures.append(f"{model_id}: {exc}")
-                    continue
-                responses_by_model[model_id] = response
-                total_cost += response.cost_usd
-                unknown_cost |= self._cost_measurement(response) == "unknown"
-                unknown_tokens |= (
-                    response.usage.get("total_tokens", response.usage.get("tokens"))
-                    is None
-                )
-                total_tokens += int(
-                    response.usage.get("total_tokens")
-                    or response.usage.get("tokens")
-                    or 0
-                )
-            budget_exhausted = (
-                active_policy.max_total_cost_usd is not None
-                and (unknown_cost or total_cost >= active_policy.max_total_cost_usd)
-            ) or (
-                active_policy.max_total_tokens is not None
-                and (unknown_tokens or total_tokens >= active_policy.max_total_tokens)
-            )
-            if budget_exhausted:
-                break
+        budget_exhausted = (
+            active_policy.max_total_cost_usd == 0 or active_policy.max_total_tokens == 0
+        )
+        if not budget_exhausted:
             launch_available()
 
-        cancelled_models = list(remaining_models)
-        for task in pending:
-            model_id = model_for_task[task]
-            cancelled_models.append(model_id)
-            task.cancel()
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
+        def account_unanswered(model_id: str) -> None:
+            nonlocal total_cost, total_tokens, unknown_cost, unknown_tokens
+            child_id = child_request_ids.get(model_id)
+            if child_id is None:
+                # This task never crossed into invocation; no request exists.
+                return
+            cost = tokens = None
+            if self._cost_controller is not None:
+                try:
+                    cost, tokens = self._cost_controller.request_usage(child_id)
+                except Exception:
+                    # Query failure must not turn possible charges into zero.
+                    failures.append(f"{model_id}: original usage evidence unavailable")
+            unknown_cost |= cost is None
+            unknown_tokens |= tokens is None
+            total_cost += cost or 0.0
+            total_tokens += tokens or 0
+
+        try:
+            while pending:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                completed, pending = await asyncio.wait(
+                    pending,
+                    timeout=remaining,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if not completed:
+                    break
+                for task in completed:
+                    model_id = model_for_task[task]
+                    try:
+                        response = task.result()
+                    except asyncio.CancelledError:
+                        # A Provider child can end cancelled independently of
+                        # its caller. Only cancellation of the parent's awaits
+                        # should enter the outer parent-cleanup handler.
+                        failures.append(f"{model_id}: parallel child cancelled")
+                        account_unanswered(model_id)
+                        continue
+                    except Exception as exc:
+                        failures.append(f"{model_id}: {exc}")
+                        account_unanswered(model_id)
+                        continue
+                    responses_by_model[model_id] = response
+                    total_cost += response.cost_usd
+                    unknown_cost |= self._cost_measurement(response) == "unknown"
+                    unknown_tokens |= (
+                        response.usage.get("total_tokens", response.usage.get("tokens"))
+                        is None
+                    )
+                    total_tokens += int(
+                        response.usage.get("total_tokens")
+                        or response.usage.get("tokens")
+                        or 0
+                    )
+                budget_exhausted = (
+                    active_policy.max_total_cost_usd is not None
+                    and (unknown_cost or total_cost >= active_policy.max_total_cost_usd)
+                ) or (
+                    active_policy.max_total_tokens is not None
+                    and (
+                        unknown_tokens or total_tokens >= active_policy.max_total_tokens
+                    )
+                )
+                if budget_exhausted:
+                    break
+                launch_available()
+
+            cancelled_models = list(remaining_models)
+            for task in pending:
+                model_id = model_for_task[task]
+                cancelled_models.append(model_id)
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+                for task in pending:
+                    account_unanswered(model_for_task[task])
+        except asyncio.CancelledError:
+            # Parent cancellation does not automatically cancel Tasks passed to
+            # asyncio.wait. Finish original child cleanup and durable accounting.
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            raise
         if budget_exhausted:
             failures.append(
                 "parallel invocation budget is unknown"
@@ -629,6 +703,8 @@ class ModelGateway:
             {
                 "candidate_count": len(candidates),
                 "success_count": len(ordered_responses),
+                "min_successes": active_policy.min_successes,
+                "successful": len(ordered_responses) >= active_policy.min_successes,
                 "failure_count": len(failures),
                 "cancelled_models": cancelled_models,
                 "total_cost_usd": None if unknown_cost else total_cost,
@@ -642,6 +718,7 @@ class ModelGateway:
             cancelled_models=tuple(cancelled_models),
             total_cost_usd=None if unknown_cost else total_cost,
             total_tokens=None if unknown_tokens else total_tokens,
+            min_successes=active_policy.min_successes,
         )
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[Any]:

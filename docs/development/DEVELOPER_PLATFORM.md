@@ -20,6 +20,75 @@ The desktop `Develop` page provides the following views:
 
 Equivalent API endpoints are available under `/api/v1/developer/`.
 
+### First-use configuration and model tests
+
+The existing native setup wizard reads `/api/v1/health/detailed` from the selected
+Runtime. Platform/architecture are reported Runtime facts; rendering a page is
+not WebView, native package or sandbox qualification. Kernel, Provider and
+execution admission remain separate. Local workspace selection uses the existing
+native initializer/restart, then confirms the selected path through the Runtime
+workspace API. A remote Controller retains its existing workspace; the wizard
+does not manage that remote host through local filesystem commands.
+
+**Configure model later** leaves existing Providers unchanged and opens the
+workbench without an API key. Completion saves configuration once; it creates no
+conversation and performs no inference. A Controller/session version change
+invalidates the pending setup, including address/token changes that return to the
+original values. An uncertain restart stays unresolved without another mutation.
+
+`POST /api/v1/providers/validate` now validates reference-only configuration; it
+performs no network request, credential resolution or inference. It returns
+`validation_scope=configuration`, `authentication=UNKNOWN` and
+`model_inference=NOT_RUN`. This corrects the old direct inference probe.
+Provider base URLs must be HTTP(S), without embedded credentials, query parameters
+or fragments. Secrets belong in the existing credential reference path.
+
+Provider Doctor/catalog reads and `provider ping` are endpoint metadata probes;
+they do not prove authentication or inference. Explicit `provider test` uses the
+existing model-test service only when the current strict NKI Gateway and original
+Provider/model/endpoint/credential-reference/capability mappings agree. A changed
+Gateway is fenced before dispatch. Unregistered, changed or direct compatibility
+configurations return `NOUS_PROVIDER_NKI_REQUIRED`, without a direct POST fallback.
+Save configuration and use **Models → Test** through the same existing Gateway.
+Kernel availability, credentials and actual Provider support are still required.
+
+Saved Provider creation, `PATCH /api/v1/providers/{provider_id}` and governed
+deletion now update the original `providers.json`, existing Registry and current
+Gateway. Gateway construction reads a locked snapshot of the original Registry
+without invoking adapter health/credential callbacks. Updates preserve unedited
+adapter settings; deletion does not remove a
+credential from its separate store or cancel already admitted requests. It takes
+effect in the current process and survives reload. Other running processes are
+not silently synchronized. The existing file lock serializes cooperating writers;
+invalid configuration is rejected instead of replaced with an empty mapping.
+Invalid edits and failed writes preserve the previous registration. If persistence
+succeeds but runtime refresh fails, the request reports failure and clears the
+current Gateway: inspect saved configuration before retrying. This is not a
+claim of transactional rollback across files, processes and in-flight effects.
+Unsupported `enabled` edits are rejected rather than falsely reported as applied.
+
+The model catalog exposes `provider_model` only when recorded in its descriptor.
+Setup uses that exact vendor model ID for the selected Provider, through the
+existing bounded catalog reader. It does not send a Gateway ID or display name
+as a vendor parameter, guess a missing ID, or mix another Provider's models.
+Template suggestions and saved model metadata do not prove remote availability.
+The desktop `anthropic` identity maps to the existing Claude/Anthropic adapter;
+root, `/v1` and full messages URLs normalize to the original messages endpoint.
+Previously saved configurations are not silently rewritten: explicitly review
+and resave an incorrectly configured template. The unimplemented native Gemini
+protocol template is disabled; compatible endpoints can use the existing
+OpenAI-compatible configuration. This is protocol configuration, not live-account
+qualification.
+
+Model tests retain the original request ID after dispatch failure and do not
+retry it automatically. Explicit completion is required; UNKNOWN is not healthy.
+Missing Token usage and unmeasured cost remain null/unknown, including the legacy
+`tokens_used` projection. Its redaction exception accepts only null/nonnegative
+integers; strings and structured values remain redacted. Inspect original usage
+and request evidence before another potentially billed call. Software tests use
+fake responses and native IPC; they do not establish a real account, installed
+Windows credential store, native executable or release acceptance.
+
 ### Inspecting actual model input
 
 Chat and the Workbench's read-only assistant expose **Inspect model input** on
@@ -64,13 +133,22 @@ workspace selection is an exact saved path/SHA-256 reference. **Send** carries
 read and Provider transfer admission; selection alone sends no file bytes. The
 inspector records selected/read/sent/rejected/budget-limited states without source
 text or raw paths. Sent identifies the Gateway Provider boundary, not confirmed
-Provider receipt. Native Windows delivery remains BLOCKED where safe no-follow
-file descriptors are unavailable.
+Provider receipt. Saved-file delivery reuses the safe workspace reader on POSIX
+and Windows; missing required APIs keep delivery BLOCKED without ordinary-file
+fallback. Canonical private-source checks and conservative Windows alias rejection
+precede bytes, and read permission never implies Provider transfer permission.
+The Windows saved-file/Context/HTTP path and owner-policy ACL path require their
+native qualification tests; ordinary Windows file-read tests alone do not
+qualify delivery.
 
 The stock Controller creates no file-sharing permissions. A trusted maintainer
 can explicitly select an owner-only policy under the current Governance `.nous`
 directory using `NOUS_PERMISSION_POLICY` before starting Runtime; see
 [configuration](../operations/configuration/CONFIG_REFERENCE.md#context-permission-policy).
+On Windows, the selected file must pass the same-handle owner/protected-DACL
+contract documented in the configuration reference. Merely having a safe source
+reader does not admit a policy, and the default installed-user permission setup
+remains a separate qualification.
 This feeds the existing PermissionEngine, not a second authority. It is re-read
 at checks, so expiry, revocation or corrupt configuration blocks later dispatch.
 The permission-status API describes configuration with UNKNOWN grants when no
@@ -107,6 +185,44 @@ attempt, including retries, fallback and NKI submission.
 Incremental snapshot updates require the same binding and supplied current
 source versions; they remain read data, not execution authority or a qualified
 cross-task cache.
+
+Work Harness decisions have a separate 96,000-character prepared-input bound.
+The complete compacted JSON must fit; it is never sliced in the middle of a
+Goal, constraint or decision schema. Overflow pauses the original Work in
+`WAITING_USER` before Provider dispatch, with a count/limit diagnostic and its
+original Goal/checkpoint retained. Reduce selected context or explicitly split
+the task rather than silently replacing its requirements. This is a character
+admission bound, not a Provider token measurement or automatic long-task summary.
+
+Parallel Gateway requests keep each child's original parent binding and limit
+its dispatch to the remaining aggregate deadline. The requested `min_successes`
+controls aggregate success; a retained partial answer does not satisfy a larger
+threshold. Partial output and usage remain available for inspection. Cancellation
+and missing responses do not prove that a dispatched Provider incurred no cost.
+For failed or cancelled children, aggregate usage is projected from all original
+CostController attempts and unsettled reservations. Missing or corrupt evidence
+stays UNKNOWN and prevents later budgeted candidates from dispatching; confirmed
+non-dispatch remains zero. Cancelling the parent cancels and joins its original
+children and retains their unsettled accounting. This does not qualify durable
+replay of an entire parallel parent request: do not resubmit a lost fan-out as a
+new invocation; inspect original request/Work evidence first.
+A child cancelled by its Provider is a failed child, not cancellation of the
+parent. Its original uncertain accounting still stops later budgeted admission;
+ordinary independent fan-out otherwise retains the existing minimum-success
+policy. Actual parent cancellation continues to cancel and join its children.
+Parallel numeric limits reject ambiguous types and non-finite values; a zero
+aggregate cost/token budget prevents even the first child dispatch. Positive
+aggregate budgets stop later admission and cancel pending work, but cannot undo
+charges from concurrent requests already dispatched. Per-request/daily budget
+reservations remain owned by CostController; this is not a vendor billing cap.
+
+The Desktop's public model list projects the active Gateway registry. Declared
+availability is not a successful health probe; absent benchmark price/latency
+remain `null`/`UNKNOWN`, while explicit measured zero remains zero. Model choice
+uses canonical `enabled` state. The client reads all advertised pages before
+replacing list membership, bounded to 20 pages/10,000 records. Inconsistent or
+changing pagination and a changed Controller are errors, not complete snapshots.
+This live list neither grants permission nor replaces dispatch-time admission.
 
 The current Chat handler supports text, model choice and execution mode. File
 attachments and Node/privacy/per-request-budget controls are disabled because
@@ -447,6 +563,14 @@ The provider's 100 ms delay, production timeouts, retry policy and runtime code
 are unchanged. This test correction does not qualify Windows network timing or
 close issues #4 and #8; their separate Relay failure evidence remains open.
 
+For an explicit Windows Skill HTTP investigation, the existing Core workflow also
+accepts `gh workflow run core-ci.yml --ref <reviewed-branch> -f diagnostic=windows-skill-http`.
+It runs the original owned HTTP/TLS cases with bounded payload-free phase traces.
+This diagnostic has separate check names and never supplies `Core gate` evidence;
+default dispatch and main/release regression keep their existing full selection.
+A passing fresh fixture cannot close the unresolved full-suite Windows timing
+issue. See the [engineering review](../acceptance/ENGINEERING_REVIEW.md#windows-skill-http-phase-investigation--2026-10-21).
+
 ### Packaging and compatibility
 
 Controller, Node and CLI share the existing `apeir-distribution` wheel and its
@@ -482,6 +606,15 @@ imports. Wrong-operation receipts and missing observations fail conformance
 without executing the effect again.
 
 ### Supported development environment
+
+On Linux, the existing detached ProcessSession host enables child-subreaper
+ownership before spawning its workload. Orphaned descendants in the original
+process group are killed and reaped before publishing the terminal result;
+unconfirmed cleanup records `RECOVERY_REQUIRED`. This covers the host's own
+workload group, not arbitrary processes that escape it or the detached host's
+own eventual adoption by PID1. Containers should still use `--init` so the
+container also reaps detached hosts. This Distribution process host is in the
+runtime-service scope and does not modify or qualify the frozen Rust Kernel.
 
 Developer Preview PR #23's source checks passed, but its initial main
 `25aed7c34cb1c4173476d660ccccc032b3fb0452` exposed two failures in untouched

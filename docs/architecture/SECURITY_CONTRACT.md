@@ -40,20 +40,35 @@ files, directories and not-yet-created write targets retain their contracts.
 Trusted internal callers that explicitly omit private-state protection retain
 their existing scope; that compatibility mode grants no model permission.
 
-This shared guard admits a static path, not a defense against a malicious OS
-owner changing the filesystem after validation. Selected model input additionally
-checks descriptor identity/version and link count around its bounded read and
-revalidates source and transfer authority at actual dispatch. Models still receive
-only admitted ordinary data; neither a filename nor a link supplies permission.
+Ordinary reads additionally share one bounded descriptor reader in the existing
+workspace isolation module. Workbench, Chat, proposal observations and selected
+model input keep the admitted workspace root, reject link/reparse replacement
+at open, and validate regular-file identity, version and single-link status around
+the read. POSIX uses no-follow directory-relative opens; Windows uses held native
+handles without delete sharing and rejects reparse points. An unavailable safe
+reader fails closed. Platform qualification is separate from implementing these
+paths. Selected Provider input explicitly reuses that same backend, rechecks its
+canonical source classification and refuses Windows tilde/namespace aliases.
+Missing native APIs fail closed; API availability grants neither file access nor
+Provider transfer. The Windows saved-file/Context/HTTP path is implemented pending
+exact-source Windows qualification. This is read-boundary hardening,
+not a complete filesystem sandbox or a
+claim that all mutations resist a malicious OS owner. Selected input still
+revalidates source and transfer authority at actual dispatch; reading a file
+never grants permission to send its contents to a Provider.
 
 The trusted host may explicitly select `NOUS_PERMISSION_POLICY` under its current
 Governance private-state directory. This feeds the existing PermissionEngine;
 file existence is not trust, and model/request data cannot select it. POSIX
-owner-only, single-link and bounded JSON checks precede admission. Rules are
-reloaded for checks; expiration, revocation or invalid state cannot reuse a cached
-allow. Conditions require present, exact-typed facts. Inspection reports
-configuration and UNKNOWN grants, not an authorization or new authority. Native
-Operation approvals, credential leases and execution/effect evidence stay distinct.
+owner-only, single-link and bounded JSON checks precede admission. Windows uses
+the existing pinned no-reparse reader and admits only a current-user-owned,
+single-link file with a protected DACL containing exactly one explicit allow ACE
+for that same user. Rules are reloaded for checks; expiration, revocation or
+invalid state cannot reuse a cached allow. Conditions require present,
+exact-typed facts. Inspection reports configuration and UNKNOWN grants, not an
+authorization or new authority. Native Operation approvals, credential leases
+and execution/effect evidence stay distinct. Reading an admitted policy seeds no
+grant and does not qualify Provider, native installation or physical execution.
 
 ## Signed Node identity and trust persistence
 
@@ -630,11 +645,16 @@ publication fence; stale installs/admissions cannot revive a revoked package.
 
 The Registry snapshots bounded content and writes CAS evidence before Extension
 publication. The CAS reference is bound into the existing Extension index/lock;
-legacy Skill artifact references remain readable. Publication revalidates current
-human authority after content acquisition. An ordinary failed publication restores
+legacy Skill artifact references remain readable. Remote acquisition revalidates
+the original human/URL permissions and catalog review before installation
+preparation and again at publication. An ordinary failed publication restores
 the old index/lock; a hard crash between those files remains fail-closed rather than
-being presented as a multi-file atomic transaction. Staged CAS objects may remain
-pinned for failure inspection. Disabled state survives updates/restart, and revoked
+being presented as a multi-file atomic transaction. CAS retention uses scoped
+preparation and registry-specific installed holds. Rejection releases only its
+preparation hold; updates and uninstall cannot release user or other registry
+holds. A promotion failure after publication retains its preparation hold;
+ambiguous legacy/crash retention is never silently deleted. Disabled state
+survives updates/restart, and revoked
 installed Skills cannot be reenabled by Catalog installation. Invalid CAS evidence
 prevents loading. Install/enable/load never executes scripts or issues execution
 grants. Human identity, package digest and artifact references use the existing

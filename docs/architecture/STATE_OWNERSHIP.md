@@ -52,11 +52,37 @@ index and pin state under that same lock, preserving another instance's protecte
 objects and transitive evidence dependencies. Corrupt pin state blocks these
 mutations. Object bytes still require digest verification.
 
+Pin retention is additive in that same `pins.json`: an optional opaque owner
+identifies one hold, and releasing it cannot remove another owner's hold.
+Unscoped pin/unpin retains the existing default/user hold. Legacy single-hold
+records remain default holds; their historical ownership cannot be inferred from
+a description. Owned records carry a pin-format schema guard that older CAS
+readers reject before writing or collecting; upgrade shared-store writers together
+rather than let old code discard unknown ownership fields. Legacy maps remain
+readable by the new owner. Skill installation uses a registry-specific installed hold and a
+separate preparation hold. Failed preparation releases only its attempt; a
+successful update releases only that installation's previous hold. If installed
+hold promotion fails after publication, retain the preparation hold and report
+failure rather than expose collectible installed evidence. Ambiguous historical
+holds and crash-left preparation holds require explicit review, not guessed GC.
+Retention never grants execution authority.
+
 Long-lived CAS readers also reload the existing atomically published index before
 get/list/resolve/verify. Evidence published by another store instance is visible
 without recreating the reader; corrupt current metadata raises an Artifact error
 instead of letting an older cache certify integrity. Readers do not rewrite or
 repair that evidence. This adds index reads, not a second cache or state owner.
+
+The global RuntimeEventBus is a retained cross-domain activity projection, distinct
+from durable per-Run EventStream sequence records. Its HTTP cursor is an original
+event ID, not a per-domain numeric sequence. A cold read returns a bounded recent
+window in chronological order; a retained cursor pages forward through persisted
+Bus records. Cursor lookup and page selection share one SQLite read snapshot.
+Missing/pruned cursors and unavailable persistence report an explicit error rather
+than substitute a recent snapshot for successful replay. Clients stop invalid
+replay and reload authoritative state explicitly. Ephemeral connection-bound Bus
+cursors confer no authority and cannot certify complete history after a cold
+restart. Bus retention, publication or delivery is not effect verification.
 
 ## Admission, durability and commitment
 

@@ -114,18 +114,21 @@ export interface CheckpointDiagnostics {
 export interface ModelView {
   id: string;
   model_id: string;
+  provider_model?: string | null;
   display_name: string;
   provider_id: string;
-  provider_kind: "openai" | "anthropic" | "local" | "custom";
+  provider_kind?: "openai" | "anthropic" | "local" | "custom";
+  endpoint_type?: string;
   state: string;
   health: string;
   capabilities: string[];
-  capability_scores: Record<string, number>;
-  evaluation?: { overall_score?: number; error_rate?: number };
+  capability_scores?: Record<string, number>;
+  evaluation?: { overall_score?: number; error_rate?: number } | null;
+  location?: string;
   recoverable: boolean;
-  avg_latency_ms: number;
-  cost_per_1k_tokens_usd: number;
-  token_limit: number;
+  avg_latency_ms?: number | null;
+  cost_per_1k_tokens_usd?: number | null;
+  token_limit?: number | null;
 }
 
 export interface TaskView {
@@ -279,6 +282,7 @@ export async function api<T = unknown>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const current = captureRuntimeConnection();
   const { url, token } = getConfig();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -287,17 +291,26 @@ export async function api<T = unknown>(
   };
 
   const response = await fetch(`${url}${path}`, { credentials: "include", ...options, headers });
-  const envelope = (await response.json()) as ApiEnvelope<T>;
-
-  if (!response.ok || !envelope.ok) {
-    throw new ApiError(
-      envelope.error?.code || `HTTP_${response.status}`,
-      envelope.error?.message || `Request failed with status ${response.status}`,
-      envelope.error?.details,
-    );
+  try {
+    current();
+    const envelope = (await response.json()) as ApiEnvelope<T>;
+    current();
+    if (!response.ok || !envelope.ok) {
+      throw new ApiError(
+        envelope.error?.code || `HTTP_${response.status}`,
+        envelope.error?.message || `Request failed with status ${response.status}`,
+        envelope.error?.details,
+      );
+    }
+    return envelope.data as T;
+  } catch (error) {
+    if (!response.bodyUsed && response.body) {
+      // Dispose only this response; cancellation does not prove an effect stopped.
+      void response.body.cancel().catch(() => {});
+    }
+    current();
+    throw error;
   }
-
-  return envelope.data as T;
 }
 
 async function apiSafe<T = unknown>(
@@ -343,7 +356,7 @@ export const fetchConversation = (conversationId: string) =>
     `/api/v1/conversations/${encodeURIComponent(conversationId)}`,
   );
 
-export const runPrompt = (
+export const runPrompt = async (
   text: string,
   modelId?: string,
   conversationId?: string,
@@ -351,8 +364,8 @@ export const runPrompt = (
   signal?: AbortSignal,
   requestId?: string,
   workspaceFileRefs?: readonly { path: string; sha256: string }[],
-) =>
-  api<{
+) => {
+  const response = await api<{
     conversation_id: string;
     message: string;
     status: string;
@@ -360,6 +373,7 @@ export const runPrompt = (
     run_id?: string;
     task_promoted?: boolean;
     result?: { proposal_id?: string; approval_request_id?: string };
+    data?: { result?: { proposal_id?: string; approval_request_id?: string } };
   }>(
     "/api/v1/chat",
     {
@@ -377,10 +391,64 @@ export const runPrompt = (
       }),
     },
   );
+  // Chat wraps the original Runtime response in data; this grants no authority.
+  if (response.data?.result) response.result = response.data.result;
+  return response;
+};
 
 // Models
-export const fetchModels = () =>
-  api<{ models: ModelView[]; total_count: number; available_count: number }>("/api/v1/models");
+export async function fetchModels() {
+  const current = captureRuntimeConnection();
+  type Snapshot = {
+    models: (Omit<ModelView, "id"> & { id?: string })[];
+    summary?: { total: number; enabled: number; healthy: number; recoverable_operations: number };
+    total_count?: number;
+    available_count?: number;
+    pagination?: { page: number; page_size: number; total: number; total_pages: number; has_next: boolean };
+  };
+  const models: ModelView[] = [];
+  const identities = new Set<string>();
+  let first: Snapshot | undefined;
+  let pageSize = 500;
+  for (let page = 1; page <= 20; page++) {
+    current();
+    const snapshot = await api<Snapshot>(`/api/v1/models?page=${page}&page_size=${pageSize}`);
+    current();
+    const invalid = () => new ApiError("MODEL_SNAPSHOT_INVALID", "Model list changed or exceeds the bounded snapshot; refresh before choosing a model");
+    if (!Array.isArray(snapshot.models) || models.length + snapshot.models.length > 10_000) throw invalid();
+    const paging = snapshot.pagination;
+    if (paging) {
+      if (![paging.page, paging.page_size, paging.total, paging.total_pages].every(Number.isSafeInteger)
+        || paging.page !== page || paging.page_size < 1 || paging.page_size > 500
+        || paging.total < 0 || paging.total > 10_000 || paging.total_pages > 20
+        || paging.total_pages !== Math.max(1, Math.ceil(paging.total / paging.page_size))
+        || paging.has_next !== (page < paging.total_pages)
+        || snapshot.models.length !== Math.min(paging.page_size, Math.max(0, paging.total - (page - 1) * paging.page_size))
+        || (first && (first.pagination?.total !== paging.total || first.pagination?.page_size !== paging.page_size))) throw invalid();
+      pageSize = paging.page_size;
+    } else if (page !== 1 || (snapshot.total_count !== undefined && snapshot.total_count !== snapshot.models.length)) {
+      throw invalid();
+    }
+    first ??= snapshot;
+    for (const model of snapshot.models) {
+      if (!model || typeof model.model_id !== "string" || !model.model_id.trim()
+        || (model.id !== undefined && model.id !== model.model_id)) {
+        throw new ApiError("MODEL_IDENTITY_INVALID", "Model Center identity is unavailable or inconsistent");
+      }
+      if (identities.has(model.model_id)) throw invalid();
+      identities.add(model.model_id);
+      // Compatibility with older DTOs; no new model identity is minted.
+      models.push({ ...model, id: model.model_id });
+    }
+    if (!paging?.has_next) {
+      current();
+      // This is a live multi-page projection, not an atomic registry snapshot
+      // or permission. The Gateway rechecks eligibility before dispatch.
+      return { ...first, models };
+    }
+  }
+  throw new ApiError("MODEL_SNAPSHOT_INVALID", "Model list exceeds the bounded snapshot");
+}
 
 export const modelAction = (action: string, modelId: string) =>
   api("/api/v1/models/action", {
@@ -398,7 +466,10 @@ export interface ModelTestResult {
   latency_ms: number;
   response_preview?: string;
   finish_reason?: string;
-  tokens_used?: number;
+  tokens_used?: number | null;
+  usage?: Record<string, number | null>;
+  cost_usd?: number | null;
+  cost_measurement?: string;
   execution?: {
     path?: string;
     operation_id?: string;
@@ -942,14 +1013,20 @@ export interface RuntimeEventEnvelope {
   dedup_key: string;
 }
 
-export const fetchEventStream = (domain = "", sinceEventId = "", limit = 200) => {
+export const fetchEventStream = async (domain = "", sinceEventId = "", limit = 200) => {
   const params = new URLSearchParams();
   if (domain) params.set("domain", domain);
   if (sinceEventId) params.set("since_event_id", sinceEventId);
   params.set("limit", String(limit));
-  return api<{ events: RuntimeEventEnvelope[]; count: number; domain: string; latest_event_id: string }>(
+  const page = await api<{ events: RuntimeEventEnvelope[]; count: number; domain: string; latest_event_id: string; ordering?: "oldest_first" }>(
     `/api/v1/events/stream?${params}`,
   );
+  const ids = Array.isArray(page?.events) ? page.events.map(event => event?.event_id) : null;
+  if (!ids || ids.length > limit || ids.some(id => typeof id !== "string" || !id || id === sinceEventId) || new Set(ids).size !== ids.length
+    || (page.latest_event_id !== undefined && page.latest_event_id !== (ids.at(-1) || ""))) {
+    throw new ApiError("NOUS_EVENT_STREAM_INVALID", "Event history did not advance; reload current state");
+  }
+  return page;
 };
 
 // New: Model Observations
@@ -1247,30 +1324,42 @@ function normalizeRuntimeEvent(event: Partial<RuntimeEventEnvelope>): RuntimeEve
 
 export function subscribeRuntimeEvents(
   onEvent: (event: RuntimeEventEnvelope) => void,
-  options: { domain?: string; intervalMs?: number } = {},
+  options: { domain?: string; intervalMs?: number; onError?: () => void } = {},
 ) {
   let active = true;
+  let timer: number | undefined;
+  const connection = captureRuntimeConnection();
+  const close = () => { active = false; if (timer !== undefined) window.clearTimeout(timer); };
+  const current = () => {
+    if (!active) return false;
+    try { connection(); return true; } catch { close(); return false; }
+  };
   let lastEventId = "";
   const intervalMs = Math.max(500, options.intervalMs || 1500);
 
   const poll = async () => {
-    if (!active) return;
+    if (!current()) return;
     try {
       const result = await fetchEventStream(options.domain || "", lastEventId, 100);
+      if (!current()) return;
       if (result.events) {
         for (const event of result.events) {
+          if (!current()) return;
           onEvent(normalizeRuntimeEvent(event));
+          if (!current()) return;
           if (event.event_id) lastEventId = event.event_id;
         }
       }
-    } catch {
-      // Retry on next poll
+    } catch (error) {
+      if (current() && error instanceof ApiError && ["NOUS_EVENT_CURSOR_UNAVAILABLE", "NOUS_EVENT_STREAM_INVALID", "NOUS_EVENT_STREAM_UNAVAILABLE"].includes(error.code)) {
+        close(); options.onError?.();
+      }
     } finally {
-      if (active) window.setTimeout(poll, intervalMs);
+      if (current()) timer = window.setTimeout(poll, intervalMs);
     }
   };
   void poll();
-  return { close: () => { active = false; }, lastEventId: () => lastEventId };
+  return { close, lastEventId: () => lastEventId };
 }
 
 export function subscribeRunEvents(
@@ -1279,23 +1368,35 @@ export function subscribeRunEvents(
   options: { intervalMs?: number; afterSequence?: number } = {},
 ) {
   let active = true;
+  let timer: number | undefined;
+  const connection = captureRuntimeConnection();
+  const close = () => { active = false; if (timer !== undefined) window.clearTimeout(timer); };
+  const current = () => {
+    if (!active) return false;
+    try { connection(); return true; } catch { close(); return false; }
+  };
   let afterSequence = Math.max(0, options.afterSequence || 0);
   const intervalMs = Math.max(250, options.intervalMs || 1000);
 
   const poll = async () => {
-    if (!active) return;
+    if (!current()) return;
     try {
       const page = await fetchRunEvents(runId, afterSequence);
-      for (const event of page.events) onEvent(normalizeRuntimeEvent(event));
+      if (!current()) return;
+      for (const event of page.events) {
+        if (!current()) return;
+        onEvent(normalizeRuntimeEvent(event));
+      }
+      if (!current()) return;
       afterSequence = page.next_after_sequence;
     } catch {
       // Retry on transient failures
     } finally {
-      if (active) window.setTimeout(poll, intervalMs);
+      if (current()) timer = window.setTimeout(poll, intervalMs);
     }
   };
   void poll();
-  return { close: () => { active = false; }, cursor: () => afterSequence };
+  return { close, cursor: () => afterSequence };
 }
 
 // Document Workbench

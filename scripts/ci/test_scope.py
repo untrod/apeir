@@ -29,6 +29,19 @@ EXAMPLE_DOCS = frozenset(
 )
 
 
+def comparison_base(base: str = "", *, head: str = "HEAD") -> str:
+    """Manual qualification includes the full branch, not only its last commit."""
+    if head.startswith("-") or base.startswith("-"):
+        raise ValueError("base/head must be explicit Git revisions")
+    if base and set(base) != {"0"}:
+        return base
+    # Workflow checkouts fetch the full graph. Missing history is an error;
+    # falling back to HEAD^ can silently omit earlier implementation commits.
+    return subprocess.check_output(
+        ["git", "merge-base", "origin/main", head], text=True
+    ).strip()
+
+
 def classify(paths: list[str], *, event: str) -> str:
     if event != "pull_request" or not paths:
         return "full"

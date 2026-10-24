@@ -39,6 +39,7 @@ from nous_runtime.workspace.workbench import (
     WorkbenchConflict,
     WorkbenchError,
 )
+from nous_runtime.workspace.isolation import read_workspace_bytes
 
 _WORKFLOW_ID = "workspace.proposal"
 _ACTION = "workspace.proposal.apply"
@@ -616,11 +617,7 @@ class WorkspaceProposalService:
             raise WorkbenchError("The approved target path changed.")
         if not target.is_file():
             return {"exists": False, "sha256": ""}
-        if target.stat().st_size > _MAX_FILE_BYTES:
-            raise WorkbenchError("Observed file exceeds the proposal bound.")
-        data = target.read_bytes()
-        if len(data) > _MAX_FILE_BYTES:
-            raise WorkbenchError("Observed file exceeds the proposal bound.")
+        data = read_workspace_bytes(self.root, target, max_bytes=_MAX_FILE_BYTES)
         return {"exists": True, "sha256": _digest(data)}
 
     def _reconcile_locked(self, run, manifest, journal, request):

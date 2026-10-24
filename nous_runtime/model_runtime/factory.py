@@ -71,8 +71,10 @@ def build_gateway_from_providers(
     """
     from nous_runtime.runtime.no_intelligence import no_intelligence_enabled
 
-    provider_objects = [] if no_intelligence_enabled() else (
-        list(providers) if providers is not None else _installed_providers()
+    provider_objects = (
+        []
+        if no_intelligence_enabled()
+        else (list(providers) if providers is not None else _installed_providers())
     )
     registry = ModelRuntimeRegistry()
     adapters = ModelAdapterRegistry()
@@ -109,9 +111,7 @@ def build_gateway_from_providers(
         provider_name = str(getattr(provider, "provider_name", "") or provider_id)
         for routed_model, routed_capabilities in model_capabilities.items():
             model_id = (
-                routed_model
-                if "/" in routed_model
-                else f"{provider_id}/{routed_model}"
+                routed_model if "/" in routed_model else f"{provider_id}/{routed_model}"
             )
             modalities = {ModelModality.TEXT}
             if "vision" in routed_capabilities:
@@ -163,9 +163,7 @@ def build_gateway_from_providers(
                     node_id="local" if is_local else "remote",
                     backend=provider_id,
                     state=ModelInstanceState.READY,
-                    max_concurrency=int(
-                        getattr(provider, "max_concurrency", 1) or 1
-                    ),
+                    max_concurrency=int(getattr(provider, "max_concurrency", 1) or 1),
                 )
             )
     if allow_direct:
@@ -182,15 +180,9 @@ def build_gateway_from_providers(
 
 
 def _installed_providers() -> list[Any]:
-    from nous_runtime.compat.provider import get_provider, list_providers
+    from nous_runtime.provider.registry import registry
 
-    providers = []
-    for item in list_providers():
-        provider_id = str(item.get("provider_id") or item.get("name") or "")
-        provider = get_provider(provider_id)
-        if provider is not None:
-            providers.append(provider)
-    return providers
+    return list(registry.adapters())
 
 
 def _provider_is_local(provider: Any) -> bool:

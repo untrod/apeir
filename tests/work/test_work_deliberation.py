@@ -91,6 +91,90 @@ def test_model_deliberator_uses_structured_gateway_contract(tmp_path):
     )
 
 
+@pytest.mark.parametrize("oversized_field", ["objective", "constraints"])
+def test_model_input_overflow_does_not_dispatch_a_partial_goal(
+    tmp_path, oversized_field
+):
+    objective = "Explain the project"
+    constraints = {"final_instruction": "Keep all original files unchanged"}
+    if oversized_field == "objective":
+        objective = "Analyze " + "public requirement " * 6000 + " END_OF_ORIGINAL_GOAL"
+    else:
+        constraints["requirements"] = "public constraint " * 6000
+    harness = WorkHarness(tmp_path)
+    original = harness.create(objective, constraints=constraints)
+    facade = StubFacade(
+        {"status": "complete", "summary": "Must not be reached", "confidence": "high"}
+    )
+    decision = ModelWorkDeliberator(facade)(harness.context_for(original))
+    assert decision.status.value == "ask_user"
+    assert decision.phase == "WAIT"
+    assert "Work model input exceeds" in decision.summary
+    assert facade.requests == []
+    reopened = WorkHarness(tmp_path).require(original.run_id)
+    assert reopened.goal.objective == objective
+    assert reopened.goal.constraints == constraints
+    assert reopened.pending_action == {}
+
+
+def test_oversized_input_waits_durably_without_provider_or_tool_execution(tmp_path):
+    from nous_runtime.events import RunState
+
+    harness = WorkHarness(tmp_path)
+    objective = ("Explain " + "public requirement " * 6000).strip()
+    original = harness.create(objective, constraints={"read_only": True})
+    facade = StubFacade(
+        {"status": "complete", "summary": "Must not be reached", "confidence": "high"}
+    )
+    result = harness.run(original.run_id, deliberator=ModelWorkDeliberator(facade))
+    assert result.state is RunState.WAITING_USER
+    assert facade.requests == []
+    reopened = WorkHarness(tmp_path).require(original.run_id)
+    assert reopened.state is RunState.WAITING_USER
+    assert reopened.goal.objective == objective
+    assert "No Provider request was dispatched" in reopened.goal.blocker
+    assert not reopened.pending_action and not reopened.observations
+
+
+def test_model_input_keeps_complete_json_and_tail_constraints_within_bound(tmp_path):
+    objective = "Explain " + "工程要求 " * 3000 + " END_OF_ORIGINAL_GOAL"
+    constraints = {"final_instruction": "Do not modify Kernel or send private files"}
+    harness = WorkHarness(tmp_path)
+    original = harness.create(objective, constraints=constraints)
+    facade = StubFacade(
+        {"status": "complete", "summary": "Analysis only", "confidence": "high"}
+    )
+    ModelWorkDeliberator(facade)(harness.context_for(original))
+    content = facade.requests[0].messages[1]["content"]
+    assert len(content) <= 96_000
+    payload = json.loads(content)
+    assert payload["work"]["goal"]["objective"] == objective
+    assert payload["work"]["goal"]["constraints"] == constraints
+    assert payload["decision_schema"] == facade.requests[0].response_schema
+
+
+def test_model_input_character_bound_is_inclusive_without_partial_dispatch(
+    tmp_path, monkeypatch
+):
+    from nous_runtime.work import deliberation
+
+    harness = WorkHarness(tmp_path)
+    original = harness.create("Explain this project", constraints={"read_only": True})
+    context = harness.context_for(original)
+    facade = StubFacade(
+        {"status": "complete", "summary": "Analysis only", "confidence": "high"}
+    )
+    deliberator = ModelWorkDeliberator(facade)
+    deliberator(context)
+    size = len(facade.requests[-1].messages[1]["content"])
+    monkeypatch.setattr(deliberation, "_DECISION_INPUT_CHARACTER_LIMIT", size)
+    deliberator(context)
+    assert len(facade.requests) == 2
+    monkeypatch.setattr(deliberation, "_DECISION_INPUT_CHARACTER_LIMIT", size - 1)
+    assert deliberator(context).status.value == "ask_user"
+    assert len(facade.requests) == 2
+
+
 def test_model_deliberator_maps_native_patch_call_to_action_envelope(tmp_path):
     harness = WorkHarness(tmp_path)
     snapshot = harness.create("Fix the code in this repository")

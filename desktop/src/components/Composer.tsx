@@ -173,7 +173,7 @@ export function Composer({
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
-  const enabledModels = models.filter((m) => m.state !== "disabled");
+  const enabledModels = models.filter((m) => m.state === "enabled");
   const onlineNodes = nodes.filter((n) => n.online);
 
   return (

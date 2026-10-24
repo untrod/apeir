@@ -561,7 +561,24 @@ class ProcessSessionStore:
     def _control(self, session_id: str, action: str, **payload: Any) -> dict[str, Any]:
         status = self.status(session_id)
         if status["state"] != ProcessSessionState.RUNNING.value:
-            raise ValueError(f"process session is not running: {status['state']}")
+            # Report admission evidence without reflecting arbitrary host error
+            # text, commands, output or environment into a control exception.
+            error = str(status.get("error") or "")
+            reason = {
+                _RUNNING_IDENTITY_UNVERIFIED: "os_identity_unverified",
+                "process host state is missing": "host_record_unavailable",
+                "process host binding mismatch": "host_binding_mismatch",
+                "process helper identity changed": "helper_identity_mismatch",
+                "process command binding mismatch": "command_binding_mismatch",
+                "process identity changed": "process_identity_mismatch",
+                "process host returned an invalid state": "invalid_host_state",
+                "terminal observation is not bound to the process identity": (
+                    "terminal_identity_mismatch"
+                ),
+            }.get(error, "host_reported_error" if error else "not_running")
+            raise ValueError(
+                f"process session is not running: {status['state']} (reason={reason})"
+            )
         directory = self._directory(session_id)
         control_id = f"ctl_{time.time_ns()}_{uuid4().hex[:8]}"
         request = {

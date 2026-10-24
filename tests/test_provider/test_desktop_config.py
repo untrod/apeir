@@ -6,6 +6,29 @@ from nous_runtime.control_plane.routes import (
 from nous_runtime.model_runtime.factory import build_gateway_from_providers
 from nous_runtime.model_runtime.models import ModelDescriptor, ModelEndpointType
 from nous_runtime.model_runtime.registry import ModelRuntimeRegistry
+import pytest
+
+
+@pytest.mark.parametrize(
+    "base",
+    [
+        "https://api.anthropic.com",
+        "https://api.anthropic.com/v1",
+        "https://api.anthropic.com/v1/messages",
+    ],
+)
+def test_desktop_anthropic_identity_uses_existing_anthropic_adapter_protocol(base):
+    config = build_provider_config(
+        provider_id="anthropic",
+        name="Anthropic",
+        api_base_url=base,
+        credential_ref="env:FAKE_ANTHROPIC_KEY",
+        model="fixture-model",
+    )
+    assert config["provider_id"] == "anthropic"
+    assert config["service"] == "claude"
+    assert config["kind"] == "anthropic-compatible"
+    assert config["endpoint"] == "https://api.anthropic.com/v1/messages"
 
 
 def test_desktop_provider_config_preserves_selected_model_routes():
@@ -94,7 +117,14 @@ def test_model_catalog_reads_the_active_gateway_registry(monkeypatch):
     assert model["model_id"] == "deepseek/deepseek-chat"
     assert model["id"] == "deepseek/deepseek-chat"
     assert model["state"] == "enabled"
-    assert model["health"] == "healthy"
+    # Registry eligibility is not measured Provider health or free inference.
+    assert model["health"] == "unknown"
+    assert model["avg_latency_ms"] is None
+    assert model["cost_per_1k_tokens_usd"] is None
+    registry.update_health("deepseek/deepseek-chat", {"status": "healthy"})
+    observed = handle_list_models()["data"]["models"][0]
+    assert observed["health"] == "healthy"
+    assert observed["id"] == model["id"]
 
 
 def test_sidecar_bundles_the_top_level_nki_client():

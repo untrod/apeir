@@ -689,7 +689,7 @@ def handle_events_stream(
     Clients poll this endpoint with the last received event_id.
     """
     try:
-        from nous_runtime.events.bus import get_event_bus
+        from nous_runtime.events.bus import EventCursorUnavailable, get_event_bus
 
         bus = get_event_bus()
         events = bus.stream_events(
@@ -703,17 +703,22 @@ def handle_events_stream(
                 "count": len(events),
                 "domain": domain,
                 "latest_event_id": events[-1]["event_id"] if events else "",
+                "ordering": "oldest_first",
             }
         )
     except ImportError:
-        return ok_response(
-            {"events": [], "count": 0, "domain": domain, "latest_event_id": ""}
+        return err_response(
+            "NOUS_EVENT_STREAM_UNAVAILABLE", "Event history unavailable"
         )
-    except Exception as e:
-        return err_response("NOUS_INTERNAL_ERROR", str(e))
-
-
-# Model Observations API
+    except EventCursorUnavailable:
+        return err_response(
+            "NOUS_EVENT_CURSOR_UNAVAILABLE",
+            "Event cursor unavailable; reload current state before resuming",
+        )
+    except Exception:
+        return err_response(
+            "NOUS_EVENT_STREAM_UNAVAILABLE", "Event history unavailable"
+        )
 
 
 def handle_model_observations(

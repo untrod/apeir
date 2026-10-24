@@ -236,3 +236,64 @@ def test_summary_reports_cache_and_remaining_budget(tmp_path: Path) -> None:
     assert summary["cached_input_tokens"] == 6
     assert summary["remaining"]["tokens"] == 85
     assert summary["policy"]["max_daily_tokens"] == 100
+
+
+def test_request_usage_preserves_all_attempts_and_open_reservations(tmp_path):
+    controller = _controller(tmp_path)
+    original = _request(estimated_input_tokens=10, max_tokens=8)
+    first = controller.authorize(original, provider_id="provider", model_id="model")
+    controller.fail(first, reason="not dispatched", dispatched=False)
+    assert controller.request_usage(original.request_id) == (0.0, 0)
+    assert controller.request_usage("unknown-request") == (None, None)
+    second = controller.authorize(
+        original, provider_id="provider", model_id="model", attempt=2
+    )
+    # The first derived-zero receipt cannot hide an open second attempt.
+    assert controller.request_usage(original.request_id) == (None, None)
+    controller.mark_dispatched(second)
+    controller.fail(second, reason="response lost", dispatched=True)
+    assert controller.request_usage(original.request_id) == (None, None)
+    assert controller.summary()["uncertain_calls"] == 1
+    with controller._session() as connection:
+        for table in ("usage_receipts", "usage_reservations"):
+            plans = connection.execute(
+                f"EXPLAIN QUERY PLAN SELECT * FROM {table} WHERE request_id=?",
+                (original.request_id,),
+            ).fetchall()
+            assert any(f"{table}_request_idx" in row[3] for row in plans)
+
+
+@pytest.mark.parametrize("corruption", ["json", "binding", "negative_cost", "usage"])
+def test_request_usage_rejects_corrupt_zero_effect_evidence(tmp_path, corruption):
+    import json
+
+    controller = _controller(tmp_path)
+    original = _request(estimated_input_tokens=10, max_tokens=8)
+    reservation = controller.authorize(
+        original, provider_id="provider", model_id="model"
+    )
+    controller.fail(reservation, reason="not dispatched", dispatched=False)
+    with controller._session(immediate=True) as connection:
+        raw = connection.execute(
+            "SELECT receipt_json FROM usage_receipts WHERE request_id=?",
+            (original.request_id,),
+        ).fetchone()[0]
+        value = json.loads(raw)
+        if corruption == "json":
+            damaged = "{"
+        else:
+            if corruption == "binding":
+                value["request_id"] = "different-original-request"
+            elif corruption == "negative_cost":
+                value["cost_usd"] = -1
+            else:
+                value["usage"]["total_tokens"] = -1
+            damaged = json.dumps(value)
+        connection.execute(
+            "UPDATE usage_receipts SET receipt_json=? WHERE request_id=?",
+            (damaged, original.request_id),
+        )
+    with pytest.raises(
+        CostLimitExceeded, match="original request usage evidence is invalid"
+    ):
+        controller.request_usage(original.request_id)

@@ -26,8 +26,12 @@ model proposals and permission-status queries never select or create authority.
 With no setting, the existing gate stays unchanged and selected-file delivery
 remains unconfigured/blocked. Restart Runtime when initially selecting a policy;
 each later check reads the file again. Missing, expired, corrupt, linked,
-foreign-owner or broadly readable/writable policy fails closed. This file-loader
-qualification is POSIX only; it provides no native Windows fallback.
+foreign-owner or broadly readable/writable policy fails closed. POSIX requires
+an owner-only directory and mode `0600` file. Windows requires a single-link
+ordinary file owned by the current process user, with inheritance disabled and
+exactly one explicit allow ACE for that same user. Windows reads and checks the
+ACL on the same pinned file handle; reparse points, alternate streams,
+short-name aliases and trailing-dot/space aliases are denied.
 
 The document accepts `rules` (at most128 existing PermissionRule objects) and an
 optional timezone-aware `expires_at`. Each rule has `subject`, `action`, `resource`,
@@ -55,6 +59,14 @@ NOUS_WORKSPACE_ROOT=/path/to/workspace \
 NOUS_PERMISSION_POLICY=/path/to/workspace/.nous/permission-policy.json \
   nous runtime-api start
 ```
+
+On Windows, prepare the reviewed file under the active authority's `.nous`
+directory, disable inheritance, and replace inherited entries with one
+full-control entry for the account that starts Runtime. Verify the resulting
+owner and ACL with `Get-Acl` before selecting it. A group-owned file, an
+Administrators/System ACE, or an inherited entry is deliberately rejected even
+when the current account can read it. APEIR does not weaken an existing ACL or
+generate policy content during startup.
 
 This configuration is policy input, not an execution grant, trusted human
 session, credential lease or effect evidence. Existing Operation approval,

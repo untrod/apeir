@@ -5,6 +5,25 @@ Python 3.10–3.12 and a writable checkout. No model API key, GPU or real device
 is needed for source inspection and simulated examples. Current acceptance
 and blockers live only in [ROADMAP](../../../ROADMAP.md).
 
+A maintainer's manual **Desktop CI** run can provide the
+`apeir-python-source-preview-<commit>` artifact in
+[GitHub Actions](https://github.com/untrod/apeir/actions/workflows/desktop-build.yml).
+It expires after seven days. The job installs its own wheel and exercises the
+existing simulated recovery Demo and public model-free API startup, authentication
+and shutdown; `source-preview-validation.json` reports that scope. The artifact
+includes this same Quick Start with links pinned to its source revision, not a
+separate installation guide. Check the source revision and `SHA256SUMS.txt` before
+installing the wheel with `python -m pip install path/to/apeir_distribution-0.1.0rc1-py3-none-any.whl`.
+For the matching Desktop sources or SDK examples, clone the repository and run
+`git checkout --detach <distribution_revision>`, replacing the placeholder with
+the exact value in `source-preview-manifest.json`. Do not use a different main
+revision alongside the downloaded wheel. Wheel users skip the editable
+`pip install -e .` command below; it is the alternative source-install path.
+This Python source package provides CLI/Runtime libraries, not APEIR.exe or a
+Windows installer. Desktop source still needs the checkout below; real model,
+Kernel, sandbox and native-release prerequisites remain separate. The manifest
+does not claim those Gates passed.
+
 ## Install
 
 ```bash
@@ -94,6 +113,54 @@ contracts, not internal Runtime modules. Their printed workspaces retain evidenc
 
 ## Development and optional components
 
+### Model-free Runtime API and source interface
+
+From the project directory you want to inspect, start the existing authenticated
+API in the foreground:
+
+```bash
+apeir --no-intelligence runtime-api start
+```
+
+This explicit process-wide mode keeps every model disabled, including saved
+Providers. It preserves production Governance and sandbox checks; independent
+Runtime-service features remain available without claiming a healthy Kernel.
+It does not erase Provider configuration. Stop this process before starting the
+normal model-enabled mode with its required authenticated Kernel. Do not set
+development mode to bypass that requirement.
+
+In another activated shell, check the API and locate its protected local session
+file (this prints the path, not the token):
+
+```bash
+apeir runtime-api status --json
+apeir runtime-api token-path
+```
+
+For the source web interface, use the same checkout and Node.js 22:
+
+```bash
+cd desktop
+npm ci
+npm run dev -- --host 127.0.0.1
+```
+
+Open the loopback URL printed by Vite. Expand **Controller connection**, set
+**API URL** to `http://127.0.0.1:8770`, then enter the token from the owner-only
+local file in **Service session token** and select **Connect**. Set the address
+before entering the token: editing it clears the draft, and changing Controllers
+never reuses the old session automatically. The field clears after submission;
+the existing session-only connection state survives page reload. It is not a
+Provider API key or human approval identity. Treat it as a credential: do
+not include it in logs, screenshots or issue attachments. Existing externally
+managed authentication uses its own session instead. The browser cannot launch
+native sidecars or store Provider secrets. Keep both foreground processes open;
+stop the interface and API when finished. This is source UI/HTTP operation,
+not an installed Windows executable. File approvals still require a separately
+enrolled authorized human; test execution remains BLOCKED without a qualified
+sandbox. An API health response does not establish model inference or execution
+qualification.
+
 For repository tests and the numerical reference task:
 
 ```bash
@@ -129,6 +196,24 @@ remove credentials and private paths. Report reproducible issues through
 
 ### Workspace developer panel
 
+In native first-use setup, environment facts come from the selected Runtime.
+Choose the workspace and continue only after its actual path is confirmed.
+Use **Configure model later** for keyless operation. Provider validation saves no
+secret and performs no inference; after saving, **Models → Test** uses the
+existing Gateway/NKI and reports original request/usage evidence. Missing Kernel
+or credentials remains BLOCKED/UNCONFIGURED. See the
+[configuration boundary](../../development/DEVELOPER_PLATFORM.md#first-use-configuration-and-model-tests).
+
+For native local configuration, select the local Runtime before opening
+**Settings → Credentials**. Windows credentials use the existing system store;
+only reference names are persisted in configuration. The browser cannot store
+Provider keys. **Start Local Runtime** connects to the endpoint reported by the
+native manager, even if another Controller address is in the connection form.
+Credential rotation, session recovery and workspace restart never retarget that
+local session to a remote Controller. If the connection changes while an action
+is pending, inspect its original local state before retrying. These software
+guards do not qualify a Windows installer or a real model account.
+
 Open **workspace / 开发者面板** in the existing Operations Console. The panel
 combines the existing bounded workspace file API, diff editor, Chat Runtime and
 persisted EventStream. Select a file, edit it, choose **Preview diff**, then
@@ -147,6 +232,11 @@ outside APEIR, close its tab (explicitly discard if needed), then reopen it.
 Drafts also remain in memory when switching Console tabs; a dirty or pending
 workspace tab cannot be closed directly. Browser reload/exit asks before losing
 any active or inactive draft where the browser supports that prompt.
+Changing the Controller address or service credential resets the Workspace view,
+including same-address credential changes and A→B→A switches. Save drafts before
+changing that connection. Old views cannot continue an approval/save/run sequence;
+an already admitted operation may still have happened. Reopen its original
+Controller and inspect persisted evidence before trying another operation.
 Editor contents are not stored in layout preferences. Font size, collaboration
 visibility and activity visibility are the only new saved preferences; existing
 Chat conversation/draft persistence retains its existing behavior.

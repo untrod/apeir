@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { btnPrimary, btnSecondary, colors, radius, space, typo } from "../design";
 import {
-  ApiError, approvalAction, getConfig, fetchDeveloperRuns, fetchRunEvents,
+  ApiError, approvalAction, captureRuntimeConnection, getConfig, fetchDeveloperRuns, fetchRunEvents,
   type DeveloperRun,
   fetchCapabilityAvailability,
   fetchWorkbenchFile,
@@ -65,6 +65,13 @@ const input: React.CSSProperties = {
 };
 
 export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOpenEnvironments?: () => void; onDraftChange?: (protectedDraft: boolean) => void }) {
+  const [connection] = useState(captureRuntimeConnection);
+  const active = useRef(true);
+  const assertConnection = useCallback(() => {
+    connection();
+    if (!active.current) throw new Error("Workspace closed; inspect the original operation before continuing.");
+  }, [connection]);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const [listing, setListing] = useState<WorkbenchListing | null>(null);
   const [capabilities, setCapabilities] = useState<CapabilityAvailability | null>(null);
   const [filePath, setFilePath] = useState("");
@@ -105,11 +112,13 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
   useEffect(() => { try { localStorage.setItem(preferenceKey, JSON.stringify(layout)); } catch { /* Preferences are optional. */ } }, [layout]);
 
   const refresh = useCallback(async () => {
+    assertConnection();
     const controller = getConfig().url;
     const [filesResult, capabilityResult, runRecords] = await Promise.allSettled([
       fetchWorkbenchFiles(),
       fetchCapabilityAvailability(), fetchDeveloperRuns(),
     ]);
+    assertConnection();
     if (controller !== getConfig().url) throw new Error("Controller changed; reopen the original workspace.");
     if (runRecords.status === "fulfilled") {
       setRuns(runRecords.value.runs.filter(item => item.run_id.startsWith("workbench-")));
@@ -119,7 +128,7 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
     if (capabilityResult.status === "fulfilled") setCapabilities(capabilityResult.value);
     const failure = [filesResult, capabilityResult, runRecords].find((item) => item.status === "rejected");
     if (failure?.status === "rejected") setError(errorMessage(failure.reason, "Workbench data is unavailable."));
-  }, []);
+  }, [assertConnection]);
 
   useEffect(() => { void refresh().catch(cause => setError(errorMessage(cause, "Workspace unavailable."))); }, [refresh]);
 
@@ -140,7 +149,9 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
     const read = ++eventRead.current;
     const controller = getConfig().url; setSelectedRun(runId); setEvents([]);
     try {
+      assertConnection();
       const result = await fetchRunEvents(runId);
+      assertConnection();
       if (controller !== getConfig().url) throw new Error("Controller changed; reopen original evidence.");
       if (read === eventRead.current) setEvents(result.events);
     } catch (cause) { if (read === eventRead.current) setError(errorMessage(cause, "Persisted activity is unavailable.")); }
@@ -190,7 +201,9 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
     const controller = getConfig().url;
     setBusy(true); setError("");
     try {
+      assertConnection();
       const file = await fetchWorkbenchFile(path);
+      assertConnection();
       if (controller !== getConfig().url) throw new Error("Controller changed; reload the original file.");
       const tab: EditorTab = { id: ++tabSequence.current, controller, path: file.path,
         content: file.content, loadedPath: file.path, loadedContent: file.content,
@@ -247,7 +260,9 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
     setBusy(true); setError("");
     try {
       if (controller !== loadedController) throw new Error("Controller changed; reload the original file.");
+      assertConnection();
       const result = await previewWorkbenchWrite(filePath.trim(), content, loadedSha256);
+      assertConnection();
       if (controller !== getConfig().url) throw new Error("Controller changed; discard this preview.");
       setPreview(result);
     }
@@ -256,6 +271,7 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
   };
 
   const captureApproval = (cause: unknown, action: PendingAction) => {
+    try { assertConnection(); } catch { return false; }
     if (cause instanceof ApiError && cause.code === "NOUS_APPROVAL_REQUIRED" && cause.details?.approval_request_id && action.controller === getConfig().url) {
       setPending({ ...action, approvalId: String(cause.details.approval_request_id) }); return true;
     }
@@ -268,7 +284,9 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
     if (action.controller !== getConfig().url) { setError("Controller changed; review the original file again."); return; }
     setBusy(true); setError("");
     try {
+      assertConnection();
       const result = await writeWorkbenchFile(action.path, action.content, action.sha256);
+      assertConnection();
       if (action.controller !== getConfig().url) throw new Error("Controller changed; inspect the original save outcome.");
       setPreview(result); setLoadedPath(action.path); setLoadedContent(action.content); setLoadedSha256(result.after_sha256); setPending(null); setReference(undefined);
       await refresh(); await showEvents(result.run_id);
@@ -283,7 +301,9 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
     const action = pending; setBusy(true); setError("");
     try {
       if (action.controller !== getConfig().url) throw new Error("Controller changed; review original request again.");
-      await approvalAction(action.approvalId, decision); setPending(null);
+      assertConnection();
+      await approvalAction(action.approvalId, decision);
+      assertConnection(); setPending(null);
       if (action.controller !== getConfig().url) throw new Error("Controller changed; original request was not resumed.");
       setBusy(false);
       if (decision === "approve") {
@@ -298,7 +318,9 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
     setBusy(true); setError("");
     const controller = getConfig().url;
     try {
+      assertConnection();
       const result = await searchWorkbench(searchQuery.trim());
+      assertConnection();
       if (controller !== getConfig().url) throw new Error("Controller changed; discard original search results.");
       setSearchResults(result.matches);
     }
@@ -312,7 +334,9 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
     if (action.controller !== getConfig().url) { setError("Controller changed; review original execution again."); return; }
     setBusy(true); setError(""); setRunResult(null);
     try {
+      assertConnection();
       const result = await runWorkbenchProfile(action.profile, action.target, 120);
+      assertConnection();
       if (action.controller !== getConfig().url) throw new Error("Controller changed; inspect original execution.");
       setRunResult(result); setPending(null); await refresh(); await showEvents(result.run_id);
     } catch (cause) {
@@ -336,7 +360,9 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
     const controller = getConfig().url;
     setBusy(true);
     try {
+      assertConnection();
       const files = await Promise.all(proposal.files.map(file => fetchWorkbenchFile(file.path)));
+      assertConnection();
       if (controller !== getConfig().url) throw new Error("Controller changed; inspect the original file evidence.");
       if (files.some(file => proposal.files.find(item => item.path === file.path)?.after_sha256 !== file.sha256)) {
         throw new Error("Files changed after the verified proposal; reload and review current versions.");
@@ -377,7 +403,7 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
       </div>
     </section>
 
-    {error && <section style={{ ...panel, padding: space.md, color: colors.danger, background: colors.dangerSoft }}>{error}</section>}
+    {error && <section role="alert" style={{ ...panel, padding: space.md, color: colors.danger, background: colors.dangerSoft }}>{error}</section>}
 
     <section aria-label="Recorded model input" style={{ ...panel, padding: space.md }}>
       <label>Inspect recorded Run <select aria-label="Recorded input Run" style={{ ...input, maxWidth: "100%" }} value={contextView?.runId || ""} onChange={event => setContextView(event.target.value ? { runId: event.target.value, controller: runController } : null)}>

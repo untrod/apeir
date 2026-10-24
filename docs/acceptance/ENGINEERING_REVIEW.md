@@ -8,6 +8,391 @@ This record distinguishes reproduced defects, inspected risks and unqualified
 external dependencies. It is not an exhaustive proof that the repository is
 bug-free, a physical acceptance, or production certification.
 
+## Governance schema admission — 2026-10-23
+
+R2 rechecked main `e3cd2a20`, composed candidate `c8ec9f3` and frozen Kernel.
+Core39960170078 Windows job120436212486 timed out during `human_env` construction,
+inside the original GovernanceStore schema `executescript`; its full log remains
+on GitHub and the failure is not replaced by the passing Multi-Arch39960173640.
+**REUSE** PR #89 connection ownership and phase diagnostics; **FIX** schema
+transaction/failure semantics; **EXTEND** its existing Windows diagnostic;
+**BLOCKED** remains protected-main integration and native locked components.
+
+Three deterministic original failures independently establish that schema DDL
+ran outside a transaction, a late injected syntax error left published partial
+tables, and initialization swallowed the error while logging private exception
+text. The existing connection now owns one `BEGIN IMMEDIATE` schema transaction:
+all DDL commits together, late failure rolls it back and propagates, and warnings
+contain no exception text. WAL, FULL synchronous behavior, busy timeout, grants,
+identity, approvals and normal transaction ownership are unchanged. There is no
+connection pool, successful-schema cache or second GovernanceStore.
+
+Focused lifecycle/human-session/context checks pass **102 tests**; related
+Governance/ControlPlane/Context/repository checks pass **1231 tests** (63.28 s).
+The original three failures and prior Windows initialization/commit stalls remain
+separate evidence: the atomicity repair alone does not prove every Windows stall
+has the same cause. The existing diagnostic can run `windows-governance` to
+exercise the original cases before the broader Governance/ControlPlane suite,
+with the original60-second bound. It cannot produce the required `Core gate`
+context; full combined-source Windows Core must qualify independently. No timing
+Issue is closed on a single passing rerun.
+
+The composed `18f032e` Windows Python3.12 diagnostic
+[39986761379](https://github.com/untrod/apeir/actions/runs/39986761379), matching
+the original failing Core interpreter, passes the original focused **102 tests
+(34.38s)** and broader Governance/ControlPlane **474 passed,18 skipped
+(118.44s)**. The earlier Python3.11 subset is retained separately. Neither
+diagnostic substitutes for full Windows Core or closes the timing Issues.
+After normal synchronization with accepted MCP main `ad773890`, the focused
+Linux schema/human/context combination still passes **102 tests**.
+
+Full composed `18f032e` Core subsequently retained a new test-probe failure on
+Linux/Python3.10: **1 failed,5739 passed,77 skipped (888.71s)**; Linux/Python3.12
+passed **5751 tests,66 skipped (898.35s)**. The new probe counted overridden
+`commit()` method calls and assumed one call. Actual Python3.10 reproduction
+shows `executescript()` first calls `commit()` without an active transaction,
+then the owner commits the real transaction: `[false,true]`, but exactly one
+SQLite BEGIN/COMMIT. The probe now traces actual SQLite boundaries and requires
+exactly `BEGIN IMMEDIATE`→`COMMIT`, with every DDL inside that transaction.
+Late-error rollback, existing-data retention, privacy, WAL/FULL and integrity
+assertions remain. No production code or timeout is changed for this correction.
+The original failing3.10 probe/log is retained; corrected focused checks pass
+**102 tests on Python3.10 (2.32s)** and **17 lifecycle tests on Python3.12**.
+Fresh exact-source full platform CI remains required.
+
+Paired Linux constructor measurement used the same interpreter/filesystem,
+alternating order,5 warmups and20 measured fresh databases per variant. Before
+PR #89 baseline `d9c0505`: p50/p95/p99 **13.52/16.80/18.57 ms**, mean CPU3.89 ms;
+atomic schema candidate: **5.26/6.04/6.28 ms**, mean CPU1.89 ms. Both retain
+identical schema, WAL/FULL and integrity checks, with0 failures. These small
+sample tail estimates are exploratory, not Windows, model, UI or end-to-end
+performance qualification.
+
+
+## Source Preview delivery closure — 2026-10-24
+
+R3 rechecked main `ad773890`, the five open reviews and frozen Kernel.
+**REUSE** the existing Provider/Workspace/Proposal, CLI and source-wheel owners;
+**EXTEND** only the existing Source Preview qualification and artifact contents.
+**BLOCKED** remain protected-main integration, real account qualification, strict
+test execution and native installation. Protection reads still return403; an
+empty effective ruleset list does not establish classic/admin enforcement. No
+additional main merge is attempted before maintainer verification.
+
+The old artifact omitted usage instructions and exercised API import/bind/close
+instead of the public startup path. The existing Desktop workflow now includes
+the canonical Quick Start with links pinned to the exact source revision, and
+hashes the guide, wheel, manifest and validation report. It invokes a bounded
+stdlib verifier using the fresh base consumer's isolated interpreter. This
+verifier reads only its temporary fixture/session: normal model-enabled startup
+without Kernel refuses; explicit model-free startup serves the chosen workspace;
+unauthenticated access denies; unused model tokens/cost stay UNKNOWN; saved
+Providers stay unchanged; interrupt exits0, revokes the session and closes the
+listener. Logs and generated session material remain private and are not uploaded.
+The verifier rejects source-checkout imports rather than qualifying them as an
+independent install. This adds no Runtime, permission or packaging authority.
+
+A newly built wheel installed with base dependencies only in a fresh Python3.10
+environment passes that public startup qualification outside the checkout.
+Related CLI/startup/repository checks pass **289 tests (2.92s)** before the new
+checkout-import refusal test; the focused final selection passes **13 tests
+(2.23s)**. Counts overlap. Current-source artifact/CI qualification is separate;
+this Linux source evidence cannot establish native Windows or real inference.
+
+## Model-free public startup and product recovery — 2026-10-23
+
+**REUSE** the existing `--no-intelligence` process mode, Runtime API, WorkHarness,
+Proposal service, human sessions and CAS; **FIX** public API startup in that
+explicit mode; **BLOCKED/PENDING** real inference, qualified test execution and
+native installation. No execution, approval or model authority is added.
+
+The actual `apeir --no-intelligence runtime-api start` command originally exited
+in production with `NOUS_KERNEL_ENDPOINT is required`, preventing independent
+Runtime-service inspection even after all models were explicitly disabled.
+Startup now activates the existing model-off guard before initialization and
+retains the ordinary Kernel preflight in model-enabled mode. Saved Providers
+remain untouched and unloaded, protected reads still require authentication,
+and unsuccessful model tests report unknown usage rather than zero.
+The subprocess/HTTP regression fails before the change and passes afterward.
+Startup, CLI, model-off, credential and Gateway checks pass **65 tests** (2.86 s).
+That combination also exposed an older CLI fixture leaving its workspace in the
+process environment: the original order retained **3 failed /20 passed**.
+Those CLI tests now use the existing temporary-workspace fixture and isolated
+capability storage; their assertions and production startup behavior are intact.
+
+A fresh wheel installed with only declared base dependencies in an independent
+Python3.12 environment was exercised outside the checkout with `python -I`.
+The public model-free API starts with a generated owner-only session, serves the
+actual selected workspace, rejects unauthenticated Provider reads and refuses
+model execution with unknown usage. Normal production startup without Kernel
+still refuses. Interrupt exits0, revokes the session and closes the listener.
+This qualifies source API operation, not an installed native executable.
+
+The composed software review used sandboxed Chromium, the actual source UI and
+authenticated Runtime HTTP with a deterministic fake deliberator/signed fake
+human identity. Original Work `work_e7e7fabef2c4454893450d006c3f3503` generated
+two-file Proposal `wfr_19f468faa14e46bcab121bac25321279` through WorkHarness.
+Browser review/Approve Once/apply yielded independently reread file MATCH.
+An initial missing service-read permission returned403 and left files unchanged;
+the fixture operator granted only the exact workspace read scope and resumed
+the same original approved proposal. No service approval authority was added.
+
+The existing pytest profile then admitted the separately approved original run
+`workbench-exec-f0eb3668891d4d51`, but returned exit-1 with
+`STRICT_SANDBOX_UNAVAILABLE`: tests did **not** execute. A new Runtime process
+restored the original proposal, authorization and CAS manifest; reconciliation
+reported `replayed=false`. Both file hashes and write timestamps stayed unchanged.
+Work remained `WAITING_USER`, requiring a qualified test backend. Browser review
+and restart had zero page errors; private screenshots/HTTP evidence are source
+browser captures, not APEIR.exe. Proposal generation occurred in the fixture's
+real WorkHarness before browser review; it was not a live model call initiated
+inside Chat. These limits keep the complete developer/product Gate PARTIAL.
+
+That qualification also identified a public source entry gap: Operations Console
+accepted an address but had no service-session input. Scripts that preselected
+the session had masked this missing user interaction. The original three UI
+cases fail before the correction (**3 failed,37 passed**). The existing form now
+accepts an explicitly entered service session over its existing HTTPS/loopback
+admission. It clears the draft on address edits, connection changes and submit,
+never forwards the old session to a new Controller, and stores no credential in
+layout/localStorage. The existing session-only API connection owner and separate
+human approval authority are unchanged. Existing unsafe-address tests also check
+that entered sessions are neither sent nor included in refusal messages.
+
+Using the independently installed public CLI's production/model-free API,
+sandboxed Chromium opened the actual source UI with no injected session or
+native IPC: a wrong session returned401, explicit form entry recovered actual
+Operations data, and reload retained the selected endpoint/session. All model
+Providers remained disabled, Kernel readiness was false, and the UI kept observe
+mode rather than inventing a human identity. There were zero model calls and
+zero browser page errors. Full Desktop checks pass **326 tests/46 files
+(57.33s)**; lint, typecheck and source build pass. These are source software
+results, not Windows native installation or live-provider qualification.
+
+Minimum-version validation found another real packaging gap: an independent
+Python3.10 base/dev install failed API imports with missing `async_timeout`
+(**7 failed,58 passed**). The API imports the existing extension facade even
+without the optional MCP SDK. Its already-used Python3.10 timeout backport is
+now a conditional base dependency instead of being declared only in the MCP
+extra; no replacement timeout, direct SDK path or unguarded execution is added.
+The same affected selection passes **65 tests (3.11s)** afterward. A second fresh
+Python3.10 environment installed only the actual wheel/base dependencies and
+passed the public strict/model-free API, authentication, unknown-usage and
+interrupt/session-cleanup checks. Its installed lost-response simulated Demo
+also retains effect count1 and reaches COMMITTED/MATCH without Kernel traversal.
+
+The existing manual Source Preview workflow still builds on Python3.12, then
+installs only the wheel/base dependencies with Python3.10, the minimum supported
+version. It now checks isolated API import/bind/close before the existing Demo,
+records consumer and builder versions, and preserves the same artifact name,
+seven-day retention and explicit non-native qualification. This adds no PR/main
+matrix or release bypass. Workflow actionlint1.7.12 and repository contracts
+pass; exact-source remote qualification remains separate.
+
+After normal composition of the existing PR83/PR86/PR89 histories, affected
+Governance, ControlPlane, Context, Work, public startup, credential, workspace
+proposal, checkpoint and repository checks pass **1549 tests,16 skipped
+(90.69s)**. Counts overlap the earlier narrower checks; skips are not PASS.
+Resulting MCP main `ad773890` separately passes Core39986188751,
+Desktop39986188830, Multi-Arch39986188775 and Security39986189013. Its Windows
+Core has **5369 passed,149 skipped (2351.96s)**; Windows Multi-Arch has
+**5073 passed,131 skipped,292 deselected (2111.40s)**. Those main results do
+not qualify the still-unmerged R2 combination or establish that repository
+administrator protection was enforced. No further main merge is attempted.
+
+
+## Saved Provider lifecycle integration — 2026-10-23
+
+Starting parent PR #83 was `e8a0913`, while main remained `e3cd2a20`.
+**REUSE** Provider setup/configuration, Registry, Gateway, existing file locks and
+Governance routes; **FIX/EXTEND** saved update/removal and setup model selection;
+**BLOCKED/PENDING** remains protected integration, native release and live-model
+qualification. There is no second Registry, credential store or execution path.
+
+Original regressions retained **4 failed / 3 passed**: deletion left saved
+configuration behind, update failed after removing the original adapter, the
+current Gateway retained stale discovery, and corrupt JSON was replaced by an
+empty mapping. Original setup selection retained **1 failed / 7 skipped**:
+Gateway identities and unrelated Providers were offered as vendor model IDs.
+
+Create/update/remove now share the existing JSON owner with advisory file and
+in-process locking, unique temporary files and atomic replacement. Invalid edits
+and failed writes preserve the original adapter; corrupt records deny mutation.
+Successful edits preserve unedited settings and refresh the original Registry
+and current strict Gateway. A refresh failure after persistence clears the
+Gateway and reports failure, without claiming rollback or retrying inference.
+Deletion survives reload, leaves credentials in their separate store and does
+not cancel already admitted requests. Other running processes are not broadcast
+synchronized; this is not a distributed transaction or an authority revocation.
+Unsupported `enabled` edits are rejected rather than falsely reported applied.
+
+The existing catalog exposes a recorded vendor `provider_model`, or null when
+unknown. The wizard reuses its bounded reader, exact selected Provider and
+connection/lifetime fences. It never substitutes a Gateway ID/display label or
+strips namespace prefixes from vendor IDs. Suggestions remain unqualified until
+an explicit actual inference through the existing Gateway/NKI.
+
+Initial focused lifecycle checks: **12 passed** (2.35 s), including new-interpreter reload,
+four-process writers, failed writes/refresh and authenticated Runtime HTTP.
+Unauthenticated PATCH returns401; an admitted PATCH changes persisted config and
+the actual model catalog; DELETE still returns403/NOUS_APPROVAL_REQUIRED without
+changing state. Full Desktop: **323 passed**, 46 files (75.50 s); lint, typecheck
+and web build pass with the retained mixed Tauri import warning. These use fake
+references/IPC and no real model or installed Windows executable.
+
+The first related regression retained **1391 passed,5 skipped,1 error** (78.30 s).
+The error is the unchanged local TLS fixture reading an empty `port` file while
+its child was still publishing via `write_text`. Its producer now closes a
+`port.pending` file before atomic replacement. The original five-second bound,
+TLS/security checks and parent assertions remain unchanged; no Runtime timeout
+or retry policy changes. The affected TLS/Skill HTTP suites then pass **37 tests**
+(25.48 s). The original error remains distinct from the Windows timing Issues;
+passing these tests does not close those Issues or qualify remote publishers.
+Final related Provider/Model/Governance/ControlPlane/Context/no-intelligence
+regression: **1393 passed,5 skipped** (65.71 s); repository contracts: **278 passed**.
+Counts overlap the narrower checks and are not a product maturity percentage.
+
+The same first-use review reproduced **3 failures** for the desktop `anthropic`
+identity: it selected the custom/OpenAI adapter rather than the existing
+Anthropic implementation. The saved identity now maps to the existing `claude`
+preset, and root, `/v1` and full messages addresses retain one correct endpoint.
+Existing saved configurations are not automatically migrated. The native Gemini
+template, for which no adapter exists, is disabled with a compatible-endpoint
+explanation. Provider/factory/no-intelligence checks then pass **96 tests**
+(4.76 s), and the wizard's **8 tests** pass; no real account call is claimed.
+The final affected combination including this protocol correction is
+**1396 passed,5 skipped** (72.15 s).
+
+The exact composed `018b175` Core and Multi-Arch runs subsequently failed, and
+their original logs are retained: all full platforms exposed the older credential
+test's mock of `_register_provider_runtime`, which the new prepare-before-save
+path no longer calls. That test now checks the actual published adapter, Gateway
+model and unchanged reference-only persistence assertions, restoring global state
+afterward. Windows Core additionally failed the existing 16-owner cold checkpoint
+test at `msvcrt.LK_LOCK` with `Resource deadlock avoided`. Initialization now queues
+local owners through the existing bounded Runtime lock before the unchanged OS
+file lock; separate processes still take that original lock. Neither Windows CRT
+retry bounds, SQLite timeouts nor the original concurrency assertions are raised.
+A four-interpreter cold-start/reload/integrity check also exercises cross-process
+ownership. This is a software correction candidate until fresh platform CI passes;
+it does not close the unrelated Windows Relay/HTTP/Automation timing Issues.
+
+The subsequent `774e079` Windows Core job120431985987 passed all7 checkpoint
+cases, including the original16-owner and new cross-process checks. The full job
+then timed out at60 seconds in `test_private_remote_read_reuses_current_human_session`:
+the stack is inside Governance `_db_connect` → `conn.commit()` during human login.
+This is retained as a failed full job, not a full Windows PASS or proof of a
+connection-leak root cause. The independent PR #89 lifecycle/phase diagnostics
+remain under their original review; this observation does not justify increasing
+the timeout, reducing durability or weakening authentication.
+
+An installed-wheel lost-response Demo also exposed repeated full Workflow event
+projections in AgentSession history after resume. The original restart and
+approval scenarios reproduced **2 failures** (9 entries for6 unique events and
+10 for7 respectively). Coordination now retains the newest exact distinct
+projections; changed evidence remains distinct, and the existing256-entry bound,
+original EventStream, Work, receipt and observation records are unchanged. There
+is no bulk history migration. A300-event approval-wait/replay case separately
+reproduced1 failure in the first deduplication candidate: filtering against the
+previous window before truncating could displace recent events with older ones.
+The final projection scans from the newest records and stops at256 distinct
+entries; repeated replay retains the canonical stream's recent window, with the
+original approval still pending. Comparison storage is bounded by that existing
+limit. No measured model-Token or end-to-end speedup is claimed.
+
+## Native session destination audit — 2026-10-23
+
+The starting PR #83 source was `48a6cc1`; current main was still `e3cd2a20`.
+**REUSE** the native process manager, Windows Credential Manager, Runtime API
+client and connection version; **FIX** local-session destination and late native
+response binding; **EXTEND** the existing startup/settings/diagnostic UI tests.
+No credential store, API, execution authority or startup daemon was added.
+Original component regressions retained **3 failures**: local startup used the
+connection form's address, late session loading replaced a changed connection,
+and local credential mutation proceeded for a selected remote Controller.
+
+The corrected UI binds native session results only to the manager's validated
+loopback endpoint and verified ready session, with original connection/version
+and view checks. Credential rotation/removal, diagnostic recovery and workspace
+restart require the selected local endpoint. Startup preserves a selected remote
+Controller. Session-reset failure does not silently restart another process.
+An action may already have completed when its response becomes unusable; no
+automatic action retry or process cancellation is inferred.
+
+New checks include the actual App bootstrap, remote/ABA/unmount negatives,
+invalid destination/readiness/session rejection, transient input clearing and
+the existing API client over two actual loopback HTTP servers. The authenticated
+request reaches only the endpoint returned by the simulated native IPC host;
+the other server receives no request. **22 focused tests** and the full Desktop
+suite (**314 passed**) exercise this software boundary. Node HTTP fixture types
+are development-only; the existing browser polling handles remain DOM numbers.
+Related Runtime startup, provider, launcher, component-lock and two-file proposal
+regressions have **39 passed**. This uses fake IPC/credentials, not an installed
+Windows executable, actual Credential Manager qualification or a real model.
+
+The preceding composed `7d0d88e` Core run `39880466334` completed on four
+platforms: Linux Python 3.12 **5684 passed / 66 skipped**, Linux Python 3.10
+and macOS Python 3.12 each **5673 passed / 77 skipped**, and Windows Python
+3.12 **5662 passed / 88 skipped**; each retained four warnings. Those exact-source
+results precede this frontend correction; new candidate CI and protected main
+integration remain separate requirements. Main protection inspection still
+returns administration HTTP 403. Native binary hashes, real model/IdP and
+installed product acceptance remain **BLOCKED/PENDING** at their own Gates.
+
+## First-use and Provider test integration — 2026-10-23
+
+**REUSE** health/workspace APIs, native initializer/process manager, Provider
+configuration, Gateway/NKI, model-test application service, usage and redaction;
+**EXTEND/FIX** the original wizard and CLI adapters. No Registry, execution
+database, credential store or approval authority was added. Original targeted
+checks retained **7 backend failures** and **2 wizard failures**: direct setup
+inference/diagnostic POST, guessed readiness, ineffective workspace selection,
+UNKNOWN model completion, missing usage converted to zero and lost error binding.
+
+Configuration validation now performs no credential resolution/network/inference.
+Doctor/ping use GET metadata only. A saved explicit Provider test uses the
+existing model-test service only for the original matching strict NKI Gateway;
+changed mappings, compatibility Gateway or Gateway replacement cannot dispatch.
+The existing model-test route records original request IDs on failure, returns
+unknown usage/cost and accepts explicit completed outcomes. The legacy counter's
+redaction correction preserves only null/nonnegative integers and rejects secret
+strings/structures. Embedded-credential and unsupported base URLs are rejected
+without copying their contents into diagnostics.
+
+The wizard reads selected Runtime health instead of guessing architecture or
+WebView availability. It initializes/restarts the exact selected local workspace
+and confirms it through the original API, or keeps the remote Controller's scope.
+Keyless setup preserves existing Providers. Saving completes once before the
+completion screen; no conversation, inference or verified execution is invented.
+Connection-version changes invalidate setup; response loss does not retry native
+actions. Local HTTP/native IPC tests, fake Gateway replies and the real
+authenticated Runtime HTTP configuration route establish software boundaries.
+They do not qualify actual Windows Credential Manager, a real model invoice,
+installed EXE, strong sandbox or hardware.
+
+Affected backend regression: **504 passed**. Full Desktop: **321 passed** in
+46 files. The preceding first native-session correction retains its separate
+314-test full run. Changed-file format checking also required mechanical
+formatting of the previously unformatted Provider experience module/test; their
+pre-existing format failures were checked against the original Git contents.
+No scanner rule, execution timeout or safety assertion was relaxed. Current-source
+PR CI and protected main integration remain required; main and external product
+Gates are not upgraded by these local results.
+
+The source-browser qualification subsequently completed keyless first-use setup,
+entered the existing Workbench and reopened its persisted configuration after
+reload. Sandboxed Chromium used actual authenticated Runtime HTTP and its real
+workspace registry, with a fake native IPC host; no POST/model request occurred
+and there were zero page errors. Default proposal inspection remained denied,
+as displayed by the original Governance boundary. This is a read-only source UI
+qualification, not unrestricted developer mutation or Windows installation.
+The fixture's initial generic network-idle wait and exact tab-name selector
+failures remain retained; explicit readiness/tab locators resolved those harness
+errors without changing application timeouts. A separate controlled delayed
+native workspace reply exposed premature Next admission (**1 failed / 6 passed**).
+The wizard now awaits the original health/workspace facts, without sleeps or
+extra retries. Final full Desktop regression: **322 passed**, 46 files.
+
 ## Product wiring audit — 2026-10-11
 
 Read-only starting main was `e5424305ec90fb0a072f21fbef371ebd5bc110f6`;
@@ -2427,6 +2812,366 @@ performance gates, Node assertions and timeouts are unchanged. This is test
 input determinism, not a performance improvement or a Windows recovery fix.
 Exact-source CI remains required before integration.
 
+### Governance SQLite connection lifetime and timing — 2026-10-21
+
+**REUSE** GovernanceStore, its original SQLite transactions, logger, HTTP/Skill
+owners and security checks. **FIX** connection cleanup after failed setup;
+**EXTEND** safe phase diagnostics. This creates no store, pool, authority,
+scheduler or event system. Kernel, component lock, busy timeout, WAL,
+synchronous durability, approval/revocation checks and effect retry rules stay
+unchanged.
+
+Main `e3cd2a2` performs three setup PRAGMAs before its cleanup `try/finally`.
+Injecting an error in each PRAGMA while retaining the actual SQLite connection
+reproduces **3 failed tests (0.18s)**: transaction bodies are denied, but the
+connections remain open. The same connection owner now covers connect, setup,
+commit/rollback and close with cleanup. Twelve lifecycle contracts pass
+**12 tests (0.09s)**, including readonly failure, failed commit rollback,
+post-commit close failure without body replay, and diagnostic privacy.
+
+The existing logger warns only when a local monotonic connect/configure/commit/
+rollback/close phase takes at least one second. Messages contain only fixed
+phase names, elapsed time and readonly state, with normal logging thread fields;
+they do not include paths, SQL, row values or exception text. This threshold is
+observability, not a deadline change. A committed fact followed by close failure
+remains readable as original evidence; no retry is added.
+
+Affected Governance/ControlPlane/Skill/SQLite/path-binding regression initially
+has **573 passed,1 setup error (51.59s)**: the owned TLS fixture saw its port file
+after creation but before its port number was written. The child now writes a
+temporary file and atomically publishes readiness; the original five-second
+deadline and assertions remain. The final affected scope has **574 passed
+(50.76s)**. This fixture correction is not a Runtime network timing fix.
+
+Same-host A/B/B/A measurement of 1000 durable short transactions per variant
+records p50/p95/p99 **0.1216/0.3105/0.5357ms** before and
+**0.1459/0.3241/0.5431ms** after; CPU **0.1632s to0.1801s**. Every database has
+500 expected rows per block, integrity_check=ok, WAL, foreign_keys=1 and
+synchronous=2. This measures diagnostic overhead on a shared Linux host, not a
+speedup, Windows result, whole-Runtime benchmark or Token saving.
+
+[Issue88](https://github.com/untrod/apeir/issues/88) remains open. Windows
+Python3.11 run39453407331 captured a Skill HTTP timeout during commit;
+Python3.12 run39541361099 captured another during close after the completion
+audit. The deterministic setup leak is not yet proven to cause either timeout.
+Full regression and exact-source/current-main platform CI remain required;
+the original five-second HTTP assertion and durable audit are preserved.
+
+
+### Windows Skill HTTP phase investigation — 2026-10-21
+
+The SQLite lifecycle repair is independent of the unresolved HTTP deadline.
+Source `cffb64d` Multi-Arch run [39635213958](https://github.com/untrod/apeir/actions/runs/39635213958)
+recorded Windows **1 failed,5026 passed,131 skipped,302 deselected,4 warnings
+(2353.08s)**. Initial installation in the revoked-update case times out before
+fault injection. Safe SQLite diagnostics show commit **1562ms**; the handler
+has progressed to opening the CAS receipt append file at the client timeout.
+This does not show that receipt open alone consumed five seconds, nor prove
+SQLite setup/close is the sole cause. Linux amd64/ARM64 pass; the issue stays OPEN.
+
+REUSE existing Core CI and owned HTTP/TLS tests; EXTEND only fixture diagnostics.
+Bounded snapshots retain phase names, request ordinals, elapsed milliseconds and
+completion flags, never arguments, paths, SQL, results or exception messages.
+Completed entries are bounded at128; active phases remain distinguishable.
+Nested timings overlap and must not be added as exclusive costs. Existing effects,
+exceptions, human/nonce admission and five-second HTTP assertions are unchanged.
+Related owned HTTP/TLS/privacy cases: **33 passed (23.48s)**; existing conservative
+CI-scope cases: **17 passed**. The combined repository/SQLite/owned HTTP selection
+has **321 passed (23.42s)**; these counts overlap. A same-host ABBA trivial-boundary
+probe (2000 samples per variant) measures diagnostic p50/p95/p99 overhead from
+0.120/0.160/0.180µs to1.111/1.172/1.383µs. This is instrumentation cost, not a
+product speedup or Windows/HTTP latency estimate. A real local fixture trace has25 completed phase
+records for12 HTTP requests; it is neither Windows qualification nor a speedup.
+
+The optional `windows-skill-http` input on existing Core CI selects a separately
+named diagnostic. Default dispatch, PR, main and release selection are unchanged.
+Diagnostic-only skipped jobs also receive different names: GitHub treats skipped
+checks as passing, so they must never replace `Core gate` or platform evidence.
+Diagnostics use the failing Windows/Python3.11 Tier1 dependency scope and original
+tests. Their result cannot qualify full Core, fix Issue #88 or certify release.
+The workflow passes official actionlint1.7.12 validation. Frozen Kernel, component
+lock, durability, timeouts and retry policy are unchanged.
+
+
+The first actual [Windows diagnostic39689950082](https://github.com/untrod/apeir/actions/runs/39689950082)
+on `154c110` passed **33 tests (62.42s)**. Its32 fixture snapshots contain200
+completed HTTP requests (mixed endpoints): observed p50/p95/p99 **47/625/641ms**,
+maximum **891ms**, with no incomplete phases. This fresh subset does not reproduce
+the full-suite deadline failure and cannot close Issue #88. Python3.11 Windows
+`monotonic()` quantizes some short phases to0ms; those values are below the timer
+resolution, not zero I/O cost. The fixture now uses high-resolution local
+`perf_counter()` for phase intervals. Original deadlines/SQLite runtime diagnostics
+stay unchanged. Related Linux owned HTTP/TLS/privacy cases still have **33 passed
+(23.43s)**; new Windows precision evidence and full-suite qualification are separate.
+
+
+### Governance read-only connection admission — 2026-10-21
+
+FIX the existing SQLite connection owner: a read-only connection no longer
+initializes parent directories. An absent/removed database still raises the
+original SQLite failure without recreating its workspace; normal existing reads
+retain original rows and need no directory-creation permission. Write-path
+initialization, transaction/rollback/close behavior, WAL and durability remain
+unchanged. This does not claim SQLite has no internal WAL sidecar activity.
+
+Both original filesystem contracts failed before the correction (**2 failed,
+12 deselected,0.14s**). Related Governance/Control Plane/Skill/permission cases
+now have **555 passed (45.91s)**; collection confirms555 distinct cases. These
+counts overlap earlier evidence. No authority, retry, timeout or Kernel change.
+The explicit Windows diagnostic now also includes these existing lifecycle cases.
+
+A paired same-host, same-database Linux ABBA probe has5000 samples per variant:
+p50/p95/p99 **120.291/257.848/411.920µs → 109.155/245.329/387.744µs**;
+thread CPU **0.7362s → 0.6737s**. Every lookup returns the same original row;
+integrity remains `ok`, row count1. This removes redundant directory operations
+in the read helper, not evidence of a whole-Runtime or Windows/HTTP speedup.
+It does not establish a correction for the unresolved full-suite Issue #88.
+
+
+### Human admission timing within the existing Skill HTTP diagnostic — 2026-10-22
+
+REUSE the existing owned HTTP/TLS fixture, `HumanSessionAuth`, nonce admission
+and bounded phase recorder. EXTEND only its instrumentation to authentication,
+nonce issuance and nonce consumption. Earlier Windows evidence has total HTTP
+2784.6ms but business admission37.1ms; attributing the remainder to SQLite close
+or CAS would be unsupported. The existing SQLite phase warnings and new nested
+method spans can now distinguish those admission stages without changing them.
+Fixed phase names, local request ordinals, elapsed milliseconds and completion
+flags remain the only retained fields. Cookies, nonces, identities, arguments,
+results and exception strings are excluded. Nested timings overlap; setup calls
+outside HTTP have their own ordinal and are not HTTP request latency.
+
+A concurrent positive/denied contract verifies separate request correlation,
+original return/exception behavior, exactly one call per operation and exclusion
+of fake private cookie/nonce material. Existing owned HTTP/TLS/lifecycle/privacy
+regression: **53 passed (25.70s)**. A real local denied-request trace observes
+both authentication and nonce-admission spans; no additional authority, SQL,
+retry, timeout, durability setting, storage owner or production behavior changes.
+This diagnostic does not itself fix or close Issue #88. Windows measurements and
+resulting-main qualification remain separate; a passing isolated run cannot
+replace the original full-suite failure evidence.
+
+### Pre-installation audit and original-evidence repair, 2026-10-18
+
+Requeried main `e3cd2a20d75a711108285533cd83014bf6f9b69d`, remote heads,
+PRs, open Issues, workflows, releases, component lock and available toolchains.
+Main's four workflows and PR #81's five exact-source workflow runs are successful;
+GitHub still reports the PR blocked by three stale required check names. The
+administration endpoint returns 403. No protection change, administrator bypass,
+new tag or Release is performed. The 31 published tags and frozen Kernel remain
+untouched. The root checkout remains on main; candidate work is isolated.
+
+| Existing surface | Classification | Actual entry / remaining boundary |
+| --- | --- | --- |
+| Work, AgentSession, Workflow, Governance, CAS, EventStream | REUSE | Existing CLI/HTTP/SDK and durable owners; no competing state system. |
+| MCP Runtime | EXTEND | PR #81 official SDK stdio → authenticated Runtime HTTP, five tools and original human approval. Not yet main; direct official Codex MCP evidence is not a model turn. |
+| Prepared Work model input | FIX | A 96,000-character string slice could corrupt JSON and omit Goal constraints/schema. Complete compacted input now either dispatches whole or pauses the original Work before Provider invocation. |
+| Signed Node result recovery | FIX | Re-signing the same terminal journal could overwrite the envelope digest already bound to VERIFIED Work. Preserve first evidence, ACK canonical duplicates, reject conflicts; terminal stop control metadata is distinct from execution evidence. |
+| Reviewed Skill acquisition | REUSE | Main has original human-reviewed local/HTTPS catalog/Extension/CAS paths. Correct the stale example claim that all remote acquisition is rejected. Instruction loading is not executable Skill qualification. |
+| Model Center | FIX / EXTEND | The live HTTP route is the Control Plane adapter over the active Gateway registry, not the earlier same-path ModelCenter handler. Do not infer measured health from declared availability or invent zero price/latency when benchmark evidence is absent. Existing REST membership and canonical enabled-only Desktop selection remain the owners. |
+| Context / Workbench | EXTEND | Existing saved-file admission, editor/proposals and original Work paths. Full authenticated Harness, all native filesystem paths and actual cloud/local model tasks require independent qualification. |
+| Parallel model invocation | FIX | Bind child dispatch to the remaining aggregate deadline and honor the requested minimum successful responses. Retain partial output/cost evidence without calling it aggregate success. |
+| Terminal / Git / Environment | EXTEND | Existing process sessions, bounded profiles, read-only sandboxed Git and Environment service. Do not label fixed profiles as a qualified full PTY or bypass missing strict isolation. |
+| Automation | EXTEND | Existing manual/one-shot simulated consumer; recurring real-node health work, general executable Skills and Recorder remain missing. |
+| Embedded / Network / Scientific | EXTEND | Existing signed Node/Device, Serial host contracts and numerical reference. Physical/WAN and strict-isolation computation/report gates remain pending or blocked. |
+| Native Windows installation | FIX | Actual verifier still fails on missing locked `nousd` bytes; worker also absent. No local Rust/MSVC/PowerShell/Windows SDK toolchain. A separate PR #84 extends the existing Desktop workflow with an opt-in frozen-source Windows rebuild diagnostic; no packaging, installation or hash match is implied by compiling. A different rebuild hash cannot replace the lock. |
+| Additional Harnesses / protocols / general engines | DEFER | See the dated official-source/license adoption table in the existing Provider contract; no copied Harness, scheduler, inference engine or workflow engine. |
+
+Defect evidence is retained privately outside source. Work overflow reproduction
+against accepted main: **2 failed, 1 passed** (0.38 s); the old path dispatched
+truncated input instead of rejecting it. Original Goal/constraint overflow,
+complete Unicode JSON/tail constraints, the exact inclusive bound and durable
+WAITING_USER/no-Provider/no-tool behavior now have regressions. Prepared input
+character count is not measured token usage; no cost-saving percentage is claimed.
+
+Node duplicate-terminal reproduction: **5 failed, 2 passed**. The first fixture
+omitted a capability requirement and was corrected before the defect baseline;
+those setup failures are retained separately. Initial preservation exposed a real
+compatibility failure in the existing reconnect test (pending retry not retired),
+which was corrected rather than skipped. Canonical comparison distinguishes bool,
+integer and float payload changes. Tests cover signed real-socket reconnect,
+conflicting result/binding/receipt/sender/key, persisted original envelope/CAS
+binding, pending queue cleanup and both ALREADY_TERMINAL stop/result orderings.
+No timeout increase, execution replay or weaker MATCH assertion is introduced.
+This proves a duplicate-envelope defect, not the historical cause of Issues
+#4/#8/#82; those remain open until their original failures are explained.
+
+Pre-composition checks: **275 Node tests passed**, **56 Work tests passed**.
+Original HTTP approval/MATCH selection: **2 passed**. Initial preservation's
+Reality/Automation selection: **169 passed**; this earlier patch scope is not
+presented as final combined qualification. Counts overlap. The candidate reuses
+PR #81 through a normal merge preserving its exact accepted source SHA; its
+own final combined regression, source CI and protected main integration remain
+required before claiming integration. Original Kernel, component lock, PID64,
+credential/sandbox boundaries and native release rules are unchanged.
+
+The initial direct ModelCenter DTO probe showed missing entity aliases, but a
+real authenticated HTTP round trip exposed the existing route override. That
+probe must **not** be reported as proof that the public model list loses every
+model. The actual Control Plane adapter already supplies both identities. Its
+missing benchmark measurements were nevertheless rendered as zero and declared
+availability as measured health; review follows the actual HTTP producer through
+Desktop consumption. The legacy ModelCenter action DTO remains unchanged;
+identity regressions qualify the actual public HTTP projection instead.
+Protected HTTP tests now use the real active Gateway and persisted registry,
+including unauthenticated denial and reopen/removal. Missing or invalid benchmark
+values remain null, unobserved health is UNKNOWN, and only canonical enabled
+models are offered. The existing central redactor permits only the exact nullable
+finite nonnegative numeric model-price field; strings, credentials, bools,
+negative/nonfinite values and other sensitive keys remain redacted. Complete
+Desktop REST loading follows bounded pagination and rejects duplicates, changed
+totals or Controller changes before publishing membership. Positive zero is
+preserved as evidence.
+
+Focused real model/API/UI checks include retained pre-fix failures; these are
+software fixtures and authenticated loopback HTTP, not actual model inference.
+Pagination regression: **5 failed,12 passed** before, **17 passed** after.
+Current full Desktop: **40 files,239 tests passed**, with lint, typecheck and Vite
+build passing. Shared-redactor Governance/credential/usage regression: **264
+passed**. Full composed Python and exact-source CI remain required. A proposed
+unnecessary legacy DTO alias also exposed that file's original formatting failure
+in source0a75af7 Security CI. The alias is withdrawn instead of reformatting the
+unrelated legacy implementation or weakening the changed-file formatter. The
+failed run and baseline-format evidence are retained.
+
+The pre-final bare-host full run recorded **5540 passed,58 skipped,3 failed**
+(719.21s). One existing Provider catalog test incorrectly equated enabled with
+healthy. Its corrected contract now asserts UNKNOWN and absent price/latency,
+then requires an explicitly recorded health result before reporting healthy;
+the existing identity/state assertions remain. The other two original process
+cleanup assertions found zombies adopted by this container's non-reaping PID1
+`tail`, a previously documented unsupported environment. No process assertion,
+timeout or Kernel code changes. The same unchanged ProcessSession/startup scope
+under a process-local Linux child reaper passes **22 tests**; four adopted
+children were reaped and no owned children remain. This is initialized test
+environment evidence, not a new product sandbox or Scientific qualification.
+The bare-host failures remain retained separately from initialized/final CI.
+
+Initialized full regression at source22ceee8: **5545 passed,58 skipped**
+(691.76s);18 adopted children reaped, no owned children remaining. A subsequent
+targeted audit nevertheless proved a missing parallel-billing case: original
+CostController receipts correctly retained uncertain charges, while parallel
+results/events showed zero or omitted failed-child cost and could dispatch a
+second budgeted candidate. Controlled method-only22ceee8 reproduction against
+unchanged accounting semantics: **2 failed**; the original parent-cancel test
+also fails while its event loop remains alive. No paid Provider calls occurred.
+
+The same CostController now supplies an exact-request, transaction-consistent
+read of all original attempts/reservations, with binding validation and additive
+request-ID indexes. Gateway projects those facts on failure/cancellation, retains
+UNKNOWN and stops further budgeted admission; proven non-dispatch stays zero.
+Parent cancellation joins original children and retains unsettled accounting.
+No alternate ledger, credential authority, retry or execution store is added.
+Focused accounting/Gateway **94 passed**; broader model/Work/Context/Control
+Plane/Provider **1312 passed** (69.35s), Python3.11 Model Runtime **314 passed**
+(3.20s). Counts overlap. Final composed source qualification remains required.
+These changes do not qualify durable replay of a parent fan-out across restart.
+
+An additional policy-boundary probe retained **22 failed,9 passed** before the
+fix: non-finite/ambiguous budgets were accepted and a zero aggregate budget
+still dispatched the first Provider call. Parallel limits now validate numeric
+types/finiteness and reject zero-budget work before any child dispatch. Model
+Runtime regression after this correction: **345 passed** on each of Python3.12
+(2.76s) and Python3.11 (3.02s). These are software/fake-Provider tests, not billed
+requests or a cost benchmark. Positive aggregate limits stop further admission;
+they cannot retroactively prevent charges for concurrent already-dispatched
+requests. Original CostController per-request/daily reservations remain separate.
+
+Independent review then reproduced a child `CancelledError` escaping through the
+parent-cancellation handler although the caller had not cancelled. Two retained
+regressions fail before correction. The Gateway now accounts for that failed
+child and preserves the existing fan-out/budget rules; actual parent cancellation
+still joins its children. Model Runtime **347 passed** on Python3.12 and
+Python3.11. No authority leak, repeated effect, orphan or paid incident was
+demonstrated by this in-memory/temporary-ledger case.
+
+Candidate28aa586 Multi-Arch run39119424955 failed the same Gateway fan-out test
+on Linux AMD64 and ARM64/Python3.11. Original raw logs are retained. A controlled
+75ms preparation stall reproduces the old assumption that zero-delay mock
+Providers necessarily finish within a whole-call50ms limit; the precise CI
+scheduling cause remains UNKNOWN. Ordering/concurrency are now event-coordinated
+and the separate pending-cancellation test retains50ms. Independent controlled
+regressions prove two product defects: an exhausted parallel deadline could still
+dispatch a child with the original1s limit, and one response could report
+`successful=True` despite `min_successes=2`. Child deadlines and the result
+predicate now enforce those original policy inputs. Partial responses, original
+request bindings and usage are retained; no timeout, retry or authority is
+expanded. Both Python3.11 and3.12 focused Model Runtime suites pass274 tests at
+that patch scope. Final composed checks and cross-platform CI remain required.
+
+The PR #84 opt-in native diagnostic was actually exercised at Distribution
+424429c/run39121517509 on Windows Server2025/Rust1.99.1. Both frozen Kernel
+release components built in1m49s, both PE machines are0x8664 and tracked Kernel
+source stayed clean. **Both hashes differ from the original lock**, so the
+diagnostic correctly fails and native integrity remains BLOCKED. The retained
+six-file logs/report artifact12134755674 has ZIP SHA-256
+`f35a283b49584d8a81e2effb99585a718f1a80ee8d544788479a9d684e8baf8e`,
+independently downloaded and checked. Exact expected/actual hashes are in PR #84.
+No component is staged/relocked, no mismatched EXE is offered for installation,
+and no installer, NKI runtime or Windows10 lifecycle qualification is claimed.
+
+
+### Linux ProcessSession descendant reaping — 2026-10-21
+
+**REUSE / FIX** the existing Distribution ProcessSandboxHost and durable
+ProcessSession projection. On main `e3cd2a2`, the original
+`test_child_process_is_cleaned_up_with_parent` and
+`test_natural_parent_exit_does_not_leave_child` both fail in this container
+with PID1 `tail -f /dev/null`. The original child creation tokens remain in
+`/proc` because dead children are zombies adopted by a non-reaping PID1.
+The same pair fails on `ae75148` and `d5b20ef`; no assertion or timeout changed.
+
+The isolated Linux host now enables `PR_SET_CHILD_SUBREAPER` before workload
+spawn, then reaps only adopted children in the original workload process group
+after the existing termination signals. Startup without that Linux primitive
+fails closed before spawning. Unconfirmed reaping cannot publish terminal
+success. The exception path also waits for the original process and cleans its
+group before recording recovery; it never launches a replacement command.
+The frozen Rust Kernel, NKI, component lock, Governance and sandbox limits are
+unchanged. The Python module's historical `nous_runtime.kernel` package name
+does not change its Distribution runtime-service execution scope.
+
+The original failing pair passes **2 tests (1.54s)** in the same bare-PID1
+environment. ProcessSession/startup/reaping regression passes **29 tests
+(27.00s)** before adding the real post-spawn persistence-failure case; the final
+new reaping suite passes **8 tests (2.25s)**, including three-generation process
+exit/terminate/kill, recovery after host failure, unavailable startup control,
+group-only waiting, and fail-closed wait errors/timeouts. Counts overlap.
+Full regression and source/main CI remain required. Container init is still
+needed for detached host processes and arbitrary process groups outside this
+bounded ownership contract; no complete PTY or isolation qualification is added.
+
+Source `525e7ec` full local regression is **5453 passed,58 skipped,4 warnings
+(693.02s)**. Its four-platform Core run
+[39541361099](https://github.com/untrod/apeir/actions/runs/39541361099) passes both
+Linux versions, but macOS has **1 failed,5414 passed,62 skipped (999.73s)**:
+the new startup-denial test blocked the `ps` subprocess used to observe the
+helper's own creation token. The test now acquires that actual token before
+installing its strict no-workload-spawn guard; the original guard and
+RECOVERY_REQUIRED assertions remain unchanged. Final focused regression:
+**30 passed (27.34s)**. New exact-source macOS CI remains required.
+
+Windows in that same run has **1 failed,5320 passed,156 skipped (2034.45s)**:
+an initial remote Skill install exceeds its unchanged five-second HTTP deadline.
+The captured request-handler stack is GovernanceStore connection close at line42,
+after `skill.management.completed`, rather than the commit at line36 seen in
+the earlier Python3.11 failure. This is additional evidence for
+[Issue88](https://github.com/untrod/apeir/issues/88), not a confirmed reaper
+regression or proof of its timing cause. No timeout, durability, Skill authority
+or assertion is weakened and the failed run remains retained.
+
+After normal synchronization with accepted MCP main `ad773890` on 2026-10-23,
+the documentation conflict retains both original evidence sections. Source
+ProcessSession/startup/reaping checks pass **30 tests (26.20s)**; related terminal,
+approval, sensitive-output, process-sandbox, MCP, Work submission and repository
+checks pass **390 tests,1 skipped (19.90s)**. An initialized Linux test harness
+reaped12 adopted test children and confirmed no remaining children; this is
+not qualification of arbitrary escaped process groups or native installation.
+Ruff, changed-file formatting, compile,235-file local links, document/comment/
+identity/metadata/version audits and diff checks pass. Security retains0 HIGH
+and5 existing MEDIUM findings. Exact synchronized-source CI is separate; main
+integration still requires verified repository protection, with no merge probe.
+
 ### Scoped MCP / original Work submission software qualification
 
 Audit classification: **REUSE** existing MCP SDK, authenticated Runtime HTTP,
@@ -2560,3 +3305,417 @@ hash/AST equivalence. Small-sample p99 is the observed maximum, not a stable
 production tail estimate. This does not establish Windows timeout root cause,
 Node end-to-end improvement, model cost savings or physical qualification.
 Exact updated source must run fresh full Core/Multi-Arch before integration.
+
+### Windows negative-path follow-up — 2026-10-19
+
+Candidate `0cb8257` retains two actual Windows failures. Core run39146298658
+has **1 failed,5464 passed,149 skipped**: the UNKNOWN independent-observation
+case has no persisted verdict, while the original mutation is VERIFIED and its
+effect count is one. Multi-Arch run39146301822 has **1 failed,5171 passed,
+131 skipped,292 deselected**: an HTTP Skill acquisition negative case times out.
+Its retained thread stack is preparing the Extension SBOM before the final
+publication check. Neither run is PASS; Issues4/8/82 remain open.
+
+Review of that Skill path proves avoidable preparation after the download has
+already invalidated the original authority or catalog review. Strengthening the
+existing HTTP/TLS negative cases to require no install preparation gives
+**6 failed,1 passed** before correction. The same existing Skill Registry now
+revalidates under its existing state lock immediately after acquisition, before
+CAS/Extension/SBOM preparation, and retains the final publication callback for
+later revocation/races. Skill/HTTP-TLS/Extension regression: **309 passed,
+17 skipped (46.93s)**. No deadline, TLS, permission or supply-chain check changes.
+This establishes the unnecessary-preparation defect; it does not prove every
+cause of the Windows filesystem stall or claim measured latency improvement.
+
+The independent-observation test retains its original verdict assertion and now
+reports bounded/redacted run errors, observation Work states and Node journal
+phases only when the verdict is missing. It does not dump output, credentials or
+signed envelopes, retry the mutation, infer a verdict or extend a timeout. The
+Windows cause remains unresolved pending exact-source CI evidence. Successful
+Linux tests or simulated effect counts cannot qualify Windows recovery, a real
+Provider, physical hardware or native installation.
+
+The same follow-up also checks ordinary workspace reads and Skill retention,
+instead of inferring safety from registered APIs. Existing path admission was
+separate from pathname reopening in Workbench, Chat and Proposal observations.
+Nine controlled leaf/ancestor/hardlink replacement cases returned an owned
+benign private marker or its digest before correction; all nine fail closed
+after reusing one bounded reader in the existing isolation module. Root
+replacement, inode changes, descriptor cleanup and unavailable safe-open APIs
+are covered. Existing single-link/empty-file/internal-alias compatibility and
+selected-input hash, budget and transfer admission remain separate. Workspace/
+Proposal/selected-input integration: **182 passed,1 skipped (21.08s)** on
+Python3.12; related Python3.11 scope: **115 passed,1 skipped (2.73s)**. The skip
+requires real Windows native handles. Windows reader implementation is not yet
+Windows qualification; selected Provider input retains its existing POSIX-only
+eligibility. This does not claim adversarial-host mutation isolation.
+
+Three independent retention reproductions show rejected updates leaving an
+unnecessary permanent pin, Catalog updates retaining old pins, and uninstall
+collecting bytes still held by a user or another registry sharing the same CAS.
+The existing CAS now has additive opaque retention owners in the same pins.json,
+with legacy/default retention and a format guard that the actual frozen old
+loader rejects. Skill preparation, installation, update and removal release
+only their own holds under the existing lifecycle fences. Canonical Extension
+references take precedence over stale legacy projections. Failed promotion
+after publication and ambiguous historical/crash holds remain protected and
+require explicit review. Artifact/Skill/Extension-fence/HTTP regression:
+**217 passed (37.54s)**. The stale-review test injects its original mutation
+after the actual lifecycle fence is acquired; no review assertion is weakened.
+All scopes overlap. Exact composed-source CI remains required before integration.
+
+Frozen composed source `b7b17b4` full regression retains **2 failed,5637 passed,
+59 skipped,4 warnings (692.03s)**. Both snapshot fixtures still injected through
+Path.open, which the descriptor reader no longer uses; the intended mutation
+did not occur during the Runtime call. The snapshot test now changes the file
+after actual bounded acquisition and traps any subsequent pathname reopen for
+the digest, retaining its original successful content/hash assertions. The growth
+test changes the source before the real descriptor opens and retains the actual
+256KiB refusal. This also exposes and restores the old precise size diagnostic
+through a typed bounded-read error; strict inode/version checks are unchanged.
+Original failing logs remain retained, not relabelled successful qualification.
+
+Frozen composed source `7a9c3af` subsequently passes **5643 tests,59 skipped,
+4 warnings (699.92s)** with a process-local child reaper:18 adopted children
+reaped,zero owned children remaining. This Linux result is not Windows
+qualification. A subsequent minimal Windows-only ordinary-name guard rejects
+colon/stream syntax and trailing dots/spaces before protected path resolution
+and before native file opening. It preserves anchors, existing traversal
+admission,POSIX filenames and explicit legacy scope. No private-state bypass has
+been reproduced on Windows. Pure Windows-name/pre-resolution/native-preflight
+checks plus related workspace/snapshot/selected-input regressions pass
+**127 tests,3 skipped** on both Python3.12 and3.11. The skips require actual
+Windows handle sharing and two owned alternate-stream cases; their presence is
+not native acceptance. Exact-source Windows CI remains required.
+
+Source `458e036` Multi-Arch then passes: Linux ARM64 **5317 passed,62 skipped,
+292 deselected** and Windows **5240 passed,139 skipped,292 deselected**. The
+owned alternate-stream rejection cases run and pass on Windows Server2025;
+this is not installed Desktop or Windows10 qualification. Core Linux3.12 passes
+**5640 tests,50 skipped**, Linux3.10/macOS each **5629 passed,61 skipped**.
+Windows Core retains **1 failed,5532 passed,157 skipped (2099.72s)**: original
+ProcessSession recovery is RUNNING with the same PID, but the subsequent fresh
+control admission refuses RECOVERY_REQUIRED. The whole ProcessSession module
+takes about9.27seconds in the log, so its30-second child lifetime is not evidence
+of the failure cause. This separate unresolved failure is
+[Issue85](https://github.com/untrod/apeir/issues/85), not an Automation verdict
+or Relay diagnosis. The original log omits the refusal reason; a passing rerun
+cannot identify whether the current host record or OS identity query failed.
+
+The existing ProcessSession control exception now reports allowlisted reason
+codes while preserving its ValueError contract and message prefix. Arbitrary
+host errors, commands, output and environment are not reflected. Five negative
+diagnostic cases fail before this change and pass after; control admission,
+identity checks, deadlines and execution are unchanged. The crash-rebind test
+now owns its child lifetime through stdin and checks terminal evidence during
+cleanup, without repeating an accepted or uncertain control. A real-host negative
+case denies an unverified control before any request is written, restores the
+same original target/helper identities without respawn, and submits exactly one
+valid kill. ProcessSession/startup/admission regressions: **28 passed** on
+Python3.12 (24.48s) and3.11 (24.32s); each owned test reaper collects four children
+with zero remaining. This improves diagnostics and fixture ownership; the
+historical Windows cause and complete product Gate remain unresolved.
+
+Frozen diagnostic source `c1272b8` full initialized Linux regression subsequently
+passes **5668 tests,61 skipped,4 warnings (719.93s)**, with18 adopted children
+reaped and zero owned children remaining. Fresh isolated Distribution/SDK wheels
+also pass the nine public Demo/Provider/instruction-Skill invocations; this is
+runtime-service/simulation, not a paid model, native installation or hardware.
+Desktop and Security pass; the exact-source Windows diagnostic remains separate.
+
+The next wiring audit classifies the shared safe workspace reader as REUSE and
+the saved-file input platform gate as EXTEND. SelectedInput still required POSIX
+descriptors even after the ordinary Windows native reader was exercised. It now
+uses the same backend, with typed unavailable errors and no pathname fallback.
+Source-private rules are reapplied to the canonical location, and Windows tilde
+and namespace spellings are refused before acquisition. Seven prequalification
+probes fail on the preceding methods and pass with these guards; Windows input
+was previously blocked, so this is not a reproduced Windows private-data leak.
+Read and Provider-transfer permissions, exact source/recipient/Work bindings,
+SHA, byte/token budgets and per-attempt revocation remain independent.
+
+Related source-reader/Context/HTTP tests pass **252 tests,7 skipped** on each of
+Python3.12/3.11. After adding explicit owner-policy scope, Context/Model Runtime/
+Governance/Work/Agent/workspace combination passes **1462 tests,8 skipped
+(44.38s)**. Counts overlap. Existing POSIX mid-read link assertions stay intact;
+native Windows equivalents check pre-open links, held-handle mutations and either
+OS-denied or detected mid-read links. Those native cases await Windows execution.
+Two existing default API bootstrap cases retain their POSIX owner-file scope;
+an added Windows negative must prove the owner-file loader remains denied. The
+safe reader does not qualify Windows ACL policy bootstrap, seed permissions,
+authenticate a remote human or complete installed Desktop/model qualification.
+
+### Windows owner-policy spelling admission — 2026-10-21
+
+**REUSE / FIX** the existing PermissionEngine, native handle reader and private
+file ACL helper. Source `d5b20ef` Core run
+[39457023307](https://github.com/untrod/apeir/actions/runs/39457023307) passed
+Linux/macOS, but Windows recorded **2 failed,5633 passed,88 skipped,4 warnings
+(2613.44s)**. Both failures are the unchanged trailing-dot/space negative tests:
+Win32 normalization removed the ambiguous spelling before file admission.
+The reader now checks the supplied spelling with the existing Windows component
+validator before `abspath`, then retains the same pinned-handle ACL/owner checks.
+The trusted-host `NOUS_PERMISSION_POLICY` entrypoint performs that admission
+before its own `.absolute()` call. Eight host-independent negative cases prove
+neither entrypoint reaches normalization for ambiguous names. Native loader and
+host-bootstrap tests retain the same deny requirement. Related policy/selected-
+input regression: **63 passed,12 skipped (14.21s)** on Linux.
+New native Windows execution is still required before policy qualification.
+
+An uninitialized container full run on `d5b20ef` recorded **2 failed,5681 passed,
+74 skipped,4 warnings (730.83s)**. Both failures are ProcessSession orphan
+reaping assertions; the same pair fails on main `e3cd2a2` and parent `ae75148`.
+Actual child status is zombie under the environment's non-reaping `tail` PID1.
+This is retained baseline evidence, independent of Windows owner-policy changes.
+
+
+### Workspace connection lifetime and source-browser qualification — 2026-10-21
+
+REUSE the existing connection epoch, Workbench/Proposal HTTP APIs, Governance,
+Workflow, CAS and EventStream. FIX the Workspace view lifetime and original
+approval continuation; no execution authority or store is added. The original
+component reproduced four failing cases: same-address token replacement,
+Controller/token ABA and view closure during an outstanding approval. The
+bounded fix checks the captured connection before dispatch/after responses and
+before follow-on actions, and resets Workspace state on connection-epoch change.
+A late response cannot publish success or start reads against the new connection.
+Closing the view is not proof that an admitted backend operation was cancelled.
+
+A sandbox-enabled Chromium run used the actual Vite frontend and Runtime HTTP
+server, a deterministic fake ModelWorkDeliberator adapter and the existing signed
+fake-OIDC test fixture. The original Work read both existing files before
+preparing one two-file proposal. Browser review and Approve Once changed both
+files, with the original admission and fresh CAS-backed file MATCH. Reload and a
+new Runtime process retained the original proposal/authorization/manifest;
+explicit reconciliation reported no replay. Both browser runs had zero page
+errors. No real account credentials, installed executable or physical device was
+used. The first fixture attempt correctly refused to propose unread existing
+files; its original recovery record is retained, not retried as another effect.
+
+Related Work/proposal/API/Context regressions: **221 passed (9.94s)**. Final
+Desktop regression: **40 files / 248 passed (64.74s)**; lint, typecheck, build,
+Ruff, compile, documentation and repository checks pass. Security has **0 HIGH,
+5 existing MEDIUM** findings. Component-lock contracts have **3 passed**; the
+actual native-byte verifier still fails at the missing locked Windows nousd. The real
+strict-sandbox probe returned `STRICT_SANDBOX_UNAVAILABLE`; no unrestricted host
+fallback ran. Therefore the complete model→edit→test product Gate remains PARTIAL:
+file-byte MATCH does not verify tests, and the source Work is not declared
+completed merely because its proposal was applied. Native binaries, deployed
+human identity, real model/provider and physical qualifications remain separate.
+
+
+### Environment continuation connection binding — 2026-10-21
+
+REUSE `EnvironmentInspector`, Runtime API, existing connection epoch, human nonce
+and Governance. FIX the URL-only view checks: token rotation, A→B→A and unmount
+could continue a reviewed Environment request. Four controlled pre-change cases
+fail (**4 failed,8 passed,1.91s**), including an extra refresh after unmount. The
+existing URL/token/epoch guard now binds the panel lifetime, all read/result
+publication and each service continuation. Connection changes remount the panel
+and clear old approvals/output. Approval nonce acquisition receives the same
+view guard; an additional client-boundary case proves closing the view prevents
+the decision POST after its nonce arrives. Original exact-body continuation,
+service-cookie separation, lost-response/no-retry and fail-closed isolation
+assertions remain. No backend authority, Environment, process store or Kernel is
+added or changed.
+
+Focused frontend cases: **16 passed (2.77s)**. Full Desktop regression:
+**40 files,253 passed (57.51s)**. Related existing Environment/HTTP/target-binding
+regression: **132 passed,2 skipped (2.40s)**. Lint, TypeScript and production web
+asset build pass; the existing Tauri static/dynamic import warning remains.
+Sandbox-enabled Chromium with actual Vite/Runtime HTTP and signed fake OIDC
+exercised denial without host permission, exact human nonce/approval, service
+resubmission and persisted OCI environment contract creation. Reload reads the
+actual created record with zero page errors; screenshots are source-browser
+records, not installed APEIR.exe captures. No OCI workload ran; strong isolation,
+real IdP/model, hardware and native installation remain separately unqualified.
+Required source and resulting-main CI remain separate integration gates.
+
+
+### Original mutation result delivery before tamper qualification — 2026-10-21
+
+Windows Core [39689311331](https://github.com/untrod/apeir/actions/runs/39689311331/job/119531250658)
+at `90b44845` retains **1 failed,5647 passed,88 skipped,4 warnings (2250.03s)**.
+The semantic-device-tamper case fails before tampering: Workflow failed,
+mutation Work RUNNING, verification absent, reconciliation required and effect
+count1. Linux/macOS passes do not resolve that failure. A controlled local drop
+of the first original mutation terminal message reproduces the same failed
+precondition (**1 failed,6.08s**); its exact error identifies the original
+mutation Work timeout. This establishes a delivery-loss failure class, not the
+reason the hosted Windows message was late or lost. Issue #82 remains open.
+
+REUSE existing Automation consumer, Node journal signature/binding validation,
+reconciler and independent observation. FIX only the acceptance precondition:
+for that exact original mutation timeout, require RUNNING with no Controller
+receipt/verification, one effect, reconciliation required and the original bound
+signed terminal journal before opening recovery transport. Perform one explicit
+reconcile/resume of the same Work/run, with mutation invocation forbidden during
+recovery. The existing observation-loss continuation uses that same no-mutation
+assertion. Missing/changed evidence still fails; all final COMMITTED/MATCH,
+wrong-device and semantic tamper assertions remain. No Runtime deadline, retry,
+result state, execution policy, authority or Kernel code changes.
+
+Existing Automation plus Verified Demo regressions: **130 passed (211.17s)**,
+including the new controlled mutation-result-loss case, original observation
+loss, corrupted journals/evidence, denied authority, restart and effect_count1.
+Current-source cross-platform CI and resulting-main qualification remain required;
+this is not a claim to have fixed Windows transport timing or closed #4/#8/#82.
+
+The unchanged Environment view correction also passed an actual sandbox-enabled
+Chromium/Runtime HTTP negative: hold its real human nonce response, leave the
+Environment view, then deliver that response. The original approval stays
+PENDING; no decision POST, service continuation or additional environment occurs,
+with zero page errors. Verification uses the existing legacy approval projection
+`/api/v1/control/approvals`; `/api/v1/approvals` and Operations expose the distinct
+Operation approval projection. Private fixture/locator corrections are not
+reported as product defects. No OCI workload, actual IdP or native UI is qualified.
+
+### Chat response and view lifetime binding — 2026-10-22
+
+REUSE the existing Chat/Conversation Runtime, shared Desktop API, connection epoch,
+EventStream, human nonce and original proposal owner. FIX two observed gaps.
+First, a late model result/history/event replay could publish callbacks or data
+after same-URL token rotation, A→B→A, conversation navigation or panel closure.
+Six controlled pre-change Chat cases fail (**6 failed,9 passed,1.65s**); three
+shared-client delayed-response/body cases fail (**3 failed,981ms**). The shared
+API now checks its captured connection before parsing and after reading a body,
+returning the existing structured `NOUS_CONTROLLER_CHANGED` error. Four existing
+Node/Usage negatives now require that exact code rather than their former
+helper-specific strings; they still reject all original connection changes.
+
+Chat binds pending results and history to the original mounted conversation and
+connection epoch. It aborts only its client request and closes its event
+subscription on closure/replacement; these actions do not prove Runtime
+execution stopped. Old callbacks cannot open a proposal/conversation or clear a
+new request's loading state. Chat approval passes the same mounted-view guard to
+existing nonce acquisition, so a late nonce cannot cause a decision POST after
+closure, navigation or credential rotation. No automatic mutation/model retry,
+new execution authority, backend record store or Kernel change is introduced.
+
+Second, the canonical Chat HTTP response retains the Runtime result under
+`data.result`, while the client expected only top-level `result`. The original
+proposal navigation contract fails (**1 failed,3 passed,874ms**). The existing
+client now projects that original nested result, preserving proposal and approval
+IDs and its previous top-level compatibility. The original waiting-approval state
+and human approval are unchanged; a proposal reference is not a grant or success.
+
+Focused Chat/API/Node/Usage regression: **48 passed (5.97s)**. Full Desktop:
+**41 files,267 passed (53.74s)**. Existing related Chat, selected-input, proposal
+and Work flow regressions: **133 passed,1 skipped (21.98s)**. ESLint, TypeScript
+and production web assets pass, retaining the existing Tauri mixed-import warning.
+Security scan has **0 HIGH,5 unchanged MEDIUM** findings.
+
+Sandbox-enabled Chromium with actual Vite and authenticated Runtime HTTP rejects
+a held original conversation read after credential rotation. A real Chat request
+then persists its original conversation before its HTTP response is released;
+closing the actual Workspace view does not resubmit it. Exactly one Chat POST,
+two persisted conversation messages and zero browser page errors are observed.
+No model is configured: the actual original request status is `failed`, not a
+coding success. This qualifies software response/history boundaries only, not
+real model execution, installed Desktop, native bytes, IdP or physical effects.
+Earlier browser qualification scripts initially selected no Chat view and then
+the disabled code-editor textarea; those selector failures are retained as
+qualification-fixture errors, not Runtime defects or passing product evidence.
+Source PR and resulting-main qualification remain separate integration gates.
+
+### Event consumer lifetime qualification — 2026-10-22
+
+REUSE existing EventClient, Runtime/Run subscription helpers, shared API,
+EntityStore, Inspector and connection epoch. FIX retired consumer publication:
+closing a subscription while a page is pending still delivered callbacks;
+changing credentials between polls reused the original cursor on a new
+connection; a stop/start race could publish an old page and create another loop.
+Original subscription contracts retain **10 failed,2 passed (1.43s)**. Corrected
+original EventClient fixture retains **4 failed,1 passed (1.02s)**, including old
+backfill and WebSocket callback ownership. An earlier incomplete fixture exhausted
+its mocked transport and raised TypeError; that fixture failure is retained
+separately and is not attributed to production transport.
+
+The existing helpers now validate the original connection and active lifetime
+before dispatch, after a page and between callbacks; close clears its scheduled
+timer. EventClient generations bind polling, backfill, socket callbacks and
+reconnect scheduling to one original start. Retired completions cannot ingest
+entities, disconnect a replacement socket or schedule another loop. Inspector
+remounts its existing panels on connection change. Original transient read retries
+and bounded polling intervals remain; none submits or retries an execution.
+This changes no authority, EventStore, backend database, Work, Kernel or lock.
+
+Focused Chat/API/event-consumer regression: **39 passed (4.38s)**. Full Desktop:
+**43 files,284 passed (60.37s)**. Lint, TypeScript and production web assets pass;
+the existing Tauri mixed-import warning remains. Actual sandbox-enabled Chromium,
+Vite and authenticated Runtime HTTP read two persisted diagnostic Run events:
+closing the held original subscription delivers zero callbacks, a fresh
+subscription receives both, and credential rotation causes zero additional
+requests from that old subscription. Browser page errors: zero. These are real
+HTTP/event-consumption observations, not model, execution, native WebSocket,
+installed Desktop, IdP or physical qualification.
+
+DEFER the separate compatibility cursor alignment audit: the global Event Bus
+HTTP endpoint accepts event IDs, while the older EventClient backfill uses
+per-domain numeric sequence values. Lifetime tests preserve that existing path;
+they do not establish complete historical replay, retention-gap handling or
+uniform ordering across Event Bus and per-Run EventStream. No full event-history
+or overall product PASS follows from these bounded lifecycle checks. Source CI
+and protected resulting-main integration remain separate required gates.
+
+### Global Event Bus cursor and persistence alignment — 2026-10-23
+
+This follows up the explicitly deferred cursor audit above. REUSE the global
+RuntimeEventBus/SQLite owner, EventClient, existing API/Inspector, EntityStore and
+per-Run EventStream; FIX their incompatible cursor assumptions. Bus replay accepts
+an original event ID, while the old client sent a per-domain numeric sequence.
+The old server searched only the recent page, substituted a recent snapshot for
+an unavailable cursor and initially returned reverse order. Its first flush could
+also clear queued events before a database existed. Original backend contracts:
+**9 failed (0.12s)**; original client cursor contracts: **4 failed (1.22s)**.
+
+The existing Bus now queues publication and flushes under its owner lock. A first
+flush initializes the same database; unavailable persistence retains the queued
+batch and cannot certify empty history. Stream reads flush that original batch
+and use one SQLite read snapshot for event-ID lookup and chronological paging.
+The initial empty cursor explicitly selects only a recent bounded window;
+retained cursors page forward beyond that window. Missing/pruned cursors return
+`NOUS_EVENT_CURSOR_UNAVAILABLE`/HTTP409, and unavailable/corrupt history returns
+`NOUS_EVENT_STREAM_UNAVAILABLE`/HTTP503 with a fixed, payload-free diagnostic.
+There is no guessed cursor repair, new journal or schema, authority, execution
+retry or Kernel change. WAL, synchronous NORMAL and existing SQLite/HTTP timeout
+settings are unchanged. The global Bus remains a retained activity projection,
+not the authoritative Work/effect journal or a promise of indefinite retention.
+
+EventClient now retains opaque event IDs only for its current connection and
+resumes that cursor across stop/start. A changed connection discards that cursor;
+a cold process reads the current recent window and existing authoritative REST
+snapshots rather than claiming complete historical replay. Non-advancing pages
+and unavailable history stop and surface a fixed diagnostic through the existing
+Inspector/toast path. The shared HTTP client checks IDs, duplicates and last-ID
+consistency before publishing a page. Per-Run numeric sequence cursors remain
+unchanged. One earlier fixture asserted numeric `201` for the global API; it now
+requires the actual original event ID `current-199`, retaining its201-event and
+single-loop assertions. The server contract demonstrates why the old expectation
+was incorrect; no denial/no-retry assertion was relaxed.
+
+Final event/HTTP/task projection/AgentSession/Reality related regression:
+**122 passed (66.46s)**; final targeted backend contracts **13 passed (1.69s)**
+include actual authenticated HTTP, restart, pagination, concurrent writers, domain
+filtering, retained queue, missing cursor and payload-free storage failure. The
+last fixture-only credential spelling check reran these13 cases successfully
+(1.46s); the deterministic fake token remains identical in client and server.
+Client cursor/lifetime/integrity and Inspector cases: **26 passed (8.06s)**.
+Full Desktop: **44 files,292 passed (52.93s)**; lint/typecheck/web assets pass with the existing
+Tauri mixed-import warning. Repository checks pass, with0HIGH/5existingMEDIUM
+security findings. An inline deterministic fake Bearer header initially added a
+scanner match; the fixture now uses its single declared fake token in both the
+server and request. Scanner rules and negative assertions are unchanged. These
+counts overlap and are not added together.
+
+Actual sandbox-enabled Chromium/Vite/authenticated Runtime HTTP and the original
+SQLite Bus replayed239 diagnostic events across pages with zero duplicate IDs.
+The existing EventClient cold view consumed the recent200 in order. Another
+SQLite owner then removed its original cursor: HTTP409 was observed, the error
+callback fired, and no further requests followed the stopped consumer; browser
+page errors: zero. These are diagnostic projection events, not model, operation,
+physical-effect, native Desktop or IdP qualification. Original backend/client
+failure logs and private browser records are retained. Exact-source CI and
+protected resulting-main acceptance remain required; no performance percentage or
+overall product PASS is inferred from these correctness checks.
+

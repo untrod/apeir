@@ -2,9 +2,17 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from typer.testing import CliRunner
 
 from nous_runtime.cli.main import app
+
+
+@pytest.fixture(autouse=True)
+def isolated_runtime_api_state(desktop_workspace, monkeypatch, tmp_path):
+    # Startup owns process configuration. Keep that state out of the checkout
+    # and restore its workspace selection before another module's CLI tests.
+    monkeypatch.setenv("NOUS_DATA_DIR", str(tmp_path / "capabilities"))
 
 
 class _Response:

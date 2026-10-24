@@ -277,6 +277,22 @@ If old required contexts reference the removed duplicate Python/hygiene jobs,
 replace them with the three stable contexts above; do not bypass a failing Gate.
 Review signing support and release provenance only when actually qualified.
 
+The 2026-10-24 required-check audit traced `Test 32-bit Rejection` to the
+original Desktop workflow in `4bafb63`; consolidation `e5a120e` removed it.
+Its first command only assigned `bits = 32` and printed PASS, and its second
+checked the runner architecture without calling APEIR admission. Reinstating
+that constant-based job would not establish rejection. The current component
+lock suite now passes a matching-digest x86 PE fixture through the real verifier
+and requires architecture rejection for both locked Windows x64 and ARM64
+targets. Both the binary and lock must remain unchanged. These two negative
+cases run in the existing `Component lock contract` step, whose failure blocks
+`Repository checks`; that is the meaningful replacement context. The complete
+suite passes14 tests locally. This is binary-header admission contract evidence,
+not native Windows execution; existing ARMv7 Lite support remains separate.
+Only an authorized maintainer may replace the obsolete required name after
+checking the current PR-head result. No synthetic status or settings bypass is
+introduced, and main integration remains paused pending protection verification.
+
 ## Preserved immutable checkpoints
 
 | Tag | Distribution commit | Scope |
@@ -495,3 +511,71 @@ Kernel stays `87fd1b2ff28ef14ab1a515a58162592b452fda2e`; component-lock file
 SHA-256 stays `fd841599a29861847e787b538b58dd2f4a67cf72b53f0144264fd267ce1e33a0`.
 The actual native verifier still fails for missing locked Windows bytes; neither
 source-wheel checksums nor lock contract tests substitute for those hashes.
+
+### Product R2 integration observation — 2026-10-23
+
+The ordinary REST merge request for PR81 was accepted at16:22:10 UTC, producing
+`ad77389045ea04270913a6513d4cdcc5232a1b3d` with parents `e3cd2a20` and
+`e99b12dd`. No force push, synthetic check, settings mutation or explicit admin
+override was requested. However, GitHub had previously reported the PR blocked,
+and the protection-read endpoint still returns403. It is therefore **not
+established** that GitHub enforced administrator protections for this merge.
+Further main merges are paused pending maintainer protection/audit review;
+acceptance does not claim that repository settings were fixed. History is
+preserved and resulting-main CI is a separate requirement. PR83 now targets
+main; the other unmerged reviews and their unique commits remain intact.
+
+The maintainer must inspect main's actual rules/ruleset and any bypass actors,
+require enforcement for administrators, and align stale required contexts with
+real workflow jobs. `Tier 1 — Windows ARM64` corresponds to the explicit
+`Windows ARM64 metadata (not native acceptance)` check; `Aggregate SBOM`
+corresponds to `Collect architecture SBOMs`. `Test 32-bit Rejection` has no
+standalone current check: verify its actual replacement/coverage before removing
+or restoring it. Keep real Core, Repository, Desktop, Security and platform gates,
+PR and conversation requirements, and force-push/deletion protections. A
+`blocked`/unknown protection state must stop subsequent merge attempts; a normal
+merge API call is not a safe test of protection when administrator enforcement
+cannot be inspected. No later PR merge, tag mutation or Release was performed
+in this R2 observation.
+
+## Maintainer-confirmed protected integration — 2026-10-24
+
+The maintainer subsequently reported completing the settings and supplied two
+GitHub UI screenshots. They show PR/current-base checks, conversation resolution
+and administrator enforcement enabled; mandatory approvals, signed commits,
+linear history, force push and deletion disabled. Selected checks include all
+four actual Python jobs, Core/Repository gates, frontend/hygiene, three Tier1
+platforms, explicit Windows ARM64 metadata and architecture SBOM collection.
+The 32-bit constant-only legacy job is replaced by the actual existing component
+admission contracts described above. The images and confirmation are retained
+privately; administration REST/GraphQL still return403. This is an owner-attested
+configuration change, not a claim that this integration changed settings itself.
+The earlier PR81 enforcement uncertainty remains historical evidence.
+
+The existing composition contains all original PR83/84/86/87/89 source heads by
+normal merges. The integration PR directly targets main; it must pass every
+actual required check at its exact head and show mergeable/CLEAN before a normal
+merge-commit request. No admin, queue bypass, synthetic check, squash, rebase or
+force push is used. Exact resulting-main SHA, fresh CI and ancestry/PR checks
+are recorded on [PR86](https://github.com/untrod/apeir/pull/86) before any branch
+retirement. Historical tags, Kernel and component-lock bytes remain unchanged.
+This repository integration does not qualify native installation, a real model,
+trusted remote IdP, strong-sandbox execution or physical hardware.
+
+The first exact-head dispatch on `7ae9915` passed all four workflows, and the
+ordinary branch summary independently confirmed all13 required context names,
+GitHub Actions App15368 and enforcement for everyone. The PR still reported
+BLOCKED with an empty check rollup. Reopening that same PR, without changing its
+SHA or deleting successful evidence, produced ordinary PR checks; however, the
+existing PR configuration selected only Linux3.12 in Core and omitted the
+Multi-Arch PR event. Two regression contracts fail on that configuration: the
+four required Python contexts are not guaranteed on PRs, and required platform
+jobs are unreachable from the PR event. This is a CI/protection integration gap,
+not a failing Runtime regression or a reason to weaken protection.
+
+Core now uses the same existing four-platform matrix for normal PRs, and the
+existing Multi-Arch workflow also triggers on PRs targeting main. Test commands,
+diagnostic isolation, native release guards, permissions and aggregate gates are
+retained; no status is copied or synthesized. This deliberately increases code
+PR CI cost to match the selected strict policy; no speed improvement is claimed.
+The new exact candidate must pass actual PR checks before normal integration.

@@ -64,6 +64,19 @@ class ExecutionAuthorizationGate(OperationAuthorizationMixin):
         if permission_engine is None:
             configured = os.environ.get("NOUS_PERMISSION_POLICY", "")
             if configured:
+                # Preserve the trusted host's original spelling for admission:
+                # Windows absolute-path normalization can hide dot/space aliases.
+                if os.name == "nt":
+                    from nous_runtime.workspace.isolation import (
+                        _validate_windows_file_components,
+                    )
+
+                    supplied = Path(configured)
+                    _validate_windows_file_components(supplied)
+                    if any("~" in component for component in supplied.parts):
+                        raise PermissionError(
+                            "Permission policy cannot use a Windows short-name component"
+                        )
                 policy_path = Path(configured).absolute()
                 state_dir = Path(self.store.db_path).parent.absolute()
                 # Policy is explicitly selected by the trusted host, never by

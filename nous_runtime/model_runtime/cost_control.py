@@ -1274,6 +1274,101 @@ class CostController:
                     ),
                 )
 
+    def request_usage(self, request_id: str) -> tuple[float | None, int | None]:
+        """Project all original attempts for one request from the usage ledger.
+
+        Missing/incomplete evidence is unknown. In particular, a missing receipt
+        does not prove that an open reservation never reached the Provider.
+        """
+        with self._lock, self._session() as connection:
+            connection.execute("BEGIN")
+            rows = connection.execute(
+                "SELECT * FROM usage_receipts WHERE request_id=? ORDER BY attempt",
+                (request_id,),
+            ).fetchall()
+            reservations = connection.execute(
+                "SELECT reservation_id, status FROM usage_reservations WHERE request_id=?",
+                (request_id,),
+            ).fetchall()
+        if not rows:
+            return None, None
+        total_cost = 0.0
+        total_tokens = 0
+        unknown_cost = unknown_tokens = False
+        receipt_statuses = {}
+        for row in rows:
+            try:
+                receipt = json.loads(row["receipt_json"])
+                if not isinstance(receipt, dict) or any(
+                    receipt.get(name) != row[name]
+                    for name in (
+                        "receipt_id",
+                        "created_at",
+                        "day",
+                        "request_id",
+                        "task_id",
+                        "provider_id",
+                        "model_id",
+                        "credential_ref_hash",
+                        "reservation_id",
+                        "attempt",
+                        "status",
+                        "cost_measurement",
+                    )
+                ):
+                    raise ValueError("usage receipt binding mismatch")
+                receipt_statuses[receipt["reservation_id"]] = receipt["status"]
+                usage = Usage.from_mapping(receipt["usage"])
+                cost = _money("provider cost", receipt["cost_usd"])
+                measurement = receipt["cost_measurement"]
+                if measurement not in {"reported", "derived", "estimated", "unknown"}:
+                    raise ValueError("usage cost measurement is invalid")
+                if receipt["status"] not in {
+                    "completed",
+                    "policy_violation",
+                    "not_dispatched",
+                    "usage_unknown",
+                    "uncertain",
+                }:
+                    raise ValueError("usage receipt status is invalid")
+                if receipt["status"] == "not_dispatched" and (
+                    cost != 0
+                    or usage.total_tokens != 0
+                    or receipt.get("dispatch_uncertain") is not False
+                    or measurement != "derived"
+                ):
+                    raise ValueError("non-dispatch usage evidence is inconsistent")
+                uncertain = (
+                    receipt["status"] == "uncertain"
+                    or receipt.get("dispatch_uncertain") is True
+                )
+                unknown_cost |= uncertain or cost is None or measurement == "unknown"
+                unknown_tokens |= (
+                    uncertain
+                    or usage.total_tokens is None
+                    or (
+                        usage.counter_measurements.get("total_tokens")
+                        not in {"reported", "derived"}
+                    )
+                )
+                total_cost += cost or 0.0
+                total_tokens += usage.total_tokens or 0
+            except (KeyError, TypeError, ValueError, CostLimitExceeded) as exc:
+                raise CostLimitExceeded(
+                    "original request usage evidence is invalid"
+                ) from exc
+        if any(
+            row["status"] != "usage_unknown"
+            or receipt_statuses.get(row["reservation_id"])
+            not in {"usage_unknown", "policy_violation"}
+            for row in reservations
+        ):
+            unknown_cost = unknown_tokens = True
+        return (
+            None if unknown_cost else total_cost,
+            None if unknown_tokens else total_tokens,
+        )
+
     def summary(self, *, day: str | None = None) -> dict[str, Any]:
         selected_day = day or _utc_day()
         groups: dict[tuple[str, ...], dict[str, Any]] = {}
@@ -1546,6 +1641,9 @@ class CostController:
                 connection.execute(
                     f"""CREATE UNIQUE INDEX IF NOT EXISTS {table}_execution_idx
                        ON {table}(execution_key) WHERE execution_key<>''"""
+                )
+                connection.execute(
+                    f"CREATE INDEX IF NOT EXISTS {table}_request_idx ON {table}(request_id)"
                 )
 
 

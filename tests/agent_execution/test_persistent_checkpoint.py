@@ -159,3 +159,57 @@ def test_concurrent_checkpoint_initialization_preserves_every_owner(tmp_path):
     with closing(sqlite3.connect(path)) as connection:
         assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+
+
+def test_checkpoint_initialization_preserves_cross_process_owners(tmp_path):
+    import json
+    import subprocess
+    import sys
+
+    path = tmp_path / "process-checkpoints.db"
+    script = """
+import json, sys
+from nous_runtime.checkpoint import Checkpoint, SQLiteCheckpointStore
+assert sys.stdin.readline().strip() == 'start'
+store = SQLiteCheckpointStore(sys.argv[1])
+row = store.save(Checkpoint(task_id=sys.argv[2], state={'owner': sys.argv[2]}))
+assert store.load(row.checkpoint_id) == row
+print(json.dumps({'checkpoint_id': row.checkpoint_id, 'task_id': row.task_id}))
+"""
+    processes = []
+    try:
+        for index in range(4):
+            processes.append(
+                subprocess.Popen(
+                    [sys.executable, "-c", script, str(path), f"process-{index}"],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+            )
+        # Release independent interpreters before waiting for any one result.
+        for process in processes:
+            process.stdin.write("start\n")
+            process.stdin.flush()
+        rows = []
+        for process in processes:
+            output, errors = process.communicate(timeout=20)
+            assert process.returncode == 0, errors
+            rows.append(json.loads(output))
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+            process.communicate(timeout=5)
+
+    restored = SQLiteCheckpointStore(path)
+    assert {row.checkpoint_id for row in restored.list()} == {
+        row["checkpoint_id"] for row in rows
+    }
+    assert {row.task_id for row in restored.list()} == {
+        f"process-{index}" for index in range(4)
+    }
+    with closing(sqlite3.connect(path)) as connection:
+        assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"

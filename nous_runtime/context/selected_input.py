@@ -13,7 +13,6 @@ import io
 import json
 import os
 import re
-import stat
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -21,7 +20,14 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from nous_runtime.agents.adapters.workspace_guard import WorkspaceGuard
-from nous_runtime.workspace.isolation import WorkspaceHardLinkError
+from nous_runtime.workspace.isolation import (
+    WorkspaceFileChangedError,
+    WorkspaceHardLinkError,
+    WorkspaceReadLimitError,
+    WorkspaceReadUnavailableError,
+    _validate_windows_file_components,
+    read_workspace_bytes,
+)
 from nous_runtime.context.exceptions import ContextPermissionError
 from nous_runtime.context.models import ContextItem, ContextSnapshot
 from nous_runtime.context.security import ContextAccessRequest, ContextGuard
@@ -74,6 +80,13 @@ class WorkspaceFileReference:
         ):
             raise SelectedInputError("invalid_relative_reference")
         parts = PurePosixPath(self.path).parts
+        if os.name == "nt":
+            if any("~" in part for part in parts):
+                raise SelectedInputError("windows_source_alias_refused")
+            try:
+                _validate_windows_file_components(PureWindowsPath(self.path))
+            except PermissionError:
+                raise SelectedInputError("windows_source_alias_refused") from None
         if (
             any(part.casefold() in _PRIVATE_PARTS for part in parts)
             or any(part.casefold().startswith(".env") for part in parts)
@@ -355,64 +368,33 @@ class SelectedWorkspaceInput:
         additionally prevents symlink replacement between validation and read.
         """
         try:
-            self._paths.validate_path(reference.path)
+            validated = Path(self._paths.validate_path(reference.path))
+            # Path admission returns the canonical location. Reapply source
+            # privacy rules there too: an OS alias is not a different source
+            # classification and cannot hide a private directory or filename.
+            WorkspaceFileReference(
+                validated.relative_to(self._root).as_posix(), reference.sha256
+            )
         except ValueError as exc:
             if isinstance(exc.__cause__, WorkspaceHardLinkError):
                 raise SelectedInputError("source_link_refused") from None
             raise
-        if (
-            os.open not in os.supports_dir_fd
-            or not hasattr(os, "O_NOFOLLOW")
-            or not hasattr(os, "O_DIRECTORY")
-        ):
-            raise SelectedInputError("safe_source_read_unavailable")
-        descriptors: list[int] = []
         try:
-            directory = os.open(
-                self._root.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-            )
-            descriptors.append(directory)
-            for part in self._root.parts[1:]:
-                directory = os.open(
-                    part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory
-                )
-                descriptors.append(directory)
-            parts = PurePosixPath(reference.path).parts
-            for part in parts[:-1]:
-                directory = os.open(
-                    part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory
-                )
-                descriptors.append(directory)
-            descriptor = os.open(
-                parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory
-            )
-            descriptors.append(descriptor)
-            before = os.fstat(descriptor)
-            if before.st_nlink != 1:
-                raise SelectedInputError("source_link_refused")
-            if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= min(
-                byte_limit, MAX_FILE_BYTES
-            ):
-                raise SelectedInputError("source_byte_bound_or_type")
-            data = bytearray()
-            while chunk := os.read(
-                descriptor, min(8192, MAX_FILE_BYTES + 1 - len(data))
-            ):
+
+            def mark_read():
                 self._was_read[reference.source_id] = True
-                data.extend(chunk)
-                if len(data) > MAX_FILE_BYTES:
-                    raise SelectedInputError("source_byte_bound_or_type")
-            after = os.fstat(descriptor)
-            if after.st_nlink != 1:
-                raise SelectedInputError("source_link_refused")
-            if (
-                (before.st_size, before.st_mtime_ns, before.st_ctime_ns)
-                != (after.st_size, after.st_mtime_ns, after.st_ctime_ns)
-                or len(data) != before.st_size
-                or hashlib.sha256(data).hexdigest() != reference.sha256
-            ):
+
+            data = read_workspace_bytes(
+                self._root,
+                reference.path,
+                max_bytes=min(byte_limit, MAX_FILE_BYTES),
+                minimum_bytes=1,
+                follow_internal_links=False,
+                on_read=mark_read,
+            )
+            if hashlib.sha256(data).hexdigest() != reference.sha256:
                 raise SelectedInputError("source_version_changed")
-            content = bytes(data).decode("utf-8", errors="strict")
+            content = data.decode("utf-8", errors="strict")
             if any(
                 (ord(char) < 32 and char not in "\n\r\t") or 127 <= ord(char) < 160
                 for char in content
@@ -431,14 +413,19 @@ class SelectedWorkspaceInput:
                 classification = {header: "selected_value" for header in headers}
                 if redact_sensitive_data(classification) != classification:
                     raise SelectedInputError("secret_source_refused")
-            return bytes(data)
+            return data
         except SelectedInputError:
             raise
+        except WorkspaceHardLinkError:
+            raise SelectedInputError("source_link_refused") from None
+        except WorkspaceFileChangedError:
+            raise SelectedInputError("source_version_changed") from None
+        except WorkspaceReadLimitError:
+            raise SelectedInputError("source_byte_bound_or_type") from None
+        except WorkspaceReadUnavailableError:
+            raise SelectedInputError("safe_source_read_unavailable") from None
         except (OSError, ValueError, UnicodeError):
             raise SelectedInputError("source_unavailable_or_invalid") from None
-        finally:
-            for descriptor in reversed(descriptors):
-                os.close(descriptor)
 
     def collect(self, request_hint: str = "", limit: int = 100) -> list[ContextItem]:
         if (

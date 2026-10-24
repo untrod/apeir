@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { btnPrimary, btnSecondary, card, colors, input, radius, space, typo } from "../design";
 import {
   ApiError,
   api,
   approvalAction,
+  captureRuntimeConnection,
   createEnvironment,
   destroyEnvironment,
   fetchEnvironmentLogs,
@@ -21,6 +22,7 @@ import {
   type EnvironmentRuntimeStatus,
 } from "../lib/api";
 import { errorMessage } from "../lib/format";
+import { useRuntimeConfigVersion } from "../store";
 
 type Pending = (
   | { kind: "create"; approvalId: string; request: EnvironmentCreateRequest }
@@ -28,6 +30,22 @@ type Pending = (
   | { kind: "run"; approvalId: string; environmentId: string; request: EnvironmentCommandRequest }) & { controller: string };
 
 export function EnvironmentInspector() {
+  const connectionVersion = useRuntimeConfigVersion();
+  return <EnvironmentPanel key={connectionVersion} />;
+}
+
+function EnvironmentPanel() {
+  const [connection] = useState(captureRuntimeConnection);
+  const active = useRef(true);
+  const reads = useRef(0);
+  const assertConnection = useCallback(() => {
+    connection();
+    if (!active.current) throw new Error("Environment view closed; inspect the original request before continuing.");
+  }, [connection]);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
   const [status, setStatus] = useState<EnvironmentRuntimeStatus | null>(null);
   const [environments, setEnvironments] = useState<EnvironmentRecord[]>([]);
   const [selected, setSelected] = useState("");
@@ -48,18 +66,19 @@ export function EnvironmentInspector() {
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
-    const controller = getConfig().url;
+    assertConnection();
+    const read = ++reads.current;
     const [nextStatus, nextEnvironments] = await Promise.all([
       fetchEnvironmentStatus(),
       fetchEnvironments(),
     ]);
-    if (getConfig().url !== controller) throw new Error("Controller changed; reload the original environment state.");
+    assertConnection();
+    if (read !== reads.current) return;
     setStatus(nextStatus);
     setEnvironments(nextEnvironments.environments);
-    if (!selected && nextEnvironments.environments[0]?.environment_id) {
-      setSelected(nextEnvironments.environments[0].environment_id);
-    }
-  }, [selected]);
+    setSelected(previous => nextEnvironments.environments.some(item => item.environment_id === previous)
+      ? previous : nextEnvironments.environments[0]?.environment_id || "");
+  }, [assertConnection]);
 
   useEffect(() => {
     void refresh().catch((cause) => setError(errorMessage(cause, "Environment Runtime is unavailable.")));
@@ -89,7 +108,7 @@ export function EnvironmentInspector() {
   });
 
   const captureApproval = (cause: unknown, value: Pending): boolean => {
-    if (getConfig().url !== value.controller) return false;
+    try { assertConnection(); } catch { return false; }
     if (!(cause instanceof ApiError) || cause.code !== "NOUS_APPROVAL_REQUIRED") return false;
     const approvalId = String(cause.details?.approval_request_id || "");
     if (!approvalId) return false;
@@ -97,8 +116,8 @@ export function EnvironmentInspector() {
     return true;
   };
 
-  const refreshAfterFailure = async (controller: string, message: string) => {
-    if (getConfig().url !== controller) {
+  const refreshAfterFailure = async (message: string) => {
+    try { assertConnection(); } catch {
       setError("Controller changed; inspect the original request before continuing.");
       return;
     }
@@ -107,7 +126,7 @@ export function EnvironmentInspector() {
     } catch {
       message += " Persisted state is unavailable; the outcome remains unconfirmed.";
     }
-    if (getConfig().url !== controller) {
+    try { assertConnection(); } catch {
       setError("Controller changed; inspect the original request before continuing.");
       return;
     }
@@ -119,13 +138,15 @@ export function EnvironmentInspector() {
     setBusy(true);
     setError("");
     try {
+      assertConnection();
       const result = await createEnvironment(request);
+      assertConnection();
       setSelected(result.environment_id);
       setPending(null);
       await refresh();
     } catch (cause) {
       if (!captureApproval(cause, { kind: "create", approvalId: "", request, controller })) {
-        await refreshAfterFailure(controller, errorMessage(cause, "Environment creation failed."));
+        await refreshAfterFailure(errorMessage(cause, "Environment creation failed."));
       }
     } finally {
       setBusy(false);
@@ -140,14 +161,16 @@ export function EnvironmentInspector() {
     setBusy(true);
     setError("");
     try {
+      assertConnection();
       if (kind === "start") await startEnvironment(environmentId);
       else if (kind === "stop") await stopEnvironment(environmentId);
       else await destroyEnvironment(environmentId);
+      assertConnection();
       setPending(null);
       await refresh();
     } catch (cause) {
       if (!captureApproval(cause, { kind, approvalId: "", environmentId, controller })) {
-        await refreshAfterFailure(controller, errorMessage(cause, `Environment ${kind} failed.`));
+        await refreshAfterFailure(errorMessage(cause, `Environment ${kind} failed.`));
       }
     } finally {
       setBusy(false);
@@ -173,13 +196,15 @@ export function EnvironmentInspector() {
     setCommandResult(null);
     const controller = getConfig().url;
     try {
+      assertConnection();
       const result = await runEnvironment(environmentId, request);
+      assertConnection();
       setCommandResult(result);
       setPending(null);
       await refresh();
     } catch (cause) {
       if (!captureApproval(cause, { kind: "run", approvalId: "", environmentId, request, controller })) {
-        await refreshAfterFailure(controller, `${errorMessage(cause, "Environment command response is unavailable.")} Outcome may be UNKNOWN. Inspect original events, logs and Artifacts before repeating the command.`);
+        await refreshAfterFailure(`${errorMessage(cause, "Environment command response is unavailable.")} Outcome may be UNKNOWN. Inspect original events, logs and Artifacts before repeating the command.`);
       }
     } finally {
       setBusy(false);
@@ -192,10 +217,10 @@ export function EnvironmentInspector() {
     setBusy(true);
     setError("");
     try {
-      if (getConfig().url !== reviewed.controller) throw new Error("Controller changed; review the original request again.");
-      await approvalAction(reviewed.approvalId, "approve");
+      assertConnection();
+      await approvalAction(reviewed.approvalId, "approve", assertConnection);
       setPending(null);
-      if (getConfig().url !== reviewed.controller) throw new Error("Controller changed; the original request was not resumed.");
+      assertConnection();
       setBusy(false);
       if (reviewed.kind === "create") await executeCreate(reviewed.request);
       else if (reviewed.kind === "run") await executeRun(reviewed.environmentId, reviewed.request);
@@ -211,9 +236,10 @@ export function EnvironmentInspector() {
     const reviewed = pending;
     setBusy(true); setError("");
     try {
-      if (getConfig().url !== reviewed.controller) throw new Error("Controller changed; review the original request again.");
-      await approvalAction(reviewed.approvalId, "deny");
-      if (getConfig().url === reviewed.controller) setPending(null);
+      assertConnection();
+      await approvalAction(reviewed.approvalId, "deny", assertConnection);
+      assertConnection();
+      setPending(null);
     } catch (cause) {
       setError(errorMessage(cause, "Denial could not be confirmed."));
     } finally { setBusy(false); }
@@ -230,11 +256,11 @@ export function EnvironmentInspector() {
 
   const inspectArtifacts = async () => {
     if (!selected || busy) return;
-    const controller = getConfig().url;
     setBusy(true); setError(""); setArtifactMetadata(null);
     try {
+      assertConnection();
       const result = await api<{ artifacts: Record<string, unknown>[] }>(`/api/v1/artifacts?environment_id=${encodeURIComponent(selected)}`);
-      if (getConfig().url !== controller) throw new Error("Controller changed; review the original environment again.");
+      assertConnection();
       setArtifactMetadata(result.artifacts);
     } catch (cause) {
       setError(errorMessage(cause, "Artifact registry metadata is unavailable."));
@@ -246,7 +272,10 @@ export function EnvironmentInspector() {
     setBusy(true);
     setError("");
     try {
-      setLogs((await fetchEnvironmentLogs(selected)).text || "No provider logs.");
+      assertConnection();
+      const result = await fetchEnvironmentLogs(selected);
+      assertConnection();
+      setLogs(result.text || "No provider logs.");
     } catch (cause) {
       setError(errorMessage(cause, "Environment logs are unavailable."));
     } finally {

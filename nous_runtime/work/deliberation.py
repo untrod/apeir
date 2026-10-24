@@ -26,6 +26,7 @@ _DECISION_EVENT_LIMIT = 6
 _DECISION_EVENT_TEXT_LIMIT = 200
 _DECISION_OBSERVATION_LIMIT = 6
 _DECISION_TOOL_TEXT_LIMIT = 6_000
+_DECISION_INPUT_CHARACTER_LIMIT = 96_000
 
 
 _DECISION_SCHEMA: dict[str, Any] = {
@@ -108,6 +109,25 @@ class ModelWorkDeliberator:
             "available_tools": [self._tool_summary(item) for item in self.tools],
             "decision_schema": _DECISION_SCHEMA,
         }
+        serialized_payload = json.dumps(
+            payload, ensure_ascii=False, separators=(",", ":"), default=str
+        )
+        if len(serialized_payload) > _DECISION_INPUT_CHARACTER_LIMIT:
+            # The Goal and evidence remain with their existing durable owners.
+            # Slicing JSON can remove constraints or leave a malformed request;
+            # neither a model nor a summary may silently replace that intent.
+            return WorkDecision(
+                status=DecisionStatus.ASK_USER,
+                summary="Work model input exceeds the bounded request size",
+                reason=(
+                    f"The prepared input has {len(serialized_payload)} characters; "
+                    f"the limit is {_DECISION_INPUT_CHARACTER_LIMIT}. No Provider "
+                    "request was dispatched. Reduce the selected context or split "
+                    "the task explicitly; the original Goal and evidence are retained."
+                ),
+                confidence="high",
+                phase="WAIT",
+            )
         native_tools = self._native_action_tools(context, progress)
         request = GatewayRequest(
             operation=GatewayOperation.STRUCTURED_OUTPUT,
@@ -174,12 +194,7 @@ class ModelWorkDeliberator:
                 },
                 {
                     "role": "user",
-                    "content": json.dumps(
-                        payload,
-                        ensure_ascii=False,
-                        separators=(",", ":"),
-                        default=str,
-                    )[:96_000],
+                    "content": serialized_payload,
                 },
             ),
             response_schema=_DECISION_SCHEMA,

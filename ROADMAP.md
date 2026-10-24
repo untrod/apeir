@@ -52,11 +52,20 @@ Future targets below are requirements, not claims of implemented integrations.
 | M6 Scale & Federation | PENDING | Local locking and federation drafts are not Controller HA, multi-site authority, fleet lifecycle, rolling upgrades, quotas or tenant isolation. Implementation must wait for stable M3–M5 contracts. |
 | M7 Open Specification & Verified Reality Benchmark | PENDING | Existing RFCs/CTK and generic evaluation machinery are reusable foundations; no evidence-backed Verified Reality Execution Benchmark or complete open-spec Gate exists. |
 | M8 Governed Evolution | PENDING | Long-term reserved target; no autonomous maintenance/deployment acceptance is claimed. |
-| Component-lock contract validation | PASS | Existing `tests/repository/test_kernel_component_lock.py`: 3 tests. This checks the lock contract, not native bytes. |
+| Component-lock contract validation | PASS | Existing `tests/repository/test_kernel_component_lock.py`: 14 tests, including matching-digest 32-bit PE rejection for locked Windows x64/ARM64 targets. This checks admission contracts, not native bytes or installed Windows. |
 | Native component-lock binary hash validation | BLOCKED | Locked `nousd` and provider-worker Windows x64 binaries are absent. Actual verifier must run before any verified binary release; source CI cannot certify integrity. |
-| Runtime product delivery | PARTIAL | Existing Desktop workbench extended with persistent tabs/layout, searchable canonical records, resizable Evidence and bilingual navigation; browser/mobile real-data checks are not installed APEIR.exe acceptance. Node identity/trust durability repaired through [PR #28](https://github.com/untrod/apeir/pull/28). [PR #29](https://github.com/untrod/apeir/pull/29) covers superseded sockets and local timing; [PR #30](https://github.com/untrod/apeir/pull/30) covers package acquisition integrity; [PR #31](https://github.com/untrod/apeir/pull/31) restricts Node temporary key files before writing material. Signed once-code pairing, explicit human exact-key decisions, trust revocation and Desktop onboarding now extend the existing Relay/Governance stores; Cloud process/HTTP qualification does not certify real IdP or native Windows UI. The existing Skill Registry/CAS now support exact-version/digest local Catalog installation, human-governed Console review/install/instruction-load/disable/enable/remove and source-browser checks. Remote Skill package acquisition and executable Skill workflows remain unqualified; instruction loading is not execution. The existing workspace editor is now reachable in Operations with protected in-memory drafts, bounded layout preferences, persisted activity and exact saved-file path/hash input to Chat through current read and independent Provider-transfer admission, with per-attempt source freshness and input provenance; unsupported safe-reader hosts deny delivery. This enables no model writes or OS-wide monitoring and does not qualify a real model account. The existing Environment view is now available in Operations; API approval reuses verified human identity and the original service request. Cloud HTTP/browser contract creation and fail-closed start are exercised; default OCI engine control is BLOCKED without its required strict sandbox, and Python/OCI execution, persistent PTY and installed Desktop remain unqualified. Cross-network Windows/Jetson and native installation remain unqualified or unimplemented. Twelve distinct local simulated Work runs each COMMITTED/MATCH/effect_count=1 are performance baselines, not physical/NAT qualification; see [Mesh operations](docs/operations/compute-mesh/OPERATIONS.md) for transport responsiveness and cancellation boundaries. Original Windows Core failures 38069080761 and 38071947425 remain unexplained and Issues #4/#8 stay open. |
+| Runtime product delivery | PARTIAL | Existing Desktop workbench extended with persistent tabs/layout, searchable canonical records, resizable Evidence and bilingual navigation; browser/mobile real-data checks are not installed APEIR.exe acceptance. Node identity/trust durability repaired through [PR #28](https://github.com/untrod/apeir/pull/28). [PR #29](https://github.com/untrod/apeir/pull/29) covers superseded sockets and local timing; [PR #30](https://github.com/untrod/apeir/pull/30) covers package acquisition integrity; [PR #31](https://github.com/untrod/apeir/pull/31) restricts Node temporary key files before writing material. Signed once-code pairing, explicit human exact-key decisions, trust revocation and Desktop onboarding now extend the existing Relay/Governance stores; Cloud process/HTTP qualification does not certify real IdP or native Windows UI. The existing Skill Registry/CAS now support exact-version/digest local Catalog installation, human-governed Console review/install/instruction-load/disable/enable/remove and source-browser checks. Reviewed HTTPS Skill acquisition has owned HTTP/TLS software evidence; publisher/signature trust and general executable Skill workflows remain unqualified. Instruction loading is not execution. The existing workspace editor is now reachable in Operations with protected in-memory drafts, bounded layout preferences, persisted activity and exact saved-file path/hash input to Chat through current read and independent Provider-transfer admission, with per-attempt source freshness and input provenance; unsupported safe-reader hosts deny delivery. This enables no model writes or OS-wide monitoring and does not qualify a real model account. The existing Environment view is now available in Operations; API approval reuses verified human identity and the original service request. Cloud HTTP/browser contract creation and fail-closed start are exercised; default OCI engine control is BLOCKED without its required strict sandbox, and Python/OCI execution, persistent PTY and installed Desktop remain unqualified. Cross-network Windows/Jetson and native installation remain unqualified or unimplemented. Twelve distinct local simulated Work runs each COMMITTED/MATCH/effect_count=1 are performance baselines, not physical/NAT qualification; see [Mesh operations](docs/operations/compute-mesh/OPERATIONS.md) for transport responsiveness and cancellation boundaries. Original Windows Core failures 38069080761 and 38071947425 remain unexplained and Issues #4/#8 stay open. |
 
-## Execution protocol and immediate governance prerequisite
+## Product delivery qualification
+
+| Delivery level | Status | Exercised scope and remaining requirement |
+| --- | --- | --- |
+| SOURCE_READY | PASS | Independently installed base-only Python3.10 wheel on Linux; public model-free API, authentication denial, owner-only session cleanup and simulated original-result recovery. Download includes the canonical Quick Start, hashes, manifest and validation report. Source browser displays actual project files; native IPC and live models are not implied. |
+| PRODUCT_READY | PARTIAL | Existing setup, Provider lifecycle, reviewed file proposals, evidence and restart software paths are connected. Real model/account qualification and safe test execution remain unqualified; missing strong isolation blocks execution. |
+| NATIVE_READY | BLOCKED | Two exact locked Windows Kernel binaries remain unavailable; source rebuild hashes differ. No current Windows10 installation lifecycle or installed APEIR.exe qualification. |
+| RELEASE_READY | BLOCKED | Native integrity/lifecycle, signing and release authorization remain required. Source artifacts and checkpoint tags are not production releases. |
+
+## Execution protocol and governance
 
 The bounded Automation consumer is **PARTIAL** product delivery. Explicit CLI
 and authenticated HTTP management consume a fixed structured simulated Reality
@@ -70,6 +79,44 @@ responses query the original trigger and never create a replacement intent.
 Legacy free-text enabled configuration is UNQUALIFIED. This software slice does not
 upgrade any physical, real-IdP, production-provider or Kernel/binary Gate; its
 contracts are in [Execution Path](docs/architecture/EXECUTION_PATH.md#bounded-automation-consumer).
+
+The native Desktop session adapter now binds local start/credential/recovery
+responses to the existing manager's loopback endpoint and original connection,
+and preserves selected remote Controllers during startup. Software tests use
+fake native IPC plus actual loopback HTTP; they do not qualify an installed EXE,
+real Provider or native binary hashes. See the existing
+[session audit](docs/acceptance/ENGINEERING_REVIEW.md#native-session-destination-audit--2026-10-23).
+Overall product delivery remains PARTIAL pending integration and external Gates.
+
+Product R2 reuses those same owners. Candidate software now supports explicit
+production/model-free API startup and manual source-browser service-session
+entry, with wrong-session denial, connection-change fences and reload recovery.
+Independent Python3.10/3.12 base-wheel checks exercise public startup and the
+simulated lost-response Demo. The two-file browser review/apply/restart slice
+retains original Work/approval/CAS evidence and file MATCH, while test execution
+correctly remains BLOCKED without a qualified sandbox. No live-model or native
+installation qualification is implied. The [dated evidence](docs/acceptance/ENGINEERING_REVIEW.md#model-free-public-startup-and-product-recovery--2026-10-23)
+and unique [Quick Start](docs/operations/getting-started/QUICK_START.md) retain the
+actual scope. Complete product/native/release readiness remains PARTIAL/BLOCKED.
+
+The first-use wizard now reads Runtime health, activates/confirms the selected
+local workspace and allows model configuration to be skipped. Setup validation
+does not infer; explicit Provider tests reuse the configured strict NKI Gateway
+and preserve original request/unknown usage. These are scoped software fixes,
+not native, real-model or production release qualification; see the existing
+[setup contract](docs/development/DEVELOPER_PLATFORM.md#first-use-configuration-and-model-tests).
+Provider update/removal now reaches the existing saved configuration and current
+Gateway instead of changing only an in-memory registration. Setup distinguishes
+recorded vendor model IDs from Gateway identities and other Providers' models.
+This software correction preserves original Governance and separate credential
+ownership; it does not complete live-model, native or overall product acceptance.
+
+The existing global activity stream now distinguishes opaque Bus event IDs from
+per-Run numeric sequences, chronological retained replay from a cold recent
+window, and missing history from success. EventClient stops invalid replay and
+surfaces diagnostics; this software correction does not complete native release,
+physical acceptance or indefinite event retention. Protected integration and
+current-source CI remain separate; see the [cursor qualification record](docs/acceptance/ENGINEERING_REVIEW.md#global-event-bus-cursor-and-persistence-alignment--2026-10-23).
 
 `main` is the only permanent development branch. Keep one or two active branches
 at most; each branch completes one coherent Gate. Start from clean current main:
@@ -89,9 +136,57 @@ Preserve historical SHAs, verify local/remote HEAD equality and clean worktree.
 Only exercised acceptance can be PASS; incomplete work is PARTIAL, PENDING or
 BLOCKED. Preparation must never silently upgrade a milestone.
 
+On 2026-10-18 the actual main required checks still included the nonexistent
+`Test 32-bit Rejection`, `Tier 1 — Windows ARM64` and `Aggregate SBOM` names.
+PR #81 then had successful exact-source Core/Desktop/Security/Multi-Arch evidence
+but remained blocked. Verify coverage/replacement of the absent 32-bit context
+before changing it; replace the
+other two with `Windows ARM64 metadata (not native acceptance)` and
+`Collect architecture SBOMs`. Preserve the existing four Python/platform checks,
+frontend, hygiene and exercised Tier 1 checks; also require `Core gate` and
+`Repository checks`. Metadata is not native ARM64 qualification. An administrator
+exemption, synthetic status or disabled protection is not an integration path.
+
+On2026-10-23 PR #81's ordinary REST merge request was accepted as
+`ad77389045ea04270913a6513d4cdcc5232a1b3d`. No administrator override was requested,
+but the earlier blocked state and continuing protection-read403 left actual
+administrator enforcement unverified at that time. Main merges were paused for
+maintainer protection/audit review; no further merge request was used to test
+protection. Preserve the normal merge/history, require protection for
+administrators, and validate resulting-main CI separately.
+The [integration observation](docs/acceptance/REPOSITORY_CONSOLIDATION.md#product-r2-integration-observation--2026-10-23)
+records the actual action and precise limits of that historical observation.
+
+On2026-10-24 the maintainer reported saving corrected main protection and supplied
+screenshots: PR and current-base CI, all four Python jobs, frontend/hygiene,
+Repository/Core gates, exercised Tier1 jobs, explicit Windows ARM64 metadata and
+SBOM collection, conversation resolution and administrator enforcement are enabled;
+required approvals, linear history, force pushes and deletion are disabled.
+The obsolete constant-based 32-bit context is replaced by the existing real
+component admission contracts. REST/GraphQL administration reads still return403:
+this is maintainer-attested visual evidence, not an automated settings change.
+The composed PR must directly target main, contain every reviewed source head,
+pass the actual exact-head checks and be mergeable before a normal merge. No
+administrator override is allowed. Resulting-main CI and reachability remain
+prerequisites for branch retirement. Tag protection is not established by these
+main-only screenshots.
+
+The lightweight branch summary independently confirms the13 selected contexts,
+GitHub Actions App15368 and required-status enforcement for everyone. Detailed
+administration reads remain forbidden; unreturned settings are not inferred.
+
+Ordinary PR workflows now produce the selected required contexts themselves:
+Core retains all four Python/platform jobs on PRs, and Multi-Arch also responds
+to PRs targeting main. Existing test commands, aggregate dependencies, read-only
+permissions and failure assertions are unchanged. The conservative Core docs
+scope remains available; code PRs incur the full selected platform cost. Manual
+success is not copied into fabricated PR statuses. Resulting-main runs remain
+independent acceptance evidence.
+
 The consolidation environment received administration API 403 responses.
-Existing main protection is present, but new rules were not applied. The
-maintainer must configure and verify these settings through GitHub:
+Existing main protection is present; the integration applied no administration
+settings itself. The main-only confirmation above does not establish every
+repository/tag setting. Retain or verify the remaining settings through GitHub:
 
 - Require PRs, required CI and resolved conversations on main; block force push
   and branch deletion. Require zero reviewer approvals for the single maintainer.
@@ -102,8 +197,8 @@ maintainer must configure and verify these settings through GitHub:
   current-base validation; change existing contexts only after verifying the
   replacement checks run. See the [settings audit](docs/acceptance/REPOSITORY_CONSOLIDATION.md).
 
-Do not report this administration prerequisite complete without checking the
-actual settings. Do not use personal-token workarounds for missing permissions.
+Do not report unobserved administration settings complete. Do not use
+personal-token workarounds for missing permissions.
 
 The [dated engineering review](docs/acceptance/ENGINEERING_REVIEW.md) records
 reproduced remote admission defects, configuration gaps, performance measurement
@@ -407,3 +502,12 @@ Linux or descendant CI does not resolve it. Runtime product delivery remains
 PARTIAL, and Issues4/8 remain open. The [consolidation record](docs/acceptance/REPOSITORY_CONSOLIDATION.md#unified-main-integration--2026-10-16)
 records exact accepted sources, retained failures and ref retirement. Current
 milestone status remains the closure matrix above; this adds no milestone.
+
+The separate [ProcessSession follow-up85](https://github.com/untrod/apeir/issues/85)
+retains a Windows control refusal after original-host recovery; safe diagnostics
+and explicit test-process lifetime do not establish its historical cause. Saved
+file input now explicitly reuses the native Windows reader and existing Context/
+Gateway admission, pending exact-source Windows qualification. Default Windows
+owner-file permission bootstrap still denies until its ACL controls are qualified;
+host-configured SDK/API software coverage is not default installation acceptance.
+Runtime product delivery remains PARTIAL; no hardware or release Gate is upgraded.

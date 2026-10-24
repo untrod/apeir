@@ -5,8 +5,10 @@ from __future__ import annotations
 import getpass
 import json
 import os
+import tempfile
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
+from urllib.parse import urlsplit
 
 from nous_runtime.cli.provider_experience import (
     executable_capabilities,
@@ -309,8 +311,7 @@ def _setup_service(service: str, *, quick: bool = False) -> str:
                 "Provider was not saved because the connection test failed. "
                 "Correct the credential or endpoint, then run 'nous provider add' again."
             )
-    _save_provider_config(provider_id, config)
-    _register_provider_runtime(provider_id, config=config)
+    _change_provider_config(provider_id, lambda _: config, publish=True)
     if probe is not None:
         status = "Healthy" if probe.get("ok") else "Unavailable"
     else:
@@ -417,7 +418,7 @@ def _request_endpoint(base_endpoint: str, preset: dict[str, Any]) -> str:
     if value.endswith(("/chat/completions", "/messages")):
         return value
     if str(preset["protocol"]) == "anthropic":
-        return value + "/v1/messages"
+        return value + ("/messages" if value.endswith("/v1") else "/v1/messages")
     return value + "/chat/completions"
 
 
@@ -481,12 +482,93 @@ def register_provider_from_config(
         capability_models=capability_models,
     )
     provider_id = str(config["provider_id"])
-    _save_provider_config(provider_id, config)
-    _register_provider_runtime(provider_id, config=config)
-    from nous_runtime.model_runtime.factory import gateway_service
-
-    gateway_service.configure_from_providers()
+    _change_provider_config(provider_id, lambda _: config, publish=True)
     return True
+
+
+def update_provider_from_config(provider_id: str, changes: dict[str, Any]) -> None:
+    """Update the original saved adapter without replacing it with a generic one."""
+    allowed = {
+        "name",
+        "api_base_url",
+        "credential_ref",
+        "capabilities",
+        "model",
+        "capability_models",
+    }
+    if not isinstance(changes, dict) or not changes or changes.keys() - allowed:
+        raise ValueError("Unsupported Provider configuration fields")
+    for field in ("name", "api_base_url", "credential_ref", "model"):
+        if field in changes and not isinstance(changes[field], str):
+            raise ValueError("Provider text fields must be strings")
+    if "capabilities" in changes and (
+        not isinstance(changes["capabilities"], list)
+        or not all(isinstance(item, str) for item in changes["capabilities"])
+    ):
+        raise ValueError("Provider capabilities must be a list of strings")
+    if "capability_models" in changes and (
+        not isinstance(changes["capability_models"], dict)
+        or not all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in changes["capability_models"].items()
+        )
+    ):
+        raise ValueError("Provider model mappings must contain strings")
+
+    def updated(previous: dict[str, Any] | None) -> dict[str, Any]:
+        if previous is None:
+            raise KeyError(provider_id)
+        # Preserve host/CLI settings that this control surface does not edit.
+        service = str(previous.get("service") or provider_id)
+        validated = build_provider_config(
+            service,
+            changes.get("name", previous.get("name") or provider_id),
+            changes.get("api_base_url", previous.get("base_endpoint") or ""),
+            credential_ref=changes.get(
+                "credential_ref", previous.get("credential_ref")
+            ),
+            capabilities=changes.get(
+                "capabilities", previous.get("capability_mapping")
+            ),
+            model=changes.get("model", previous.get("model")),
+            capability_models=changes.get(
+                "capability_models", previous.get("capability_models")
+            ),
+        )
+        config = dict(previous)
+        fields = {
+            "name": ("name",),
+            "api_base_url": ("base_endpoint", "endpoint", "models_endpoint"),
+            "credential_ref": (
+                "credential_ref",
+                "authentication_required",
+                "credential_scope",
+            ),
+            "capabilities": ("capability_mapping", "executable_capabilities"),
+            "model": ("model",),
+            "capability_models": ("capability_models",),
+        }
+        for field in changes:
+            for key in fields[field]:
+                config[key] = validated[key]
+        if "credential_ref" in changes:
+            config.pop("api_key_env", None)
+            if "api_key_env" in validated:
+                config["api_key_env"] = validated["api_key_env"]
+        return config
+
+    _change_provider_config(provider_id, updated, publish=True)
+
+
+def remove_provider_from_config(provider_id: str) -> None:
+    """Remove configuration and current dispatch discovery, leaving secrets alone."""
+    from nous_runtime.services.providers import get_provider
+
+    def removed(previous: dict[str, Any] | None) -> None:
+        if previous is None and get_provider(provider_id) is None:
+            raise KeyError(provider_id)
+
+    _change_provider_config(provider_id, removed, publish=True)
 
 
 def build_provider_config(
@@ -512,9 +594,32 @@ def build_provider_config(
     elif reference and not reference.startswith("secret:"):
         raise ValueError("credential_ref must use env: or secret:")
 
-    service = provider_id if provider_id in SERVICE_PRESETS else "custom"
+    service = "claude" if provider_id == "anthropic" else provider_id
+    if service not in SERVICE_PRESETS:
+        service = "custom"
     preset = SERVICE_PRESETS[service]
-    base_endpoint = (api_base_url or str(preset["base_endpoint"])).rstrip("/")
+    base_endpoint = str(api_base_url or preset["base_endpoint"]).strip().rstrip("/")
+    try:
+        parsed_endpoint = urlsplit(base_endpoint)
+        valid_endpoint = (
+            parsed_endpoint.scheme in {"http", "https"}
+            and bool(parsed_endpoint.hostname)
+            and parsed_endpoint.port != 0
+            and parsed_endpoint.username is None
+            and parsed_endpoint.password is None
+            and not parsed_endpoint.query
+            and not parsed_endpoint.fragment
+            and not any(
+                character.isspace() or ord(character) < 32
+                for character in base_endpoint
+            )
+        )
+    except ValueError:
+        valid_endpoint = False
+    if not valid_endpoint:
+        raise ValueError(
+            "Provider base URL must use HTTP(S) without embedded credentials, query parameters or fragments"
+        )
     configured = normalize_capability_mapping(capabilities or preset["capabilities"])
     if not configured:
         configured = normalize_capability_mapping(preset["capabilities"])
@@ -561,7 +666,7 @@ def validate_provider_from_config(
     model: str | None = None,
     capability_models: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Probe a proposed Provider configuration without persisting it."""
+    """Validate reference-only configuration without inference or network I/O."""
     config = build_provider_config(
         provider_id=provider_id,
         name=name,
@@ -571,35 +676,101 @@ def validate_provider_from_config(
         model=model,
         capability_models=capability_models,
     )
-    return probe_provider_config(provider_id, config, "test")
+    return {
+        "ok": True,
+        "provider_id": config["provider_id"],
+        "status": "Configuration accepted; authentication and inference not tested",
+        "validation_scope": "configuration",
+        "authentication": "UNKNOWN",
+        "model_inference": "NOT_RUN",
+        "latency_ms": None,
+    }
 
 
 def _save_provider_config(provider_id: str, config: dict[str, Any]) -> None:
     """Persist only non-secret Provider configuration."""
+    _change_provider_config(provider_id, lambda _: config)
+
+
+def _change_provider_config(
+    provider_id: str,
+    change: Callable[[dict[str, Any] | None], dict[str, Any] | None],
+    *,
+    publish: bool = False,
+) -> None:
+    """Serialize changes to the existing JSON owner, then publish its adapter."""
+    from nous_runtime.locking import file_lock, runtime_locks
     from nous_runtime.project.workspace import find_workspace, init_workspace
 
     workspace = find_workspace()
     if workspace is None:
         workspace = init_workspace()
     path = Path(workspace) / "providers.json"
-    existing: dict[str, Any] = {}
-    if path.is_file():
+    with (
+        runtime_locks.acquire(f"workspace:providers:{path}", owner="provider-config"),
+        file_lock(str(path) + ".lock"),
+    ):
+        existing: dict[str, Any] = {}
+        if path.exists():
+            try:
+                existing = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                raise ValueError(
+                    "Provider configuration is unreadable or invalid; inspect original state"
+                ) from exc
+            if not isinstance(existing, dict) or not all(
+                isinstance(value, dict) for value in existing.values()
+            ):
+                raise ValueError(
+                    "Provider configuration must contain a mapping of Provider records"
+                )
+        config = change(existing.get(provider_id))
+        candidate = (
+            _configured_provider(provider_id, config=config)
+            if publish and config is not None
+            else None
+        )
+        if config is None:
+            existing.pop(provider_id, None)
+        else:
+            existing[provider_id] = _sanitize_config(config)
+        temporary: Path | None = None
         try:
-            value = json.loads(path.read_text(encoding="utf-8"))
-            existing = value if isinstance(value, dict) else {}
-        except (OSError, ValueError):
-            existing = {}
-    existing[provider_id] = _sanitize_config(config)
-    temporary = Path(str(path) + ".tmp")
-    temporary.write_text(
-        json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    try:
-        os.chmod(temporary, 0o600)
-    except OSError:
-        pass
-    os.replace(temporary, path)
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=path.parent,
+                prefix=".providers-",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+                json.dump(existing, handle, indent=2, ensure_ascii=False)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+        if publish:
+            from nous_runtime.model_runtime.factory import gateway_service
+            from nous_runtime.provider.registry import ProviderRegistry
+            from nous_runtime.runtime.no_intelligence import no_intelligence_enabled
+
+            registry = ProviderRegistry()
+            try:
+                registry.remove(provider_id)
+                if candidate is not None and not no_intelligence_enabled():
+                    registry.install(candidate)
+                gateway_service.configure_from_providers()
+            except Exception as exc:
+                # Persistence may already have changed. Never imply rollback or
+                # keep advertising a partially refreshed Gateway as ready.
+                gateway_service.clear()
+                raise RuntimeError(
+                    "Provider configuration saved; runtime refresh failed. Inspect original configuration before retrying."
+                ) from exc
 
 
 def load_providers_from_config(workspace: str | Path | None = None) -> int:
@@ -634,6 +805,20 @@ def _register_provider_runtime(
     """Register a configured adapter without persisting credential material."""
     from nous_runtime.services.providers import register_adapter
 
+    register_adapter(
+        _configured_provider(provider_id, endpoint, api_key, model, config=config)
+    )
+
+
+def _configured_provider(
+    provider_id: str,
+    endpoint: str = "",
+    api_key: str = "",
+    model: str = "",
+    *,
+    config: dict[str, Any] | None = None,
+) -> Any:
+    """Construct the existing adapter before any saved configuration is changed."""
     values = dict(config or {})
     values.setdefault("endpoint", endpoint)
     values.setdefault("model", model)
@@ -680,7 +865,7 @@ def _register_provider_runtime(
                 values.get("structured_output_mode") or "json_schema"
             ),
         )
-    register_adapter(provider)
+    return provider
 
 
 def _test_connection(endpoint: str, api_key: str, model: str) -> bool:

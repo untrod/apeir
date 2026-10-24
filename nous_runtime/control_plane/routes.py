@@ -19,6 +19,7 @@ Verified APIs:
 from __future__ import annotations
 
 import logging
+import math
 import os
 from typing import Any
 
@@ -67,13 +68,23 @@ def _paginate(items: list[Any], page: int, page_size: int) -> dict[str, Any]:
     }
 
 
+def _model_measurement(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        measured = float(value)
+    except OverflowError:
+        return None
+    return measured if math.isfinite(measured) and measured >= 0 else None
+
+
 def _adapt_model_record(record) -> dict[str, Any]:
     """Adapt a ModelRecord to API response dict."""
     d = record.descriptor
     state = record.state.value if hasattr(record.state, "value") else str(record.state)
     health = str((record.health or {}).get("status") or "").lower()
     if health not in {"healthy", "degraded", "unhealthy", "unknown"}:
-        health = "healthy" if state == "enabled" and d.availability else "unknown"
+        health = "unknown"
     provider_name = d.provider_id.lower()
     provider_kind = (
         "anthropic"
@@ -87,6 +98,9 @@ def _adapt_model_record(record) -> dict[str, Any]:
     return {
         "id": d.model_id,
         "model_id": d.model_id,
+        "provider_model": d.metadata.get("provider_model")
+        if isinstance(d.metadata.get("provider_model"), str)
+        else None,
         "display_name": d.display_name,
         "provider_id": d.provider_id,
         "provider_kind": provider_kind,
@@ -124,10 +138,12 @@ def _adapt_model_record(record) -> dict[str, Any]:
         "health": health,
         "health_status": state,
         "probes": [],
-        "cost_per_1k_tokens_usd": float(
-            (record.benchmark or {}).get("cost_per_1k_tokens_usd") or 0
+        "cost_per_1k_tokens_usd": _model_measurement(
+            (record.benchmark or {}).get("cost_per_1k_tokens_usd")
         ),
-        "avg_latency_ms": float((record.benchmark or {}).get("avg_latency_ms") or 0),
+        "avg_latency_ms": _model_measurement(
+            (record.benchmark or {}).get("avg_latency_ms")
+        ),
         "token_limit": d.context_length,
         "recoverable": state not in {"removed"},
         "schema_version": "1.0.0",
@@ -369,16 +385,21 @@ def handle_get_model(model_id: str) -> dict[str, Any]:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
 
-def handle_model_test(model_id: str, body: dict | None = None) -> dict[str, Any]:
+def handle_model_test(
+    model_id: str, body: dict | None = None, *, _expected_gateway=None
+) -> dict[str, Any]:
     """POST /api/v1/models/{model_id}/test — real gateway invoke test"""
     body = body or {}
     test_prompt = body.get("prompt", "Hello, this is a connectivity test. Reply 'OK'.")
+    request = None
     try:
         from nous_runtime.model_runtime.models import ModelRequest, RoutingMode
         from nous_runtime.model_runtime.factory import gateway_service
         import time
 
         gateway = gateway_service.get()
+        if _expected_gateway is not None and gateway is not _expected_gateway:
+            raise RuntimeError("Configured Gateway changed before model test")
         registry = getattr(gateway, "registry", None)
         record = registry.get(model_id) if registry is not None else None
         capabilities = set(record.descriptor.capabilities) if record else set()
@@ -410,11 +431,17 @@ def handle_model_test(model_id: str, body: dict | None = None) -> dict[str, Any]
                 "instance_id": getattr(response, "instance_id", ""),
                 "request_id": request.request_id,
                 "response_id": getattr(response, "response_id", ""),
-                "healthy": response.finish_reason not in ("error", "timeout"),
+                "healthy": response.finish_reason in {"completed", "stop", "end_turn"},
                 "latency_ms": round(latency_ms, 1),
                 "response_preview": (response.content or "")[:200],
                 "finish_reason": response.finish_reason,
-                "tokens_used": getattr(response, "usage", {}).get("total_tokens", 0),
+                "tokens_used": getattr(response, "usage", {}).get("total_tokens"),
+                "usage": dict(getattr(response, "usage", {}) or {}),
+                "cost_usd": response.cost_usd
+                if metadata.get("cost_measurement")
+                in {"reported", "derived", "estimated"}
+                else None,
+                "cost_measurement": metadata.get("cost_measurement", "unknown"),
                 "execution": {
                     "path": metadata.get("execution_path", "gateway"),
                     "operation_id": metadata.get("operation_id", ""),
@@ -423,10 +450,34 @@ def handle_model_test(model_id: str, body: dict | None = None) -> dict[str, Any]
                 },
             }
         )
-    except ImportError:
-        return err_response("NOUS_DEPENDENCY_MISSING", "Model runtime not available")
-    except Exception as e:
-        return ok_response({"model_id": model_id, "healthy": False, "error": str(e)})
+    except Exception as exc:
+        if isinstance(exc, ImportError) and request is None:
+            return err_response(
+                "NOUS_DEPENDENCY_MISSING", "Model runtime not available"
+            )
+        status = getattr(exc, "http_status", None)
+        diagnostic = (
+            {
+                401: "Provider authentication failed.",
+                402: "Provider account balance is insufficient.",
+                403: "Provider denied this model request.",
+                429: "Provider rate limit reached.",
+            }.get(status)
+            if type(status) is int
+            else None
+        )
+        return ok_response(
+            {
+                "model_id": model_id,
+                "healthy": False,
+                "request_id": request.request_id if request is not None else None,
+                "tokens_used": None,
+                "cost_usd": None,
+                "cost_measurement": "unknown",
+                "error": (diagnostic or "Model test did not complete.")
+                + " Inspect the original request and usage before retrying.",
+            }
+        )
 
 
 def handle_model_test_request(body: dict) -> dict[str, Any]:
@@ -505,7 +556,7 @@ def handle_create_provider(body: dict) -> dict[str, Any]:
 
 
 def handle_validate_provider(body: dict) -> dict[str, Any]:
-    """POST /api/v1/providers/validate - probe without saving configuration."""
+    """Validate unsaved configuration; authentication/inference are not exercised."""
     provider_id = str(body.get("provider_id") or "")
     name = str(body.get("name") or provider_id)
     if not provider_id or not name:
@@ -534,26 +585,11 @@ def handle_validate_provider(body: dict) -> dict[str, Any]:
 
 
 def handle_update_provider(provider_id: str, body: dict) -> dict[str, Any]:
-    """PATCH /api/v1/providers/{provider_id} — remove + re-register (no update API)."""
+    """PATCH the saved configuration and refresh existing dispatch discovery."""
     try:
-        from nous_runtime.provider.registry import ProviderRegistry
+        from nous_runtime.cli.provider_setup import update_provider_from_config
 
-        registry = ProviderRegistry()
-        existing = registry.get(provider_id)
-        if not existing:
-            return err_response("NOUS_NOT_FOUND", f"Provider {provider_id} not found")
-        # Remove and re-register with updated config
-        registry.remove(provider_id)
-        from nous_runtime.compat.provider import create_simple_provider
-
-        name = body.get("name", getattr(existing, "name", provider_id))
-        capabilities = body.get("capabilities", getattr(existing, "capabilities", []))
-        api_base = body.get("api_base_url", getattr(existing, "api_base_url", ""))
-        cred_ref = body.get("credential_ref", getattr(existing, "credential_ref", None))
-        new_provider = create_simple_provider(
-            provider_id, name, api_base, capabilities, cred_ref
-        )
-        registry.install(new_provider)
+        update_provider_from_config(provider_id, body)
         return ok_response(
             {
                 "provider_id": provider_id,
@@ -565,35 +601,47 @@ def handle_update_provider(provider_id: str, body: dict) -> dict[str, Any]:
                         "name",
                         "api_base_url",
                         "credential_ref",
-                        "enabled",
                         "capabilities",
+                        "model",
+                        "capability_models",
                     )
                 ],
                 "message": f"Provider {provider_id} updated",
             }
         )
+    except KeyError:
+        return err_response("NOUS_NOT_FOUND", "Saved Provider configuration not found")
+    except ValueError as exc:
+        return err_response("NOUS_VALIDATION_ERROR", str(exc))
     except ImportError:
         return err_response(
             "NOUS_DEPENDENCY_MISSING", "Provider registry not available"
         )
-    except Exception as e:
-        return err_response("NOUS_INTERNAL_ERROR", str(e))
+    except Exception:
+        return err_response(
+            "NOUS_INTERNAL_ERROR",
+            "Provider update failed; inspect original configuration before retrying",
+        )
 
 
 def handle_delete_provider(provider_id: str) -> dict[str, Any]:
     """DELETE /api/v1/providers/{provider_id}"""
     try:
-        from nous_runtime.provider.registry import ProviderRegistry
+        from nous_runtime.cli.provider_setup import remove_provider_from_config
 
-        registry = ProviderRegistry()
-        if not registry.get(provider_id):
-            return err_response("NOUS_NOT_FOUND", f"Provider {provider_id} not found")
-        registry.remove(provider_id)
+        remove_provider_from_config(provider_id)
         return ok_response(
             {"provider_id": provider_id, "message": f"Provider {provider_id} removed"}
         )
-    except Exception as e:
-        return err_response("NOUS_INTERNAL_ERROR", str(e))
+    except KeyError:
+        return err_response("NOUS_NOT_FOUND", "Provider not found")
+    except ValueError as exc:
+        return err_response("NOUS_VALIDATION_ERROR", str(exc))
+    except Exception:
+        return err_response(
+            "NOUS_INTERNAL_ERROR",
+            "Provider removal failed; inspect original configuration before retrying",
+        )
 
 
 def handle_provider_test(provider_id: str, body: dict | None = None) -> dict[str, Any]:

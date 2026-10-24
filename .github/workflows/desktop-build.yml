@@ -10,6 +10,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      rebuild_locked_kernel:
+        description: 'Diagnostic only: rebuild frozen Windows Kernel and compare original hashes (no release)'
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -19,6 +24,63 @@ permissions:
   contents: read
 
 jobs:
+  locked-kernel-rebuild:
+    name: Locked Kernel rebuild diagnostic (not installation acceptance)
+    if: github.event_name == 'workflow_dispatch' && inputs.rebuild_locked_kernel == true
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: distribution
+      - uses: actions/checkout@v4
+        id: kernel
+        with:
+          repository: untrod/apeir-kernel
+          ref: 87fd1b2ff28ef14ab1a515a58162592b452fda2e
+          persist-credentials: false
+          path: kernel-rebuild-source
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Record build environment and exact source
+        shell: pwsh
+        run: |
+          $evidence = Join-Path $env:RUNNER_TEMP 'kernel-rebuild-evidence'
+          New-Item -ItemType Directory -Force $evidence | Out-Null
+          rustc -vV | Out-File "$evidence/toolchain.txt"
+          cargo -V | Out-File -Append "$evidence/toolchain.txt"
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture | Format-List | Out-File -Append "$evidence/toolchain.txt"
+          & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products '*' -format json | Out-File "$evidence/visual-studio.json"
+          git -C distribution rev-parse HEAD | Out-File "$evidence/distribution-sha.txt"
+          git -C kernel-rebuild-source rev-parse HEAD | Out-File "$evidence/kernel-sha.txt"
+      - name: Build frozen components without modifying source or lock
+        working-directory: kernel-rebuild-source
+        shell: pwsh
+        run: |
+          cargo build --release --locked --target x86_64-pc-windows-msvc -p nousd --bin nousd -p nous-provider-worker --bin nous-provider-worker 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/kernel-rebuild-evidence/cargo-build.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Independently compare both PE files with unchanged component lock
+        if: always() && steps.kernel.outcome == 'success'
+        shell: pwsh
+        run: |
+          python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-rebuild-source --candidate-root kernel-rebuild-source/target/x86_64-pc-windows-msvc/release --report "$env:RUNNER_TEMP/kernel-rebuild-evidence/component-report.json"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Retain diagnostic evidence, never publish mismatched executables
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: locked-kernel-rebuild-diagnostic
+          retention-days: 14
+          if-no-files-found: error
+          path: ${{ runner.temp }}/kernel-rebuild-evidence/
+
   # Frontend Validation
   frontend-tests:
     name: Frontend Build Validation
@@ -57,6 +119,116 @@ jobs:
         if: steps.scope.outputs.scope == 'documentation'
         working-directory: .
         run: python scripts/markdown_link_check.py
+
+  source-preview:
+    name: Python source preview (not native release)
+    if: github.event_name == 'workflow_dispatch'
+    needs: [frontend-tests]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        id: source-builder
+        with:
+          python-version: '3.12'
+      - name: Verify versions and build the existing Python package
+        run: |
+          python scripts/ci/verify_release_versions.py
+          python -m pip install build
+          python -m build --wheel --outdir artifacts/source-preview
+      - name: Select the minimum supported Python for the base-package consumer
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install and exercise the built wheel in isolation
+        run: |
+          python -m venv "$RUNNER_TEMP/apeir-source-consumer"
+          "$RUNNER_TEMP/apeir-source-consumer/bin/python" -m pip install artifacts/source-preview/*.whl
+          "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I scripts/ci/verify_source_preview_install.py --report "$RUNNER_TEMP/source-startup.json"
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I -c "import nous_runtime; from nous_runtime.api.server import create_server; assert 'site-packages' in nous_runtime.__file__; server = create_server('127.0.0.1', 0); server.server_close()"
+          "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I "$RUNNER_TEMP/apeir-source-consumer/bin/apeir" version
+          "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I "$RUNNER_TEMP/apeir-source-consumer/bin/apeir" demo --workspace "$RUNNER_TEMP/apeir-source-demo" --scenario lost-response --approve-once --json > "$RUNNER_TEMP/source-demo.json"
+      - name: Record scoped installed-package evidence
+        run: |
+          python - <<'PY'
+          import json, os, platform
+          from pathlib import Path
+          result = json.loads((Path(os.environ["RUNNER_TEMP"]) / "source-demo.json").read_text())
+          before = result["before_recovery"]
+          assert result["execution_scope"] == "runtime-service" and result["kernel_traversed"] is False
+          assert result["simulated"] is True
+          assert result["work"]["state"] == "COMMITTED" and result["effect_verification"]["verdict"] == "MATCH"
+          assert before["receipt"] is None and before["effect_count"] == result["effect_count"] == 1
+          report = {
+              "source_wheel_installation": "PASS",
+              "consumer_python": platform.python_version(),
+              "isolated_api_import_bind_and_close": "PASS",
+              "simulated_lost_response_recovery": "PASS",
+              "execution_scope": result["execution_scope"],
+              "kernel_traversed": False,
+              "effect_count_before_recovery": before["effect_count"],
+              "effect_count_after_recovery": result["effect_count"],
+              "observation_count": len(result["observations"]),
+              "artifact_integrity_checks": result["artifact_integrity_checked"],
+              "real_model_and_physical_acceptance": "NOT_RUN",
+              "native_installation": "NOT_RUN",
+          }
+          report.update(json.loads((Path(os.environ["RUNNER_TEMP"]) / "source-startup.json").read_text()))
+          Path("artifacts/source-preview/source-preview-validation.json").write_text(json.dumps(report, indent=2) + "\n")
+          PY
+      - name: Record measured wheel hashes and qualification limits
+        env:
+          SOURCE_REVISION: ${{ github.sha }}
+          BUILD_PYTHON_VERSION: ${{ steps.source-builder.outputs.python-version }}
+        run: |
+          python - <<'PY'
+          import email, hashlib, json, os, platform, re, zipfile
+          from pathlib import Path
+          from urllib.parse import urljoin
+          root = Path("artifacts/source-preview")
+          wheels = sorted(root.glob("*.whl"))
+          assert len(wheels) == 1, "Expected the existing Distribution wheel only"
+          wheel = wheels[0]
+          with zipfile.ZipFile(wheel) as archive:
+              assert not any(name.endswith((".exe", ".db", ".sqlite", ".sqlite3", ".jsonl", ".pem", ".key")) or "/.nous/" in name or "/.git/" in name for name in archive.namelist()), "Runtime state or native binary entered source wheel"
+              metadata_names = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
+              assert len(metadata_names) == 1
+              metadata = email.message_from_bytes(archive.read(metadata_names[0]))
+          digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+          lock = Path("runtime-components.lock.json")
+          canonical = "https://github.com/untrod/apeir/blob/" + os.environ["SOURCE_REVISION"] + "/docs/operations/getting-started/QUICK_START.md"
+          guide = Path("docs/operations/getting-started/QUICK_START.md").read_text(encoding="utf-8")
+          guide = re.sub(r"(\]\()([^\s)]+)(\))", lambda match: match[1] + urljoin(canonical, match[2]) + match[3], guide)
+          guide_path = root / "QUICK_START.md"
+          guide_path.write_text("Canonical instructions for this exact source revision: " + canonical + "\n\n" + guide, encoding="utf-8")
+          manifest = {
+              "distribution_revision": os.environ["SOURCE_REVISION"],
+              "distribution_name": metadata["Name"],
+              "distribution_version": metadata["Version"],
+              "python": platform.python_version(),
+              "build_python": os.environ["BUILD_PYTHON_VERSION"],
+              "kind": "Python source preview; not native Desktop or a verified release",
+              "verified_release": False,
+              "kernel_reference": json.loads(lock.read_text())["components"]["nous-kernel"]["revision"],
+              "component_lock_sha256": hashlib.sha256(lock.read_bytes()).hexdigest(),
+              "native_binary_hash_verification": "NOT_RUN",
+              "native_installation": "NOT_RUN",
+              "signing_and_release_qualification": "NOT_RUN",
+              "wheel": {"filename": wheel.name, "sha256": digest},
+              "validation_report": "source-preview-validation.json",
+              "usage_instructions": {"filename": guide_path.name, "canonical_url": canonical, "sha256": hashlib.sha256(guide_path.read_bytes()).hexdigest()},
+          }
+          (root / "source-preview-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+          (root / "SHA256SUMS.txt").write_text("".join(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n" for path in sorted(root.iterdir()) if path.is_file() and path.name != "SHA256SUMS.txt"))
+          PY
+          echo 'Python source package only. No EXE/NSIS, native hash, installation, signing or production release qualification is claimed.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apeir-python-source-preview-${{ github.sha }}
+          path: artifacts/source-preview/
+          if-no-files-found: error
+          retention-days: 7
 
   # Windows x86_64 Build
   build-windows-x64:

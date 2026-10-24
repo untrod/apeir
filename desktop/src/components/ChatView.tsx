@@ -12,10 +12,11 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { btnSecondary, colors, typo, radius, space, fadeIn } from "../design";
 import { entityStore } from "../store";
-import { useMessages, useActiveTasks, useModels, useNodes, useStoreHydrated } from "../store";
+import { useMessages, useActiveTasks, useModels, useNodes, useStoreHydrated, useRuntimeConfigVersion } from "../store";
 import type { RuntimeEventEnvelope, Conversation, Message as MessageType } from "../store";
 import {
   approvalAction,
+  captureRuntimeConnection,
   describeRuntimeFailure,
   fetchConversation,
   fetchRunEvents,
@@ -105,7 +106,7 @@ function RuntimeCardForEvent({ event, compact }: { event: RuntimeEventEnvelope; 
   }
   if (type.startsWith("approval.")) {
     return <ApprovalCard event={event} title={String(payload.request_id || "Approval")} status={type.replace("approval.", "")} compact={compact}>
-      {type === "approval.requested" && <ApprovalActions requestId={String(payload.request_id || "")} />}
+      {type === "approval.requested" && <ApprovalActions key={String(payload.request_id || "")} requestId={String(payload.request_id || "")} />}
     </ApprovalCard>;
   }
   if (type.startsWith("artifact.")) {
@@ -123,13 +124,26 @@ function RuntimeCardForEvent({ event, compact }: { event: RuntimeEventEnvelope; 
 
 function ApprovalActions({ requestId }: { requestId: string }) {
   const [state, setState] = useState<"idle" | "loading" | "done">("idle");
+  const [connection] = useState(captureRuntimeConnection);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+  const current = () => {
+    connection();
+    if (!active.current) throw new Error("Approval view closed; review the original request again");
+  };
   const handle = async (action: "approve" | "deny") => {
     setState("loading");
     try {
-      await approvalAction(requestId, action);
+      current();
+      await approvalAction(requestId, action, current);
+      current();
       setState("done");
       toast.success(action === "approve" ? "Approved" : "Denied", `Request ${requestId.slice(0, 12)}...`);
     } catch (err) {
+      try { current(); } catch { return; }
       setState("idle");
       toast.error("Failed", err instanceof Error ? err.message : "Unknown");
     }
@@ -184,10 +198,7 @@ function RuntimeActivity({ runId, events }: { runId: string; events: RuntimeEven
 // ChatView
 
 
-export function ChatView({
-  conversationId, onConversationCreated, onCardClick, onTraceClick,
-  workspaceFile, readOnly = false, onClearWorkspaceFile, onProposalCreated,
-}: {
+type ChatViewProps = {
   conversationId?: string;
   onConversationCreated?: (conversationId: string) => void;
   onCardClick: (event: RuntimeEventEnvelope) => void;
@@ -196,7 +207,17 @@ export function ChatView({
   readOnly?: boolean;
   onProposalCreated?: (proposalId: string) => void;
   onClearWorkspaceFile?: () => void;
-}) {
+};
+
+export function ChatView(props: ChatViewProps) {
+  const connectionVersion = useRuntimeConfigVersion();
+  return <ChatSession key={JSON.stringify([connectionVersion, props.conversationId || ""])} {...props} />;
+}
+
+function ChatSession({
+  conversationId, onConversationCreated, onCardClick, onTraceClick,
+  workspaceFile, readOnly = false, onClearWorkspaceFile, onProposalCreated,
+}: ChatViewProps) {
   // All state from EntityStore
   const messages = useMessages(conversationId || "");
   const activeTasks = useActiveTasks();
@@ -215,7 +236,20 @@ export function ChatView({
   const inspectContext = (runId: string) => setContextView({ runId, controller: getConfig().url });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  useEffect(() => () => { abortRef.current?.abort(); }, []);
+  const subscriptionRef = useRef<ReturnType<typeof subscribeRunEvents> | null>(null);
+  const active = useRef(true);
+  const [connection] = useState(captureRuntimeConnection);
+  const currentView = useCallback(() => {
+    try { connection(); return active.current; } catch { return false; }
+  }, [connection]);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+      abortRef.current?.abort();
+      subscriptionRef.current?.close();
+    };
+  }, []);
 
   useEffect(() => {
     if (!conversationId) {
@@ -225,14 +259,14 @@ export function ChatView({
     let cancelled = false;
     fetchConversation(conversationId)
       .then((conversation) => {
-        if (cancelled) return;
+        if (cancelled || !currentView()) return;
         const { messages: history, ...summary } = conversation;
         entityStore.upsertConversations([summary]);
         entityStore.upsertMessages(history || []);
         setLocalMessages([]);
       })
       .catch((error) => {
-        if (!cancelled) {
+        if (!cancelled && currentView()) {
           toast.error(
             "Conversation could not be loaded",
             error instanceof Error ? error.message : "Unknown error",
@@ -242,7 +276,7 @@ export function ChatView({
     return () => {
       cancelled = true;
     };
-  }, [conversationId]);
+  }, [conversationId, currentView]);
 
   // Seed welcome message (only if hydrated with no messages)
   useEffect(() => {
@@ -277,6 +311,7 @@ export function ChatView({
 
 
   const handleSend = useCallback(async (text: string, attachments: ComposerAttachment[], constraints: ComposerConstraints) => {
+    if (!currentView()) return;
     const unsupported = attachments.length > 0 ? CHAT_ATTACHMENTS_UNAVAILABLE
       : constraints.node_id || (constraints.privacy_level && constraints.privacy_level !== "standard") || constraints.budget_limit_usd !== undefined
         ? CHAT_CONSTRAINTS_UNAVAILABLE : "";
@@ -294,12 +329,15 @@ export function ChatView({
     setStreaming(true);
     setLiveEvents([]);
     const requestId = crypto.randomUUID();
-    const originalController = getConfig().url;
     setActiveRunId(requestId);
 
+    abortRef.current?.abort();
+    subscriptionRef.current?.close();
     const controller = new AbortController();
     abortRef.current = controller;
+    const isCurrent = () => currentView() && abortRef.current === controller && !controller.signal.aborted;
     const appendEvent = (event: RuntimeEventEnvelope) => {
+      if (!isCurrent()) return;
       setLiveEvents((current) => {
         if (current.some((item) => item.event_id === event.event_id)) return current;
         return [...current, event].sort((a, b) => a.sequence - b.sequence).slice(-80);
@@ -310,6 +348,7 @@ export function ChatView({
       (event) => appendEvent(event as RuntimeEventEnvelope),
       { intervalMs: 500 },
     );
+    subscriptionRef.current = subscription;
 
     try {
       const result = await runPrompt(
@@ -321,7 +360,7 @@ export function ChatView({
         requestId,
         workspaceFile ? [{ path: workspaceFile.path, sha256: workspaceFile.sha256 }] : undefined,
       );
-      if (getConfig().url !== originalController) throw new Error("Controller changed; inspect the original request before continuing.");
+      if (!isCurrent()) return;
       if (result.status === "failed" || result.status === "selected_input_rejected") {
         throw new Error(describeRuntimeFailure(result.message || ""));
       }
@@ -335,12 +374,14 @@ export function ChatView({
       let terminalEvents: RuntimeEventEnvelope[] = [];
       try {
         const page = await fetchRunEvents(requestId, 0);
+        if (!isCurrent()) return;
         terminalEvents = page.events as RuntimeEventEnvelope[];
         terminalEvents.forEach(appendEvent);
       } catch {
         // The response remains authoritative if telemetry replay is unavailable.
       }
 
+      if (!isCurrent()) return;
       const asstMsg = {
         id: `a_${Date.now()}`, role: "assistant", content,
         timestamp: new Date().toISOString(), traceId, runId,
@@ -353,7 +394,7 @@ export function ChatView({
       };
       setLocalMessages((prev) => [...prev, asstMsg]);
     } catch (err: any) {
-      if (err?.name === "AbortError") return;
+      if (!isCurrent() || err?.name === "AbortError") return;
       setLocalMessages((prev) => [...prev, {
         id: `e_${Date.now()}`, role: "system",
         content: `Error: ${err instanceof Error ? err.message : "Request failed"}`,
@@ -361,15 +402,21 @@ export function ChatView({
       }]);
     } finally {
       subscription.close();
-      setLoading(false);
-      setStreaming(false);
-      setActiveRunId("");
-      abortRef.current = null;
+      if (subscriptionRef.current === subscription) subscriptionRef.current = null;
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        if (currentView()) {
+          setLoading(false);
+          setStreaming(false);
+          setActiveRunId("");
+        }
+      }
     }
-  }, [conversationId, onConversationCreated, workspaceFile, readOnly, onProposalCreated]);
+  }, [conversationId, onConversationCreated, workspaceFile, readOnly, onProposalCreated, currentView]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
+    subscriptionRef.current?.close();
     setStreaming(false);
     setLoading(false);
   }, []);

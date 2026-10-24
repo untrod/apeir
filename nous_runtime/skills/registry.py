@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
 import re
 import shutil
 import tempfile
+import threading
+import uuid
 import zipfile
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterator, Mapping
 
 from nous_runtime.artifact.content_store import ContentAddressedArtifactStore
 from nous_runtime.artifact.models import ArtifactType
@@ -32,6 +35,7 @@ _STATE_SCHEMA = "apeir.skill-registry-state/v1"
 _CATALOG_SCHEMA = "apeir.skill-catalog/v1"
 _MAX_CATALOG_BYTES = 1024 * 1024
 _MAX_CATALOG_SKILLS = 512
+_WRITER_OWNERSHIP = threading.local()
 _PROVIDER_PRIORITY = {
     "project": 50,
     "installed": 40,
@@ -84,6 +88,37 @@ class SkillRegistry:
         )
         self.state_path = self.workspace / ".nous" / "skills.json"
         self.diagnostics: list[dict[str, str]] = []
+
+    @contextmanager
+    def _writer_lock(self) -> Iterator[None]:
+        """Fence Skill lifecycle writes, including trusted same-thread callbacks.
+
+        This reuses the existing state lock with state -> Extension -> CAS order.
+        PID binding prevents inherited ownership from bypassing a lock on fork.
+        """
+        held = getattr(_WRITER_OWNERSHIP, "held", None)
+        if held is None:
+            held = _WRITER_OWNERSHIP.held = set()
+        owner = (os.getpid(), str(self.state_path))
+        if owner in held:
+            yield
+            return
+        with file_lock(self.state_path.with_suffix(".lock")):
+            held.add(owner)
+            try:
+                yield
+            finally:
+                held.remove(owner)
+
+    def _retention_owner(self, extension_id: str) -> str:
+        return hashlib.sha256(
+            (
+                "apeir.installed-skill/v1\0"
+                + str(self.extensions.root)
+                + "\0"
+                + extension_id
+            ).encode("utf-8")
+        ).hexdigest()
 
     def list(
         self, *, include_disabled: bool = False, include_catalogs: bool = True
@@ -178,6 +213,19 @@ class SkillRegistry:
     ) -> SkillRecord:
         """Inspect, copy, evidence, and register a Skill without executing scripts."""
 
+        with self._writer_lock(), self.extensions._writer_lock():
+            return self._install(
+                source, expected=expected, before_publish=before_publish
+            )
+
+    def _install(
+        self,
+        source: str | Path,
+        *,
+        expected: SkillRecord | None,
+        before_publish: Callable[[], None] | None,
+    ) -> SkillRecord:
+
         # Snapshot bounded source bytes first. The exact reviewed snapshot, CAS
         # bundle and Extension object must agree before either index is visible.
         with tempfile.TemporaryDirectory(prefix="apeir-skill-install-") as temporary:
@@ -236,7 +284,10 @@ class SkillRegistry:
                 },
             )
             artifact_ref = str(artifact["artifact"]["digest"])
-            store.pin(artifact_ref, reason=f"installed-skill:{manifest.extension_id}")
+            attempt_owner = hashlib.sha256(uuid.uuid4().bytes).hexdigest()
+            installed_owner = self._retention_owner(manifest.extension_id)
+            reason = f"installed-skill:{manifest.extension_id}"
+            store.pin(artifact_ref, reason=reason, owner=attempt_owner)
 
             def revalidate_publication():
                 if before_publish is not None:
@@ -258,9 +309,25 @@ class SkillRegistry:
                             "review an explicit migration first"
                         )
 
-            installed = self.extensions.install(
-                staged, artifact_ref=artifact_ref, before_publish=revalidate_publication
-            )
+            published = retained = False
+            try:
+                installed = self.extensions.install(
+                    staged,
+                    artifact_ref=artifact_ref,
+                    before_publish=revalidate_publication,
+                )
+                published = True
+                store.pin(artifact_ref, reason=reason, owner=installed_owner)
+                retained = True
+            finally:
+                # If promotion fails after publication, keep preparation evidence
+                # protected and fail closed. Never report successful cleanup by
+                # making a published installation collectible.
+                if not published or retained:
+                    store.unpin(artifact_ref, owner=attempt_owner)
+            previous_artifact = str((previous or {}).get("artifact_ref") or "")
+            if previous_artifact and previous_artifact != artifact_ref:
+                store.unpin(previous_artifact, owner=installed_owner)
         # Existing enable/disable state survives updates. New Skills have the
         # existing enabled default; neither case grants execution permission.
         assert installed.provenance is not None
@@ -359,7 +426,11 @@ class SkillRegistry:
             with tempfile.TemporaryDirectory(prefix="apeir-remote-skill-") as temporary:
                 archive = Path(temporary) / "package.zip"
                 archive.write_bytes(content)
-                with file_lock(self.state_path.with_suffix(".lock")):
+                with self._writer_lock():
+                    # Acquisition can outlive authority or the reviewed catalog.
+                    # Reject before local CAS/Extension/SBOM preparation, while
+                    # retaining the final publication check below for later races.
+                    revalidate()
                     try:
                         return self.install(
                             archive, expected=entry, before_publish=revalidate
@@ -383,18 +454,15 @@ class SkillRegistry:
         return self.install(source, expected=entry, before_publish=before_publish)
 
     def update(self, source: str | Path) -> SkillRecord:
-        candidate = ExtensionInspector().inspect(source)
-        self._require_skill_manifest(candidate)
-        skill_id = candidate.skills[0].name
-        try:
-            current = self.resolve(f"installed:{skill_id}", include_disabled=True)
-        except KeyError as exc:
-            raise ValueError(f"skill is not installed: {skill_id}") from exc
-        previous_artifact = current.artifact_ref
-        updated = self.install(source)
-        if previous_artifact and previous_artifact != updated.artifact_ref:
-            ContentAddressedArtifactStore(self.artifact_root).unpin(previous_artifact)
-        return updated
+        with self._writer_lock():
+            candidate = ExtensionInspector().inspect(source)
+            self._require_skill_manifest(candidate)
+            skill_id = candidate.skills[0].name
+            try:
+                self.resolve(f"installed:{skill_id}", include_disabled=True)
+            except KeyError as exc:
+                raise ValueError(f"skill is not installed: {skill_id}") from exc
+            return self.install(source)
 
     def remove(
         self,
@@ -404,7 +472,7 @@ class SkillRegistry:
         expected_version: str = "",
         before_publish: Callable[[], None] | None = None,
     ) -> bool:
-        with file_lock(self.state_path.with_suffix(".lock")):
+        with self._writer_lock():
             return self._remove(
                 skill_id,
                 expected_digest=expected_digest,
@@ -440,14 +508,16 @@ class SkillRegistry:
         if not removed:
             return False
         state = self._state()
-        artifact_ref = (
-            str(state.setdefault("installed_artifacts", {}).pop(extension_id, ""))
-            or record.artifact_ref
-        )
+        # The verified Extension record is canonical. A historical Skill-state
+        # projection must not shadow the current package's retention identity.
+        state.setdefault("installed_artifacts", {}).pop(extension_id, None)
+        artifact_ref = record.artifact_ref
         state.setdefault("enabled", {}).pop(record.skill_id, None)
         self._write_state(state)
         if artifact_ref:
-            ContentAddressedArtifactStore(self.artifact_root).unpin(artifact_ref)
+            ContentAddressedArtifactStore(self.artifact_root).unpin(
+                artifact_ref, owner=self._retention_owner(extension_id)
+            )
         return True
 
     def enable(
@@ -508,7 +578,7 @@ class SkillRegistry:
         catalog = self._read_catalog(source, allow_remote=remote)
         if remote:
             self._validate_remote_entries(catalog, source)
-        with file_lock(self.state_path.with_suffix(".lock")):
+        with self._writer_lock():
             state = self._state()
             catalogs = state.setdefault("catalogs", [])
             if source not in catalogs:
@@ -524,7 +594,7 @@ class SkillRegistry:
     def remove_catalog(
         self, source: str, *, before_publish: Callable[[], None] | None = None
     ) -> bool:
-        with file_lock(self.state_path.with_suffix(".lock")):
+        with self._writer_lock():
             state = self._state()
             catalogs = state.setdefault("catalogs", [])
             if source not in catalogs:
@@ -709,7 +779,7 @@ class SkillRegistry:
         expected_extension_id: str,
         before_publish: Callable[[], None] | None,
     ) -> SkillRecord:
-        with file_lock(self.state_path.with_suffix(".lock")):
+        with self._writer_lock():
             record = self.resolve(skill_id, include_disabled=True)
             # Use the existing state -> Extension writer order, shared with
             # installed package removal/acquisition. The reviewed installed
@@ -820,7 +890,7 @@ class SkillRegistry:
         authorize_remote(source)
         catalog = self._read_catalog(source, allow_remote=True)
         self._validate_remote_entries(catalog, source)
-        with file_lock(self.state_path.with_suffix(".lock")):
+        with self._writer_lock():
             state = self._state()
             if source not in state.get("catalogs", []):
                 raise PermissionError("Skill catalog was removed during acquisition")

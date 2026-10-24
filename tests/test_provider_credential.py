@@ -332,33 +332,50 @@ def test_config_without_api_key_has_no_direct_credential_flag(tmp_path, monkeypa
 
 def test_register_provider_from_config_persists_reference_only(tmp_path, monkeypatch):
     from nous_runtime.cli import provider_setup
+    from nous_runtime.model_runtime.factory import gateway_service
+    from nous_runtime.provider.registry import ProviderRegistry
 
     monkeypatch.delenv("NOUS_WORKSPACE_ROOT", raising=False)
+    monkeypatch.delenv("NOUS_NO_INTELLIGENCE", raising=False)
     (tmp_path / ".nous").mkdir()
     monkeypatch.chdir(tmp_path)
-    registered: list[tuple[str, dict]] = []
-    monkeypatch.setattr(
-        provider_setup,
-        "_register_provider_runtime",
-        lambda provider_id, *, config: registered.append((provider_id, config)),
-    )
+    registry = ProviderRegistry()
+    previous = registry.get("deepseek")
+    gateway = gateway_service.get(required=False)
+    try:
+        assert provider_setup.register_provider_from_config(
+            provider_id="deepseek",
+            name="DeepSeek",
+            api_base_url="https://api.deepseek.com",
+            credential_ref="env:DEEPSEEK_API_KEY",
+            capabilities=["Reasoning", "Coding"],
+        )
 
-    assert provider_setup.register_provider_from_config(
-        provider_id="deepseek",
-        name="DeepSeek",
-        api_base_url="https://api.deepseek.com",
-        credential_ref="env:DEEPSEEK_API_KEY",
-        capabilities=["Reasoning", "Coding"],
-    )
-
-    config_path = tmp_path / ".nous" / "providers.json"
-    payload = json.loads(config_path.read_text(encoding="utf-8"))
-    saved = payload["deepseek"]
-    assert saved["credential_ref"] == "env:DEEPSEEK_API_KEY"
-    assert saved["api_key_env"] == "DEEPSEEK_API_KEY"
-    assert saved["structured_output_mode"] == "json_object"
-    assert "api_key" not in saved
-    assert registered[0][0] == "deepseek"
+        config_path = tmp_path / ".nous" / "providers.json"
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+        saved = payload["deepseek"]
+        assert saved["credential_ref"] == "env:DEEPSEEK_API_KEY"
+        assert saved["api_key_env"] == "DEEPSEEK_API_KEY"
+        assert saved["structured_output_mode"] == "json_object"
+        assert "api_key" not in saved
+        # Verify the published adapter and Gateway rather than a private helper
+        # callback: configuration mutations now prepare the adapter before save.
+        registered = registry.get("deepseek")
+        assert registered is not None
+        assert registered.provider_id == "deepseek"
+        assert registered.credential_ref == "env:DEEPSEEK_API_KEY"
+        assert "deepseek/deepseek-chat" in {
+            record.descriptor.model_id
+            for record in gateway_service.get().registry.list()
+        }
+    finally:
+        registry.remove("deepseek")
+        if previous is not None:
+            registry.install(previous)
+        if gateway is None:
+            gateway_service.clear()
+        else:
+            gateway_service.configure(gateway)
 
 
 def test_register_provider_from_config_rejects_secret_as_env_name(

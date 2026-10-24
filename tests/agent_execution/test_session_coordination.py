@@ -155,6 +155,16 @@ def test_uncertain_effect_never_replans_or_replays_after_restart(tmp_path: Path)
     assert "reconciliation" in restored.error
     assert effects == [waiting.workflow_run_id]
     assert restored.result == {}
+    workflow_events = [
+        item for item in restored.observations if item.get("kind") == "workflow_event"
+    ]
+    identities = [(item["run_id"], item["event_id"]) for item in workflow_events]
+    assert len(identities) == len(set(identities))
+    assert {
+        item["event_id"]
+        for item in waiting.observations
+        if item.get("kind") == "workflow_event"
+    } <= {item["event_id"] for item in workflow_events}
     restarted.close()
 
 
@@ -191,7 +201,50 @@ def test_approval_gate_resumes_same_durable_workflow(tmp_path: Path):
     assert completed.state is AgentSessionState.COMPLETED
     assert completed.workflow_run_id == workflow_run_id
     assert completed.result["workflow_outputs"]["execute"] == {"ok": True}
+    workflow_events = [
+        item for item in completed.observations if item.get("kind") == "workflow_event"
+    ]
+    identities = [(item["run_id"], item["event_id"]) for item in workflow_events]
+    assert len(identities) == len(set(identities))
     coordinator.close()
+
+
+def test_long_workflow_replay_retains_newest_unique_events(tmp_path: Path):
+    from nous_runtime.events.models import RunEvent
+    from nous_runtime.workflow import WorkflowRuntime
+
+    coordinator = AgentSessionCoordinator(tmp_path)
+    try:
+        session = coordinator.create(
+            agent_id="review-agent", model="test-model", objective="Await review"
+        )
+        waiting = coordinator.submit_plan(
+            session.session_id,
+            TaskPlan(
+                task_id=session.session_id,
+                steps=(PlanStep("approve", "Human approval", "governance.approval"),),
+            ),
+        )
+        runtime = WorkflowRuntime(str(tmp_path))
+        for index in range(300):
+            runtime.events.emit(
+                RunEvent(
+                    run_id=waiting.workflow_run_id,
+                    event_type="workflow.progress",
+                    payload={"index": index},
+                )
+            )
+        coordinator.resume_plan(session.session_id)
+        replayed = coordinator.resume_plan(session.session_id)
+        original = runtime.events.load_events(waiting.workflow_run_id)
+        assert replayed.state is AgentSessionState.WAITING
+        assert replayed.pending_approvals == ("approve",)
+        assert replayed.workflow_run_id == waiting.workflow_run_id
+        assert list(replayed.observations) == [
+            {"kind": "workflow_event", **event.to_dict()} for event in original[-256:]
+        ]
+    finally:
+        coordinator.close()
 
 
 def test_plan_orchestrates_artifact_across_multiple_nodes(tmp_path: Path):

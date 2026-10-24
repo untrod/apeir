@@ -5,19 +5,30 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      diagnostic:
+        description: Optional investigation; never qualifies the Core gate
+        type: choice
+        default: none
+        options: [none, windows-skill-http, windows-governance]
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.diagnostic || 'none' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   python-tests:
-    name: Python Tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnostic != 'none' && 'Full regression not selected (diagnostic only)' || format('Python Tests ({0}, Python {1})', matrix.os, matrix.python) }}
+    if: github.event_name != 'workflow_dispatch' || inputs.diagnostic == 'none'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-22.04","python":"3.12"}]' || '[{"os":"ubuntu-22.04","python":"3.10"},{"os":"ubuntu-22.04","python":"3.12"},{"os":"windows-latest","python":"3.12"},{"os":"macos-14","python":"3.12"}]') }}
+        include:
+          - { os: ubuntu-22.04, python: '3.10' }
+          - { os: ubuntu-22.04, python: '3.12' }
+          - { os: windows-latest, python: '3.12' }
+          - { os: macos-14, python: '3.12' }
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,8 +76,10 @@ jobs:
           m = re.search(r'(\d+) tests collected', p.stdout);
           raise SystemExit(0 if p.returncode == 0 and m and int(m.group(1)) >= 2452 else 1)"
   core-gate:
-    name: Core gate
-    if: always()
+    # A skipped check also satisfies GitHub protection. Give diagnostic skips a
+    # different context so they cannot replace the required Core gate evidence.
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnostic != 'none' && 'Core qualification not selected (diagnostic only)' || 'Core gate' }}
+    if: always() && (github.event_name != 'workflow_dispatch' || inputs.diagnostic == 'none')
     needs: [python-tests]
     runs-on: ubuntu-latest
     steps:
@@ -74,3 +87,29 @@ jobs:
         env:
           RESULT: ${{ needs.python-tests.result }}
         run: test "$RESULT" = success
+  windows-skill-http-diagnostic:
+    name: Windows Governance diagnostic (not Core qualification)
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnostic != 'none'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # Match Core's initialization failure or the earlier Multi-Arch HTTP case.
+          python-version: ${{ inputs.diagnostic == 'windows-governance' && '3.12' || '3.11' }}
+          cache: pip
+      - name: Install matching Tier 1 dependencies
+        run: python -m pip install ".[tier1,dev,a2a,mcp]"
+      - name: Exercise original owned HTTP and TLS paths
+        if: inputs.diagnostic == 'windows-skill-http'
+        env:
+          APEIR_SKILL_HTTP_DIAGNOSTIC: '1'
+        run: python -m pytest -q tests/governance/test_sqlite_connection_lifecycle.py tests/control_plane/test_remote_skill_center.py --tb=short --timeout=60 -rA
+      - name: Exercise original Governance initialization and identity failures
+        if: inputs.diagnostic == 'windows-governance'
+        run: python -m pytest -q tests/governance/test_sqlite_connection_lifecycle.py tests/control_plane/test_human_sessions.py tests/context/test_guard_admission.py --tb=short --timeout=60 -rA
+      - name: Governance and Control Plane regression after focused qualification
+        if: inputs.diagnostic == 'windows-governance'
+        env:
+          APEIR_SKILL_HTTP_DIAGNOSTIC: '1'
+        run: python -m pytest -q tests/governance tests/control_plane --tb=short --timeout=60 -rA

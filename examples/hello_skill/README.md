@@ -55,10 +55,13 @@ before publication; CAS failures and failed index publication preserve the prior
 valid installation. Disabled state survives updates and restart. Revoked installed
 Skills cannot be restored by reinstalling through the Catalog.
 
-This delivery qualifies local catalog management and source-browser controls.
-Remote package acquisition is **not qualified** and is rejected. Passive Console
-refresh does not fetch remote catalogs. Real IdP, installed Windows Desktop and
-physical execution retain their separate qualification gates. A hard crash between
+This example qualifies local catalog management and source-browser controls.
+The existing [reviewed HTTPS catalog path](../../docs/architecture/SECURITY_CONTRACT.md#skillextension-acquisition-before-publication)
+separately exercises controlled remote acquisition, including owned HTTP/TLS
+integration tests. It does not qualify arbitrary publishers or executable Skill
+workflows. Passive Console refresh does not fetch remote catalogs. Real IdP,
+installed Windows Desktop and physical execution retain their separate
+qualification gates. A hard crash between
 Extension index and lock publication fails closed; this is not a multi-file crash
 transaction. Staged CAS evidence can remain pinned after failed publication for
 inspection; no automatic deletion of failure evidence is introduced.

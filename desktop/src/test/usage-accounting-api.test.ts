@@ -40,7 +40,7 @@ describe("canonical usage accounting API", () => {
       setConfig({ url: "http://localhost:8770", token: serviceToken });
       return { ok: true, json: async () => ({ ok: true, data: usageFixture() }) };
     }));
-    await expect(read()).rejects.toThrow("Controller connection changed");
+    await expect(read()).rejects.toMatchObject({ code: "NOUS_CONTROLLER_CHANGED" });
   });
 
   it("invalidates a pending usage response when credentials change on the same Controller", async () => {
@@ -48,6 +48,6 @@ describe("canonical usage accounting API", () => {
       setConfig({ url: "http://localhost:8770", token: "fake.changed.service" });
       return { ok: true, json: async () => ({ ok: true, data: usageFixture() }) };
     }));
-    await expect(fetchUsageSummary()).rejects.toThrow("Controller connection changed");
+    await expect(fetchUsageSummary()).rejects.toMatchObject({ code: "NOUS_CONTROLLER_CHANGED" });
   });
 });

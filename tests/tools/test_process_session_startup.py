@@ -147,9 +147,12 @@ def _cleanup_original_session(store, session_id):
                 current = store.status(session_id)
                 if current["state"] in process_session._TERMINAL_STATES:
                     return current
-                # This exception is raised before a control file is written.
-                # Each next attempt still performs the original identity check.
-                if str(exc) != "process session is not running: RECOVERY_REQUIRED":
+                # A diagnostic suffix must not change the refusal contract.
+                # Recheck the original journal before another admission attempt;
+                # an accepted or ambiguous control must never be repeated.
+                if not str(exc).startswith(
+                    "process session is not running: RECOVERY_REQUIRED"
+                ) or any((store.root / session_id / "control").glob("*.json")):
                     raise
             else:
                 accepted = True

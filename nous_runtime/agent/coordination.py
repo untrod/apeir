@@ -346,13 +346,21 @@ class AgentSessionCoordinator:
                 if isinstance(output, Mapping) and output.get("work_id")
             )
         )
+        # Resume reloads full history. Keep the newest distinct projections so
+        # replayed old entries cannot displace the current bounded window.
+        observations: list[Mapping[str, Any]] = []
+        for observation in reversed(
+            (*session.observations, *events, *reality_evidence)
+        ):
+            if observation not in observations:
+                observations.append(observation)
+                if len(observations) == _OBSERVATION_LIMIT:
+                    break
         session = replace(
             session,
             workflow_run_id=run.run_id,
             active_work=work_ids,
-            observations=(*session.observations, *events, *reality_evidence)[
-                -_OBSERVATION_LIMIT:
-            ],
+            observations=tuple(reversed(observations)),
             updated_at=session_timestamp(),
         )
         if run.state is WorkflowState.COMPLETED:

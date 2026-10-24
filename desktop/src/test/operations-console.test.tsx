@@ -1,13 +1,60 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OperationsConsole, type OperationsSnapshot } from "../components/OperationsConsole";
-import { setConfig } from "../lib/api";
+import { getConfig, setConfig } from "../lib/api";
 
 const fixture: OperationsSnapshot = {
   agents: [], works: [{ work_id: "uncertain-effect-1", state: "UNKNOWN", execution_capability: "device.firmware.update" }], workflows: [], nodes: [{ node_id: "jetson-sim-1", state: "ONLINE" }], devices: [{ device_id: "actuator-sim-1", lifecycle: "AVAILABLE" }], approvals: [{ request_id: "approval-original-1", status: "PENDING" }], grants: [], credential_leases: [], artifacts: [], evidence: [{ work_id: "uncertain-effect-1", receipt: { status: "SUCCEEDED" }, effect_verification: { verdict: "UNKNOWN" } }], activity: [], incidents: [], health: { degraded: true, components: [] }, controls: { actions: ["approve_once", "deny", "interrupt", "reconcile"] },
 };
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear(); setConfig({ url: "http://localhost:8770", token: "" }); window.history.replaceState({}, "", "/"); });
 describe("Operations Console", () => {
+  it("connects with an explicit service session without persisting it in layout storage", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: fixture }) });
+    vi.stubGlobal("fetch", fetcher);
+    render(<OperationsConsole />);
+    await screen.findByRole("button", { name: "uncertain-effect-1" });
+    const session = "APEIR_FAKE_ONLY_EXPLICIT_SERVICE_SESSION";
+    const field = screen.getByLabelText("Service session token");
+    expect(field).toHaveAttribute("type", "password");
+    fireEvent.change(screen.getByLabelText("API URL"), { target: { value: "http://127.0.0.1:8770" } });
+    fireEvent.change(field, { target: { value: session } });
+    fireEvent.submit(field.closest("form")!);
+    await waitFor(() => expect(getConfig()).toEqual({ url: "http://127.0.0.1:8770", token: session }));
+    await waitFor(() => expect(fetcher.mock.calls.some(([url, options]) => url.endsWith("/control/operations") && options.headers.Authorization === `Bearer ${session}`)).toBe(true));
+    expect(field).toHaveValue("");
+    expect(Array.from({ length: localStorage.length }, (_, i) => localStorage.getItem(localStorage.key(i)!)).join("\n")).not.toContain(session);
+    expect(screen.getByText("Observe mode · human authentication required for actions")).toBeInTheDocument();
+    expect(fetcher.mock.calls.every(([, options]) => !options.method || options.method === "GET")).toBe(true);
+  });
+
+  it("clears a drafted session on address edits and never carries the original session to another Controller", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: fixture }) });
+    vi.stubGlobal("fetch", fetcher);
+    setConfig({ url: "https://controller-a.example.test", token: "APEIR_FAKE_ONLY_ORIGINAL_SESSION" });
+    render(<OperationsConsole />);
+    await screen.findByRole("button", { name: "uncertain-effect-1" });
+    const field = screen.getByLabelText("Service session token");
+    fireEvent.change(field, { target: { value: "APEIR_FAKE_ONLY_DRAFT_SESSION" } });
+    fireEvent.change(screen.getByLabelText("API URL"), { target: { value: "https://controller-b.example.test" } });
+    expect(field).toHaveValue("");
+    fireEvent.submit(field.closest("form")!);
+    await waitFor(() => expect(getConfig()).toEqual({ url: "https://controller-b.example.test", token: "" }));
+    const newCalls = fetcher.mock.calls.filter(([url]) => url.startsWith("https://controller-b.example.test/"));
+    expect(newCalls.length).toBeGreaterThan(0);
+    expect(newCalls.every(([, options]) => !options.headers.Authorization)).toBe(true);
+  });
+
+  it("discards the unsent service session when another view changes the connection", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: fixture }) }));
+    render(<OperationsConsole />);
+    await screen.findByRole("button", { name: "uncertain-effect-1" });
+    const field = screen.getByLabelText("Service session token");
+    fireEvent.change(field, { target: { value: "APEIR_FAKE_ONLY_UNSENT_SESSION" } });
+    act(() => { setConfig({ url: "https://other-controller.example.test", token: "" }); });
+    expect(field).toHaveValue("");
+    expect(screen.getByLabelText("API URL")).toHaveValue("https://other-controller.example.test");
+  });
+
   it("opens the existing Environment API view without model requests or duplicated state", async () => {
     const fetcher = vi.fn().mockImplementation(async (url: string) => ({ ok: true, json: async () => ({ ok: true, data: url.endsWith("/environments/status") ? { environments: 0, providers: [] } : url.endsWith("/environments") ? { environments: [], total: 0 } : fixture }) }));
     vi.stubGlobal("fetch", fetcher);
@@ -90,7 +137,10 @@ describe("Operations Console", () => {
     const count = fetcher.mock.calls.length;
     for (const address of ["http://remote.example", "https://user:fake@remote.example", "https://remote.example?credential=fake", "https://remote.example#token"]) {
       fireEvent.change(screen.getByRole("textbox", { name: "API URL" }), { target: { value: address } });
+      fireEvent.change(screen.getByLabelText("Service session token"), { target: { value: "APEIR_FAKE_ONLY_REJECTED_TARGET_SESSION" } });
       fireEvent.submit(screen.getByRole("textbox", { name: "API URL" }).closest("form")!);
+      expect(screen.getByLabelText("Service session token")).toHaveValue("");
+      expect(screen.getByRole("alert")).not.toHaveTextContent("APEIR_FAKE_ONLY_REJECTED_TARGET_SESSION");
       expect(screen.getByRole("alert")).toHaveTextContent("Controller requires HTTPS");
       expect(fetcher.mock.calls.length).toBe(count);
       expect(screen.getByRole("alert")).not.toHaveTextContent(address);
@@ -507,4 +557,35 @@ describe("generic Operations original response handling", () => {
     expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/human/logout"))).toHaveLength(1);
     expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/operations/actions"))).toHaveLength(0);
   });
+});
+
+it("reopens Workspace state on a same-address identity change without carrying old drafts", async () => {
+  const originalScroll = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = vi.fn();
+  let close = () => {};
+  try {
+    const fetcher = vi.fn().mockImplementation(async (url: string) => {
+      let data: unknown = fixture;
+      if (url.includes("/workspace/files")) data = { workspace: "/owned", path: ".", total: 1, truncated: false, files: [{ path: "a.py", size_bytes: 3, modified_at: "", language: "python" }], profiles: [] };
+      else if (url.includes("/workspace/file?")) data = { path: "a.py", content: "old", sha256: "a".repeat(64), size_bytes: 3, language: "python" };
+      else if (url.includes("/workspace/proposals")) data = { proposals: [], total: 0 };
+      else if (url.endsWith("/developer/capabilities")) data = { available: [], unavailable: [], summary: { available: 0, unavailable: 0, registered: 0 } };
+      else if (url.includes("/developer/runs")) data = { runs: [], total: 0 };
+      return { ok: true, json: async () => ({ ok: true, data }) };
+    });
+    vi.stubGlobal("fetch", fetcher);
+    setConfig({ url: "http://localhost:8770", token: "fake.original" });
+    const view = render(<OperationsConsole />); close = view.unmount;
+    fireEvent.click(await screen.findByRole("button", { name: "workspace" }));
+    fireEvent.click(await screen.findByRole("button", { name: "a.py" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue("old"));
+    fireEvent.change(screen.getByRole("textbox", { name: "Code editor" }), { target: { value: "private original draft" } });
+    act(() => {
+      setConfig({ url: "http://localhost:8770", token: "fake.other" });
+      setConfig({ url: "http://localhost:8770", token: "fake.original" });
+    });
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Code editor" })).toHaveValue(""));
+    expect(screen.queryByRole("tab", { name: /a.py/ })).not.toBeInTheDocument();
+    expect(JSON.stringify(localStorage)).not.toContain("private original draft");
+  } finally { close(); Element.prototype.scrollIntoView = originalScroll; }
 });

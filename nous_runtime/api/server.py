@@ -357,6 +357,10 @@ class RuntimeAPIHandler(BaseHTTPRequestHandler):
             return 403
         if code == "NOUS_INVALID_REQUEST":
             return 400
+        if code == "NOUS_EVENT_CURSOR_UNAVAILABLE":
+            return 409
+        if code == "NOUS_EVENT_STREAM_UNAVAILABLE":
+            return 503
         return 500
 
 

@@ -9,6 +9,28 @@ effect verification and recovery. Reuse mature external agent harnesses, cluster
 schedulers, policy engines, secret stores, identity systems and device ecosystems
 instead of rebuilding them as competing authorities.
 
+### Official-source adoption review, 2026-10-18
+
+Repository identity, current default branch and license metadata were queried
+for the projects below. Codex App Server documentation, ACP/A2A/Agent Skills
+READMEs and the Dify/n8n license texts were also read. This is an adoption review,
+not an exercised integration or legal clearance for every dependency, enterprise
+component, hosted service or model weight. No third-party implementation was
+copied. A mutable upstream default branch is not a pinned protocol version.
+
+| Official project / source | Decision | Existing APEIR seam and qualification limit |
+| --- | --- | --- |
+| [Codex](https://github.com/openai/codex) | INTEGRATE | Official App Server/SDK, not a replacement Harness; Apache-2.0 repository. Latest stable release observed was `rust-v0.163.0`; current default-branch App Server documentation blob `2c4d9a70e79865780120b76030234008b25c12c9` is not proof the release supports every documented field. Full authenticated turn/filesystem/recovery qualification remains pending. |
+| [Claude Code](https://github.com/anthropics/claude-code), [Cursor](https://github.com/cursor/cursor) | DEFER | Product/protocol interoperability only; public repository visibility is not a license to copy their clients or hosted commercial features. Claude README links commercial terms; neither repository supplied a permissive SPDX license in this audit. |
+| [OpenHands](https://github.com/OpenHands/OpenHands), [OpenCode](https://github.com/anomalyco/opencode), [Cline](https://github.com/cline/cline), [OpenClaw](https://github.com/openclaw/openclaw), [Hermes Agent](https://github.com/NousResearch/hermes-agent) | DEFER | Replaceable Intelligence/Execution Providers after a concrete task and complete conformance; current repository metadata respectively MIT, MIT, Apache-2.0, MIT, MIT does not qualify their services or every component. No second Agent engine. |
+| [Dify](https://github.com/langgenius/dify), [n8n](https://github.com/n8n-io/n8n), [Node-RED](https://github.com/node-red/node-red), [LangGraph](https://github.com/langchain-ai/langgraph) | DEFER | Integrate concrete external flows through existing Work/Workflow if needed, never duplicate their general visual engines. Dify uses modified Apache terms with additional conditions; n8n Sustainable Use and Enterprise exclusions require separate review. Node-RED metadata is Apache-2.0; LangGraph MIT. |
+| [Ray](https://github.com/ray-project/ray) | INTEGRATE | Existing bounded ExecutionProvider diagnostic; Apache-2.0. PID64 default remains unchanged; diagnostic evidence is not production cluster/GPU acceptance. |
+| [Ollama](https://github.com/ollama/ollama), [vLLM](https://github.com/vllm-project/vllm) | REUSE THIRD-PARTY | Serve local models through existing Gateway/Provider adapters; MIT and Apache-2.0 repository metadata respectively. Actual model/weight license, hardware, API capabilities and inference must be qualified separately. Do not build an inference server. |
+| [ROS 2](https://github.com/ros2/ros2), [ESP-IDF](https://github.com/espressif/esp-idf) | INTEGRATE | Device/Environment adapters and existing signed Work; ROS aggregate requires per-package license review, ESP-IDF metadata Apache-2.0 with component review still needed. Neither discovery nor successful compilation proves a physical effect. |
+| [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) | REUSE THIRD-PARTY | Official MIT SDK transport in PR #81; existing authenticated HTTP, Governance and Work remain authoritative. Tool discovery grants no permission. |
+| [ACP](https://github.com/agentclientprotocol/agent-client-protocol), [A2A](https://github.com/a2aproject/A2A) | DEFER | Apache-2.0 protocol repositories; implement another adapter only for a real interoperability need, without a new session/authority database. |
+| [Agent Skills](https://github.com/agentskills/agentskills) | INTEGRATE | Existing SkillRegistry/Manifest/Extension/CAS seam. Upstream code is Apache-2.0, documentation CC-BY-4.0; instructions are not executable capability grants. Actual format compatibility and packages require their own tests. |
+
 ## Roles and existing boundaries
 
 | Role | Existing authoritative path | Authority constraint |

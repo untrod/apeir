@@ -1,6 +1,6 @@
 /** Real runtime operations; every mutation returns to the existing Governance gate. */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, captureRuntimeConnection, getConfig, humanMutation, setConfig, subscribeRuntimeConfig } from "../lib/api";
+import { api, captureRuntimeConnection, getConfig, getRuntimeConfigVersion, humanMutation, setConfig, subscribeRuntimeConfig } from "../lib/api";
 import { DeveloperWorkbench } from "./DeveloperWorkbench";
 import { AutomationInspector } from "./AutomationInspector";
 import { DeveloperPlatform } from "./DeveloperPlatform";
@@ -38,6 +38,7 @@ function loadLayout(): Layout {
   } catch { return defaultLayout; }
 }
 const translations: Record<string, string> = {
+  "Service session token": "服务会话令牌", "Use a Runtime session, never a Provider API key. Blank keeps the session only for the same address.": "请使用 Runtime 会话令牌，不要输入模型 API 密钥。留空仅保留相同地址的已有会话。",
   "Conflicting installed Skill identities require a reviewed migration. Management is blocked.": "已安装技能存在身份冲突，需要审查迁移方案。管理操作已阻止。",
   automations: "自动化", workspace: "开发者面板", usage: "模型实验室 / 用量", environments: "开发环境", skills: "技能", "Review package": "审查技能包", "Install reviewed package": "安装已审查包", "Load instructions": "读取说明", "Enable": "启用", "Disable": "禁用", "Uninstall": "卸载",
   works: "任务", nodes: "节点", pairings: "节点配对", "Add Node": "添加节点", "Create one-time invitation": "创建一次性邀请", "Confirm Controller identity": "确认 Controller 身份", "Trust this Node once": "信任此节点", devices: "设备", approvals: "审批", evidence: "证据", incidents: "事件处置", agents: "智能体", workflows: "工作流", grants: "授权", credential_leases: "凭据租约", artifacts: "工件", activity: "活动",
@@ -92,6 +93,7 @@ export function OperationsConsole() {
   const [snapshot, setSnapshot] = useState<OperationsSnapshot | null>(null);
   const collection = layout.active;
   const [workspaceOpened, setWorkspaceOpened] = useState(layout.tabs.includes("workspace"));
+  const [connectionEpoch, setConnectionEpoch] = useState(getRuntimeConfigVersion);
   const [automationsOpened, setAutomationsOpened] = useState(layout.tabs.includes("automations"));
   const [workspaceDraft, setWorkspaceDraft] = useState(false);
   const [query, setQuery] = useState("");
@@ -108,6 +110,7 @@ export function OperationsConsole() {
   const [controllerConfirmed, setControllerConfirmed] = useState(false);
   const [invitation, setInvitation] = useState<Row | null>(null);
   const [endpoint, setEndpoint] = useState(getConfig().url);
+  const [sessionToken, setSessionToken] = useState("");
   const callbackHandled = useRef(false);
   const sequence = useRef(0);
   const refreshSequence = useRef(0);
@@ -236,7 +239,7 @@ export function OperationsConsole() {
   }
   useEffect(() => {
     active.current = true;
-    const unsubscribe = subscribeRuntimeConfig(() => { refreshSequence.current++; updateHuman(null); setSnapshot(null); setDetails(null); setSkillContent(null); setInvitation(null); sequence.current = 0; });
+    const unsubscribe = subscribeRuntimeConfig(() => { setConnectionEpoch(getRuntimeConfigVersion()); setEndpoint(getConfig().url); setSessionToken(""); refreshSequence.current++; updateHuman(null); setSnapshot(null); setDetails(null); setSkillContent(null); setInvitation(null); sequence.current = 0; });
     return () => { active.current = false; liveHuman.current = null; unsubscribe(); };
   }, [updateHuman]);
   const enabled = !!human && human.expires_at * 1000 > Date.now() && !busy;
@@ -247,7 +250,23 @@ export function OperationsConsole() {
       <div className="operations-controls"><button onClick={() => void reload()} disabled={busy}>{t("Refresh")}</button><button onClick={() => void signIn()} disabled={busy}>{t(human ? "Renew human session" : "Sign in as human")}</button>{human && <button onClick={() => void signOut()}>{t("Sign out")}</button>}<button onClick={toggle} aria-label="Toggle theme">{resolved === "dark" ? "☀" : "☾"}</button><button onClick={() => setLayout(current => ({ ...current, locale: current.locale === "en" ? "zh" : "en" }))} aria-label="Change language">{layout.locale === "en" ? "中文" : "English"}</button></div>
     </header>
     <details className="operations-demo"><summary>Run the verified simulated demo</summary><p>Start with the source Quick Start. Run these CLI commands in an empty dedicated workspace; results and evidence come from the existing Runtime. Approval here is an explicit local OS-user action.</p><pre>apeir demo --workspace ./demo-match --phase prepare --json{"\n"}apeir demo --workspace ./demo-match --phase resume --approve-once --json</pre><p>SIMULATED · Runtime-service · Kernel not traversed. No physical or remote-human qualification.</p><a href="https://github.com/untrod/apeir/blob/main/examples/hello_runtime/README.md" target="_blank" rel="noreferrer">Failure scenarios and evidence guide</a></details>
-    <details><summary>{t("Controller connection")}</summary><form onSubmit={event => { event.preventDefault(); try { const address = new URL(endpoint); if (address.username || address.password || address.search || address.hash || !(address.protocol === "https:" || (address.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(address.hostname)))) throw new Error("Controller requires HTTPS or loopback HTTP without credentials, query or fragment"); const url = address.href.replace(/\/$/, ""); setConfig({ url, token: url === getConfig().url ? getConfig().token : "" }); updateHuman(null); setInvitation(null); setControllerConfirmed(false); setSnapshot(null); setDetails(null); setSkillContent(null); selectedId.current = null; sequence.current = 0; void reload(); } catch (err) { setError(err instanceof Error ? err.message : "Invalid controller URL"); } }}><label>API URL <input aria-label="API URL" value={endpoint} onChange={event => setEndpoint(event.target.value)} /></label><button>{t("Connect")}</button></form></details>
+    <details><summary>{t("Controller connection")}</summary><form onSubmit={event => {
+      event.preventDefault();
+      try {
+        const address = new URL(endpoint);
+        if (address.username || address.password || address.search || address.hash || !(address.protocol === "https:" || (address.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(address.hostname)))) throw new Error("Controller requires HTTPS or loopback HTTP without credentials, query or fragment");
+        const url = address.href.replace(/\/$/, "");
+        setConfig({ url, token: sessionToken || (url === getConfig().url ? getConfig().token : "") });
+        updateHuman(null); setInvitation(null); setControllerConfirmed(false); setSnapshot(null); setDetails(null); setSkillContent(null); selectedId.current = null; sequence.current = 0;
+        void reload();
+      } catch (err) { setError(err instanceof Error ? err.message : "Invalid controller URL"); }
+      finally { setSessionToken(""); }
+    }}>
+      <label>API URL <input aria-label="API URL" value={endpoint} onChange={event => { setEndpoint(event.target.value); setSessionToken(""); }} /></label>
+      <label>{t("Service session token")} <input type="password" aria-label={t("Service session token")} value={sessionToken} onChange={event => setSessionToken(event.target.value)} autoComplete="off" spellCheck={false} maxLength={4096} /></label>
+      <p>{t("Use a Runtime session, never a Provider API key. Blank keeps the session only for the same address.")}</p>
+      <button>{t("Connect")}</button>
+    </form></details>
     <section aria-label="Secure Node onboarding" className="operations-demo"><button disabled={!snapshot || busy} onClick={() => { setNodeForm(current => !current); setControllerConfirmed(false); }}>{t("Add Node")}</button>{nodeForm && <form onSubmit={event => { event.preventDefault(); if (snapshot?.controller_public_key && controllerConfirmed) void action("pairings", "create", snapshot.controller_public_key, { relay_url: relayAddress }); }}><p>Pairing establishes identity trust only. Work execution still requires Governance. Verify this Controller key through a trusted channel before inviting a Node.</p><label>Controller public key <output>{snapshot?.controller_public_key || "UNKNOWN"}</output></label><label>Relay URL <input aria-label="Relay URL" placeholder="wss://controller.example:9771" value={relayAddress} onChange={event => setRelayAddress(event.target.value)} required /></label><label><input type="checkbox" checked={controllerConfirmed} onChange={event => setControllerConfirmed(event.target.checked)} />{t("Confirm Controller identity")}</label><button disabled={!enabled || !controllerConfirmed || !snapshot?.controller_public_key}>{t("Create one-time invitation")}</button><p>Remote connections require verified WSS/TLS. No default route or DNS changes.</p></form>}{invitation && <div aria-label="One-time Node invitation"><p>Enter this code on your Node. It is not saved in browser storage or an execution credential.</p><strong>{Number(invitation.expires_at) * 1000 > Date.now() ? String(invitation.pairing_code) : "EXPIRED"}</strong><p>Request: {String(invitation.request_id)} · Expires: {new Date(Number(invitation.expires_at) * 1000).toISOString()}</p><pre>{JSON.stringify(["apeir-node", "pair", "--request-id", invitation.request_id, "--relay-url", invitation.relay_url, "--server-public-key", invitation.controller_public_key])}</pre><p>Run the shown arguments in the Node terminal; the code is prompted privately. Inspect its exact public key in the pairings view before approving. After approval or response loss, query the same request with --status.</p><button onClick={() => { setInvitation(null); setNodeForm(false); setControllerConfirmed(false); selectCollection("pairings"); }}>Hide code and inspect pairing</button></div>}</section>
     {error && <p role="alert" className="operations-error">{error}</p>}
     <section className="operations-health" aria-label="System health"><div><span className={`operations-badge ${!snapshot || snapshot.health.degraded ? "uncertain" : "healthy"}`}>{!snapshot ? "UNKNOWN" : snapshot.health.degraded ? "DEGRADED" : "HEALTHY"}</span><p>{human ? `Human: ${human.subject_id}` : t("Observe mode · human authentication required for actions")}</p></div>
@@ -259,7 +278,7 @@ export function OperationsConsole() {
     <div className="operations-tabs" role="tablist" aria-label="Open views">{layout.tabs.map(key => <div key={key}><button role="tab" tabIndex={collection === key ? 0 : -1} aria-selected={collection === key} aria-controls="operations-records" onClick={() => selectCollection(key)} onKeyDown={event => { if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) { event.preventDefault(); const index = event.key === "Home" ? 0 : event.key === "End" ? layout.tabs.length - 1 : (layout.tabs.indexOf(key) + (event.key === "ArrowRight" ? 1 : layout.tabs.length - 1)) % layout.tabs.length; selectCollection(layout.tabs[index]); (event.currentTarget.closest('[role="tablist"]')?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[index])?.focus(); } }}>{layout.locale === "zh" ? t(key) : label(key)}</button>{layout.tabs.length > 1 && <button aria-label={`Close ${label(key)} view`} disabled={key === "workspace" && workspaceDraft} onClick={() => { if (key === "workspace") setWorkspaceOpened(false); const tabs = layout.tabs.filter(item => item !== key); setLayout(current => ({ ...current, tabs, active: current.active === key ? tabs[0] : current.active })); if (collection === key) { setDetails(null); setSkillContent(null); selectedId.current = null; setQuery(""); } }}>×</button>}</div>)}</div>
     {collection !== "environments" && collection !== "workspace" && collection !== "usage" && collection !== "automations" && <label className="operations-search">{t("Search records")}<input ref={searchRef} aria-label="Search records" value={query} onChange={event => setQuery(event.target.value)} placeholder="Ctrl / ⌘ F" /></label>}
     <section id="operations-records" role="tabpanel" aria-label={label(collection)} className="operations-records">
-      {workspaceOpened && <div hidden={collection !== "workspace"}><DeveloperWorkbench key={getConfig().url} onDraftChange={setWorkspaceDraft} onOpenEnvironments={() => selectCollection("environments")} /></div>}
+      {workspaceOpened && <div hidden={collection !== "workspace"}><DeveloperWorkbench key={connectionEpoch} onDraftChange={setWorkspaceDraft} onOpenEnvironments={() => selectCollection("environments")} /></div>}
       {automationsOpened && <div hidden={collection !== "automations"}><AutomationInspector human={human} approvals={snapshot?.approvals ?? []} /></div>}
       {collection === "workspace" || collection === "automations" ? null : collection === "usage" ? <DeveloperPlatform modelsOnly /> : collection === "environments" ? <EnvironmentInspector key={getConfig().url} /> : !snapshot ? <p>{t("Waiting for authoritative runtime data.")}</p> : (snapshot[collection]?.length ?? 0) === 0 ? <p>{layout.locale === "zh" ? `暂无${t(collection)}记录。` : `No ${label(collection)} recorded.`}</p> : rows.length === 0 ? <p>{t("No matching records.")}</p> : rows.map((row, index) => {
         const id = rowId(row);

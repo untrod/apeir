@@ -13,7 +13,7 @@ from typing import Any, Protocol
 
 from nous_runtime.checkpoint.models import Checkpoint
 from nous_runtime.core.redaction import redact_sensitive_data
-from nous_runtime.locking import file_lock
+from nous_runtime.locking import file_lock, runtime_locks
 from nous_runtime.task.exceptions import TaskRuntimeError
 
 
@@ -87,7 +87,13 @@ class SQLiteCheckpointStore:
         # WAL is persistent database state. Serialize its first transition and
         # schema admission across owners; ordinary reads/writes need not try to
         # change journal mode on every connection while another owner is busy.
+        # Queue local owners before the OS lock: Windows LK_LOCK has a finite
+        # retry window, so competing threads must not each consume that window.
         with (
+            runtime_locks.acquire(
+                f"workspace:checkpoint-initialize:{self.path}",
+                owner="checkpoint-schema",
+            ),
             file_lock(self.path.with_name(self.path.name + ".initialize.lock")),
             self._db() as connection,
         ):

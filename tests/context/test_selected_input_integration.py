@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import threading
 import urllib.request
 from dataclasses import replace
@@ -19,7 +20,7 @@ from nous_runtime.context.selected_input import (
     SelectedInputAdmission,
     SelectedInputError,
 )
-from nous_runtime.governance.permission import PermissionRule
+from nous_runtime.governance.permission import PermissionEngine, PermissionRule
 from nous_runtime.model_runtime import (
     GatewayChatHandler,
     ModelAdapterRegistry,
@@ -42,6 +43,26 @@ from tests.context.test_selected_input import (
 from tests.model_runtime.test_gateway import add_model
 
 admitted_context = context_fixture
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows owner-policy ACL contract")
+def test_windows_unprotected_owner_policy_fails_closed(tmp_path):
+    path = tmp_path / "permission-policy.json"
+    path.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {
+                        "subject": "api-service",
+                        "action": "workspace.read",
+                        "resource": "*",
+                    }
+                ]
+            }
+        )
+    )
+    with pytest.raises(PermissionError, match="current-user-only"):
+        PermissionEngine.from_owner_file(path)
 
 
 @pytest.fixture
@@ -238,7 +259,12 @@ def test_explicit_host_policy_bootstraps_real_api_without_engine_injection(
         ]
     }
     path.write_text(json.dumps(document))
-    path.chmod(0o600)
+    if os.name == "nt":
+        from nous_runtime.security.private_files import restrict_owner_only_file
+
+        restrict_owner_only_file(path, subject="test owner policy")
+    else:
+        path.chmod(0o600)
     monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(root))
     monkeypatch.setenv("NOUS_PERMISSION_POLICY", str(path))
     monkeypatch.setattr("nous_runtime.governance.gate._gate_instance", None)

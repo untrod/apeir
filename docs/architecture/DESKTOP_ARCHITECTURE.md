@@ -55,8 +55,11 @@ can still be entered manually.
 - CORS allows only Tauri and numeric-port loopback origins.
 - Tauri exposes only the commands required to show the window and manage the
   local Runtime session; broad filesystem, HTTP, and shell plugins are disabled.
-- Provider credentials remain owned by the Runtime credential provider. The
-  Desktop setup flow never accepts or persists Provider API keys.
+- Provider credentials remain owned by the existing credential paths. Native
+  Windows setup/settings accept a transient password input through restricted
+  Tauri IPC into Windows Credential Manager. Configuration retains environment
+  reference names; keys are not stored in browser storage or ordinary Runtime
+  API payloads. Browser-only setup uses existing references and cannot store keys.
 - Desktop state is a cache of authoritative Runtime state.
 
 ## Operations workbench
@@ -85,6 +88,17 @@ it grants no execution authority.
 Source frontend tests/build are software validation. They do not qualify an
 installed Windows executable, NSIS lifecycle, real IdP or physical hardware.
 
+Native session commands bind their returned session to the loopback endpoint
+reported by the existing Tauri process manager. Endpoint, readiness and session
+availability are checked before publishing that connection; the original
+connection version and active view must still agree. Credential changes,
+diagnostic recovery and workspace restart require the selected local Runtime.
+Only the explicit **Start Local Runtime** action switches from another Controller
+to local. Native startup preserves a selected remote Controller and does not
+load a local token or create a local workspace for that remote connection.
+An uncertain native action is not retried automatically, including session-reset
+failure. Closing a view does not prove a dispatched native action was cancelled.
+
 The 2026-10-10 workbench audit reused the existing Console/API, ThemeProvider,
 UI-state reset and signed Relay projection. It extended presentation and added
 `trust_status=TRUSTED` to Nodes actually present in the canonical trust map;
@@ -102,8 +116,11 @@ API, `ChatView`/`Composer` and canonical EventStream. It is an Operations view,
 not a second editor backend or Agent executor. File writes and fixed-profile runs
 keep the existing service requester separate from human approval cookies; decisions
 reuse the bound nonce and Governance admission. The same distinction applies to
-read-only preview and Chat requests. Controller changes invalidate the original
-file reference and pending action instead of retargeting them.
+read-only preview and Chat requests. Controller address/token changes invalidate the original
+file reference and pending action instead of retargeting them. The existing
+connection epoch also fences same-address identity replacement and A→B→A changes.
+Unmounted Workspace views cannot continue approval-to-execution sequences; this
+does not cancel an already admitted backend effect.
 
 Workspace tabs retain unsaved drafts in memory during view changes. New panel
 preferences contain only font size and collaboration/activity visibility, not
@@ -116,7 +133,28 @@ There is no operating-system desktop/keystroke recorder or unrestricted containe
 launcher. See the [Quick Start](../operations/getting-started/QUICK_START.md#workspace-developer-panel)
 for the actual user path and qualified scope.
 
+Environment views also bind the existing URL/token/configuration epoch and their
+mounted lifetime. Connection changes remount the original panel rather than
+reusing approvals or output from another connection. Approval nonce acquisition,
+decision and service continuation check the same original view; a late response
+cannot start another environment operation or refresh an unmounted panel.
+Environment reads, logs and Artifact metadata retain those same connection checks.
+Closing a view does not prove an admitted workload stopped; recover its original
+Runtime evidence before repeating an operation. Strong isolation remains required.
+
 ## Build commands
+
+Manual **Desktop CI** also builds the existing Python Distribution wheel after
+frontend validation. Its `apeir-python-source-preview-<commit>` Actions artifact
+contains the wheel, measured SHA-256, a source manifest and minimal installed-wheel
+validation evidence, retained for seven days. The job installs the built wheel in
+an isolated virtual environment and runs the existing simulated lost-response
+Demo; its original effect count remains one through recovery. Raw demo state and
+generated keys stay outside the uploaded artifact. It contains no native
+Desktop/Kernel binaries or Runtime state. The manifest
+marks native integrity, installation and release qualification NOT_RUN; this
+source package is independent of the gated native build jobs and publishes no
+GitHub Release. A successful source-package job cannot satisfy native acceptance.
 
 Web asset validation:
 
