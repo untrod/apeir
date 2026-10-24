@@ -14,6 +14,11 @@ and shutdown; `source-preview-validation.json` reports that scope. The artifact
 includes this same Quick Start with links pinned to its source revision, not a
 separate installation guide. Check the source revision and `SHA256SUMS.txt` before
 installing the wheel with `python -m pip install path/to/apeir_distribution-0.1.0rc1-py3-none-any.whl`.
+For the matching Desktop sources or SDK examples, clone the repository and run
+`git checkout --detach <distribution_revision>`, replacing the placeholder with
+the exact value in `source-preview-manifest.json`. Do not use a different main
+revision alongside the downloaded wheel. Wheel users skip the editable
+`pip install -e .` command below; it is the alternative source-install path.
 This Python source package provides CLI/Runtime libraries, not APEIR.exe or a
 Windows installer. Desktop source still needs the checkout below; real model,
 Kernel, sandbox and native-release prerequisites remain separate. The manifest
