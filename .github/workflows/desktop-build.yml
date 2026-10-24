@@ -10,6 +10,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      rebuild_locked_kernel:
+        description: 'Diagnostic only: rebuild frozen Windows Kernel and compare original hashes (no release)'
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -19,6 +24,63 @@ permissions:
   contents: read
 
 jobs:
+  locked-kernel-rebuild:
+    name: Locked Kernel rebuild diagnostic (not installation acceptance)
+    if: github.event_name == 'workflow_dispatch' && inputs.rebuild_locked_kernel == true
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: distribution
+      - uses: actions/checkout@v4
+        id: kernel
+        with:
+          repository: untrod/apeir-kernel
+          ref: 87fd1b2ff28ef14ab1a515a58162592b452fda2e
+          persist-credentials: false
+          path: kernel-rebuild-source
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Record build environment and exact source
+        shell: pwsh
+        run: |
+          $evidence = Join-Path $env:RUNNER_TEMP 'kernel-rebuild-evidence'
+          New-Item -ItemType Directory -Force $evidence | Out-Null
+          rustc -vV | Out-File "$evidence/toolchain.txt"
+          cargo -V | Out-File -Append "$evidence/toolchain.txt"
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture | Format-List | Out-File -Append "$evidence/toolchain.txt"
+          & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products '*' -format json | Out-File "$evidence/visual-studio.json"
+          git -C distribution rev-parse HEAD | Out-File "$evidence/distribution-sha.txt"
+          git -C kernel-rebuild-source rev-parse HEAD | Out-File "$evidence/kernel-sha.txt"
+      - name: Build frozen components without modifying source or lock
+        working-directory: kernel-rebuild-source
+        shell: pwsh
+        run: |
+          cargo build --release --locked --target x86_64-pc-windows-msvc -p nousd --bin nousd -p nous-provider-worker --bin nous-provider-worker 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/kernel-rebuild-evidence/cargo-build.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Independently compare both PE files with unchanged component lock
+        if: always() && steps.kernel.outcome == 'success'
+        shell: pwsh
+        run: |
+          python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-rebuild-source --candidate-root kernel-rebuild-source/target/x86_64-pc-windows-msvc/release --report "$env:RUNNER_TEMP/kernel-rebuild-evidence/component-report.json"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Retain diagnostic evidence, never publish mismatched executables
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: locked-kernel-rebuild-diagnostic
+          retention-days: 14
+          if-no-files-found: error
+          path: ${{ runner.temp }}/kernel-rebuild-evidence/
+
   # Frontend Validation
   frontend-tests:
     name: Frontend Build Validation

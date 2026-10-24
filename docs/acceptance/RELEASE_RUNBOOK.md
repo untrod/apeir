@@ -10,6 +10,27 @@ require the maintainer's credentials and explicit approval.
 3. Download or build the exact locked Kernel artifacts and verify their SHA-256.
 4. Confirm every version manifest reports `0.1.0-rc1`.
 
+If the original Windows binaries cannot be recovered, the existing **Desktop CI**
+manual workflow has an opt-in `rebuild_locked_kernel` diagnostic. It checks out
+the frozen Kernel separately, records the Windows/MSVC and Rust toolchains,
+builds both components with `cargo build --release --locked`, and independently
+compares their SHA-256 and PE architecture with the unchanged Distribution lock.
+The diagnostic is off by default, has a 30-minute bound and two Cargo build jobs,
+and uploads only logs and a component report for 14 days. It neither stages
+executables nor enables packaging, changes the lock, signs, tags or publishes.
+
+```bash
+gh workflow run desktop-build.yml --ref <reviewed-distribution-branch> -f rebuild_locked_kernel=true
+```
+
+A missing binary, changed Kernel source, wrong revision, invalid PE or hash
+mismatch fails the diagnostic with `BLOCKED`; a successful build alone is not
+component integrity. Preserve the actual and expected hashes and build inputs.
+If the bytes differ, request a separate reviewed rebuild/compatibility/version
+and component-lock update; do not replace the historical lock values. Even an
+exact `MATCH` leaves NKI runtime and Windows 10 installation acceptance `NOT_RUN`
+until exercised below. A Windows CI runner is not a clean Windows 10 install test.
+
 ## 2. Verify source
 
 ```powershell
@@ -46,7 +67,7 @@ No production version or GitHub release is invented by checkpoint creation.
 SDK is beta; formal SemVer publication requires stable public compatibility
 and packaging plus all release gates. Release Preflight runs the actual component
 hash verifier and must fail when locked bytes are absent. Never substitute the
-three lock contract tests for native verification.
+component-lock contract tests for native verification.
 
 ## 5. Produce release metadata
 
