@@ -14,6 +14,7 @@ from __future__ import annotations
 import atexit
 import json
 import logging
+import os
 import sqlite3
 import threading
 import uuid
@@ -35,6 +36,10 @@ DEFAULT_PERSIST_INTERVAL_SEC = 1.0
 
 class EventCursorUnavailable(ValueError):
     """The original retained event is unavailable; a snapshot is not replay."""
+
+
+class EventWorkspaceMismatch(RuntimeError):
+    """A process-level bus cannot acquire another workspace's ownership."""
 
 
 @dataclass
@@ -68,7 +73,7 @@ class RuntimeEventBus:
         max_listeners_per_pattern: int = DEFAULT_MAX_LISTENERS_PER_PATTERN,
         persist_interval_sec: float = DEFAULT_PERSIST_INTERVAL_SEC,
     ):
-        self._workspace = workspace_root or "."
+        self._workspace = str(Path(workspace_root or ".").expanduser().resolve())
         self._max_buffer = max(100, int(max_buffer))
         self._max_listeners = max(1, int(max_listeners_per_pattern))
         self._persist_interval = max(0.1, float(persist_interval_sec))
@@ -575,15 +580,18 @@ _bus_lock = threading.Lock()
 
 
 def get_event_bus(workspace_root: str = "") -> RuntimeEventBus:
-    """Get or create the global RuntimeEventBus singleton."""
+    """Get the existing bus for the configured owner, never an ambient CWD."""
     global _bus_instance
-    if _bus_instance is not None:
-        return _bus_instance
-
+    requested = workspace_root or os.environ.get("NOUS_WORKSPACE_ROOT", "")
+    owner = Path(requested).expanduser().resolve() if requested else None
     with _bus_lock:
         if _bus_instance is not None:
+            if owner is not None and owner != Path(_bus_instance._workspace):
+                raise EventWorkspaceMismatch(
+                    "Event bus workspace changed; restart its owning Runtime"
+                )
             return _bus_instance
-        _bus_instance = RuntimeEventBus(workspace_root=workspace_root)
+        _bus_instance = RuntimeEventBus(workspace_root=str(owner or Path.cwd()))
         return _bus_instance
 
 
@@ -603,6 +611,7 @@ __all__ = [
     "RuntimeEventBus",
     "BusMetrics",
     "EventCursorUnavailable",
+    "EventWorkspaceMismatch",
     "get_event_bus",
     "reset_event_bus",
 ]

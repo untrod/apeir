@@ -946,7 +946,7 @@ function AppShell() {
     return <OperationsConsole onOpenStudio={() => setPage("studio")} />;
   }
   if (page === "studio" && !("__TAURI_INTERNALS__" in window)) {
-    return <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}><button onClick={() => setPage("operations")}>← Operations</button><div style={{ flex: 1, minHeight: 0 }}><React.Suspense fallback={<p role="status">Loading APEIR Studio…</p>}><StudioShell onProtectedChange={protectStudio} /></React.Suspense></div></div>;
+    return <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}><div style={{ flex: 1, minHeight: 0 }}><React.Suspense fallback={<p role="status">Loading APEIR Studio…</p>}><StudioShell onProtectedChange={protectStudio} onExit={() => setPage("operations")} /></React.Suspense></div></div>;
   }
 
   if (bootstrapStatus.state !== "ready" && !connected) {

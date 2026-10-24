@@ -37,12 +37,16 @@ Open the Vite address, connect Operations to your authenticated Runtime, then
 choose **APEIR Studio / Open workspace**. The native sidebar has **Studio**;
 source browser validation is not Windows EXE acceptance.
 
-Choose a preset, add panels, drag tab headers to split/regroup, resize splitters
-and maximize/restore groups. Ctrl/Cmd+Shift+P opens panel search; Ctrl/Cmd+Alt+S
-saves presentation. Save/Load/Reset/Import/Export use the bounded version1 schema.
-Double-click a tab to rename it using the docking library. Resolve unsaved
-drafts/pending actions before closing editors or replacing layouts. Layout
-export contains no file content, credentials, Work or approval identity.
+Use **Workspace** for presets, saved layouts, import/export, language and theme.
+**Add panel** opens the searchable panel list. The everyday view keeps layout
+controls hidden. Choose **Edit layout** (Ctrl/Cmd+Alt+L) to drag tab headers,
+resize splitters, close panels or arrange Dashboard widgets; **Done editing**
+returns to normal use without stopping background Work. Maximize and tab selection
+remain available in either mode. Ctrl/Cmd+Shift+P opens panel search;
+Ctrl/Cmd+Alt+S saves presentation. Escape closes transient menus/settings.
+Save/Load/Reset/Import/Export retain the bounded version1 schema. Resolve unsaved
+drafts/pending actions before closing editors or replacing layouts. Layout export
+contains no file content, credentials, Work or approval identity.
 
 Node, Device, Workflow, Evidence and Activity panels share the real Operations
 projection and its refresh action; empty results are not ONLINE or verified
@@ -50,7 +54,7 @@ success. Use Operations for original governed controls. Supported commands reuse
 Workbench profiles and strict sandbox admission; missing isolation is BLOCKED.
 Controlled Commands is not an interactive PTY.
 
-Use **Layout library** for named layouts. **Save current as new** records the
+Use **Workspace → Layout library** for named layouts. **Save current as new** records the
 current arrangement under Global, Workspace, Template or Dashboard. Workspace
 uses the actual authenticated Runtime directory; Dashboard retains only Dashboard
 panels. Select a saved entry to load, duplicate, rename, export or remove it.
@@ -64,14 +68,24 @@ revisions are rejected, preserving both windows’ saved entries. Browsers witho
 Web Locks cannot write the library; export still works. The library is bounded
 to16 entries/1MiB. A rejected or full library does not erase earlier entries.
 
-For a read-only Dashboard, choose **Add panel → Dashboard**. Use **Widget** and
-**Add widget**, drag a widget’s title, resize its corner or edit x/y/w/h in
+For a read-only Dashboard, choose **Add panel → Dashboard**. Enter **Edit layout**
+to add widgets, drag a widget’s title, resize its corner or edit x/y/w/h in
 **Settings**. Overlapping or out-of-range geometry is refused. Give instances
 custom titles, duplicate/remove them or pause their display subscription.
-**Save dashboard** saves the same Studio layout; **Export dashboard** creates a
+The Dashboard **···** menu contains save/import/export/reset. **Save dashboard**
+saves the same Studio layout; **Export dashboard** creates a
 single-panel Dashboard document. Import it with **Import dashboard**, or use the
 main Studio Import/Load controls to restore a saved full workspace. Importing
 presentation never executes Work or authorizes a resource.
+
+New Dashboard cards use compact dimensions; existing explicit geometry and
+version1 layouts with implicit defaults retain their original dimensions. Small
+windows stack cards for reading without rewriting saved coordinates. Network
+presets include resource and topology widgets. Memory meters use only current,
+trusted Node reports; CPU logical capacity is distinct from unsupported utilization.
+Topology edges use exact reported Device `node_id` bindings; missing bindings stay
+UNKNOWN. Usage summaries keep unknown costs/tokens distinct from zero, with full
+accounting under **Usage details**. Technical source details are collapsed.
 
 Runtime/Kernel status, Nodes, Devices, Work, Usage, Governance audit and evidence
 metadata use actual current APIs. Missing resources are UNKNOWN; GPU/network/

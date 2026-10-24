@@ -93,6 +93,43 @@ namespace mismatch, duplicate IDs, oversize collections, stale revisions and
 unavailable writer locks, preserving prior stored bytes on quota failure.
 Native Windows/media/Provider/hardware qualification remains separate.
 
+### Studio visual and interaction refinement — 2026-10-24
+
+REUSE the same FlexLayout model, GridLayout, ThemeProvider/design palette,
+version1 layout/library documents, protected drafts and Runtime read consumers.
+EXTEND presentation with a compact toolbar/menu, ephemeral normal/edit mode,
+shared status treatments, monochrome icons, bilingual labels and keyboard focus.
+No execution, permission, Runtime database or layout schema is introduced.
+The Usage panel now reads the existing shared accounting consumer directly,
+instead of opening the Model Lab configuration view a second time.
+
+Existing explicit and implicit legacy Dashboard geometry remains compatible;
+only newly created Dashboards get smaller default cards. Responsive stacking is
+a view transform and never overwrites saved positions. Resource meters admit
+only fresh/current/trusted reports with valid memory bounds. Topology connects
+only exact reported Node/Device bindings. Missing metrics/bindings remain
+UNKNOWN; CPU utilization, GPU and throughput are not invented.
+
+Real model-disabled CLI/HTTP and sandboxed Chromium checks retain the original
+layout/drag/draft/Controller/library assertions, add old six-row Dashboard import,
+normal-mode movement refusal, keyboard edit/settings, live service and unknown
+usage states, both themes and Chinese small-screen reload. Frontend contract
+fixtures exercise nonempty memory/topology rendering and stale/revoked/invalid
+report refusal; they are not physical telemetry or hardware acceptance.
+Local validation:405 Desktop tests and7 composed sandboxed Chromium/real HTTP
+cases pass, including browser2x DPI/touch hit targets and measured service-status
+text contrast of at least4.5:1 in both existing themes. Type/lint/build and
+repository contracts (299 PASS,5 Windows-only skips on Linux) pass. The retained
+security scan remains0 HIGH/5 pre-existing MEDIUM. These results belong to the
+composed source candidate; exact-head CI and resulting-main qualification remain
+separate gates.
+
+The original visual test exposed an implicit-default compatibility regression;
+it is retained privately and fixed by preserving legacy defaults. Source browser
+screenshots are not installed APEIR.exe screenshots. Windows10 native visual,
+DPI, lifecycle and real Provider qualification remain PENDING/BLOCKED under the
+existing native gates. No FPS, latency, Token or cost saving is asserted.
+
 ### Shared Usage transport measurement — 2026-10-24
 
 The public `desktop/scripts/benchmark-studio-usage.mjs` builds isolated fixtures
@@ -3840,3 +3877,22 @@ failure logs and private browser records are retained. Exact-source CI and
 protected resulting-main acceptance remain required; no performance percentage or
 overall product PASS is inferred from these correctness checks.
 
+
+## Event projection owner admission — 2026-10-24
+
+REUSE the existing RuntimeEventBus singleton, retained SQLite projection and
+original event-ID cursor. FIX its configured-owner admission and absolute path
+pinning; changing a process owner fails closed until an explicit Runtime restart.
+No event system, root authority, database pool or automatic evidence migration
+is added. Original records outside the configured owner are left intact; they
+cannot be silently assigned to another workspace. Per-Run EventStream and Work
+records are unaffected. Detailed failure evidence is retained privately.
+
+Five original deterministic ownership/replay tests failed on main `d14859c`.
+The same tests pass after the bounded owner fix, including actual independent
+CLI/HTTP startup, original event IDs, rejected unrelated cursors, relative paths
+and deterministic concurrent first-owner admission. Event/replay/Control Plane
+regression passed52 tests locally. Source-browser qualification covers the
+existing EventStream widget through the real authenticated Controller switch;
+no model, physical or native qualification is inferred. Exact PR and resulting
+main CI remain separate requirements.

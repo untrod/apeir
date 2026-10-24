@@ -74,7 +74,15 @@ instead of letting an older cache certify integrity. Readers do not rewrite or
 repair that evidence. This adds index reads, not a second cache or state owner.
 
 The global RuntimeEventBus is a retained cross-domain activity projection, distinct
-from durable per-Run EventStream sequence records. Its HTTP cursor is an original
+from durable per-Run EventStream sequence records. Its existing singleton is
+bound to the configured `NOUS_WORKSPACE_ROOT` (or an explicit trusted owner),
+not the Desktop/CLI launch directory. Paths are pinned absolutely at creation.
+A different configured/explicit owner in the same process is rejected until the
+owning Runtime is restarted; no second owner or implicit rebind is created.
+Historical activity files outside that configured owner are not automatically
+imported or reassigned. Original Work and per-Run evidence remain under their
+existing owners. An unavailable original cursor still requires explicit reload.
+ Its HTTP cursor is an original
 event ID, not a per-domain numeric sequence. A cold read returns a bounded recent
 window in chronological order; a retained cursor pages forward through persisted
 Bus records. Cursor lookup and page selection share one SQLite read snapshot.
