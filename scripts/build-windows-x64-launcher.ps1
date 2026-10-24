@@ -4,6 +4,7 @@ param(
     [string]$Target = "x86_64-pc-windows-msvc",
     [string]$ExpectedVersion = "0.1.0-rc1",
     [string]$ArtifactRoot = "",
+    [string]$KernelArtifactDirectory = "",
     [switch]$SkipValidation,
     [switch]$SkipSidecarSmoke,
     [switch]$SkipRuntimeSidecarBuild
@@ -40,13 +41,14 @@ if (-not $preflight.ready) {
     -KernelRoot $kernel `
     -RepoRoot $repo `
     -Target $Target `
+    -ArtifactDirectory $KernelArtifactDirectory `
     -SkipBuild
 if ($LASTEXITCODE -ne 0) { throw "Kernel component verification failed." }
 
 if (-not $SkipRuntimeSidecarBuild) {
-    & python -c "import PyInstaller"
+    & python -c "import PyInstaller; import cyclonedx_py"
     if ($LASTEXITCODE -ne 0) {
-        throw "PyInstaller is missing. Install the project installer-build extra before building."
+        throw "Build/SBOM tools are missing. Install the project installer-build extra before building."
     }
 }
 
@@ -91,6 +93,11 @@ Copy-Item -LiteralPath $runtimeBuildOutput -Destination $runtimeSidecar -Force
 $kernelSidecar = Join-Path $binaryRoot "nousd-$Target.exe"
 $workerSidecar = Join-Path $binaryRoot "nous-provider-worker-$Target.exe"
 
+# Tests and Runtime construction can take time; recheck the actual immutable
+# inputs immediately before executing native sidecars.
+& python (Join-Path $repo "scripts\ci\verify_kernel_components.py") --repo-root $repo --kernel-root $kernel
+if ($LASTEXITCODE -ne 0) { throw "Kernel components changed before native smoke." }
+
 if (-not $SkipSidecarSmoke) {
     $nativeValidation = & (Join-Path $repo "scripts\ci\verify_windows_native_sidecars.ps1") `
         -SidecarPath $runtimeSidecar `
@@ -108,6 +115,9 @@ $quotedManifest = '"' + $manifestPath + '"'
 Invoke-NousDeveloperCommand "cargo check --locked --target $Target --manifest-path $quotedManifest"
 Invoke-NousDeveloperCommand "cargo test --locked --target $Target --manifest-path $quotedManifest"
 Invoke-NousDeveloperCommand "cd /d `"$desktop`" && npm run tauri:build:x64"
+
+& python (Join-Path $repo "scripts\ci\verify_kernel_components.py") --repo-root $repo --kernel-root $kernel
+if ($LASTEXITCODE -ne 0) { throw "Kernel components changed during Desktop packaging." }
 
 $releaseRoot = Join-Path $tauriRoot "target\$Target\release"
 $launcher = Join-Path $releaseRoot "apeir-control-center.exe"
@@ -146,6 +156,12 @@ Copy-Item -LiteralPath $launcher -Destination (Join-Path $portableRoot "APEIR.ex
 Copy-Item -LiteralPath $runtimeSidecar -Destination (Join-Path $portableRoot "nous-runtime.exe")
 Copy-Item -LiteralPath $kernelSidecar -Destination (Join-Path $portableRoot "nousd.exe")
 Copy-Item -LiteralPath $workerSidecar -Destination (Join-Path $portableRoot "nous-provider-worker.exe")
+foreach ($artifact in $component.artifacts) {
+    $copied = Join-Path $portableRoot "$($artifact.name).exe"
+    if ((Get-FileHash -LiteralPath $copied -Algorithm SHA256).Hash -ne $artifact.sha256) {
+        throw "Portable Kernel bytes do not match the approved component lock."
+    }
+}
 $publishedInstaller = Join-Path $artifactRoot $installer.Name
 Copy-Item -LiteralPath $installer.FullName -Destination $publishedInstaller -Force
 
@@ -227,7 +243,11 @@ $nativeReport = [ordered]@{
     status = if ($SkipSidecarSmoke) { "skipped" } else { "passed" }
     validated_at_utc = $buildTimestamp
     target = $Target
-    host_os = "Windows 10"
+    host_os = (Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture)
+    supported_os_baseline = "Windows 10 X64"
+    scope = "native sidecar smoke and build; not installed Desktop qualification"
+    installation_acceptance = "NOT_RUN"
+    full_validation_executed = -not $SkipValidation
     toolchain = $toolchain
     smoke = $nativeValidation
 }
@@ -260,7 +280,30 @@ $manifest | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath $artifactManifest
 $releaseManifest = Join-Path $artifactRoot "release-manifest.json"
 $manifest | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath $releaseManifest -Encoding utf8
 
-$evidenceHashes = foreach ($path in @($nativeReportPath, $artifactManifest, $releaseManifest)) {
+$pythonSbom = Join-Path $artifactRoot "python-build-environment.cdx.json"
+& python -m cyclonedx_py environment --output-file $pythonSbom
+if ($LASTEXITCODE -ne 0) { throw "Python build-environment SBOM generation failed." }
+$sourceManifest = Join-Path $artifactRoot "source-manifest.json"
+[ordered]@{
+    distribution_revision = $runtimeRevision
+    kernel_revision = $actualRevision
+    kernel_cargo_lock_sha256 = (Get-FileHash (Join-Path $kernel 'Cargo.lock') -Algorithm SHA256).Hash
+    desktop_cargo_lock_sha256 = (Get-FileHash (Join-Path $tauriRoot 'Cargo.lock') -Algorithm SHA256).Hash
+    component_lock_sha256 = (Get-FileHash $lockPath -Algorithm SHA256).Hash
+    sbom_scope = 'Python build environment; Rust dependencies retained in original Cargo.lock files. Complete release supply-chain qualification remains separate.'
+} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $sourceManifest -Encoding utf8
+Copy-Item (Join-Path $kernel 'Cargo.lock') (Join-Path $artifactRoot 'kernel-Cargo.lock') -Force
+Copy-Item (Join-Path $tauriRoot 'Cargo.lock') (Join-Path $artifactRoot 'desktop-Cargo.lock') -Force
+$platformNotes = Join-Path $artifactRoot "platform-support.txt"
+@"
+APEIR $ExpectedVersion unsigned native development build.
+Target: Windows 10 x64; actual build OS is recorded in native-validation-report.json.
+Windows 10 install/upgrade/uninstall, Defender and signing acceptance: NOT_RUN by this builder.
+Python build-environment SBOM is not an assertion of complete native payload provenance.
+Use RELEASE_RUNBOOK.md before claiming NATIVE_PREVIEW_READY or publishing a Release.
+"@ | Set-Content -LiteralPath $platformNotes -Encoding utf8
+
+$evidenceHashes = foreach ($path in @($nativeReportPath, $artifactManifest, $releaseManifest, $pythonSbom, $sourceManifest, $platformNotes, (Join-Path $artifactRoot 'kernel-Cargo.lock'), (Join-Path $artifactRoot 'desktop-Cargo.lock'))) {
     $item = Get-Item -LiteralPath $path
     [ordered]@{
         name = $item.Name

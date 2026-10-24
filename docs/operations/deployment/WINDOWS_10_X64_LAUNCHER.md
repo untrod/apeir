@@ -43,7 +43,11 @@ The current lock targets Windows x64 and freezes Kernel
 Obtain the original pinned release bundle from the maintainer and stage those
 two files without changing the lock. `stage-kernel-components.ps1 -SkipBuild`
 checks the Kernel checkout revision and invokes the actual PE/hash verifier; it
-does not copy files or rebuild them. Verify before running packaging:
+does not rebuild them. With an explicit `-ArtifactDirectory`, it verifies every
+input against the maintained lock before copying any staged component, then
+verifies the staged files again. A mismatched/missing component or dirty tracked
+Kernel source rejects the entire input before replacing existing files.
+Verify before running packaging:
 
 ```powershell
 python scripts/ci/verify_kernel_components.py --repo-root . --kernel-root ..\kernel
@@ -57,6 +61,70 @@ not a hash-validation PASS. A source rebuild with a different digest requires
 separate normalization/re-lock/version review and maintainer approval. Packaging
 now verifies these inputs before full tests or Runtime sidecar generation. The
 source frontend can be developed independently while this gate is BLOCKED.
+
+### R4 trusted candidate evidence — 2026-10-24
+
+The bounded current inventory found no Kernel or Distribution Releases, zero
+Kernel Actions artifacts, and no original release bundle among971 available
+Distribution artifacts. The only older native diagnostic retained build logs,
+not EXEs. This establishes `ORIGINAL_LOCKED_ARTIFACT_UNAVAILABLE` within the
+audited sources; it does not claim a maintainer's private backup was examined.
+
+| Component | Historical 2026-10-18 rebuild SHA-256 | R4 deterministic candidate SHA-256 |
+| --- | --- | --- |
+| `nousd` | `8F12A0A583AD27523849C1646C6C64F5ABE5E681CFBF2FC5320274224E6A907D` | `5453D0D78F5076722C8408E16629E656F6DE18526229F9A1E7EC6AE77664716C` |
+| `nous-provider-worker` | `1DB92D70426F8E601E739E5A0203FC52E11F4FED008E51ECC424F782DCF5752B` | `7CA450E42C64D25E1F450BB892AF7F21346BC094A1EEF1952A1B933933FAA973` |
+
+The old lock values above are unchanged. The first R4 pair reproduced20-byte
+timestamp/debug-identity variance with otherwise equal PE contents; both real
+smoke runs passed. Candidate-only `RUSTFLAGS=-C link-arg=/Brepro` then produced
+identical **unmodified Kernel EXE bytes** in two clean recorded environments:
+[actual build/comparison](https://github.com/untrod/apeir/actions/runs/40084421303).
+This qualifies that pair, not universal reproducibility or the PyInstaller EXE.
+
+Both real Kernel/Worker/Runtime smoke runs passed NKI1/2/3 health, wrong/missing
+NKI credentials, unsupported versions, unauthorized model credentials before
+provider spawn, production Runtime refusal with a bad NKI token, HTTP session
+denial, protected owner-only token DACL and forced process-fault cleanup/restart.
+The original failed Work was queried after restart without another submission.
+No real model, untrusted workload, physical effect or installed GUI was claimed.
+The build host was **Windows Server2025**, not Windows10: Rust/Cargo1.99.1,
+MSVC14.51.36260.0, SDK10.0.26100.0, Kernel Cargo.lock SHA-256
+`7FEFFACC76089D5CF6727EA2746C2F11410A391C9FBFACD6A3C2FE886C5A1F54`.
+The frozen source actually supports NKI1/2/3; the old lock's1/2 metadata also
+needs explicit review, never a silent compatibility rewrite.
+
+The [primary unapproved candidate](https://github.com/untrod/apeir/actions/runs/40084421303/artifacts/12556562701)
+contains actual EXEs, dependencies/signature records, hashes and scoped smoke
+evidence. ZIP SHA-256 is
+`cc98ba7c98c32abdf2132facf4da4283e921aa093840044dfb54cd2e7e808536`.
+Artifacts expire after14 days; a maintainer must retain the exact approved bytes
+in controlled durable storage before relying on them for ongoing distribution.
+All are unsigned candidates; old-lock integrity remains BLOCKED pending separate
+maintainer approval. No NSIS/Portable or Windows10 installation PASS follows
+from this source build and compatibility result.
+
+### Approved GitHub Actions input
+
+Only **after** the lock migration is approved, the exact candidate is retained,
+and the maintainer authorizes `APEIR_BINARY_RELEASE_ENABLED=true`, select
+`native_target=windows-x64` in the existing Desktop CI workflow. Supply the exact
+producer run ID, artifact ID and ZIP digest. The pipeline rejects moving names,
+fork/unrelated producer sources, expired archives, missing digests, unsafe ZIPs,
+incomplete smoke records and bytes that fail the maintained component lock.
+It then uses the official launcher below in full mode to produce Portable and
+NSIS together, with checksums, a source manifest, validation report, original
+Cargo.lock files and a Python **build-environment** SBOM. That BOM alone is not
+complete native release provenance. Other native targets remain independently
+gated; default `native_target=none` never opts them in.
+
+```bash
+gh workflow run desktop-build.yml --ref <approved-source-revision> -f native_target=windows-x64 -f approved_kernel_run_id=<reviewed-run-id> -f approved_kernel_artifact_id=<reviewed-artifact-id> -f approved_kernel_zip_sha256=<reviewed-zip-sha256>
+```
+
+The current integration cannot read repository Actions variables (HTTP403);
+it has not enabled the binary switch or inferred its configured value. Native
+packaging and current Windows10 installation remain BLOCKED/PENDING, respectively.
 
 ## Build
 

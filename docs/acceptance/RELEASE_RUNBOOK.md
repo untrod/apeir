@@ -99,6 +99,22 @@ $env:APEIR_KERNEL_ROOT = (Resolve-Path "..\apeir-kernel").Path
 .\scripts\build-windows-x64-launcher.ps1 -KernelRoot $env:APEIR_KERNEL_ROOT
 ```
 
+For an approved external bundle, pass `-KernelArtifactDirectory` containing its
+locked relative `desktop/src-tauri/binaries/` paths. The existing staging/verifier
+checks the full bundle before replacing any staged input and rechecks after copy.
+Full delivery runs must not pass `-SkipValidation` or `-SkipSidecarSmoke`.
+The existing Desktop CI Windows x64 job now accepts reviewed exact run/artifact
+IDs plus the archive digest, binds the producer to this repository and a source
+ancestor, and uses this same official script. `native_target=none` is the default;
+setting the binary flag alone does not start every native platform. See the
+[Windows input and qualification record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#approved-github-actions-input).
+
+The native report records the actual build OS rather than hardcoding Windows10.
+It explicitly marks installed Desktop acceptance `NOT_RUN`. Build outputs include
+a Python build-environment CycloneDX SBOM and original Kernel/Desktop Cargo.lock
+files; complete cross-component supply-chain/signature qualification remains a
+separate release Gate.
+
 Run install, upgrade, launch, shutdown, uninstall, orphan-process, and Windows
 Defender checks on Windows 10 x64. Store generated evidence outside the source
 tree.

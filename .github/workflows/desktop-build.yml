@@ -19,6 +19,23 @@ on:
         description: 'Run real native smoke and retain unapproved candidates for lock review; requires rebuild_locked_kernel'
         type: boolean
         default: false
+      native_target:
+        description: 'Explicit native target; all binary gates and platform qualification still apply'
+        type: choice
+        default: none
+        options: [none, windows-x64, windows-arm64, linux-x64, macos-arm64]
+      approved_kernel_run_id:
+        description: 'Reviewed same-repository candidate producer run (Windows x64 only)'
+        type: string
+        default: ''
+      approved_kernel_artifact_id:
+        description: 'Exact reviewed candidate artifact ID; never a moving artifact name'
+        type: string
+        default: ''
+      approved_kernel_zip_sha256:
+        description: 'Maintainer-reviewed artifact ZIP SHA-256; cannot override the component lock'
+        type: string
+        default: ''
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -262,10 +279,16 @@ jobs:
         with:
           fetch-depth: 0
       - name: Reject incomplete candidate qualification inputs
-        if: github.event_name == 'workflow_dispatch' && inputs.qualify_kernel_candidate == true && inputs.rebuild_locked_kernel != true
+        if: github.event_name == 'workflow_dispatch' && ((inputs.qualify_kernel_candidate == true && inputs.rebuild_locked_kernel != true) || (inputs.rebuild_locked_kernel == true && inputs.native_target != 'none'))
         working-directory: .
         run: |
-          echo 'qualify_kernel_candidate requires rebuild_locked_kernel=true'
+          echo 'Candidate qualification requires rebuild_locked_kernel=true and native_target=none; native packaging is a separate approved run'
+          exit 1
+      - name: Reject native requests while the release gate is disabled
+        if: github.event_name == 'workflow_dispatch' && inputs.native_target != 'none' && vars.APEIR_BINARY_RELEASE_ENABLED != 'true'
+        working-directory: .
+        run: |
+          echo 'BLOCKED: APEIR_BINARY_RELEASE_ENABLED requires maintainer authorization and qualified native inputs'
           exit 1
       - name: Select conservative PR scope
         id: scope
@@ -407,55 +430,101 @@ jobs:
 
   # Windows x86_64 Build
   build-windows-x64:
-    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && inputs.native_target == 'windows-x64'
     name: Build Windows x86_64
     needs: [frontend-tests]
     runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: distribution
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: untrod/apeir-kernel
+          ref: 87fd1b2ff28ef14ab1a515a58162592b452fda2e
+          path: kernel-native-source
+          persist-credentials: false
       - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
+        with: { python-version: '3.12' }
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-
-      - name: Verify native locked Kernel bytes before packaging
-        run: python scripts/ci/verify_kernel_components.py --repo-root .
-
-      - name: Build embedded Runtime sidecar
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.99.1'
+          targets: x86_64-pc-windows-msvc
+      - name: Download only the exact reviewed same-repository candidate archive
+        shell: python {0}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVED_RUN_ID: ${{ inputs.approved_kernel_run_id }}
+          APPROVED_ARTIFACT_ID: ${{ inputs.approved_kernel_artifact_id }}
+          APPROVED_ZIP_SHA256: ${{ inputs.approved_kernel_zip_sha256 }}
+        run: |
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+          run_id, artifact_id, expected = (os.environ[key] for key in ("APPROVED_RUN_ID", "APPROVED_ARTIFACT_ID", "APPROVED_ZIP_SHA256"))
+          assert re.fullmatch(r"[1-9][0-9]*", run_id) and re.fullmatch(r"[1-9][0-9]*", artifact_id), "Exact reviewed run/artifact IDs are required"
+          assert re.fullmatch(r"[0-9A-Fa-f]{64}", expected), "Reviewed ZIP digest is required"
+          def api(path):
+              result = subprocess.run(["gh", "api", "repos/untrod/apeir/" + path], capture_output=True, text=True)
+              assert result.returncode == 0, "Reviewed artifact metadata is unavailable"
+              return json.loads(result.stdout)
+          producer = api("actions/runs/" + run_id)
+          artifact = api("actions/artifacts/" + artifact_id)
+          assert producer["head_repository"]["full_name"] == "untrod/apeir"
+          assert producer["path"] == ".github/workflows/desktop-build.yml" and producer["event"] == "workflow_dispatch"
+          assert producer["status"] == "completed" and producer["conclusion"] in ("success", "failure")
+          revision = producer["head_sha"]
+          assert re.fullmatch(r"[0-9a-f]{40}", revision)
+          subprocess.run(["git", "-C", "distribution", "merge-base", "--is-ancestor", revision, "HEAD"], check=True)
+          assert artifact["workflow_run"]["id"] == int(run_id) and artifact["workflow_run"]["head_sha"] == revision
+          assert not artifact["expired"] and artifact["size_in_bytes"] <= 256 * 1024 * 1024
+          assert re.fullmatch(r"unapproved-kernel-candidate-windows-x64-[12]", artifact["name"])
+          assert artifact.get("digest", "").lower() == "sha256:" + expected.lower()
+          archive = Path(os.environ["RUNNER_TEMP"]) / "reviewed-kernel.zip"
+          with archive.open("wb") as stream:
+              result = subprocess.run(["gh", "api", "repos/untrod/apeir/actions/artifacts/" + artifact_id + "/zip"], stdout=stream, stderr=subprocess.PIPE)
+          assert result.returncode == 0, "Reviewed artifact download failed"
+          assert archive.stat().st_size <= 256 * 1024 * 1024
+          assert hashlib.sha256(archive.read_bytes()).hexdigest() == expected.lower()
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write("APPROVED_PRODUCER_REVISION=" + revision + "\n")
+          Path(os.environ["RUNNER_TEMP"], "reviewed-input-provenance.json").write_text(json.dumps({"producer_revision": revision, "producer_run": int(run_id), "artifact_id": int(artifact_id), "archive_sha256": expected.lower()}, indent=2))
+      - name: Admit the downloaded bytes through the unchanged maintained lock
+        shell: pwsh
+        env:
+          APPROVED_ZIP_SHA256: ${{ inputs.approved_kernel_zip_sha256 }}
+        run: |
+          python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-native-source --artifact-zip "$env:RUNNER_TEMP/reviewed-kernel.zip" --artifact-sha256 $env:APPROVED_ZIP_SHA256 --artifact-source-revision $env:APPROVED_PRODUCER_REVISION --artifact-output "$env:RUNNER_TEMP/approved-native-inputs"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install existing full validation and installer build dependencies
+        working-directory: distribution
+        run: python -m pip install ".[dev,a2a,mcp,scientific,installer-build]"
+      - name: Install frontend build dependencies
+        working-directory: distribution/desktop
+        run: npm ci
+      - name: Build Portable and NSIS together through the official full launcher entry
         shell: pwsh
         run: |
-          python -m pip install ".[installer-build]"
-          pyinstaller nous-sidecar.spec
-          New-Item -ItemType Directory -Force desktop/src-tauri/binaries | Out-Null
-          Copy-Item dist/nous-runtime.exe desktop/src-tauri/binaries/nous-runtime-x86_64-pc-windows-msvc.exe
-
-      - name: Build Tauri desktop
-        working-directory: desktop
-        run: |
-          npm ci
-          npx tauri build --bundles nsis --target x86_64-pc-windows-msvc
-
-      - name: Verify and hash NSIS installer
-        shell: pwsh
-        run: |
-          $installer = Get-ChildItem desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis -Filter "*.exe" | Select-Object -First 1
-          if (-not $installer) { throw "x64 NSIS installer not found" }
-          Get-FileHash -Algorithm SHA256 $installer.FullName | Format-List | Out-File -Encoding utf8 SHA256SUMS.txt
-
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0
+          & ./distribution/scripts/build-windows-x64-launcher.ps1 -RepoRoot (Resolve-Path distribution).Path -KernelRoot (Resolve-Path kernel-native-source).Path -KernelArtifactDirectory "$env:RUNNER_TEMP/approved-native-inputs"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item "$env:RUNNER_TEMP/reviewed-input-provenance.json" distribution/artifacts/windows-x64/
 
       - uses: actions/upload-artifact@v4
         with:
           retention-days: 14
-          name: windows-x86_64
-          path: |
-            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-            SHA256SUMS.txt
+          name: windows-x64-native-development-build
+          if-no-files-found: error
+          path: distribution/artifacts/windows-x64/
 
   # Windows ARM64 release candidate build
   build-windows-arm64:
-    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && inputs.native_target == 'windows-arm64'
     name: Build Windows ARM64
     needs: [frontend-tests]
     runs-on: windows-11-arm
@@ -541,7 +610,7 @@ jobs:
 
   # Linux x86_64 Build
   build-linux-x64:
-    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && inputs.native_target == 'linux-x64'
     name: Build Linux x86_64
     needs: [frontend-tests]
     runs-on: ubuntu-22.04
@@ -597,7 +666,7 @@ jobs:
 
   # macOS ARM64 Build
   build-macos-arm64:
-    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && inputs.native_target == 'macos-arm64'
     name: Build macOS ARM64
     needs: [frontend-tests]
     runs-on: macos-14
