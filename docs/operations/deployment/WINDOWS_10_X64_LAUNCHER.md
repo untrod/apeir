@@ -126,6 +126,16 @@ The current integration cannot read repository Actions variables (HTTP403);
 it has not enabled the binary switch or inferred its configured value. Native
 packaging and current Windows10 installation remain BLOCKED/PENDING, respectively.
 
+The actual Kernel import tables include `VCRUNTIME140.dll`. Build-host success
+does not prove that a clean Windows10 host has the VC++ runtime. The x64 builder
+therefore stages app-local CRT DLLs only from the selected Visual Studio x64
+redistributable directory, requires valid Microsoft signatures and records their
+versions/source/hashes in `native-dependencies.json`. A generated Tauri resource
+overlay includes those same files in NSIS; Portable carries them beside the EXEs.
+The component smoke checks the actual loaded CRT path when app-local CRT is
+present. This path still requires a real qualified packaging/install run; it
+does not alter the reviewed Kernel hashes or remove license/Windows10 gates.
+
 ## Build
 
 From the Runtime repository root:

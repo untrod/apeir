@@ -510,10 +510,11 @@ jobs:
         run: npm ci
       - name: Build Portable and NSIS together through the official full launcher entry
         shell: pwsh
+        working-directory: distribution
         run: |
-          & ./distribution/scripts/build-windows-x64-launcher.ps1 -RepoRoot (Resolve-Path distribution).Path -KernelRoot (Resolve-Path kernel-native-source).Path -KernelArtifactDirectory "$env:RUNNER_TEMP/approved-native-inputs"
+          & ./scripts/build-windows-x64-launcher.ps1 -RepoRoot (Resolve-Path .).Path -KernelRoot (Resolve-Path ../kernel-native-source).Path -KernelArtifactDirectory "$env:RUNNER_TEMP/approved-native-inputs"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Copy-Item "$env:RUNNER_TEMP/reviewed-input-provenance.json" distribution/artifacts/windows-x64/
+          Copy-Item "$env:RUNNER_TEMP/reviewed-input-provenance.json" artifacts/windows-x64/
 
       - uses: actions/upload-artifact@v4
         with:

@@ -213,6 +213,16 @@ try {
     }
     $kernelParent = Start-Process @kernelStart
     Wait-KernelReady -Process $kernelParent -Port $kernelPort
+    $appLocalCrt = Join-Path (Split-Path $kernel) 'vcruntime140.dll'
+    $appLocalCrtChecked = $false
+    if (Test-Path -LiteralPath $appLocalCrt) {
+        Get-NativePeMachine -Path $appLocalCrt -Name 'Visual C++ runtime' -ExpectedMachine $expectedMachine -Architecture $targetArchitecture
+        $loadedCrt = @($kernelParent.Modules | Where-Object { $_.ModuleName -ieq 'vcruntime140.dll' })
+        if ($loadedCrt.Count -ne 1 -or $loadedCrt[0].FileName -ine $appLocalCrt) {
+            throw 'Kernel did not load the supplied app-local Visual C++ runtime.'
+        }
+        $appLocalCrtChecked = $true
+    }
     & $probePython -I $nkiProbe --endpoint $env:NOUS_KERNEL_ENDPOINT --report $nkiReport | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Actual Kernel NKI qualification failed." }
 
@@ -289,6 +299,7 @@ try {
         token_length = $token.Length
         token_disclosed = $false
         token_owner_only_dacl = $true
+        app_local_crt_loaded = $appLocalCrtChecked
         kernel_pid = $kernelParent.Id
         parent_pid = $parent.Id
         runtime_pid = [int]$live.data.pid
@@ -323,9 +334,11 @@ try {
     $summary.restarted_authenticated_status = $true
 } finally {
     try {
-        Stop-ProcessTree -Process $badParent
-        Stop-ProcessTree -Process $parent
-        Stop-ProcessTree -Process $kernelParent
+        try { Stop-ProcessTree -Process $badParent }
+        finally {
+            try { Stop-ProcessTree -Process $parent }
+            finally { Stop-ProcessTree -Process $kernelParent }
+        }
     } finally {
         foreach ($name in $environmentNames) {
             [Environment]::SetEnvironmentVariable($name, $previousEnvironment[$name], "Process")
