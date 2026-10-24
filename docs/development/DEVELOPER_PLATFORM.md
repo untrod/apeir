@@ -50,6 +50,20 @@ success. Use Operations for original governed controls. Supported commands reuse
 Workbench profiles and strict sandbox admission; missing isolation is BLOCKED.
 Controlled Commands is not an interactive PTY.
 
+Use **Layout library** for named layouts. **Save current as new** records the
+current arrangement under Global, Workspace, Template or Dashboard. Workspace
+uses the actual authenticated Runtime directory; Dashboard retains only Dashboard
+panels. Select a saved entry to load, duplicate, rename, export or remove it.
+Workspace entries are shown only after resolving that Controller/directory;
+Global/templates remain reusable. Export is the same safe Studio document and
+can be restored with the existing Import control. No task, credential or draft
+is transferred. Resolve protected editor state before loading another layout.
+
+If another window saves the library, **Reload library** before editing. Stale
+revisions are rejected, preserving both windows’ saved entries. Browsers without
+Web Locks cannot write the library; export still works. The library is bounded
+to16 entries/1MiB. A rejected or full library does not erase earlier entries.
+
 For a read-only Dashboard, choose **Add panel → Dashboard**. Use **Widget** and
 **Add widget**, drag a widget’s title, resize its corner or edit x/y/w/h in
 **Settings**. Overlapping or out-of-range geometry is refused. Give instances
@@ -66,6 +80,21 @@ does not prove Kernel availability, a model invocation or a physical effect.
 EventStream is the existing cursor-driven bus; Governance audit is separate.
 The same authenticated Controller supplies all visible widgets. Source browser
 checks cover actual HTTP reads and zero mutation requests, not native installation.
+
+The shared Usage transport has a reproducible, model-disabled component
+microbenchmark. Prepare two clean detached checkouts and install their Desktop
+dependencies. From this revision’s `desktop`, run:
+
+```bash
+node scripts/benchmark-studio-usage.mjs --baseline-checkout BEFORE_CHECKOUT --candidate-checkout AFTER_CHECKOUT --runtime-checkout FIXED_RUNTIME_CHECKOUT --python PYTHON_EXECUTABLE --output NEW_PRIVATE_RESULT.json
+```
+
+Replace the five paths with absolute paths; the Python environment must support
+the fixed Runtime’s base API. The script builds isolated fixtures from the actual
+StatusBar source, starts owned loopback services, alternates3 paired11-second
+windows and cleans up. It never calls a real model. Choose a new result path;
+existing evidence is not overwritten. See the [measured results and limitations](../acceptance/ENGINEERING_REVIEW.md#shared-usage-transport-measurement--2026-10-24).
+This is not a full-product, native or Token-cost benchmark.
 
 General, Software, Agent, Embedded, Network, Scientific, Interactive and Blank
 are compositions of existing views. They do not qualify hardware/media,

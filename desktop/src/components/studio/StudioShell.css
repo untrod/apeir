@@ -22,3 +22,7 @@
 .studio-dock .flexlayout__tab { background: var(--nous-surface); }.studio-dock .flexlayout__tab_button { font-size: 12px; }
 @media (max-width: 700px) { .studio-controller, .studio-toolbar kbd { display: none; }.studio-toolbar { gap: 4px; padding: 4px; }.studio-toolbar button, .studio-toolbar select { min-height: 32px; }.studio-notice { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .studio-shell *, .studio-shell *::before { transition: none !important; animation: none !important; } }
+
+.studio-layout-library { padding:10px; font-size:12px; max-height:340px; overflow:auto; border-bottom:1px solid var(--nous-border); }
+.studio-layout-library header { display:flex; justify-content:space-between; }.studio-layout-library label { display:inline-flex; align-items:center; gap:5px; margin:4px; }.studio-layout-library ul { list-style:none; display:flex; gap:6px; flex-wrap:wrap; padding:0; }.studio-library-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.studio-layout-library [aria-pressed=true] { border-color:var(--nous-border-focus); }

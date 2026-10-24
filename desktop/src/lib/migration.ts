@@ -25,6 +25,7 @@ const LEGACY_KEYS = [
 const RESETTABLE_UI_KEYS = [
   "apeir.operations.layout.v1",
   "apeir.studio.layout.v1",
+  "apeir.studio.library.v1",
   SCHEMA_KEY,
   MIGRATION_REPORT_KEY,
   "nous_onboarding_completed",
