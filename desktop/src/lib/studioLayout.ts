@@ -1,6 +1,6 @@
 import type { IJsonModel, IJsonRowNode } from "flexlayout-react";
 import { Actions, GroupAction, type Action } from "flexlayout-react";
-import { validateDashboard } from "./studioDashboard";
+import { compactDashboard, validateDashboard } from "./studioDashboard";
 
 export function discardsProtectedPanel(action: Action, protectedIds: ReadonlySet<string>): boolean {
   if (action instanceof GroupAction) return action.actions.some(item => discardsProtectedPanel(item, protectedIds));
@@ -95,7 +95,7 @@ export function createStudioLayout(template = "general", locale: "en" | "zh" = "
   let sequence = 0;
   return parseStudioLayout(JSON.stringify({ schemaVersion: 1, kind: "workspace", name: preset.en, locale, layout: {
     type: "row", id: "studio-root", children: preset.panels.map((types, i) => ({ type: "tabset", id: `group-${i}`, weight: template === "software" ? [55, 27, 18][i] : 100 / preset.panels.length,
-      children: types.map(type => ({ type: "tab", id: `panel-${++sequence}`, component: type, name: type })) })),
+      children: types.map(type => ({ type: "tab", id: `panel-${++sequence}`, component: type, name: type, ...(type === "dashboard" ? { config: template === "network" ? compactDashboard(["runtime", "kernel", "nodes", "resources", "topology", "usage", "works", "evidence"]) : compactDashboard() } : {}) })) })),
   } }));
 }
 

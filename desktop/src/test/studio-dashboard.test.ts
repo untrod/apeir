@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Model } from "flexlayout-react";
-import { defaultDashboard, validateDashboard } from "../lib/studioDashboard";
+import { compactDashboard, defaultDashboard, validateDashboard } from "../lib/studioDashboard";
 import { captureStudioLayout, createStudioLayout, parseStudioLayout, studioModel } from "../lib/studioLayout";
 
 const layout = (config: unknown) => {
@@ -8,6 +8,18 @@ const layout = (config: unknown) => {
   source.layout.children = [{ type: "tabset", id: "group", children: [{ type: "tab", id: "panel", component: "dashboard", config }] }];
   return source;
 };
+it("keeps legacy implicit geometry while making only newly created dashboards compact", () => {
+  expect(defaultDashboard().widgets.every(widget => widget.h === 6)).toBe(true);
+  const compact = compactDashboard();
+  expect(compact.widgets.every(widget => widget.h === 4)).toBe(true);
+  expect(validateDashboard(compact)).toEqual(compact);
+  const legacy = layout(undefined); delete (legacy.layout.children![0] as { children: Array<{ config?: unknown }> }).children[0].config;
+  expect(parseStudioLayout(JSON.stringify(legacy))).toEqual(legacy);
+  const network = createStudioLayout("network");
+  expect(JSON.stringify(network)).toContain('"type":"topology"');
+  expect(JSON.stringify(network)).toContain('"type":"resources"');
+});
+
 describe("Dashboard shares the bounded Studio presentation contract", () => {
   it("preserves exact widget identities, settings and positions through the real dock model", () => {
     const config = defaultDashboard(); config.widgets[0] = { ...config.widgets[0], title: "User layout", paused: true, x: 2, y: 12, w: 6 };

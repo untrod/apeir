@@ -1,5 +1,5 @@
 /** Bounded presentation configuration. Never serialises Runtime data or permission. */
-export const WIDGET_TYPES = ["runtime", "kernel", "nodes", "devices", "resources", "usage", "works", "evidence", "activity", "diagnostics", "events", "gpu", "network", "sensors"] as const;
+export const WIDGET_TYPES = ["runtime", "kernel", "nodes", "devices", "resources", "usage", "works", "evidence", "activity", "diagnostics", "events", "gpu", "network", "sensors", "topology"] as const;
 export type WidgetType = typeof WIDGET_TYPES[number];
 export type DashboardWidget = { id: string; type: string; title: string; x: number; y: number; w: number; h: number; paused: boolean };
 export type DashboardConfig = { schemaVersion: 1; widgets: DashboardWidget[] };
@@ -36,3 +36,6 @@ export function validateDashboard(input: unknown): DashboardConfig {
   return { schemaVersion: 1, widgets };
 }
 export const defaultDashboard = (): DashboardConfig => ({ schemaVersion: 1, widgets: ["runtime", "kernel", "nodes", "works", "usage", "evidence"].map((type, i) => ({ id: `widget-${i + 1}`, type, title: "", x: (i % 3) * 4, y: Math.floor(i / 3) * 6, w: 4, h: 6, paused: false })) });
+
+/** New layouts are denser; config-less version-1 layouts retain their original geometry. */
+export const compactDashboard = (types: readonly WidgetType[] = ["runtime", "kernel", "nodes", "works", "usage", "evidence"]): DashboardConfig => ({ schemaVersion: 1, widgets: types.map((type, i) => ({ id: `widget-${i + 1}`, type, title: "", x: (i % 3) * 4, y: Math.floor(i / 3) * 4, w: 4, h: 4, paused: false })) });

@@ -93,6 +93,35 @@ namespace mismatch, duplicate IDs, oversize collections, stale revisions and
 unavailable writer locks, preserving prior stored bytes on quota failure.
 Native Windows/media/Provider/hardware qualification remains separate.
 
+### Studio visual and interaction refinement — 2026-10-24
+
+REUSE the same FlexLayout model, GridLayout, ThemeProvider/design palette,
+version1 layout/library documents, protected drafts and Runtime read consumers.
+EXTEND presentation with a compact toolbar/menu, ephemeral normal/edit mode,
+shared status treatments, monochrome icons, bilingual labels and keyboard focus.
+No execution, permission, Runtime database or layout schema is introduced.
+The Usage panel now reads the existing shared accounting consumer directly,
+instead of opening the Model Lab configuration view a second time.
+
+Existing explicit and implicit legacy Dashboard geometry remains compatible;
+only newly created Dashboards get smaller default cards. Responsive stacking is
+a view transform and never overwrites saved positions. Resource meters admit
+only fresh/current/trusted reports with valid memory bounds. Topology connects
+only exact reported Node/Device bindings. Missing metrics/bindings remain
+UNKNOWN; CPU utilization, GPU and throughput are not invented.
+
+Real model-disabled CLI/HTTP and sandboxed Chromium checks retain the original
+layout/drag/draft/Controller/library assertions, add old six-row Dashboard import,
+normal-mode movement refusal, keyboard edit/settings, live service and unknown
+usage states, both themes and Chinese small-screen reload. Frontend contract
+fixtures exercise nonempty memory/topology rendering and stale/revoked/invalid
+report refusal; they are not physical telemetry or hardware acceptance.
+The original visual test exposed an implicit-default compatibility regression;
+it is retained privately and fixed by preserving legacy defaults. Source browser
+screenshots are not installed APEIR.exe screenshots. Windows10 native visual,
+DPI, lifecycle and real Provider qualification remain PENDING/BLOCKED under the
+existing native gates. No FPS, latency, Token or cost saving is asserted.
+
 ### Shared Usage transport measurement — 2026-10-24
 
 The public `desktop/scripts/benchmark-studio-usage.mjs` builds isolated fixtures

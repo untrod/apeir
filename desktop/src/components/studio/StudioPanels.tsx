@@ -8,7 +8,7 @@ import { TaskCenter } from "../TaskCenter";
 import { OperationsConsole, type OperationsSnapshot } from "../OperationsConsole";
 import { useStudioSnapshot } from "./StudioData";
 export { StudioSnapshot } from "./StudioData";
-import { StudioDashboard } from "./StudioDashboard";
+import { StudioDashboard, StudioUsage } from "./StudioDashboard";
 import { ErrorBoundary } from "../ErrorBoundary";
 import type { DrawerView } from "../DetailDrawer";
 
@@ -23,7 +23,7 @@ function Projection({ collection }: { collection: keyof OperationsSnapshot | "ru
   return <section className="studio-projection" aria-label={`${collection} Runtime records`}>
     <header><strong>{collection}</strong><button onClick={() => refresh(["operations"])}>Refresh / 刷新</button></header>
     {loading ? <p role="status">LOADING · Runtime</p> : error ? <p role="alert">UNAVAILABLE · {error}</p> : value === undefined ? <p role="status">UNKNOWN · No source reported.</p> : Array.isArray(value) ? value.length ? value.slice(0, 200).map((row, i) => <details key={i}><summary>{String((row as Record<string, unknown>).node_id ?? (row as Record<string, unknown>).device_id ?? (row as Record<string, unknown>).work_id ?? (row as Record<string, unknown>).digest ?? (row as Record<string, unknown>).sequence ?? `Record ${i + 1}`)}</summary><pre>{JSON.stringify(row, null, 2)}</pre></details>) : <p>No records reported / 暂无记录</p> : <pre>{JSON.stringify(value, null, 2)}</pre>}
-    <p className="studio-note">Read-only Runtime projection. Receipt ≠ Observation. Missing values remain UNKNOWN.</p>
+    <details className="studio-card-details"><summary>Source / 来源</summary>Runtime projection · Receipt ≠ Observation · UNKNOWN remains unknown.</details>
   </section>;
 }
 
@@ -51,7 +51,7 @@ export const STUDIO_PANELS: readonly PanelContribution[] = [
   { type: "diagnostics", en: "Diagnostics", zh: "诊断", owner: "Runtime health projection", render: () => <Projection collection="runtime" /> },
   { type: "documents", en: "Documents", zh: "文档", owner: "DocumentRuntime", render: () => <DocumentWorkbench /> },
   { type: "simulation", en: "Simulation", zh: "仿真", owner: "SimulationRuntime", render: () => <SimulationWorkbench /> },
-  { type: "usage", en: "Model Usage", zh: "模型用量", owner: "Model Lab / Usage accounting", render: () => <DeveloperPlatform modelsOnly /> },
+  { type: "usage", en: "Model Usage", zh: "模型用量", owner: "CostController / Usage accounting", render: p => <StudioUsage isVisible={p.isVisible} locale={p.locale} /> },
   { type: "activity", en: "Governance Activity", zh: "治理活动", owner: "GovernanceStore audit projection", render: () => <Projection collection="activity" /> },
   { type: "operations", en: "Operations Console", zh: "操作控制台", owner: "Existing Console / Governance", render: () => <OperationsConsole /> },
 ];

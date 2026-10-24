@@ -46,7 +46,7 @@ export function StudioLayoutLibrary({ current, load, exportLayout, close, locale
   };
   return <section role="dialog" aria-modal="false" aria-label="Saved layout library" className="studio-layout-library">
     <header><strong>{t("Layout library", "布局库")}</strong><button onClick={close}>{t("Close library", "关闭布局库")}</button></header>
-    <p>{t("Presentation only. Workspace layouts use the current authenticated Runtime directory. No file content, identity, approval or permission is saved.", "仅保存展示配置。工作区布局绑定当前已认证 Runtime 的目录，不保存文件内容、身份、审批或权限。")}</p>
+    <details className="studio-card-details"><summary>{t("About saved layouts", "关于保存的布局")}</summary><p>{t("Workspace layouts belong to the current Runtime directory. Layouts contain presentation settings, never file drafts, credentials or permissions.", "工作区布局属于当前 Runtime 目录，仅保存展示设置，不包含文件草稿、凭据或权限。")}</p></details>
     <label>{t("Layout name", "布局名称")}<input autoFocus aria-label="Layout name" maxLength={64} value={name} onChange={event => setName(event.target.value)} /></label>
     <label>{t("Save as", "保存类型")}<select aria-label="Layout scope" value={kind} disabled={busy} onChange={event => {
       const next = event.target.value as LayoutKind; setKind(next); setSelected(null);
