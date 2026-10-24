@@ -33,8 +33,9 @@ are rejected; unknown components load no code. Source mobile390px and dark mode
 are exercised. The public Playwright test is now part of existing Desktop CI;
 screenshots are labelled source browser, never installed APEIR.exe evidence.
 
-An exploratory Vite-development warm Studio-open baseline recorded8 samples:
-p50=126.35ms,p95=155.46ms (median / nearest-rank). It measures click to two browser animation frames after
+Source `62025bccac70973ad77af1d459c75810114d952d`, Linux x64/Node24.19.0,
+Vite7.3.7 and sandboxed Chromium156.0.8078.4 recorded8 exploratory warm
+Studio-open samples: p50=137.96ms,p95=150.01ms (median / nearest-rank). It measures click to two browser animation frames after
 the Studio region appears, in the same local Chromium/source environment. It
 does not measure Windows cold start, sustained FPS, memory release, paired
 improvement or model latency. Those performance qualifications remain pending.
