@@ -13,6 +13,11 @@ reconcile what happened. A successful response alone does not prove an effect.
 [Operations](docs/operations/README.md) · [Developer SDK](docs/development/DEVELOPER_PLATFORM.md) ·
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [简体中文](README.zh-CN.md)
 
+[APEIR Studio](docs/development/DEVELOPER_PLATFORM.md#apeir-studio) is the modular
+Desktop workspace over this Runtime: dock existing views and save safe layouts.
+The current source-browser preview includes reproducible Runtime integration
+checks; it is not a qualified Windows installer. Feature limits remain in ROADMAP.
+
 ## Architecture
 
 ```text

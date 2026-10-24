@@ -197,6 +197,11 @@ Copy-Item -LiteralPath $launcher -Destination (Join-Path $portableRoot "APEIR.ex
 Copy-Item -LiteralPath $runtimeSidecar -Destination (Join-Path $portableRoot "nous-runtime.exe")
 Copy-Item -LiteralPath $kernelSidecar -Destination (Join-Path $portableRoot "nousd.exe")
 Copy-Item -LiteralPath $workerSidecar -Destination (Join-Path $portableRoot "nous-provider-worker.exe")
+$licenseFiles = foreach ($name in @('LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md')) {
+    $destination = Join-Path $portableRoot $name
+    Copy-Item -LiteralPath (Join-Path $repo $name) -Destination $destination
+    $destination
+}
 foreach ($dependency in $nativeDependencies) {
     $source = Join-Path $binaryRoot $dependency.name
     if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne $dependency.sha256) { throw 'Native runtime dependency changed during packaging.' }
@@ -228,6 +233,7 @@ $artifactFiles = @(
     $portableZip
 )
 $artifactFiles += @($nativeDependencies | ForEach-Object { Join-Path $portableRoot $_.name })
+$artifactFiles += @($licenseFiles)
 $artifactRootPrefix = ([System.IO.Path]::GetFullPath($artifactRoot)).TrimEnd(
     [System.IO.Path]::DirectorySeparatorChar,
     [System.IO.Path]::AltDirectorySeparatorChar

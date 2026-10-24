@@ -8,6 +8,50 @@ This record distinguishes reproduced defects, inspected risks and unqualified
 external dependencies. It is not an exhaustive proof that the repository is
 bug-free, a physical acceptance, or production certification.
 
+## Studio composition review — 2026-10-24
+
+Starting main `9048af81` includes normally merged R4 PR #90; its component lock
+and frozen Kernel remain unchanged. REUSE the existing Desktop Runtime views,
+API/EntityStore/EventClient, theme and editor. EXTEND presentation with a pinned
+FlexLayout dock and bounded version1 layout; the new frontend panel contribution
+table owns rendering only. The Desktop architecture records the view/owner map.
+No Workflow executor, Runtime store, credential backend or installer is added.
+
+Two original deterministic failures establish that the existing EntityStore
+retained prior nodes after credential replacement and hydrated unscoped cached
+records. The repair clears the same Store on connection replacement, scopes its
+existing cache record to endpoint/session without saving bearer material, and
+rejects obsolete hydration/batch results. Same-scope historical Node tests retain
+their original UNKNOWN/revoked assertions. This fix is required for Studio's
+cross-Controller acceptance, not a new task database or authority.
+
+Actual sandboxed Linux Chromium with two owned, model-disabled Runtime CLI/HTTP
+processes exercises layout save/reload, draft-preserving drag, no repeated file
+read on reparenting, blocked destructive layout replacement, Controller switch,
+hidden old private content and explicit draft export. Malicious layout fields
+are rejected; unknown components load no code. Source mobile390px and dark mode
+are exercised. The public Playwright test is now part of existing Desktop CI;
+screenshots are labelled source browser, never installed APEIR.exe evidence.
+
+Source `62025bccac70973ad77af1d459c75810114d952d`, Linux x64/Node24.19.0,
+Vite7.3.7 and sandboxed Chromium156.0.8078.4 recorded8 exploratory warm
+Studio-open samples: p50=137.96ms,p95=150.01ms (median / nearest-rank). It measures click to two browser animation frames after
+the Studio region appears, in the same local Chromium/source environment. It
+does not measure Windows cold start, sustained FPS, memory release, paired
+improvement or model latency. Those performance qualifications remain pending.
+
+Dependency audit independently reproduced7 pre-existing development findings
+on main (5 HIGH,2 MODERATE); production dependencies had0. Compatible Vite7.3.7,
+Vitest4.1.12 and affected transitive dependency updates remove those findings;
+the full audited lock now has0 findings. No scan or assertion is weakened.
+FlexLayout0.11.1 is MIT and Playwright1.64.1 is Apache-2.0; both are version-pinned.
+The required frontend job now audits all npm dependencies, including dev tools.
+
+The schema has document-kind discriminators but currently saves one global
+presentation preference. Workspace-specific libraries, Dashboard editing, visual
+Workflow conversion, isolated external UI contributions and real media adapters
+remain PENDING. Existing text/Runtime views in a preset do not qualify these.
+
 ## Governance schema admission — 2026-10-23
 
 R2 rechecked main `e3cd2a20`, composed candidate `c8ec9f3` and frozen Kernel.

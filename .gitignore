@@ -119,3 +119,6 @@ Thumbs.db
 remote_terminal/data/pack_registry.json
 # Generated desktop Runtime sidecars
 desktop/src-tauri/binaries/
+# Source-browser validation output may contain temporary workspace data.
+desktop/test-results/
+desktop/playwright-report/

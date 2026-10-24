@@ -20,6 +20,58 @@ The desktop `Develop` page provides the following views:
 
 Equivalent API endpoints are available under `/api/v1/developer/`.
 
+### APEIR Studio
+
+Use the canonical [Quick Start](../operations/getting-started/QUICK_START.md)
+for installation and its explicit model-disabled Runtime without Kernel/model
+credentials. In a checkout of the same revision, Node22.19+ (or a newer supported
+LTS) can run:
+
+```bash
+cd desktop
+npm ci
+npm run dev
+```
+
+Open the Vite address, connect Operations to your authenticated Runtime, then
+choose **APEIR Studio / Open workspace**. The native sidebar has **Studio**;
+source browser validation is not Windows EXE acceptance.
+
+Choose a preset, add panels, drag tab headers to split/regroup, resize splitters
+and maximize/restore groups. Ctrl/Cmd+Shift+P opens panel search; Ctrl/Cmd+Alt+S
+saves presentation. Save/Load/Reset/Import/Export use the bounded version1 schema.
+Double-click a tab to rename it using the docking library. Resolve unsaved
+drafts/pending actions before closing editors or replacing layouts. Layout
+export contains no file content, credentials, Work or approval identity.
+
+Node, Device, Workflow, Evidence and Activity panels share the real Operations
+projection and its refresh action; empty results are not ONLINE or verified
+success. Use Operations for original governed controls. Supported commands reuse
+Workbench profiles and strict sandbox admission; missing isolation is BLOCKED.
+Controlled Commands is not an interactive PTY.
+
+General, Software, Agent, Embedded, Network, Scientific, Interactive and Blank
+are compositions of existing views. They do not qualify hardware/media,
+third-party UI execution, visual Workflow editing or scientific execution. See
+[Desktop ownership and limits](../architecture/DESKTOP_ARCHITECTURE.md#apeir-studio-presentation-shell).
+
+The checked-in integration test starts two owned, temporary, model-disabled
+Runtime CLI processes and sandboxed Chromium. It exercises layout restore,
+draft-preserving drag, protected replacement, actual Controller switching,
+explicit private-draft export and rejected malicious layouts. From `desktop`:
+
+```bash
+npx playwright install --with-deps chromium
+npm run test:e2e
+```
+
+The selected `python` must have the Distribution installed; optionally set
+`APEIR_TEST_PYTHON` to its absolute executable. Runtime state stays in temporary
+directories; the fake test bearer is not a Provider key. Screenshot output under
+`desktop/test-results` is source-browser evidence, not an installed Windows
+application. Existing Desktop CI runs this test without disabling Chromium's
+sandbox. No real model call or untrusted workload is admitted.
+
 ### First-use configuration and model tests
 
 The existing native setup wizard reads `/api/v1/health/detailed` from the selected

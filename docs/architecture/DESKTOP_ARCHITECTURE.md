@@ -17,6 +17,71 @@ tool, not a separately hosted production website.
 - Shared API client in `desktop/src/lib/api.ts`
 - Runtime entity and event state under `desktop/src/store/`
 
+## APEIR Studio presentation shell
+
+Studio is the same Desktop: use **Studio** in the native sidebar or **APEIR Studio
+/ Open workspace** in source Operations. FlexLayout0.11.1 (MIT, React18, Node20+)
+is pinned in the existing lockfile. ThemeProvider skins the docking controls;
+the shell is lazy-loaded. No second Runtime or installer is introduced.
+
+| Classification | Panels | Existing authority / view |
+| --- | --- | --- |
+| REUSE | Chat / Context | ChatView, Composer, ContextInspector; Conversation/Gateway/NKI |
+| REUSE | Files / Editor / Controlled Commands | DeveloperWorkbench, WorkspaceProposals; Workspace/Governance/ProcessSession; not a PTY |
+| REUSE | Models / Usage | DeveloperPlatform / Model Lab; original Usage journal |
+| REUSE | Tasks | TaskCenter and existing EntityStore/EventClient |
+| REUSE | Environment / Documents / Simulation | Existing Inspector/Workbench and their Runtime services |
+| REUSE | Nodes / Devices / Workflow records / Evidence metadata / Governance Activity | One shared transient read of `/api/v1/control/operations`; Controller/Reality/Workflow/DistributedWork metadata and GovernanceStore audit owners |
+| REUSE | Operations / detailed Inspector | OperationsConsole and its original human authentication/Governance |
+| EXTEND | Docking and preset templates | Bounded versioned presentation JSON, no execution consumer |
+| NEW | Frontend panel contribution table and stable portal hosts | Rendering/lifecycle only; not Runtime or authorization state |
+
+Stable tab IDs address React portal hosts. Dragging reparents the existing host,
+preserving drafts without remounting or replaying work. Closing/replacing a
+protected editor is blocked until drafts and pending actions are resolved.
+Closing a panel does not cancel backend Work. Existing editor/Operations
+preferences remain intact; only a safe initial preset is derived from old tabs.
+
+`apeir.studio.layout.v1` currently stores the global presentation choice. The
+schema distinguishes global/workspace/dashboard/template documents; named
+workspace libraries and Dashboard editing are not yet qualified. Import admits
+only geometry, display fields and panel type references:96KiB,100 nodes,24
+panels,8 levels, finite positive sizes and unique IDs. Unknown types render
+Missing Component and load no code. No module URL, callback, resource identity,
+token, content or grant is accepted. Popouts and executable third-party UI are
+disabled. Layout export is not file draft persistence.
+
+Controller/session changes retire original panel trees/requests before rendering
+the new projection. Unsaved editor text is retained only in memory outside the
+retired view. It is not shown as the new Controller's file or placed in layouts.
+Explicit **Export previous private drafts** downloads private text; it does not
+apply a change, create a Proposal or transfer it to another Runtime. Resolve or
+explicitly discard archived drafts before leaving Studio. Reload/process exit
+can still lose unsaved text. Original Work, approvals and effects remain owned
+by Runtime, not a panel or layout.
+
+Task and Chat trace selections reuse the existing DetailDrawer with the original
+entity ID, scoped to that Studio session. The Activity projection here is the
+Governance audit, not RuntimeEventBus or a durable Run EventStream. Evidence rows
+are original Work receipt/verification metadata; rendering them is not CAS byte
+integrity verification. Studio also hides the older ResourceDock to avoid a
+second bottom workspace and its extra background usage polling.
+
+The existing EntityStore also clears synchronously on a Controller/session
+change. Its same IndexedDB record now carries cache-schema2 and a SHA-256 scope
+digest bound to endpoint and bearer session; raw bearer material is never saved
+there. A legacy/unscoped or mismatched cache cannot populate the current view.
+Without WebCrypto, optional offline caching is disabled and current Runtime
+reads continue. This is session isolation, not encrypted or authoritative
+evidence storage. Runtime remains the history owner. App hydration/poll batches
+recheck their captured connection after all requests settle, so one already
+fulfilled old response cannot leak across a later connection change.
+
+The Interactive preset currently composes text Chat/Models/Diagnostics only;
+ASR/TTS, vision, microphone and Avatar are PENDING. Visual Workflow editing,
+Dashboard widgets and an isolated external UI SDK remain PENDING. Workflow
+panels display actual existing Workflow records, not a graph executor.
+
 ## Data flow
 
 ```text

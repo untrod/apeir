@@ -137,7 +137,7 @@ apeir runtime-api status --json
 apeir runtime-api token-path
 ```
 
-For the source web interface, use the same checkout and Node.js 22:
+For the source web interface, use the same checkout and Node.js22.19+:
 
 ```bash
 cd desktop
@@ -160,6 +160,25 @@ not an installed Windows executable. File approvals still require a separately
 enrolled authorized human; test execution remains BLOCKED without a qualified
 sandbox. An API health response does not establish model inference or execution
 qualification.
+
+The existing Desktop CI also uploads `apeir-studio-source-frontend-<commit>`
+after unit/build and actual Runtime/browser integration pass. This is a static
+source-browser preview, not an EXE. Download the artifact from the exact accepted
+commit, verify `SHA256SUMS.txt` and compare `source-manifest.json` with the
+Distribution source/wheel revision you install. GitHub artifact retention and
+sign-in requirements apply; this is not a permanent signed Release download.
+
+After extracting that artifact, serve its `app` directory locally without Node:
+
+```bash
+python -m http.server 5186 --bind 127.0.0.1 --directory app
+```
+
+Open `http://127.0.0.1:5186`, connect to the actual authenticated Runtime as above,
+then select **APEIR Studio / Open workspace**. The same Studio source and theme
+are used by Tauri. Use the [Studio guide](../../development/DEVELOPER_PLATFORM.md#apeir-studio)
+for panels, safe layout import/export and current feature limits. Real model,
+sandbox, native installation and physical acceptance remain separate gates.
 
 For repository tests and the numerical reference task:
 

@@ -11,8 +11,8 @@
 
 import React, { useState, useMemo } from "react";
 import { colors, typo, radius, space, card as cardStyle, btnSecondary, btnPrimary, statusColor } from "../design";
-import { useTasks, useActiveTasks, entityStore, type Task, type TaskStatus } from "../store";
-import { taskAction } from "../lib/api";
+import { useTasks, useActiveTasks, useRuntimeConfigVersion, entityStore, type Task, type TaskStatus } from "../store";
+import { captureRuntimeConnection, taskAction } from "../lib/api";
 import { toast } from "./Toast";
 import { Skeleton } from "./Skeleton";
 
@@ -23,9 +23,14 @@ import { Skeleton } from "./Skeleton";
 interface TaskCenterProps {
   onTaskClick: (taskId: string) => void;
   onTraceClick: (traceId: string) => void;
+  onConversationClick?: (conversationId: string) => void;
 }
 
-export function TaskCenter({ onTaskClick, onTraceClick }: TaskCenterProps) {
+export function TaskCenter(props: TaskCenterProps) {
+  const version = useRuntimeConfigVersion();
+  return <TaskCenterSession key={version} {...props} />;
+}
+function TaskCenterSession({ onTaskClick, onTraceClick, onConversationClick }: TaskCenterProps) {
   const allTasks = useTasks();
   const [filter, setFilter] = useState<string>("all");
 
@@ -89,6 +94,7 @@ export function TaskCenter({ onTaskClick, onTraceClick }: TaskCenterProps) {
               task={task}
               onTaskClick={onTaskClick}
               onTraceClick={onTraceClick}
+              onConversationClick={onConversationClick}
             />
           ))
         )}
@@ -101,23 +107,28 @@ export function TaskCenter({ onTaskClick, onTraceClick }: TaskCenterProps) {
 // Task Row
 
 
-function TaskRow({ task, onTaskClick, onTraceClick }: {
+function TaskRow({ task, onTaskClick, onTraceClick, onConversationClick }: {
   task: Task;
   onTaskClick: (id: string) => void;
   onTraceClick: (id: string) => void;
+  onConversationClick?: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [acting, setActing] = useState(false);
+  const [current] = useState(captureRuntimeConnection);
   const st = statusColor(task.status);
 
   const handleAction = async (action: string) => {
     setActing(true);
     try {
+      current();
       await taskAction(action, task.id);
+      current();
       // Status changes arrive via runtime events — do NOT optimistically mutate local state.
       // entityStore.updateTaskStatus() removed per RC9 state ownership audit.
       toast.success(`Task ${action} requested`, `Task ${task.id.slice(0, 12)}... awaiting confirmation`);
     } catch (err) {
+      try { current(); } catch { return; }
       toast.error("Action failed", err instanceof Error ? err.message : "Unknown error");
     } finally {
       setActing(false);
@@ -128,6 +139,7 @@ function TaskRow({ task, onTaskClick, onTraceClick }: {
   const canPause = ["planning", "running", "dispatching", "recovering"].includes(task.status);
   const canResume = task.status === "paused" && task.recoverable;
   const canRetry = task.status === "failed" && task.recoverable && task.task_kind !== "work";
+  const navigate = (action: () => void) => { try { current(); action(); } catch { /* The retired view cannot retarget a new Controller. */ } };
 
   return (
     <div style={{ ...cardStyle, marginBottom: space.md }}>
@@ -213,16 +225,16 @@ function TaskRow({ task, onTaskClick, onTraceClick }: {
 
           {/* Actions */}
           <div style={{ display: "flex", gap: space.sm, flexWrap: "wrap" }}>
-            <button onClick={() => onTaskClick(task.id)} style={{ ...btnSecondary, fontSize: typo.xs, padding: `${space.xs} ${space.md}` }}>
+            <button onClick={() => navigate(() => onTaskClick(task.id))} style={{ ...btnSecondary, fontSize: typo.xs, padding: `${space.xs} ${space.md}` }}>
               View Details
             </button>
             {task.trace_id && (
-              <button onClick={() => task.task_kind === "work" ? onTaskClick(task.id) : onTraceClick(task.trace_id!)} style={{ ...btnSecondary, fontSize: typo.xs, padding: `${space.xs} ${space.md}` }}>
+              <button onClick={() => navigate(() => task.task_kind === "work" ? onTaskClick(task.id) : onTraceClick(task.trace_id!))} style={{ ...btnSecondary, fontSize: typo.xs, padding: `${space.xs} ${space.md}` }}>
                 {task.task_kind === "work" ? "View Work Activity" : "View Trace"}
               </button>
             )}
             {task.conversation_id && (
-              <button onClick={() => { /* navigate to conversation */ }} style={{ ...btnSecondary, fontSize: typo.xs, padding: `${space.xs} ${space.md}` }}>
+              <button disabled={!onConversationClick} title={onConversationClick ? "Open original conversation" : "Conversation navigation is not connected in this view."} onClick={() => navigate(() => onConversationClick?.(task.conversation_id!))} style={{ ...btnSecondary, fontSize: typo.xs, padding: `${space.xs} ${space.md}`, opacity: onConversationClick ? 1 : 0.5 }}>
                 Open Conversation
               </button>
             )}

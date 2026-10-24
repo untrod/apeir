@@ -24,7 +24,7 @@ import {
   usePendingApprovals, useStoreHydrated, useRuntimeConfigVersion,
 } from "./store";
 import {
-  api, testConnection, fetchTasks, fetchNodes, fetchModels, fetchApprovals, fetchConversations,
+  api, captureRuntimeConnection, testConnection, fetchTasks, fetchNodes, fetchModels, fetchApprovals, fetchConversations,
   fetchStatus, getConfig, getRuntimeConfigVersion,
 } from "./lib/api";
 import type { GlobalSearchResult, RuntimeEventEnvelope } from "./lib/api";
@@ -57,6 +57,7 @@ import { EnvironmentInspector } from "./components/EnvironmentInspector";
 import { SimulationWorkbench } from "./components/SimulationWorkbench";
 import { errorMessage, fixedNumber } from "./lib/format";
 import { usageMoney, usageNumber } from "./lib/usageAccounting";
+const StudioShell = React.lazy(() => import("./components/studio/StudioShell").then(module => ({ default: module.StudioShell })));
 
 import { bindNativeRuntimeSession, isLocalRuntimeSelected, nativeRuntimeStatus } from "./lib/nativeRuntime";
 
@@ -707,7 +708,17 @@ function AppShell() {
   const [fatalDiag, setFatalDiag] = useState<DiagnosticState | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [page, setPage] = useState<NavPage>("operations");
+  const runtimeConfigVersion = useRuntimeConfigVersion();
+  const [page, setPageState] = useState<NavPage>("operations");
+  const studioProtected = useRef(false);
+  const protectStudio = useCallback((value: boolean) => { studioProtected.current = value; }, []);
+  const setPage = useCallback((next: NavPage) => {
+    if (page === "studio" && next !== "studio" && studioProtected.current) {
+      toast.warning("Resolve Studio drafts or pending actions before leaving. Layout export does not save file content.");
+      return;
+    }
+    setPageState(next);
+  }, [page]);
   const [drawer, setDrawer] = useState<DrawerView>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -765,16 +776,22 @@ function AppShell() {
 
   // Handle bootstrap completion
   useEffect(() => {
+    let active = true;
+    const current = captureRuntimeConnection();
     if (bootstrapStatus.state === "ready") {
       // Hydrate store and load data
       entityStore.hydrate().then(() => {
-        Promise.allSettled([
+        current();
+        if (!active) return;
+        return Promise.allSettled([
           fetchTasks("", 100),
           fetchNodes(),
           fetchModels(),
           fetchApprovals(),
           fetchConversations(),
         ]).then(([tasksData, nodesData, modelsData, approvalsData, conversationsData]) => {
+          current();
+          if (!active) return;
           if (tasksData.status === "fulfilled" && tasksData.value?.tasks) {
             entityStore.upsertTasks(tasksData.value.tasks as any);
           }
@@ -791,31 +808,37 @@ function AppShell() {
             entityStore.upsertConversations(conversationsData.value.conversations);
           }
           eventClient.start({ mode: "polling", onError: () => toast.error("Event history unavailable", "Reload current Runtime state before resuming.") });
+          setConnected(true);
         });
-        setConnected(true);
-      });
+      }).catch(() => { /* Stale snapshots cannot publish into a replacement session. */ });
     } else if (bootstrapStatus.state === "onboarding_required") {
       setShowOnboarding(true);
       // Still attempt store hydration
       entityStore.hydrate().catch(() => {});
     }
-  }, [bootstrapStatus.state]);
+    return () => { active = false; };
+  }, [bootstrapStatus.state, runtimeConfigVersion]);
 
   // Poll for updates when connected
   useEffect(() => {
     if (!connected) return;
+    const current = captureRuntimeConnection();
+    let active = true;
     const timer = setInterval(async () => {
+      try { current(); } catch { return; }
       const [tasksData, nodesData, modelsData, approvalsData, conversationsData] = await Promise.allSettled([
         fetchTasks("", 50), fetchNodes(), fetchModels(), fetchApprovals(), fetchConversations(),
       ]);
+      try { current(); } catch { return; }
+      if (!active) return;
       if (tasksData.status === "fulfilled" && tasksData.value?.tasks) entityStore.upsertTasks(tasksData.value.tasks as any);
       if (nodesData.status === "fulfilled" && Array.isArray(nodesData.value)) entityStore.upsertNodes(nodesData.value as any);
       if (modelsData.status === "fulfilled" && modelsData.value?.models) entityStore.upsertModels(modelsData.value.models as any);
       if (approvalsData.status === "fulfilled" && approvalsData.value?.approvals) entityStore.upsertApprovals(approvalsData.value.approvals as any);
       if (conversationsData.status === "fulfilled" && conversationsData.value?.conversations) entityStore.upsertConversations(conversationsData.value.conversations);
     }, 5000);
-    return () => { clearInterval(timer); eventClient.stop(); };
-  }, [connected]);
+    return () => { active = false; clearInterval(timer); eventClient.stop(); };
+  }, [connected, runtimeConfigVersion]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -847,7 +870,7 @@ function AppShell() {
     } else if (result.kind === "file") {
       setPage("workspace");
     }
-  }, []);
+  }, [setPage]);
 
   const commands = createDefaultCommands(
     (p) => setPage(p as NavPage),
@@ -920,7 +943,10 @@ function AppShell() {
   }
 
   if (page === "operations" && !("__TAURI_INTERNALS__" in window)) {
-    return <OperationsConsole />;
+    return <OperationsConsole onOpenStudio={() => setPage("studio")} />;
+  }
+  if (page === "studio" && !("__TAURI_INTERNALS__" in window)) {
+    return <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}><button onClick={() => setPage("operations")}>← Operations</button><div style={{ flex: 1, minHeight: 0 }}><React.Suspense fallback={<p role="status">Loading APEIR Studio…</p>}><StudioShell onProtectedChange={protectStudio} /></React.Suspense></div></div>;
   }
 
   if (bootstrapStatus.state !== "ready" && !connected) {
@@ -956,7 +982,7 @@ function AppShell() {
   return (
     <>
       <StatusBar onSearch={() => setPaletteOpen(true)} />
-      <div style={{ display: "flex", flex: 1, overflow: "hidden", height: `calc(100vh - ${page === "chat" || page === "operations" ? 44 : 148}px)` }}>
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", height: `calc(100vh - ${page === "chat" || page === "operations" || page === "studio" ? 44 : 148}px)` }}>
         <Sidebar currentPage={page} onNavigate={setPage} inspectorOpen={inspectorOpen}
           onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
           taskCount={tasks.filter((t) => ["running", "queued", "awaiting_approval"].includes(t.status)).length}
@@ -969,8 +995,9 @@ function AppShell() {
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ flex: inspectorOpen ? "40%" : "1", overflow: "hidden", transition: "flex 0.3s ease" }}>
             {page === "chat" && <ChatView conversationId={activeConversationId} onConversationCreated={setActiveConversationId} onCardClick={handleEventClick} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} />}
+            {page === "studio" && <React.Suspense fallback={<p role="status">Loading APEIR Studio…</p>}><StudioShell onProtectedChange={protectStudio} /></React.Suspense>}
             {page === "operations" && <OperationsConsole />}
-            {page === "tasks" && <TaskCenter onTaskClick={(id) => setDrawer({ kind: "task", taskId: id })} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} />}
+            {page === "tasks" && <TaskCenter onTaskClick={(id) => setDrawer({ kind: "task", taskId: id })} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} onConversationClick={id => { setActiveConversationId(id); setPage("chat"); }} />}
             {page === "develop" && <DeveloperPlatform />}
             {page === "documents" && <DocumentWorkbench />}
             {page === "environments" && <EnvironmentInspector />}
@@ -984,7 +1011,7 @@ function AppShell() {
         </div>
         <DetailDrawer view={drawer} onClose={() => setDrawer(null)} />
       </div>
-      {page !== "chat" && page !== "operations" && <ResourceDock />}
+      {page !== "chat" && page !== "operations" && page !== "studio" && <ResourceDock />}
       <CommandPalette
         commands={commands}
         open={paletteOpen}

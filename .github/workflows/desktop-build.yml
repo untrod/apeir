@@ -305,6 +305,8 @@ jobs:
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci
         if: steps.scope.outputs.scope == 'full'
+      - run: npm audit --audit-level=high
+        if: steps.scope.outputs.scope == 'full'
       - run: npm run lint
         if: steps.scope.outputs.scope == 'full'
       - run: npm test
@@ -313,6 +315,70 @@ jobs:
         if: steps.scope.outputs.scope == 'full'
       - run: npm run build
         if: steps.scope.outputs.scope == 'full'
+      - uses: actions/setup-python@v5
+        if: steps.scope.outputs.scope == 'full'
+        with:
+          python-version: '3.12'
+      - name: Install the existing Runtime for source Studio integration
+        if: steps.scope.outputs.scope == 'full'
+        working-directory: .
+        run: python -m pip install .
+      - name: Install sandboxed Chromium test prerequisites
+        if: steps.scope.outputs.scope == 'full'
+        run: npx playwright install --with-deps chromium
+      - name: Exercise source Studio against two real model-disabled Runtime processes
+        if: steps.scope.outputs.scope == 'full'
+        run: npm run test:e2e
+      - name: Retain the matching source Studio frontend, integrity and canonical guide
+        if: steps.scope.outputs.scope == 'full'
+        env:
+          SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, re, shutil
+          from pathlib import Path
+          from urllib.parse import urljoin
+          root = Path('../artifacts/studio-source-frontend')
+          root.mkdir(parents=True, exist_ok=True)
+          shutil.copytree('dist', root / 'app', dirs_exist_ok=True)
+          for name in ('LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md'):
+              shutil.copyfile(Path('..') / name, root / name)
+          shutil.copyfile('package-lock.json', root / 'desktop-package-lock.json')
+          revision = os.environ['SOURCE_REVISION']
+          canonical = f'https://github.com/untrod/apeir/blob/{revision}/docs/operations/getting-started/QUICK_START.md'
+          guide = Path('../docs/operations/getting-started/QUICK_START.md').read_text(encoding='utf-8')
+          guide = re.sub(r'(\]\()([^\s)]+)(\))', lambda match: match[1] + urljoin(canonical, match[2]) + match[3], guide)
+          (root / 'QUICK_START.md').write_text(f'Canonical guide for this exact source revision: {canonical}\n\n' + guide, encoding='utf-8')
+          lock = Path('../runtime-components.lock.json')
+          manifest = {
+              'distribution_revision': revision,
+              'kind': 'Static source-browser Studio frontend; not native Desktop or a release',
+              'runtime_requirement': 'Install the Distribution from the same source revision; authenticate to its actual API',
+              'validation': 'Frontend unit/type/lint/build and two actual model-disabled CLI/HTTP/Chromium integration cases passed in this job',
+              'kernel_reference': json.loads(lock.read_text())['components']['nous-kernel']['revision'],
+              'component_lock_sha256': hashlib.sha256(lock.read_bytes()).hexdigest(),
+              'kernel_binary_integrity': 'NOT_RUN', 'native_installation': 'NOT_RUN', 'real_model': 'NOT_RUN',
+              'supply_chain_scope': 'Original package lock and notices retained; not formal release qualification',
+          }
+          (root / 'source-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
+          files = sorted(path for path in root.rglob('*') if path.is_file() and path.name != 'SHA256SUMS.txt')
+          assert not any(path.suffix in ('.exe', '.db', '.sqlite', '.sqlite3', '.pem', '.key') for path in files)
+          (root / 'SHA256SUMS.txt').write_text(''.join(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(root).as_posix()}\n' for path in files), encoding='utf-8')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: steps.scope.outputs.scope == 'full'
+        with:
+          name: apeir-studio-source-frontend-${{ github.sha }}
+          path: artifacts/studio-source-frontend/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.scope.outputs.scope == 'full'
+        with:
+          name: studio-source-browser-evidence-${{ github.sha }}
+          path: desktop/test-results/**/*.png
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Documentation-only validation (required context remains present)
         if: steps.scope.outputs.scope == 'documentation'
         working-directory: .
