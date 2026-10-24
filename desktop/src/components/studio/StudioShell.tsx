@@ -7,6 +7,7 @@ import { useTheme } from "../../theme";
 import { captureStudioLayout, createStudioLayout, discardsProtectedPanel, loadStudioLayout, MAX_LAYOUT_BYTES, parseStudioLayout, STUDIO_LAYOUT_KEY, STUDIO_TEMPLATES, studioModel, type StudioLayout } from "../../lib/studioLayout";
 import { STUDIO_PANELS, StudioPanel, StudioSnapshot } from "./StudioPanels";
 import type { WorkbenchDraft } from "../DeveloperWorkbench";
+import { StudioLayoutLibrary } from "./StudioLayoutLibrary";
 import { DetailDrawer, type DrawerView } from "../DetailDrawer";
 import "flexlayout-react/style/light.css";
 import "./StudioShell.css";
@@ -64,6 +65,7 @@ function StudioSession({ epoch, remember, onProtectionChange }: { epoch: number;
   const [message, setMessage] = useState(initial.error);
   const [query, setQuery] = useState("");
   const [picker, setPicker] = useState(false);
+  const [library, setLibrary] = useState(false);
   const [selection, setSelection] = useState<DrawerView>(null);
   const [template, setTemplate] = useState("general");
   const dirty = useRef(new Set<string>());
@@ -89,7 +91,7 @@ function StudioSession({ epoch, remember, onProtectionChange }: { epoch: number;
     const keyboard = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === "KeyP") { event.preventDefault(); setPicker(value => !value); }
       if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === "KeyS") { event.preventDefault(); save(); }
-      if (event.key === "Escape") setPicker(false);
+      if (event.key === "Escape") { setPicker(false); setLibrary(false); }
     };
     window.addEventListener("keydown", keyboard);
     return () => window.removeEventListener("keydown", keyboard);
@@ -127,9 +129,10 @@ function StudioSession({ epoch, remember, onProtectionChange }: { epoch: number;
       <label>{t("Template", "模板")} <select value={template} onChange={event => setTemplate(event.target.value)}>{Object.entries(STUDIO_TEMPLATES).map(([id, item]) => <option key={id} value={id}>{item[locale]}</option>)}</select></label>
       <button onClick={() => replace(createStudioLayout(template, locale))}>{t("Apply preset", "应用预设")}</button>
       <button onClick={save}>{t("Save layout", "保存布局")}</button>
+      <button onClick={() => setLibrary(value => !value)} aria-expanded={library}>{t("Layout library", "布局库")}</button>
       <button onClick={() => { try { replace(loadStudioLayout(localStorage)); } catch (error) { setMessage(String(error)); } }}>{t("Load", "载入")}</button>
       <button onClick={() => replace(createStudioLayout("general", locale))}>{t("Reset", "重置")}</button>
-      <button onClick={() => download(JSON.stringify(captureStudioLayout(model.toJson(), document), null, 2), "apeir-studio-layout.json")}>{t("Export", "导出")}</button>
+      <button onClick={() => { try { download(JSON.stringify(captureStudioLayout(model.toJson(), document), null, 2), "apeir-studio-layout.json"); } catch (error) { setMessage(String(error)); } }}>{t("Export", "导出")}</button>
       <button onClick={() => input.current?.click()}>{t("Import", "导入")}</button>
       <input hidden ref={input} type="file" accept="application/json,.json" aria-label="Import Studio layout" onChange={async event => {
         const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
@@ -139,6 +142,7 @@ function StudioSession({ epoch, remember, onProtectionChange }: { epoch: number;
       <select aria-label="Studio theme" value={mode} onChange={event => setMode(event.target.value as "light" | "dark" | "system")}><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select>
     </header>
     {picker && <section className="studio-picker" aria-label="Panel library"><label>{t("Search panels", "搜索面板")}<input autoFocus value={query} onChange={event => setQuery(event.target.value)} /></label>{STUDIO_PANELS.filter(panel => `${panel.en} ${panel.zh} ${panel.type}`.toLowerCase().includes(query.toLowerCase())).map(panel => <button key={panel.type} onClick={() => open(panel.type)}><strong>{panel[locale]}</strong><small>{panel.owner}</small></button>)}</section>}
+    {library && <StudioLayoutLibrary locale={locale} current={() => captureStudioLayout(model.toJson(), document)} load={replace} exportLayout={layout => download(JSON.stringify(layout, null, 2), "apeir-studio-layout.json")} close={() => setLibrary(false)} />}
     {message && <div role="status" className="studio-notice">{message}<button onClick={() => setMessage("")}>{t("Dismiss", "关闭提示")}</button></div>}
     <div className="studio-dock" data-layout-revision={revision}><Layout model={model} factory={node => <StudioPanelSlot host={getHost(node.getId())} />} onAction={action} onModelChange={() => setRevision(value => value + 1)} /></div>
     {tabs.map(node => <StablePanel key={node.getId()} node={node} host={getHost(node.getId())} dirty={dirty.current} onProtectionChange={onProtectionChange} onSnapshot={value => remember(`${epoch}:${node.getId()}`, value)} open={open} inspect={setSelection} config={node.getConfig()} locale={locale} saveLayout={save} updateConfig={config => { if (JSON.stringify(node.getConfig()) !== JSON.stringify(config)) { model.doAction(Actions.updateNodeAttributes(node.getId(), { config })); setRevision(value => value + 1); } }} />)}
