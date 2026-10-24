@@ -60,6 +60,17 @@ uploaded. Neither candidate retention nor matching two builds approves relocking
 packaging, signing or publication. Nonidentical bytes or build environments must
 be reported rather than described as fully reproducible.
 
+The first R4 pair (`d4b3f10`, Actions40083548896) built successfully and both
+real native smoke runs passed, but the two unchanged Kernel components differed
+by20 bytes each. Their recorded environments matched; in-memory forensic
+comparison localized the variance to PE timestamp/debug identity metadata. Raw
+files and their distinct hashes are retained unchanged. Candidate-only builds
+now record `RUSTFLAGS=-C link-arg=/Brepro` to request deterministic linker output;
+the regular original-lock diagnostic keeps its original flags. This is a new
+source-build profile for review, never post-processing EXEs or trying to recover
+old hashes by collision. Its actual second-pair results, including any remaining
+variance, belong in the lock-migration PR before approval.
+
 ## 2. Verify source
 
 ```powershell

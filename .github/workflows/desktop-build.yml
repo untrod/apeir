@@ -60,9 +60,18 @@ jobs:
           targets: x86_64-pc-windows-msvc
       - name: Record build environment and exact source
         shell: pwsh
+        env:
+          QUALIFY_CANDIDATE: ${{ inputs.qualify_kernel_candidate }}
         run: |
           $evidence = Join-Path $env:RUNNER_TEMP 'kernel-rebuild-evidence'
           New-Item -ItemType Directory -Force $evidence | Out-Null
+          if ($env:QUALIFY_CANDIDATE -eq 'true') {
+            if ($env:RUSTFLAGS) { throw 'Unexpected compiler flags in candidate baseline' }
+            # MSVC timestamps/debug IDs varied in the first recorded clean pair.
+            # Rebuild deterministically, never edit or normalize the EXE bytes.
+            $env:RUSTFLAGS = '-C link-arg=/Brepro'
+            "RUSTFLAGS=$env:RUSTFLAGS" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
           rustc +1.99.1 -vV | Out-File "$evidence/toolchain.txt"
           cargo +1.99.1 -V | Out-File -Append "$evidence/toolchain.txt"
           Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture | Format-List | Out-File -Append "$evidence/toolchain.txt"

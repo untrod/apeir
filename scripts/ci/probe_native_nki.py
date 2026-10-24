@@ -151,8 +151,10 @@ async def qualify(endpoint: str, previous: dict | None = None) -> dict:
             "scope": "native component compatibility; not installation or sandbox qualification",
             "request_versions_exercised": versions,
             "kernel_runtime_version": health["runtime_version"],
-            "invalid_versions_rejected": previous is None,
-            "wrong_and_missing_nki_credentials_rejected": previous is None,
+            "invalid_versions_rejected": True if previous is None else None,
+            "wrong_and_missing_nki_credentials_rejected": True
+            if previous is None
+            else None,
             "unauthorized_model_credential": "DENIED_BEFORE_PROVIDER_SPAWN",
             "original_workload_id": identity,
             "original_profile_sha256": digest,

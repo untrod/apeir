@@ -253,6 +253,12 @@ try {
     if ($token.Length -ne 64) {
         throw "Packaged Runtime created an invalid session token."
     }
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $tokenAcl = Get-Acl -LiteralPath $tokenFile
+    $rules = @($tokenAcl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
+    if (-not $tokenAcl.AreAccessRulesProtected -or $tokenAcl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $identity.Value -or $rules.Count -ne 1 -or $rules[0].IdentityReference.Value -ne $identity.Value -or $rules[0].AccessControlType -ne 'Allow') {
+        throw "Runtime session token is not protected by a current-user-only DACL."
+    }
     $headers = @{
         Authorization = "Bearer $token"
         Origin = "tauri://localhost"
@@ -282,6 +288,7 @@ try {
         provider_worker_health = $true
         token_length = $token.Length
         token_disclosed = $false
+        token_owner_only_dacl = $true
         kernel_pid = $kernelParent.Id
         parent_pid = $parent.Id
         runtime_pid = [int]$live.data.pid
