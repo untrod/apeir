@@ -537,3 +537,27 @@ PR and conversation requirements, and force-push/deletion protections. A
 merge API call is not a safe test of protection when administrator enforcement
 cannot be inspected. No later PR merge, tag mutation or Release was performed
 in this R2 observation.
+
+## Maintainer-confirmed protected integration — 2026-10-24
+
+The maintainer subsequently reported completing the settings and supplied two
+GitHub UI screenshots. They show PR/current-base checks, conversation resolution
+and administrator enforcement enabled; mandatory approvals, signed commits,
+linear history, force push and deletion disabled. Selected checks include all
+four actual Python jobs, Core/Repository gates, frontend/hygiene, three Tier1
+platforms, explicit Windows ARM64 metadata and architecture SBOM collection.
+The 32-bit constant-only legacy job is replaced by the actual existing component
+admission contracts described above. The images and confirmation are retained
+privately; administration REST/GraphQL still return403. This is an owner-attested
+configuration change, not a claim that this integration changed settings itself.
+The earlier PR81 enforcement uncertainty remains historical evidence.
+
+The existing composition contains all original PR83/84/86/87/89 source heads by
+normal merges. The integration PR directly targets main; it must pass every
+actual required check at its exact head and show mergeable/CLEAN before a normal
+merge-commit request. No admin, queue bypass, synthetic check, squash, rebase or
+force push is used. Exact resulting-main SHA, fresh CI and ancestry/PR checks
+are recorded on [PR86](https://github.com/untrod/apeir/pull/86) before any branch
+retirement. Historical tags, Kernel and component-lock bytes remain unchanged.
+This repository integration does not qualify native installation, a real model,
+trusted remote IdP, strong-sandbox execution or physical hardware.
