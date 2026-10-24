@@ -64,7 +64,11 @@ const input: React.CSSProperties = {
   fontSize: typo.sm,
 };
 
-export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOpenEnvironments?: () => void; onDraftChange?: (protectedDraft: boolean) => void }) {
+export type WorkbenchDraft = { path: string; content: string; originalSha256: string };
+export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange, onDraftSnapshot, embeddedConversation = true }: {
+  onOpenEnvironments?: () => void; onDraftChange?: (protectedDraft: boolean) => void;
+  onDraftSnapshot?: (drafts: WorkbenchDraft[]) => void; embeddedConversation?: boolean;
+}) {
   const [connection] = useState(captureRuntimeConnection);
   const active = useRef(true);
   const assertConnection = useCallback(() => {
@@ -135,6 +139,12 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
   const dirty = content !== loadedContent || filePath !== loadedPath;
   const protectedDraft = dirty || tabs.some(tab => tab.id !== activeTab && tabIsDirty(tab));
   useEffect(() => { onDraftChange?.(protectedDraft || !!pending || proposalBusy); }, [protectedDraft, pending, proposalBusy, onDraftChange]);
+  useEffect(() => {
+    onDraftSnapshot?.([
+      ...tabs.filter(tab => tab.id !== activeTab && tabIsDirty(tab)).map(tab => ({ path: tab.path, content: tab.content, originalSha256: tab.sha256 })),
+      ...(dirty ? [{ path: filePath, content, originalSha256: loadedSha256 }] : []),
+    ]);
+  }, [tabs, activeTab, dirty, filePath, content, loadedSha256, onDraftSnapshot]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => { if (protectedDraft || pending || proposalBusy) { event.preventDefault(); event.returnValue = ""; } };
     window.addEventListener("beforeunload", warn);
@@ -414,7 +424,7 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
       {contextView && <ContextInspector {...contextView} onClose={() => setContextView(null)} />}
     </section>
 
-    <div className={`developer-columns ${layout.conversation ? "with-collaboration" : ""}`}>
+    <div className={`developer-columns ${embeddedConversation && layout.conversation ? "with-collaboration" : ""}`}>
       <aside style={{ ...panel, overflow: "hidden" }}>
         <div style={{ padding: space.md, borderBottom: `1px solid ${colors.borderLight}` }}>
           <div style={{ display: "flex", gap: space.xs }}>
@@ -487,7 +497,7 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange }: { onOp
           {runResult && <pre style={{ margin: `${space.md} 0 0`, maxHeight: 300, overflow: "auto", padding: space.md, borderRadius: radius.md, background: colors.bg, color: runResult.ok ? colors.text : colors.danger, fontFamily: typo.mono, fontSize: typo.xs, whiteSpace: "pre-wrap" }}>{`run ${runResult.run_id}\nexit ${runResult.exit_code}\n${runResult.stdout}${runResult.stderr ? `\n${runResult.stderr}` : ""}`}</pre>}
         </section>
       </main>
-      <aside hidden={!layout.conversation} className="developer-collaboration" aria-label="Workspace collaboration"><div className="developer-activity"><button style={btnSecondary} aria-pressed={collaborationMode === "ask"} disabled={busy} onClick={() => setCollaborationMode("ask")}>Ask / 只读分析</button><button style={btnSecondary} aria-pressed={collaborationMode === "edit"} disabled={busy} onClick={() => setCollaborationMode("edit")}>Edit / 审查提案</button></div><p>File references grant no authority. Edit prepares proposals for human review; execution and tests still require their own admission and backend.</p><ChatView conversationId={conversationId} onConversationCreated={setConversationId} workspaceFile={reference} onClearWorkspaceFile={() => setReference(undefined)} readOnly={collaborationMode === "ask"} onProposalCreated={setFocusProposalId} onCardClick={event => { const runId = String(event.payload?.run_id || event.metadata?.run_id || ""); if (runId) void showEvents(runId); }} onTraceClick={showTrace} /></aside>
+      {embeddedConversation && <aside hidden={!layout.conversation} className="developer-collaboration" aria-label="Workspace collaboration"><div className="developer-activity"><button style={btnSecondary} aria-pressed={collaborationMode === "ask"} disabled={busy} onClick={() => setCollaborationMode("ask")}>Ask / 只读分析</button><button style={btnSecondary} aria-pressed={collaborationMode === "edit"} disabled={busy} onClick={() => setCollaborationMode("edit")}>Edit / 审查提案</button></div><p>File references grant no authority. Edit prepares proposals for human review; execution and tests still require their own admission and backend.</p><ChatView conversationId={conversationId} onConversationCreated={setConversationId} workspaceFile={reference} onClearWorkspaceFile={() => setReference(undefined)} readOnly={collaborationMode === "ask"} onProposalCreated={setFocusProposalId} onCardClick={event => { const runId = String(event.payload?.run_id || event.metadata?.run_id || ""); if (runId) void showEvents(runId); }} onTraceClick={showTrace} /></aside>}
     </div>
     {closeTarget !== null && <section role="alert" style={{ ...panel, padding: space.md }}><p>Unsaved changes in {closeTarget === activeTab ? filePath : tabs.find(tab => tab.id === closeTarget)?.path}. Keep editing or explicitly discard this draft before closing.</p><button style={btnSecondary} onClick={() => setCloseTarget(null)}>Keep editing</button><button style={btnSecondary} onClick={() => closeTab(closeTarget, true)}>Discard draft and close</button></section>}
     {pending && <section aria-label="Workbench approval" style={{ ...panel, padding: space.md }}><h3>Explicit approval required</h3><p>Review the original {pending.kind} request: {pending.kind === "save" ? pending.path : `${pending.profile} ${pending.target}`}. Installation, model output and layout settings grant no authority.</p><p>Request {pending.approvalId}</p><button disabled={busy} style={btnPrimary} onClick={() => void decide("approve")}>Approve once and {pending.kind}</button><button disabled={busy} style={btnSecondary} onClick={() => void decide("deny")}>Deny original request</button></section>}

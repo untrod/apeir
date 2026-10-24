@@ -305,6 +305,8 @@ jobs:
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci
         if: steps.scope.outputs.scope == 'full'
+      - run: npm audit --audit-level=high
+        if: steps.scope.outputs.scope == 'full'
       - run: npm run lint
         if: steps.scope.outputs.scope == 'full'
       - run: npm test
@@ -313,6 +315,27 @@ jobs:
         if: steps.scope.outputs.scope == 'full'
       - run: npm run build
         if: steps.scope.outputs.scope == 'full'
+      - uses: actions/setup-python@v5
+        if: steps.scope.outputs.scope == 'full'
+        with:
+          python-version: '3.12'
+      - name: Install the existing Runtime for source Studio integration
+        if: steps.scope.outputs.scope == 'full'
+        working-directory: .
+        run: python -m pip install .
+      - name: Install sandboxed Chromium test prerequisites
+        if: steps.scope.outputs.scope == 'full'
+        run: npx playwright install --with-deps chromium
+      - name: Exercise source Studio against two real model-disabled Runtime processes
+        if: steps.scope.outputs.scope == 'full'
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.scope.outputs.scope == 'full'
+        with:
+          name: studio-source-browser-evidence-${{ github.sha }}
+          path: desktop/test-results/**/*.png
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Documentation-only validation (required context remains present)
         if: steps.scope.outputs.scope == 'documentation'
         working-directory: .

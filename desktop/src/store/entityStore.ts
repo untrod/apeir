@@ -1,5 +1,5 @@
 /**
- * EntityStore — Single source of truth for all Nous domain entities.
+ * EntityStore — Desktop projection of authoritative Runtime domain entities.
  *
  * Architecture:
  *   REST API → EntityStore ← RuntimeEvent stream
@@ -12,7 +12,7 @@
  *   - Event-driven: entities update via RuntimeEvent payloads
  *   - Deduplicated: event_id + dedup_key prevent double-processing
  *   - Sequenced: per-domain cursors enable reconnect backfill
- *   - Offline-first: IndexedDB persists state; rehydrates on load
+ *   - Scoped offline cache: endpoint/session digest must match on hydration
  *   - Reconciled: server timestamps win conflicts via updated_at
  */
 
@@ -25,6 +25,7 @@ import type {
   WorkspaceEntry,
   RuntimeEventEnvelope,
 } from "./types";
+import { captureRuntimeConnection, getConfig, subscribeRuntimeConfig } from "../lib/api";
 
 
 // IndexedDB helpers
@@ -45,7 +46,17 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-async function loadCache(): Promise<EntityStoreState | null> {
+type ScopedCache = { cache_schema: 2; scope: string; state: EntityStoreState };
+async function cacheScope(): Promise<string | null> {
+  const { url, token } = getConfig();
+  // An unavailable secure digest disables optional caching, not Runtime access.
+  if (!token || !globalThis.crypto?.subtle) return null;
+  const bytes = new TextEncoder().encode(JSON.stringify(["apeir.entity.cache.v2", url, token]));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function loadCache(): Promise<ScopedCache | null> {
   try {
     const db = await openDB();
     return new Promise((resolve) => {
@@ -62,10 +73,15 @@ async function loadCache(): Promise<EntityStoreState | null> {
 
 async function saveCache(state: EntityStoreState): Promise<void> {
   try {
+    const current = captureRuntimeConnection();
+    const scope = await cacheScope();
+    current();
+    if (!scope) return;
     const db = await openDB();
+    try { current(); } catch { db.close(); return; }
     const tx = db.transaction(STORE_NAME, "readwrite");
     // A persisted UI snapshot cannot certify current spend or budget readiness.
-    tx.objectStore(STORE_NAME).put({ ...state, usage_accounting: EMPTY_STATE.usage_accounting }, "entity_state");
+    tx.objectStore(STORE_NAME).put({ cache_schema: 2, scope, state: { ...state, usage_accounting: EMPTY_STATE.usage_accounting } }, "entity_state");
     tx.oncomplete = () => db.close();
   } catch {
     // Offline — silent fail, data lives in memory
@@ -116,6 +132,7 @@ class EntityStoreImpl {
   private listeners = new Set<Listener>();
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private usageReadSequence = 0;
+  private hydrationSequence = 0;
 
   /** Debounced persistence to IndexedDB */
   private scheduleSave(): void {
@@ -136,9 +153,15 @@ class EntityStoreImpl {
   // Lifecycle
 
   async hydrate(): Promise<void> {
-    const cached = await loadCache();
-    if (cached) {
-      this.state = { ...structuredClone(EMPTY_STATE), ...cached, usage_accounting: structuredClone(EMPTY_STATE.usage_accounting) };
+    const read = ++this.hydrationSequence;
+    const current = captureRuntimeConnection();
+    const scope = await cacheScope();
+    current();
+    const cached = scope ? await loadCache() : null;
+    current();
+    if (read !== this.hydrationSequence) return;
+    if (cached?.cache_schema === 2 && cached.scope === scope && cached.state?.schema_version === EMPTY_STATE.schema_version) {
+      this.state = { ...structuredClone(EMPTY_STATE), ...cached.state, usage_accounting: structuredClone(EMPTY_STATE.usage_accounting) };
       // Offline cache is historical data, never proof of current Node readiness.
       this.state.nodes = Object.fromEntries(Object.entries(this.state.nodes).filter(([id, node]) => id !== "undefined" && node.id).map(([id, node]) => [id, {
         ...node, name: node.name || id, capabilities: node.capabilities || [], online: false,
@@ -521,6 +544,7 @@ class EntityStoreImpl {
 
   clearStore(): void {
     this.usageReadSequence++;
+    this.hydrationSequence++;
     this.state = structuredClone(EMPTY_STATE);
     this.notify();
   }
@@ -531,3 +555,5 @@ class EntityStoreImpl {
 
 
 export const entityStore = new EntityStoreImpl();
+// Retire the existing projection synchronously; a new session never inherits it.
+subscribeRuntimeConfig(() => entityStore.clearStore());

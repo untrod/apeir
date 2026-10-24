@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchNodes, setConfig } from "../lib/api";
 import { entityStore } from "../store/entityStore";
+import { createHash, webcrypto } from "node:crypto";
 
 const row = (node_id: string) => ({ node_id, node_name: node_id, platform: "Linux", arch: "arm64", capabilities: ["system.echo"], online: true, last_seen: "", status: "online", trust_status: "TRUSTED", connected: true, connectivity_state: "ONLINE", connectivity_lease_valid: true, resource_report_fresh: true, source: "node_runtime.controller-status" });
 const reply = (data: unknown) => ({ ok: true, json: async () => ({ ok: true, data }) });
@@ -94,12 +95,14 @@ describe("persisted Node cache is historical evidence", () => {
     entityStore.upsertNodes(await fetchNodes());
     const cached = structuredClone(entityStore.getState());
     entityStore.clearStore();
+    vi.stubGlobal("crypto", webcrypto);
+    const scope = createHash("sha256").update(JSON.stringify(["apeir.entity.cache.v2", "http://127.0.0.1:8770", "fake-node-fact-service"])).digest("hex");
     function request<T>(result: T) {
       const req = { result, onsuccess: null as null | (() => void) };
       queueMicrotask(() => req.onsuccess?.());
       return req;
     }
-    vi.stubGlobal("indexedDB", { open: () => request({ close: () => {}, transaction: () => ({ objectStore: () => ({ get: () => request(cached), put: () => {} }) }) }) });
+    vi.stubGlobal("indexedDB", { open: () => request({ close: () => {}, transaction: () => ({ objectStore: () => ({ get: () => request({ cache_schema: 2, scope, state: cached }), put: () => {} }) }) }) });
     await entityStore.hydrate();
     const node = entityStore.getState().nodes["node-cached"];
     expect(node.name).toBe("node-cached");

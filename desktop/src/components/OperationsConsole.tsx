@@ -86,7 +86,7 @@ function WorkEvidence({ work }: { work: Row }) {
   return <section className="operations-work-chain" aria-label="Work execution chain"><h2>Work execution chain</h2><p>Values from the selected backend record. Receipt and observation are separate evidence; missing values remain UNKNOWN.</p><dl>{fields.map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}</dl></section>;
 }
 
-export function OperationsConsole() {
+export function OperationsConsole({ onOpenStudio }: { onOpenStudio?: () => void } = {}) {
   const [layout, setLayout] = useState(loadLayout);
   const { resolved, toggle } = useTheme();
   const t = (value: string) => layout.locale === "zh" ? translations[value] ?? value : value;
@@ -246,7 +246,7 @@ export function OperationsConsole() {
   const simulatedDevices = new Set((snapshot?.devices ?? []).filter(row => record(row.metadata).simulation === true && typeof row.device_id === "string" && row.device_id.length > 0).map(row => String(row.device_id)));
   const rows = (collection === "environments" || collection === "workspace" || collection === "usage" || collection === "automations") ? [] : snapshot?.[collection]?.filter(row => !query.trim() || JSON.stringify(row).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) ?? [];
   return <main className="operations-console" aria-label="Operations console" lang={layout.locale === "zh" ? "zh-CN" : "en"}>
-    <header className="operations-header"><div><p className="operations-eyebrow">APEIR / OPERATIONS</p><h1>{t("Execution & reality")}</h1><p>{t("Observe state, inspect evidence, govern the next action.")}</p></div>
+    <header className="operations-header"><div><p className="operations-eyebrow">APEIR / OPERATIONS</p><h1>{t("Execution & reality")}</h1><p>{t("Observe state, inspect evidence, govern the next action.")}</p>{onOpenStudio && <button onClick={onOpenStudio}>APEIR Studio · {layout.locale === "zh" ? "打开工作台" : "Open workspace"}</button>}</div>
       <div className="operations-controls"><button onClick={() => void reload()} disabled={busy}>{t("Refresh")}</button><button onClick={() => void signIn()} disabled={busy}>{t(human ? "Renew human session" : "Sign in as human")}</button>{human && <button onClick={() => void signOut()}>{t("Sign out")}</button>}<button onClick={toggle} aria-label="Toggle theme">{resolved === "dark" ? "☀" : "☾"}</button><button onClick={() => setLayout(current => ({ ...current, locale: current.locale === "en" ? "zh" : "en" }))} aria-label="Change language">{layout.locale === "en" ? "中文" : "English"}</button></div>
     </header>
     <details className="operations-demo"><summary>Run the verified simulated demo</summary><p>Start with the source Quick Start. Run these CLI commands in an empty dedicated workspace; results and evidence come from the existing Runtime. Approval here is an explicit local OS-user action.</p><pre>apeir demo --workspace ./demo-match --phase prepare --json{"\n"}apeir demo --workspace ./demo-match --phase resume --approve-once --json</pre><p>SIMULATED · Runtime-service · Kernel not traversed. No physical or remote-human qualification.</p><a href="https://github.com/untrod/apeir/blob/main/examples/hello_runtime/README.md" target="_blank" rel="noreferrer">Failure scenarios and evidence guide</a></details>
