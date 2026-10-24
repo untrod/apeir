@@ -80,6 +80,37 @@ def test_component_lock_rejects_path_escape(tmp_path: Path) -> None:
         verify(tmp_path, lock, None)
 
 
+@pytest.mark.parametrize(
+    ("target", "expected_machine"),
+    [
+        ("x86_64-pc-windows-msvc", "0x8664"),
+        ("aarch64-pc-windows-msvc", "0xAA64"),
+    ],
+)
+def test_locked_64bit_component_rejects_32bit_pe_with_matching_hash(
+    tmp_path: Path, target: str, expected_machine: str
+) -> None:
+    relative = Path("desktop/bin/nousd.exe")
+    artifact = tmp_path / relative
+    _write_pe(artifact, machine=0x014C)
+    original = artifact.read_bytes()
+    lock = tmp_path / "runtime-components.lock.json"
+    _write_lock(lock, relative, hashlib.sha256(original).hexdigest())
+    data = json.loads(lock.read_text())
+    data["components"]["nous-kernel"]["target"] = target
+    data["components"]["nous-kernel"]["artifacts"][0]["pe_machine"] = expected_machine
+    lock.write_text(json.dumps(data), encoding="utf-8")
+    original_lock = lock.read_bytes()
+
+    # Digest admission succeeds, so rejection must come from the real PE
+    # architecture boundary, not an unrelated missing file or hash mismatch.
+    with pytest.raises(ValueError, match="architecture mismatch"):
+        verify(tmp_path, lock, None)
+
+    assert artifact.read_bytes() == original
+    assert lock.read_bytes() == original_lock
+
+
 @pytest.fixture
 def rebuilt_candidate(tmp_path: Path) -> tuple[Path, Path, Path]:
     kernel = tmp_path / "kernel"
