@@ -277,6 +277,22 @@ If old required contexts reference the removed duplicate Python/hygiene jobs,
 replace them with the three stable contexts above; do not bypass a failing Gate.
 Review signing support and release provenance only when actually qualified.
 
+The 2026-10-24 required-check audit traced `Test 32-bit Rejection` to the
+original Desktop workflow in `4bafb63`; consolidation `e5a120e` removed it.
+Its first command only assigned `bits = 32` and printed PASS, and its second
+checked the runner architecture without calling APEIR admission. Reinstating
+that constant-based job would not establish rejection. The current component
+lock suite now passes a matching-digest x86 PE fixture through the real verifier
+and requires architecture rejection for both locked Windows x64 and ARM64
+targets. Both the binary and lock must remain unchanged. These two negative
+cases run in the existing `Component lock contract` step, whose failure blocks
+`Repository checks`; that is the meaningful replacement context. The complete
+suite passes14 tests locally. This is binary-header admission contract evidence,
+not native Windows execution; existing ARMv7 Lite support remains separate.
+Only an authorized maintainer may replace the obsolete required name after
+checking the current PR-head result. No synthetic status or settings bypass is
+introduced, and main integration remains paused pending protection verification.
+
 ## Preserved immutable checkpoints
 
 | Tag | Distribution commit | Scope |
