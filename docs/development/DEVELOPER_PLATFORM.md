@@ -607,6 +607,15 @@ without executing the effect again.
 
 ### Supported development environment
 
+On Linux, the existing detached ProcessSession host enables child-subreaper
+ownership before spawning its workload. Orphaned descendants in the original
+process group are killed and reaped before publishing the terminal result;
+unconfirmed cleanup records `RECOVERY_REQUIRED`. This covers the host's own
+workload group, not arbitrary processes that escape it or the detached host's
+own eventual adoption by PID1. Containers should still use `--init` so the
+container also reaps detached hosts. This Distribution process host is in the
+runtime-service scope and does not modify or qualify the frozen Rust Kernel.
+
 Developer Preview PR #23's source checks passed, but its initial main
 `25aed7c34cb1c4173476d660ccccc032b3fb0452` exposed two failures in untouched
 baseline files. Windows Core recorded **1 failed, 4000 passed, 53 skipped,

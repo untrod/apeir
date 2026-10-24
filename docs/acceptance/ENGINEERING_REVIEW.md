@@ -3111,6 +3111,67 @@ No component is staged/relocked, no mismatched EXE is offered for installation,
 and no installer, NKI runtime or Windows10 lifecycle qualification is claimed.
 
 
+### Linux ProcessSession descendant reaping — 2026-10-21
+
+**REUSE / FIX** the existing Distribution ProcessSandboxHost and durable
+ProcessSession projection. On main `e3cd2a2`, the original
+`test_child_process_is_cleaned_up_with_parent` and
+`test_natural_parent_exit_does_not_leave_child` both fail in this container
+with PID1 `tail -f /dev/null`. The original child creation tokens remain in
+`/proc` because dead children are zombies adopted by a non-reaping PID1.
+The same pair fails on `ae75148` and `d5b20ef`; no assertion or timeout changed.
+
+The isolated Linux host now enables `PR_SET_CHILD_SUBREAPER` before workload
+spawn, then reaps only adopted children in the original workload process group
+after the existing termination signals. Startup without that Linux primitive
+fails closed before spawning. Unconfirmed reaping cannot publish terminal
+success. The exception path also waits for the original process and cleans its
+group before recording recovery; it never launches a replacement command.
+The frozen Rust Kernel, NKI, component lock, Governance and sandbox limits are
+unchanged. The Python module's historical `nous_runtime.kernel` package name
+does not change its Distribution runtime-service execution scope.
+
+The original failing pair passes **2 tests (1.54s)** in the same bare-PID1
+environment. ProcessSession/startup/reaping regression passes **29 tests
+(27.00s)** before adding the real post-spawn persistence-failure case; the final
+new reaping suite passes **8 tests (2.25s)**, including three-generation process
+exit/terminate/kill, recovery after host failure, unavailable startup control,
+group-only waiting, and fail-closed wait errors/timeouts. Counts overlap.
+Full regression and source/main CI remain required. Container init is still
+needed for detached host processes and arbitrary process groups outside this
+bounded ownership contract; no complete PTY or isolation qualification is added.
+
+Source `525e7ec` full local regression is **5453 passed,58 skipped,4 warnings
+(693.02s)**. Its four-platform Core run
+[39541361099](https://github.com/untrod/apeir/actions/runs/39541361099) passes both
+Linux versions, but macOS has **1 failed,5414 passed,62 skipped (999.73s)**:
+the new startup-denial test blocked the `ps` subprocess used to observe the
+helper's own creation token. The test now acquires that actual token before
+installing its strict no-workload-spawn guard; the original guard and
+RECOVERY_REQUIRED assertions remain unchanged. Final focused regression:
+**30 passed (27.34s)**. New exact-source macOS CI remains required.
+
+Windows in that same run has **1 failed,5320 passed,156 skipped (2034.45s)**:
+an initial remote Skill install exceeds its unchanged five-second HTTP deadline.
+The captured request-handler stack is GovernanceStore connection close at line42,
+after `skill.management.completed`, rather than the commit at line36 seen in
+the earlier Python3.11 failure. This is additional evidence for
+[Issue88](https://github.com/untrod/apeir/issues/88), not a confirmed reaper
+regression or proof of its timing cause. No timeout, durability, Skill authority
+or assertion is weakened and the failed run remains retained.
+
+After normal synchronization with accepted MCP main `ad773890` on 2026-10-23,
+the documentation conflict retains both original evidence sections. Source
+ProcessSession/startup/reaping checks pass **30 tests (26.20s)**; related terminal,
+approval, sensitive-output, process-sandbox, MCP, Work submission and repository
+checks pass **390 tests,1 skipped (19.90s)**. An initialized Linux test harness
+reaped12 adopted test children and confirmed no remaining children; this is
+not qualification of arbitrary escaped process groups or native installation.
+Ruff, changed-file formatting, compile,235-file local links, document/comment/
+identity/metadata/version audits and diff checks pass. Security retains0 HIGH
+and5 existing MEDIUM findings. Exact synchronized-source CI is separate; main
+integration still requires verified repository protection, with no merge probe.
+
 ### Scoped MCP / original Work submission software qualification
 
 Audit classification: **REUSE** existing MCP SDK, authenticated Runtime HTTP,
