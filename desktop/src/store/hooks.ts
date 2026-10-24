@@ -5,7 +5,7 @@
  * Components subscribe to fine-grained slices for optimal re-rendering.
  */
 
-import { useState, useEffect, useCallback, useSyncExternalStore } from "react";
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
 import { entityStore } from "./entityStore";
 import { fetchUsageSummary, getConfig, getRuntimeConfigVersion, subscribeRuntimeConfig } from "../lib/api";
 import type {
@@ -226,30 +226,72 @@ export function useUsage(): UsageRecord[] {
   return Object.values(state.usage);
 }
 
-export function useCostSummary(): CostSummary {
+type UsageReader = { version: number; active: () => boolean };
+const usageReaders = new Set<UsageReader>();
+let usageTimer: number | undefined;
+let usageFlight: { version: number; key: object; promise: Promise<void>; abort: AbortController } | null = null;
+const visibleDocument = () => document.visibilityState !== "hidden";
+const hasVisibleUsageReader = () => [...usageReaders].some(reader => {
+  try { return reader.version === getRuntimeConfigVersion() && reader.active() && visibleDocument(); } catch { return false; }
+});
+
+/** Shared transport only. The existing EntityStore/CostController still own data. */
+export function refreshCostSummary(replacePending = false): Promise<void> {
+  const version = getRuntimeConfigVersion();
+  if (!hasVisibleUsageReader()) return Promise.resolve();
+  if (usageFlight?.version === version && !replacePending) return usageFlight.promise;
+  usageFlight?.abort.abort();
+  const controller = getConfig().url;
+  const sequence = entityStore.beginUsageRead(controller, version);
+  const key = {};
+  const abort = new AbortController();
+  const promise = (async () => {
+    try {
+      const summary = await fetchUsageSummary(undefined, { signal: abort.signal });
+      if (usageFlight?.key === key && hasVisibleUsageReader() && getRuntimeConfigVersion() === version && getConfig().url === controller) entityStore.finishUsageRead(sequence, summary);
+    } catch {
+      if (usageFlight?.key === key && hasVisibleUsageReader() && getRuntimeConfigVersion() === version) entityStore.failUsageRead(sequence);
+    }
+  })().finally(() => { if (usageFlight?.key === key) usageFlight = null; });
+  usageFlight = { version, key, promise, abort };
+  return promise;
+}
+
+function subscribeUsage(reader: UsageReader) {
+  const alreadyVisible = hasVisibleUsageReader();
+  usageReaders.add(reader);
+  let frame: number | undefined;
+  if (!alreadyVisible && hasVisibleUsageReader()) void refreshCostSummary();
+  else if (!alreadyVisible) frame = requestAnimationFrame(() => { if (usageReaders.has(reader)) void refreshCostSummary(); });
+  const visible = () => { if (visibleDocument()) void refreshCostSummary(); };
+  if (usageTimer === undefined) {
+    // Retire a stalled read at the existing five-second refresh boundary.
+    // This aborts only an HTTP read, never a model operation or its accounting.
+    usageTimer = window.setInterval(() => { void refreshCostSummary(true); }, 5000);
+    document.addEventListener("visibilitychange", visible);
+    visibilityListener = visible;
+  }
+  return () => {
+    usageReaders.delete(reader);
+    if (frame !== undefined) cancelAnimationFrame(frame);
+    if (!usageReaders.size && usageTimer !== undefined) {
+      window.clearInterval(usageTimer); usageTimer = undefined;
+      usageFlight?.abort.abort(); usageFlight = null;
+      if (visibilityListener) document.removeEventListener("visibilitychange", visibilityListener);
+      visibilityListener = undefined;
+    }
+  };
+}
+let visibilityListener: (() => void) | undefined;
+
+export function useCostSummary(isActive = visibleDocument): CostSummary {
   const version = useRuntimeConfigVersion();
+  const activity = useRef(isActive); activity.current = isActive;
   const state = useSyncExternalStore(
     (listener) => entityStore.subscribe(listener),
     () => entityStore.getState().usage_accounting,
   );
-  useEffect(() => {
-    let cancelled = false;
-    const controller = getConfig().url;
-    const refresh = async () => {
-      const sequence = entityStore.beginUsageRead(controller, version);
-      try {
-        const summary = await fetchUsageSummary();
-        if (!cancelled && getRuntimeConfigVersion() === version && getConfig().url === controller) {
-          entityStore.finishUsageRead(sequence, summary);
-        }
-      } catch {
-        if (!cancelled && getRuntimeConfigVersion() === version) entityStore.failUsageRead(sequence);
-      }
-    };
-    void refresh();
-    const timer = window.setInterval(() => { void refresh(); }, 5000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [version]);
+  useEffect(() => subscribeUsage({ version, active: () => activity.current() }), [version]);
   if (state.configuration_version !== version || state.controller !== getConfig().url) {
     return { status: "loading", controller: getConfig().url, configuration_version: version, summary: null, error: null };
   }

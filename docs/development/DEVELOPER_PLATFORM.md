@@ -50,6 +50,23 @@ success. Use Operations for original governed controls. Supported commands reuse
 Workbench profiles and strict sandbox admission; missing isolation is BLOCKED.
 Controlled Commands is not an interactive PTY.
 
+For a read-only Dashboard, choose **Add panel → Dashboard**. Use **Widget** and
+**Add widget**, drag a widget’s title, resize its corner or edit x/y/w/h in
+**Settings**. Overlapping or out-of-range geometry is refused. Give instances
+custom titles, duplicate/remove them or pause their display subscription.
+**Save dashboard** saves the same Studio layout; **Export dashboard** creates a
+single-panel Dashboard document. Import it with **Import dashboard**, or use the
+main Studio Import/Load controls to restore a saved full workspace. Importing
+presentation never executes Work or authorizes a resource.
+
+Runtime/Kernel status, Nodes, Devices, Work, Usage, Governance audit and evidence
+metadata use actual current APIs. Missing resources are UNKNOWN; GPU/network/
+sensor metrics without a qualified source are UNSUPPORTED. A healthy Runtime API
+does not prove Kernel availability, a model invocation or a physical effect.
+EventStream is the existing cursor-driven bus; Governance audit is separate.
+The same authenticated Controller supplies all visible widgets. Source browser
+checks cover actual HTTP reads and zero mutation requests, not native installation.
+
 General, Software, Agent, Embedded, Network, Scientific, Interactive and Blank
 are compositions of existing views. They do not qualify hardware/media,
 third-party UI execution, visual Workflow editing or scientific execution. See

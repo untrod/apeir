@@ -48,9 +48,31 @@ FlexLayout0.11.1 is MIT and Playwright1.64.1 is Apache-2.0; both are version-pin
 The required frontend job now audits all npm dependencies, including dev tools.
 
 The schema has document-kind discriminators but currently saves one global
-presentation preference. Workspace-specific libraries, Dashboard editing, visual
-Workflow conversion, isolated external UI contributions and real media adapters
+presentation preference. Workspace-specific libraries, visual Workflow conversion, isolated external UI contributions and real media adapters
 remain PENDING. Existing text/Runtime views in a preset do not qualify these.
+
+### Dashboard integration follow-up
+
+EXTEND the existing Studio schema and panel table with a bounded read-only
+Dashboard; REUSE Operations, detailed health, CostController/EntityStore and the
+same EventClient transport. No new Runtime authority, DB or executable widget
+loader is added. A missing Controller resource projection is extended with
+bounded CPU-capacity/RAM fields from its current signed report; stale/offline/
+revoked reports are unavailable. No CPU/GPU utilization is invented.
+
+Actual source Chromium/HTTP acceptance checks add/settings/drag, exact persisted
+coordinates after reload, import/export, rejected bounds, explicit unsupported
+GPU metrics and pause. Original failed geometry tests are retained privately:
+allowing collisions made the visible drag differ from its rejected persisted
+state. The library’s no-overlap strategy fixes the mismatch; acceptance checks
+persisted coordinates as well as DOM position. Shared subscriptions are tested
+with multiple visible/hidden readers and stale Controller responses. These are
+software/source-browser observations, not Windows or hardware qualification.
+Local follow-up qualification:383 Desktop tests and3 actual CLI/HTTP/Chromium
+cases passed;306 Node/Operations tests passed. Repository contracts passed299
+with5 Windows-only cases skipped on Linux. Type/lint/build, full npm audit
+(0 findings) and documentation checks passed. Exact candidate CI remains a
+separate gate; these local results do not certify a future merge commit.
 
 ## Governance schema admission — 2026-10-23
 

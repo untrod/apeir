@@ -335,10 +335,10 @@ export async function testConnection(): Promise<boolean> {
 // Dashboard
 export const fetchDashboard = () => api<DashboardData>("/api/v1/dashboard");
 export const fetchStatus = () => api<RuntimeStatus>("/api/v1/status");
-export async function fetchUsageSummary(day?: string): Promise<UsageAccountingSummary> {
+export async function fetchUsageSummary(day?: string, options: RequestInit = {}): Promise<UsageAccountingSummary> {
   const version = getRuntimeConfigVersion();
   const controller = getConfig().url;
-  const result = await api<unknown>(`/api/v1/usage${day ? `?day=${encodeURIComponent(day)}` : ""}`);
+  const result = await api<unknown>(`/api/v1/usage${day ? `?day=${encodeURIComponent(day)}` : ""}`, options);
   if (getConfig().url !== controller || getRuntimeConfigVersion() !== version) {
     throw new Error("Controller connection changed; reload usage accounting.");
   }

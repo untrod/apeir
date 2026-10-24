@@ -12,7 +12,7 @@ it("opens the original task in the existing Inspector instead of losing its iden
   const task: Task = { id: "original-studio-work", run_id: "original-studio-work", trace_id: "original-studio-work", task_kind: "work", name: "Inspect original Work", status: "blocked", priority: "normal", steps: [], progress_pct: 0, cancellation_requested: false, recoverable: true, schema_version: "1.0.0", created_at: "2026-10-24T00:00:00Z", updated_at: "2026-10-24T00:00:00Z" };
   entityStore.reconcile({ tasks: { [task.id]: task } });
   const inspect = vi.fn(); const open = vi.fn();
-  render(<StudioPanel type="tasks" inspect={inspect} open={open} onDraftChange={vi.fn()} onDraftSnapshot={vi.fn()} />);
+  render(<StudioPanel locale="en" isVisible={() => true} updateConfig={vi.fn()} saveLayout={vi.fn()} type="tasks" inspect={inspect} open={open} onDraftChange={vi.fn()} onDraftSnapshot={vi.fn()} />);
   fireEvent.click(screen.getByText(task.name));
   fireEvent.click(screen.getByRole("button", { name: "View Work Activity" }));
   expect(inspect).toHaveBeenCalledWith({ kind: "task", taskId: task.id });
