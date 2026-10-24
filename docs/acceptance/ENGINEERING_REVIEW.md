@@ -69,6 +69,36 @@ sample tail estimates are exploratory, not Windows, model, UI or end-to-end
 performance qualification.
 
 
+## Source Preview delivery closure — 2026-10-24
+
+R3 rechecked main `ad773890`, the five open reviews and frozen Kernel.
+**REUSE** the existing Provider/Workspace/Proposal, CLI and source-wheel owners;
+**EXTEND** only the existing Source Preview qualification and artifact contents.
+**BLOCKED** remain protected-main integration, real account qualification, strict
+test execution and native installation. Protection reads still return403; an
+empty effective ruleset list does not establish classic/admin enforcement. No
+additional main merge is attempted before maintainer verification.
+
+The old artifact omitted usage instructions and exercised API import/bind/close
+instead of the public startup path. The existing Desktop workflow now includes
+the canonical Quick Start with links pinned to the exact source revision, and
+hashes the guide, wheel, manifest and validation report. It invokes a bounded
+stdlib verifier using the fresh base consumer's isolated interpreter. This
+verifier reads only its temporary fixture/session: normal model-enabled startup
+without Kernel refuses; explicit model-free startup serves the chosen workspace;
+unauthenticated access denies; unused model tokens/cost stay UNKNOWN; saved
+Providers stay unchanged; interrupt exits0, revokes the session and closes the
+listener. Logs and generated session material remain private and are not uploaded.
+The verifier rejects source-checkout imports rather than qualifying them as an
+independent install. This adds no Runtime, permission or packaging authority.
+
+A newly built wheel installed with base dependencies only in a fresh Python3.10
+environment passes that public startup qualification outside the checkout.
+Related CLI/startup/repository checks pass **289 tests (2.92s)** before the new
+checkout-import refusal test; the focused final selection passes **13 tests
+(2.23s)**. Counts overlap. Current-source artifact/CI qualification is separate;
+this Linux source evidence cannot establish native Windows or real inference.
+
 ## Model-free public startup and product recovery — 2026-10-23
 
 **REUSE** the existing `--no-intelligence` process mode, Runtime API, WorkHarness,

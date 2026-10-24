@@ -82,6 +82,7 @@ jobs:
         run: |
           python -m venv "$RUNNER_TEMP/apeir-source-consumer"
           "$RUNNER_TEMP/apeir-source-consumer/bin/python" -m pip install artifacts/source-preview/*.whl
+          "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I scripts/ci/verify_source_preview_install.py --report "$RUNNER_TEMP/source-startup.json"
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I -c "import nous_runtime; from nous_runtime.api.server import create_server; assert 'site-packages' in nous_runtime.__file__; server = create_server('127.0.0.1', 0); server.server_close()"
           "$RUNNER_TEMP/apeir-source-consumer/bin/python" -I "$RUNNER_TEMP/apeir-source-consumer/bin/apeir" version
@@ -111,6 +112,7 @@ jobs:
               "real_model_and_physical_acceptance": "NOT_RUN",
               "native_installation": "NOT_RUN",
           }
+          report.update(json.loads((Path(os.environ["RUNNER_TEMP"]) / "source-startup.json").read_text()))
           Path("artifacts/source-preview/source-preview-validation.json").write_text(json.dumps(report, indent=2) + "\n")
           PY
       - name: Record measured wheel hashes and qualification limits
@@ -119,8 +121,9 @@ jobs:
           BUILD_PYTHON_VERSION: ${{ steps.source-builder.outputs.python-version }}
         run: |
           python - <<'PY'
-          import email, hashlib, json, os, platform, zipfile
+          import email, hashlib, json, os, platform, re, zipfile
           from pathlib import Path
+          from urllib.parse import urljoin
           root = Path("artifacts/source-preview")
           wheels = sorted(root.glob("*.whl"))
           assert len(wheels) == 1, "Expected the existing Distribution wheel only"
@@ -132,6 +135,11 @@ jobs:
               metadata = email.message_from_bytes(archive.read(metadata_names[0]))
           digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
           lock = Path("runtime-components.lock.json")
+          canonical = "https://github.com/untrod/apeir/blob/" + os.environ["SOURCE_REVISION"] + "/docs/operations/getting-started/QUICK_START.md"
+          guide = Path("docs/operations/getting-started/QUICK_START.md").read_text(encoding="utf-8")
+          guide = re.sub(r"(\]\()([^\s)]+)(\))", lambda match: match[1] + urljoin(canonical, match[2]) + match[3], guide)
+          guide_path = root / "QUICK_START.md"
+          guide_path.write_text("Canonical instructions for this exact source revision: " + canonical + "\n\n" + guide, encoding="utf-8")
           manifest = {
               "distribution_revision": os.environ["SOURCE_REVISION"],
               "distribution_name": metadata["Name"],
@@ -147,9 +155,10 @@ jobs:
               "signing_and_release_qualification": "NOT_RUN",
               "wheel": {"filename": wheel.name, "sha256": digest},
               "validation_report": "source-preview-validation.json",
+              "usage_instructions": {"filename": guide_path.name, "canonical_url": canonical, "sha256": hashlib.sha256(guide_path.read_bytes()).hexdigest()},
           }
           (root / "source-preview-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-          (root / "SHA256SUMS.txt").write_text(f"{digest}  {wheel.name}\n")
+          (root / "SHA256SUMS.txt").write_text("".join(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n" for path in sorted(root.iterdir()) if path.is_file() and path.name != "SHA256SUMS.txt"))
           PY
           echo 'Python source package only. No EXE/NSIS, native hash, installation, signing or production release qualification is claimed.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
