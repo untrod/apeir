@@ -171,6 +171,18 @@ administrator override is allowed. Resulting-main CI and reachability remain
 prerequisites for branch retirement. Tag protection is not established by these
 main-only screenshots.
 
+The lightweight branch summary independently confirms the13 selected contexts,
+GitHub Actions App15368 and required-status enforcement for everyone. Detailed
+administration reads remain forbidden; unreturned settings are not inferred.
+
+Ordinary PR workflows now produce the selected required contexts themselves:
+Core retains all four Python/platform jobs on PRs, and Multi-Arch also responds
+to PRs targeting main. Existing test commands, aggregate dependencies, read-only
+permissions and failure assertions are unchanged. The conservative Core docs
+scope remains available; code PRs incur the full selected platform cost. Manual
+success is not copied into fabricated PR statuses. Resulting-main runs remain
+independent acceptance evidence.
+
 The consolidation environment received administration API 403 responses.
 Existing main protection is present; the integration applied no administration
 settings itself. The main-only confirmation above does not establish every

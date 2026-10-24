@@ -561,3 +561,21 @@ are recorded on [PR86](https://github.com/untrod/apeir/pull/86) before any branc
 retirement. Historical tags, Kernel and component-lock bytes remain unchanged.
 This repository integration does not qualify native installation, a real model,
 trusted remote IdP, strong-sandbox execution or physical hardware.
+
+The first exact-head dispatch on `7ae9915` passed all four workflows, and the
+ordinary branch summary independently confirmed all13 required context names,
+GitHub Actions App15368 and enforcement for everyone. The PR still reported
+BLOCKED with an empty check rollup. Reopening that same PR, without changing its
+SHA or deleting successful evidence, produced ordinary PR checks; however, the
+existing PR configuration selected only Linux3.12 in Core and omitted the
+Multi-Arch PR event. Two regression contracts fail on that configuration: the
+four required Python contexts are not guaranteed on PRs, and required platform
+jobs are unreachable from the PR event. This is a CI/protection integration gap,
+not a failing Runtime regression or a reason to weaken protection.
+
+Core now uses the same existing four-platform matrix for normal PRs, and the
+existing Multi-Arch workflow also triggers on PRs targeting main. Test commands,
+diagnostic isolation, native release guards, permissions and aggregate gates are
+retained; no status is copied or synthesized. This deliberately increases code
+PR CI cost to match the selected strict policy; no speed improvement is claimed.
+The new exact candidate must pass actual PR checks before normal integration.
