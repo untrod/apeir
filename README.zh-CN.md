@@ -8,6 +8,10 @@ APEIR 是面向异构智能与现实资源的开放执行、治理和验证运�
 [五份权威架构契约](docs/architecture/README.md) · [里程碑状态](ROADMAP.md) ·
 [公开 SDK](docs/development/DEVELOPER_PLATFORM.md) · [贡献](CONTRIBUTING.md) · [安全](SECURITY.md)
 
+[APEIR Studio](docs/development/DEVELOPER_PLATFORM.md#apeir-studio) 复用同一 Runtime，
+提供可拖动的多面板工作台和安全布局保存。当前源码浏览器预览具备可复现的 Runtime
+集成测试；它不是已通过验收的 Windows 安装包。各项能力限制仍以 ROADMAP 为准。
+
 ## 开发预览
 
 [Verified Execution Demo](examples/hello_runtime/README.md) 不需要 API Key 或真实硬件。

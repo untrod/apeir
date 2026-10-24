@@ -31,7 +31,7 @@ the shell is lazy-loaded. No second Runtime or installer is introduced.
 | REUSE | Models / Usage | DeveloperPlatform / Model Lab; original Usage journal |
 | REUSE | Tasks | TaskCenter and existing EntityStore/EventClient |
 | REUSE | Environment / Documents / Simulation | Existing Inspector/Workbench and their Runtime services |
-| REUSE | Nodes / Devices / Workflow records / Evidence / Activity | One shared transient read of `/api/v1/control/operations`; original Controller/Reality/Workflow/CAS/event owners |
+| REUSE | Nodes / Devices / Workflow records / Evidence metadata / Governance Activity | One shared transient read of `/api/v1/control/operations`; Controller/Reality/Workflow/DistributedWork metadata and GovernanceStore audit owners |
 | REUSE | Operations / detailed Inspector | OperationsConsole and its original human authentication/Governance |
 | EXTEND | Docking and preset templates | Bounded versioned presentation JSON, no execution consumer |
 | NEW | Frontend panel contribution table and stable portal hosts | Rendering/lifecycle only; not Runtime or authorization state |
@@ -59,6 +59,13 @@ apply a change, create a Proposal or transfer it to another Runtime. Resolve or
 explicitly discard archived drafts before leaving Studio. Reload/process exit
 can still lose unsaved text. Original Work, approvals and effects remain owned
 by Runtime, not a panel or layout.
+
+Task and Chat trace selections reuse the existing DetailDrawer with the original
+entity ID, scoped to that Studio session. The Activity projection here is the
+Governance audit, not RuntimeEventBus or a durable Run EventStream. Evidence rows
+are original Work receipt/verification metadata; rendering them is not CAS byte
+integrity verification. Studio also hides the older ResourceDock to avoid a
+second bottom workspace and its extra background usage polling.
 
 The existing EntityStore also clears synchronously on a Controller/session
 change. Its same IndexedDB record now carries cache-schema2 and a SHA-256 scope

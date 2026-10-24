@@ -7,6 +7,7 @@ import { useTheme } from "../../theme";
 import { captureStudioLayout, createStudioLayout, discardsProtectedPanel, loadStudioLayout, MAX_LAYOUT_BYTES, parseStudioLayout, STUDIO_LAYOUT_KEY, STUDIO_TEMPLATES, studioModel, type StudioLayout } from "../../lib/studioLayout";
 import { STUDIO_PANELS, StudioPanel, StudioSnapshot } from "./StudioPanels";
 import type { WorkbenchDraft } from "../DeveloperWorkbench";
+import { DetailDrawer, type DrawerView } from "../DetailDrawer";
 import "flexlayout-react/style/light.css";
 import "./StudioShell.css";
 
@@ -63,6 +64,7 @@ function StudioSession({ epoch, remember, onProtectionChange }: { epoch: number;
   const [message, setMessage] = useState(initial.error);
   const [query, setQuery] = useState("");
   const [picker, setPicker] = useState(false);
+  const [selection, setSelection] = useState<DrawerView>(null);
   const [template, setTemplate] = useState("general");
   const dirty = useRef(new Set<string>());
   const hosts = useRef(new Map<string, HTMLElement>());
@@ -139,16 +141,17 @@ function StudioSession({ epoch, remember, onProtectionChange }: { epoch: number;
     {picker && <section className="studio-picker" aria-label="Panel library"><label>{t("Search panels", "搜索面板")}<input autoFocus value={query} onChange={event => setQuery(event.target.value)} /></label>{STUDIO_PANELS.filter(panel => `${panel.en} ${panel.zh} ${panel.type}`.toLowerCase().includes(query.toLowerCase())).map(panel => <button key={panel.type} onClick={() => open(panel.type)}><strong>{panel[locale]}</strong><small>{panel.owner}</small></button>)}</section>}
     {message && <div role="status" className="studio-notice">{message}<button onClick={() => setMessage("")}>{t("Dismiss", "关闭提示")}</button></div>}
     <div className="studio-dock" data-layout-revision={revision}><Layout model={model} factory={node => <StudioPanelSlot host={getHost(node.getId())} />} onAction={action} onModelChange={() => setRevision(value => value + 1)} /></div>
-    {tabs.map(node => <StablePanel key={node.getId()} node={node} host={getHost(node.getId())} dirty={dirty.current} onProtectionChange={onProtectionChange} onSnapshot={value => remember(`${epoch}:${node.getId()}`, value)} open={open} />)}
+    {tabs.map(node => <StablePanel key={node.getId()} node={node} host={getHost(node.getId())} dirty={dirty.current} onProtectionChange={onProtectionChange} onSnapshot={value => remember(`${epoch}:${node.getId()}`, value)} open={open} inspect={setSelection} />)}
+    <DetailDrawer view={selection} onClose={() => setSelection(null)} />
     <footer className="studio-footer">{t("Layout is presentation, never permission. Closing a panel does not cancel Work.", "布局不授予权限；关闭面板不会取消后台任务。")}</footer>
   </section></StudioSnapshot>;
 }
 
-function StablePanel({ node, host, dirty, onSnapshot, open, onProtectionChange }: { node: TabNode; host: HTMLElement; dirty: Set<string>; onSnapshot: (drafts: WorkbenchDraft[]) => void; open: (type: string) => void; onProtectionChange: (value: boolean) => void }) {
+function StablePanel({ node, host, dirty, onSnapshot, open, onProtectionChange, inspect }: { node: TabNode; host: HTMLElement; dirty: Set<string>; onSnapshot: (drafts: WorkbenchDraft[]) => void; open: (type: string) => void; onProtectionChange: (value: boolean) => void; inspect: (view: DrawerView) => void }) {
   const callbacks = useRef({ onSnapshot, open }); callbacks.current = { onSnapshot, open };
   const id = node.getId();
   const onDraftChange = useCallback((value: boolean) => { if (value) dirty.add(id); else dirty.delete(id); onProtectionChange(dirty.size > 0); }, [dirty, id, onProtectionChange]);
   const onDraftSnapshot = useCallback((value: WorkbenchDraft[]) => callbacks.current.onSnapshot(value), []);
   const openPanel = useCallback((type: string) => callbacks.current.open(type), []);
-  return createPortal(<StudioPanel type={node.getComponent() ?? "missing"} onDraftChange={onDraftChange} onDraftSnapshot={onDraftSnapshot} open={openPanel} />, host, id);
+  return createPortal(<StudioPanel type={node.getComponent() ?? "missing"} onDraftChange={onDraftChange} onDraftSnapshot={onDraftSnapshot} open={openPanel} inspect={inspect} />, host, id);
 }

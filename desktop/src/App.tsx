@@ -982,7 +982,7 @@ function AppShell() {
   return (
     <>
       <StatusBar onSearch={() => setPaletteOpen(true)} />
-      <div style={{ display: "flex", flex: 1, overflow: "hidden", height: `calc(100vh - ${page === "chat" || page === "operations" ? 44 : 148}px)` }}>
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", height: `calc(100vh - ${page === "chat" || page === "operations" || page === "studio" ? 44 : 148}px)` }}>
         <Sidebar currentPage={page} onNavigate={setPage} inspectorOpen={inspectorOpen}
           onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
           taskCount={tasks.filter((t) => ["running", "queued", "awaiting_approval"].includes(t.status)).length}
@@ -997,7 +997,7 @@ function AppShell() {
             {page === "chat" && <ChatView conversationId={activeConversationId} onConversationCreated={setActiveConversationId} onCardClick={handleEventClick} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} />}
             {page === "studio" && <React.Suspense fallback={<p role="status">Loading APEIR Studio…</p>}><StudioShell onProtectedChange={protectStudio} /></React.Suspense>}
             {page === "operations" && <OperationsConsole />}
-            {page === "tasks" && <TaskCenter onTaskClick={(id) => setDrawer({ kind: "task", taskId: id })} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} />}
+            {page === "tasks" && <TaskCenter onTaskClick={(id) => setDrawer({ kind: "task", taskId: id })} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} onConversationClick={id => { setActiveConversationId(id); setPage("chat"); }} />}
             {page === "develop" && <DeveloperPlatform />}
             {page === "documents" && <DocumentWorkbench />}
             {page === "environments" && <EnvironmentInspector />}
@@ -1011,7 +1011,7 @@ function AppShell() {
         </div>
         <DetailDrawer view={drawer} onClose={() => setDrawer(null)} />
       </div>
-      {page !== "chat" && page !== "operations" && <ResourceDock />}
+      {page !== "chat" && page !== "operations" && page !== "studio" && <ResourceDock />}
       <CommandPalette
         commands={commands}
         open={paletteOpen}
