@@ -116,6 +116,14 @@ normal-mode movement refusal, keyboard edit/settings, live service and unknown
 usage states, both themes and Chinese small-screen reload. Frontend contract
 fixtures exercise nonempty memory/topology rendering and stale/revoked/invalid
 report refusal; they are not physical telemetry or hardware acceptance.
+Local validation:405 Desktop tests and7 composed sandboxed Chromium/real HTTP
+cases pass, including browser2x DPI/touch hit targets and measured service-status
+text contrast of at least4.5:1 in both existing themes. Type/lint/build and
+repository contracts (299 PASS,5 Windows-only skips on Linux) pass. The retained
+security scan remains0 HIGH/5 pre-existing MEDIUM. These results belong to the
+composed source candidate; exact-head CI and resulting-main qualification remain
+separate gates.
+
 The original visual test exposed an implicit-default compatibility regression;
 it is retained privately and fixed by preserving legacy defaults. Source browser
 screenshots are not installed APEIR.exe screenshots. Windows10 native visual,

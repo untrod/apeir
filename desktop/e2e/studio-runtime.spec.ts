@@ -132,16 +132,18 @@ test("EventStream widgets retain their authenticated workspace owner across Cont
     });
     expect(exit).toBe(0);
   }
-  await open(page);
+  await open(page); await workspaceMenu(page);
   await page.getByRole("combobox", { name: "Template", exact: true }).selectOption("blank");
   await page.getByRole("button", { name: "Apply preset", exact: true }).click();
   await page.getByRole("button", { name: /Add panel/ }).click();
   await page.getByRole("textbox", { name: "Search panels" }).fill("dashboard");
-  await page.getByRole("button", { name: /Dashboard.*Existing Runtime/ }).click();
+  await page.getByRole("button", { name: /Dashboard/ }).click();
+  await page.getByRole("button", { name: "Edit layout", exact: true }).click();
   await page.getByRole("combobox", { name: "Widget type", exact: true }).selectOption("events");
   await page.getByRole("button", { name: "Add widget", exact: true }).click();
   await expect(page.getByText("qualification.workspace-0", { exact: false })).toBeVisible();
   await expect(page.getByText("qualification.workspace-1", { exact: false })).toHaveCount(0);
+  await dashboardMenu(page);
   await page.getByRole("button", { name: "Save dashboard", exact: true }).click();
   await page.getByRole("button", { name: /Add panel/ }).click();
   await page.getByRole("textbox", { name: "Search panels" }).fill("operations console");
