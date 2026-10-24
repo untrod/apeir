@@ -31,6 +31,46 @@ and component-lock update; do not replace the historical lock values. Even an
 exact `MATCH` leaves NKI runtime and Windows 10 installation acceptance `NOT_RUN`
 until exercised below. A Windows CI runner is not a clean Windows 10 install test.
 
+### Candidate compatibility before lock migration
+
+When bounded recovery of the original bytes has failed, the same diagnostic can
+explicitly qualify **unapproved candidates** using `qualify_kernel_candidate`:
+
+```bash
+gh workflow run desktop-build.yml --ref <reviewed-distribution-branch> -f rebuild_locked_kernel=true -f qualify_kernel_candidate=true
+```
+
+This performs two clean Windows builds with recorded Rust1.99.1, MSVC/SDK,
+Cargo.lock, source revision, allowed build variables, signatures and dependencies.
+The existing real sidecar smoke tests NKI1/2/3, bad/missing authentication,
+unsupported protocol versions, forbidden model credentials before provider spawn,
+Runtime startup refusal with a bad NKI session, authenticated HTTP, and fault
+restart/query of the original failed workload. The build host's Python only
+drives the existing NKI client; native child PATH/Python configuration is scrubbed.
+Fault cleanup is not graceful Desktop-exit or Windows10 installation acceptance.
+
+The original-lock comparison retains its nonzero exit on mismatched bytes. Later
+candidate-only steps run explicitly to collect compatibility evidence; they do
+not turn this failed integrity Gate into PASS. Candidate files are outside the
+Distribution's staged binary directory. The two `unapproved-kernel-candidate-*`
+artifacts and comparison report expire after14 days; preserve their exact archive
+digests and files before expiry for review. Failed smoke remains FAIL in the
+candidate manifest. No Runtime databases, session tokens or raw service logs are
+uploaded. Neither candidate retention nor matching two builds approves relocking,
+packaging, signing or publication. Nonidentical bytes or build environments must
+be reported rather than described as fully reproducible.
+
+The first R4 pair (`d4b3f10`, Actions40083548896) built successfully and both
+real native smoke runs passed, but the two unchanged Kernel components differed
+by20 bytes each. Their recorded environments matched; in-memory forensic
+comparison localized the variance to PE timestamp/debug identity metadata. Raw
+files and their distinct hashes are retained unchanged. Candidate-only builds
+now record `RUSTFLAGS=-C link-arg=/Brepro` to request deterministic linker output;
+the regular original-lock diagnostic keeps its original flags. This is a new
+source-build profile for review, never post-processing EXEs or trying to recover
+old hashes by collision. Its actual second-pair results, including any remaining
+variance, belong in the lock-migration PR before approval.
+
 ## 2. Verify source
 
 ```powershell
@@ -58,6 +98,22 @@ cd ..
 $env:APEIR_KERNEL_ROOT = (Resolve-Path "..\apeir-kernel").Path
 .\scripts\build-windows-x64-launcher.ps1 -KernelRoot $env:APEIR_KERNEL_ROOT
 ```
+
+For an approved external bundle, pass `-KernelArtifactDirectory` containing its
+locked relative `desktop/src-tauri/binaries/` paths. The existing staging/verifier
+checks the full bundle before replacing any staged input and rechecks after copy.
+Full delivery runs must not pass `-SkipValidation` or `-SkipSidecarSmoke`.
+The existing Desktop CI Windows x64 job now accepts reviewed exact run/artifact
+IDs plus the archive digest, binds the producer to this repository and a source
+ancestor, and uses this same official script. `native_target=none` is the default;
+setting the binary flag alone does not start every native platform. See the
+[Windows input and qualification record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#approved-github-actions-input).
+
+The native report records the actual build OS rather than hardcoding Windows10.
+It explicitly marks installed Desktop acceptance `NOT_RUN`. Build outputs include
+a Python build-environment CycloneDX SBOM and original Kernel/Desktop Cargo.lock
+files; complete cross-component supply-chain/signature qualification remains a
+separate release Gate.
 
 Run install, upgrade, launch, shutdown, uninstall, orphan-process, and Windows
 Defender checks on Windows 10 x64. Store generated evidence outside the source

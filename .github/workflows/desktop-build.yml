@@ -15,6 +15,27 @@ on:
         description: 'Diagnostic only: rebuild frozen Windows Kernel and compare original hashes (no release)'
         type: boolean
         default: false
+      qualify_kernel_candidate:
+        description: 'Run real native smoke and retain unapproved candidates for lock review; requires rebuild_locked_kernel'
+        type: boolean
+        default: false
+      native_target:
+        description: 'Explicit native target; all binary gates and platform qualification still apply'
+        type: choice
+        default: none
+        options: [none, windows-x64, windows-arm64, linux-x64, macos-arm64]
+      approved_kernel_run_id:
+        description: 'Reviewed same-repository candidate producer run (Windows x64 only)'
+        type: string
+        default: ''
+      approved_kernel_artifact_id:
+        description: 'Exact reviewed candidate artifact ID; never a moving artifact name'
+        type: string
+        default: ''
+      approved_kernel_zip_sha256:
+        description: 'Maintainer-reviewed artifact ZIP SHA-256; cannot override the component lock'
+        type: string
+        default: ''
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -29,6 +50,10 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.rebuild_locked_kernel == true
     runs-on: windows-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: ${{ fromJSON(inputs.qualify_kernel_candidate && '[1,2]' || '[1]') }}
     env:
       CARGO_BUILD_JOBS: '2'
       CARGO_TERM_COLOR: never
@@ -48,38 +73,199 @@ jobs:
         with: { python-version: '3.12' }
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: '1.99.1'
           targets: x86_64-pc-windows-msvc
       - name: Record build environment and exact source
         shell: pwsh
+        env:
+          QUALIFY_CANDIDATE: ${{ inputs.qualify_kernel_candidate }}
         run: |
           $evidence = Join-Path $env:RUNNER_TEMP 'kernel-rebuild-evidence'
           New-Item -ItemType Directory -Force $evidence | Out-Null
-          rustc -vV | Out-File "$evidence/toolchain.txt"
-          cargo -V | Out-File -Append "$evidence/toolchain.txt"
+          if ($env:QUALIFY_CANDIDATE -eq 'true') {
+            if ($env:RUSTFLAGS) { throw 'Unexpected compiler flags in candidate baseline' }
+            # MSVC timestamps/debug IDs varied in the first recorded clean pair.
+            # Rebuild deterministically, never edit or normalize the EXE bytes.
+            $env:RUSTFLAGS = '-C link-arg=/Brepro'
+            "RUSTFLAGS=$env:RUSTFLAGS" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+          rustc +1.99.1 -vV | Out-File "$evidence/toolchain.txt"
+          cargo +1.99.1 -V | Out-File -Append "$evidence/toolchain.txt"
           Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture | Format-List | Out-File -Append "$evidence/toolchain.txt"
           & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products '*' -format json | Out-File "$evidence/visual-studio.json"
           git -C distribution rev-parse HEAD | Out-File "$evidence/distribution-sha.txt"
           git -C kernel-rebuild-source rev-parse HEAD | Out-File "$evidence/kernel-sha.txt"
+          $preflight = & ./distribution/scripts/ci/windows_native_preflight.ps1 -Target x86_64-pc-windows-msvc
+          if (-not $preflight.ready) { throw 'Windows native build prerequisites unavailable' }
+          $environment = [ordered]@{
+            operating_system = (Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture)
+            runner_image = $env:ImageOS
+            runner_image_version = $env:ImageVersion
+            rust = (& rustc +1.99.1 -vV) -join "`n"
+            cargo = (& cargo +1.99.1 -V)
+            msvc = (Get-Item -LiteralPath $preflight.cl_path).VersionInfo.ProductVersion
+            windows_sdk = $preflight.kernel32_lib
+            cargo_lock_sha256 = (Get-FileHash kernel-rebuild-source/Cargo.lock -Algorithm SHA256).Hash
+            component_lock_sha256 = (Get-FileHash distribution/runtime-components.lock.json -Algorithm SHA256).Hash
+            build_parameters = 'cargo +1.99.1 build --release --locked --target x86_64-pc-windows-msvc -p nousd --bin nousd -p nous-provider-worker --bin nous-provider-worker'
+            environment = @{ CARGO_BUILD_JOBS = $env:CARGO_BUILD_JOBS; CARGO_TERM_COLOR = $env:CARGO_TERM_COLOR; RUSTFLAGS = $env:RUSTFLAGS; SOURCE_DATE_EPOCH = $env:SOURCE_DATE_EPOCH }
+          }
+          $environment | ConvertTo-Json -Depth 6 | Out-File "$evidence/build-environment.json"
+          Copy-Item kernel-rebuild-source/Cargo.lock "$evidence/Cargo.lock"
       - name: Build frozen components without modifying source or lock
+        id: kernel-build
         working-directory: kernel-rebuild-source
         shell: pwsh
         run: |
-          cargo build --release --locked --target x86_64-pc-windows-msvc -p nousd --bin nousd -p nous-provider-worker --bin nous-provider-worker 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/kernel-rebuild-evidence/cargo-build.log"
+          cargo +1.99.1 build --release --locked --target x86_64-pc-windows-msvc -p nousd --bin nousd -p nous-provider-worker --bin nous-provider-worker 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/kernel-rebuild-evidence/cargo-build.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Independently compare both PE files with unchanged component lock
+        id: original-lock
         if: always() && steps.kernel.outcome == 'success'
         shell: pwsh
         run: |
           python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-rebuild-source --candidate-root kernel-rebuild-source/target/x86_64-pc-windows-msvc/release --report "$env:RUNNER_TEMP/kernel-rebuild-evidence/component-report.json"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Admit only clean, frozen-source x64 candidates to compatibility tests
+        id: candidate-admission
+        if: always() && inputs.qualify_kernel_candidate == true && steps.kernel-build.outcome == 'success'
+        shell: pwsh
+        run: |
+          $report = Get-Content "$env:RUNNER_TEMP/kernel-rebuild-evidence/component-report.json" -Raw | ConvertFrom-Json
+          if ($report.actual_revision -ne '87fd1b2ff28ef14ab1a515a58162592b452fda2e' -or -not $report.tracked_source_clean -or $report.artifacts.Count -ne 2) { throw 'Candidate source is not the frozen clean Kernel' }
+          foreach ($item in $report.artifacts) {
+            if ($item.pe_machine -ne '0x8664' -or -not $item.sha256 -or @($item.errors | Where-Object { $_ -ne 'hash mismatch' }).Count) { throw 'Candidate has a non-hash integrity failure' }
+          }
+          $root = "$env:RUNNER_TEMP/unapproved-kernel-candidate"
+          New-Item -ItemType Directory -Force "$root/desktop/src-tauri/binaries" | Out-Null
+          foreach ($name in @('nousd', 'nous-provider-worker')) {
+            Copy-Item "kernel-rebuild-source/target/x86_64-pc-windows-msvc/release/$name.exe" "$root/desktop/src-tauri/binaries/$name-x86_64-pc-windows-msvc.exe"
+          }
+      - name: Build the existing Runtime sidecar for candidate compatibility only
+        id: candidate-runtime
+        if: always() && inputs.qualify_kernel_candidate == true && steps.candidate-admission.outcome == 'success'
+        working-directory: distribution
+        shell: pwsh
+        run: |
+          python -m pip install ".[installer-build]"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip freeze | Out-File "$env:RUNNER_TEMP/kernel-rebuild-evidence/python-dependencies.txt"
+          python -m PyInstaller --noconfirm --clean nous-sidecar.spec 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/kernel-rebuild-evidence/runtime-build.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item dist/nous-runtime.exe "$env:RUNNER_TEMP/unapproved-kernel-candidate/nous-runtime.exe"
+      - name: Exercise actual candidate processes through the existing Native Sidecar Smoke
+        id: candidate-smoke
+        if: always() && inputs.qualify_kernel_candidate == true && steps.candidate-runtime.outcome == 'success'
+        shell: pwsh
+        run: |
+          $root = "$env:RUNNER_TEMP/unapproved-kernel-candidate"
+          $smoke = & ./distribution/scripts/ci/verify_windows_native_sidecars.ps1 -SidecarPath "$root/nous-runtime.exe" -KernelPath "$root/desktop/src-tauri/binaries/nousd-x86_64-pc-windows-msvc.exe" -ProviderWorkerPath "$root/desktop/src-tauri/binaries/nous-provider-worker-x86_64-pc-windows-msvc.exe" -EvidenceDirectory $root
+          $smoke | ConvertTo-Json -Depth 12 | Out-File "$root/native-smoke.json"
+      - name: Record unapproved candidate inputs, signatures, dependencies and hashes
+        id: candidate-record
+        if: always() && inputs.qualify_kernel_candidate == true && steps.candidate-runtime.outcome == 'success'
+        shell: pwsh
+        env:
+          NATIVE_SMOKE_OUTCOME: ${{ steps.candidate-smoke.outcome }}
+          BUILD_ATTEMPT: ${{ matrix.attempt }}
+        run: |
+          $root = "$env:RUNNER_TEMP/unapproved-kernel-candidate"
+          Copy-Item "$env:RUNNER_TEMP/kernel-rebuild-evidence/component-report.json" "$root/original-lock-report.json"
+          Copy-Item "$env:RUNNER_TEMP/kernel-rebuild-evidence/build-environment.json" "$root/build-environment.json"
+          Copy-Item "$env:RUNNER_TEMP/kernel-rebuild-evidence/python-dependencies.txt" $root
+          $preflight = & ./distribution/scripts/ci/windows_native_preflight.ps1 -Target x86_64-pc-windows-msvc
+          $dumpbin = Join-Path (Split-Path $preflight.link_path) 'dumpbin.exe'
+          $files = foreach ($relative in @('desktop/src-tauri/binaries/nousd-x86_64-pc-windows-msvc.exe', 'desktop/src-tauri/binaries/nous-provider-worker-x86_64-pc-windows-msvc.exe', 'nous-runtime.exe')) {
+            $path = Join-Path $root $relative
+            & $dumpbin /DEPENDENTS $path | Out-File "$root/$([IO.Path]::GetFileNameWithoutExtension($path))-dependencies.txt"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            @{ path = $relative; sha256 = (Get-FileHash $path -Algorithm SHA256).Hash; size_bytes = (Get-Item $path).Length; signature_status = (Get-AuthenticodeSignature $path).Status.ToString() }
+          }
+          $manifest = [ordered]@{
+            purpose = 'UNAPPROVED_NATIVE_CANDIDATE; not an installer or release'
+            distribution_revision = (& git -C distribution rev-parse HEAD).Trim()
+            kernel_revision = (& git -C kernel-rebuild-source rev-parse HEAD).Trim()
+            source_build = 'PASS'
+            native_smoke = $env:NATIVE_SMOKE_OUTCOME
+            native_component_integrity = (Get-Content "$root/original-lock-report.json" -Raw | ConvertFrom-Json).status
+            component_lock_migration_approved = $false
+            installation_acceptance = 'NOT_RUN'
+            signing_and_release = 'NOT_RUN'
+            github_repository = $env:GITHUB_REPOSITORY
+            github_run_id = $env:GITHUB_RUN_ID
+            github_run_attempt = $env:GITHUB_RUN_ATTEMPT
+            independent_build_attempt = $env:BUILD_ATTEMPT
+            files = @($files)
+          }
+          $manifest | ConvertTo-Json -Depth 8 | Out-File "$root/candidate-manifest.json"
+          Get-ChildItem $root -File -Recurse | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $([IO.Path]::GetRelativePath($root, $_.FullName) -replace '\\','/')" } | Out-File "$root/SHA256SUMS.txt"
+      - uses: actions/upload-artifact@v4
+        if: always() && inputs.qualify_kernel_candidate == true && steps.candidate-record.outcome == 'success'
+        with:
+          name: unapproved-kernel-candidate-windows-x64-${{ matrix.attempt }}
+          path: ${{ runner.temp }}/unapproved-kernel-candidate/
+          retention-days: 14
+          if-no-files-found: error
       - name: Retain diagnostic evidence, never publish mismatched executables
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: locked-kernel-rebuild-diagnostic
+          name: ${{ inputs.qualify_kernel_candidate && format('locked-kernel-rebuild-diagnostic-{0}', matrix.attempt) || 'locked-kernel-rebuild-diagnostic' }}
           retention-days: 14
           if-no-files-found: error
           path: ${{ runner.temp }}/kernel-rebuild-evidence/
+
+  compare-kernel-candidates:
+    name: Compare unapproved native candidate builds (not lock approval)
+    if: always() && github.event_name == 'workflow_dispatch' && inputs.qualify_kernel_candidate == true && inputs.rebuild_locked_kernel == true
+    needs: [locked-kernel-rebuild]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: unapproved-kernel-candidate-windows-x64-*
+          path: candidates
+      - name: Verify actual candidate bytes and compare the two recorded environments
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          result = {"purpose": "two clean native candidate builds; no component-lock or release approval", "status": "FAIL"}
+          try:
+              roots = sorted(Path("candidates").glob("unapproved-kernel-candidate-windows-x64-*"))
+              assert len(roots) == 2
+              manifests, environments, native_hashes = [], [], []
+              for root in roots:
+                  manifest = json.loads((root / "candidate-manifest.json").read_text(encoding="utf-8-sig"))
+                  assert manifest["kernel_revision"] == "87fd1b2ff28ef14ab1a515a58162592b452fda2e"
+                  assert manifest["native_smoke"] == "success"
+                  assert manifest["component_lock_migration_approved"] is False
+                  hashes = {}
+                  for item in manifest["files"]:
+                      path = Path(item["path"])
+                      assert not path.is_absolute() and ".." not in path.parts
+                      assert hashlib.sha256((root / path).read_bytes()).hexdigest().upper() == item["sha256"]
+                      if path.name.startswith(("nousd-", "nous-provider-worker-")):
+                          hashes[path.name] = item["sha256"]
+                  assert len(hashes) == 2
+                  native_hashes.append(hashes)
+                  manifests.append(manifest)
+                  environments.append(json.loads((root / "build-environment.json").read_text(encoding="utf-8-sig")))
+              result.update(kernel_component_hashes=native_hashes, environments_equal=environments[0] == environments[1], kernel_bytes_equal=native_hashes[0] == native_hashes[1])
+              assert manifests[0]["distribution_revision"] == manifests[1]["distribution_revision"]
+              assert result["environments_equal"] and result["kernel_bytes_equal"]
+              result["status"] = "MATCH_IN_TWO_RECORDED_ENVIRONMENTS"
+          finally:
+              Path("candidate-comparison.json").write_text(json.dumps(result, indent=2) + "\n")
+              print(json.dumps(result))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-candidate-build-comparison
+          path: candidate-comparison.json
+          retention-days: 14
+          if-no-files-found: error
 
   # Frontend Validation
   frontend-tests:
@@ -92,6 +278,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Reject incomplete candidate qualification inputs
+        if: github.event_name == 'workflow_dispatch' && ((inputs.qualify_kernel_candidate == true && inputs.rebuild_locked_kernel != true) || (inputs.rebuild_locked_kernel == true && inputs.native_target != 'none'))
+        working-directory: .
+        run: |
+          echo 'Candidate qualification requires rebuild_locked_kernel=true and native_target=none; native packaging is a separate approved run'
+          exit 1
+      - name: Reject native requests while the release gate is disabled
+        if: github.event_name == 'workflow_dispatch' && inputs.native_target != 'none' && vars.APEIR_BINARY_RELEASE_ENABLED != 'true'
+        working-directory: .
+        run: |
+          echo 'BLOCKED: APEIR_BINARY_RELEASE_ENABLED requires maintainer authorization and qualified native inputs'
+          exit 1
       - name: Select conservative PR scope
         id: scope
         working-directory: .
@@ -232,55 +430,102 @@ jobs:
 
   # Windows x86_64 Build
   build-windows-x64:
-    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && inputs.native_target == 'windows-x64'
     name: Build Windows x86_64
     needs: [frontend-tests]
     runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: distribution
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: untrod/apeir-kernel
+          ref: 87fd1b2ff28ef14ab1a515a58162592b452fda2e
+          path: kernel-native-source
+          persist-credentials: false
       - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
+        with: { python-version: '3.12' }
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-
-      - name: Verify native locked Kernel bytes before packaging
-        run: python scripts/ci/verify_kernel_components.py --repo-root .
-
-      - name: Build embedded Runtime sidecar
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.99.1'
+          targets: x86_64-pc-windows-msvc
+      - name: Download only the exact reviewed same-repository candidate archive
+        shell: python {0}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVED_RUN_ID: ${{ inputs.approved_kernel_run_id }}
+          APPROVED_ARTIFACT_ID: ${{ inputs.approved_kernel_artifact_id }}
+          APPROVED_ZIP_SHA256: ${{ inputs.approved_kernel_zip_sha256 }}
+        run: |
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+          run_id, artifact_id, expected = (os.environ[key] for key in ("APPROVED_RUN_ID", "APPROVED_ARTIFACT_ID", "APPROVED_ZIP_SHA256"))
+          assert re.fullmatch(r"[1-9][0-9]*", run_id) and re.fullmatch(r"[1-9][0-9]*", artifact_id), "Exact reviewed run/artifact IDs are required"
+          assert re.fullmatch(r"[0-9A-Fa-f]{64}", expected), "Reviewed ZIP digest is required"
+          def api(path):
+              result = subprocess.run(["gh", "api", "repos/untrod/apeir/" + path], capture_output=True, text=True)
+              assert result.returncode == 0, "Reviewed artifact metadata is unavailable"
+              return json.loads(result.stdout)
+          producer = api("actions/runs/" + run_id)
+          artifact = api("actions/artifacts/" + artifact_id)
+          assert producer["head_repository"]["full_name"] == "untrod/apeir"
+          assert producer["path"] == ".github/workflows/desktop-build.yml" and producer["event"] == "workflow_dispatch"
+          assert producer["status"] == "completed" and producer["conclusion"] in ("success", "failure")
+          revision = producer["head_sha"]
+          assert re.fullmatch(r"[0-9a-f]{40}", revision)
+          subprocess.run(["git", "-C", "distribution", "merge-base", "--is-ancestor", revision, "HEAD"], check=True)
+          assert artifact["workflow_run"]["id"] == int(run_id) and artifact["workflow_run"]["head_sha"] == revision
+          assert not artifact["expired"] and artifact["size_in_bytes"] <= 256 * 1024 * 1024
+          assert re.fullmatch(r"unapproved-kernel-candidate-windows-x64-[12]", artifact["name"])
+          assert artifact.get("digest", "").lower() == "sha256:" + expected.lower()
+          archive = Path(os.environ["RUNNER_TEMP"]) / "reviewed-kernel.zip"
+          with archive.open("wb") as stream:
+              result = subprocess.run(["gh", "api", "repos/untrod/apeir/actions/artifacts/" + artifact_id + "/zip"], stdout=stream, stderr=subprocess.PIPE)
+          assert result.returncode == 0, "Reviewed artifact download failed"
+          assert archive.stat().st_size <= 256 * 1024 * 1024
+          assert hashlib.sha256(archive.read_bytes()).hexdigest() == expected.lower()
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write("APPROVED_PRODUCER_REVISION=" + revision + "\n")
+          Path(os.environ["RUNNER_TEMP"], "reviewed-input-provenance.json").write_text(json.dumps({"producer_revision": revision, "producer_run": int(run_id), "artifact_id": int(artifact_id), "archive_sha256": expected.lower()}, indent=2))
+      - name: Admit the downloaded bytes through the unchanged maintained lock
         shell: pwsh
+        env:
+          APPROVED_ZIP_SHA256: ${{ inputs.approved_kernel_zip_sha256 }}
         run: |
-          python -m pip install ".[installer-build]"
-          pyinstaller nous-sidecar.spec
-          New-Item -ItemType Directory -Force desktop/src-tauri/binaries | Out-Null
-          Copy-Item dist/nous-runtime.exe desktop/src-tauri/binaries/nous-runtime-x86_64-pc-windows-msvc.exe
-
-      - name: Build Tauri desktop
-        working-directory: desktop
-        run: |
-          npm ci
-          npx tauri build --bundles nsis --target x86_64-pc-windows-msvc
-
-      - name: Verify and hash NSIS installer
+          python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-native-source --artifact-zip "$env:RUNNER_TEMP/reviewed-kernel.zip" --artifact-sha256 $env:APPROVED_ZIP_SHA256 --artifact-source-revision $env:APPROVED_PRODUCER_REVISION --artifact-output "$env:RUNNER_TEMP/approved-native-inputs"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install existing full validation and installer build dependencies
+        working-directory: distribution
+        run: python -m pip install ".[dev,a2a,mcp,scientific,installer-build]"
+      - name: Install frontend build dependencies
+        working-directory: distribution/desktop
+        run: npm ci
+      - name: Build Portable and NSIS together through the official full launcher entry
         shell: pwsh
+        working-directory: distribution
         run: |
-          $installer = Get-ChildItem desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis -Filter "*.exe" | Select-Object -First 1
-          if (-not $installer) { throw "x64 NSIS installer not found" }
-          Get-FileHash -Algorithm SHA256 $installer.FullName | Format-List | Out-File -Encoding utf8 SHA256SUMS.txt
-
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0
+          & ./scripts/build-windows-x64-launcher.ps1 -RepoRoot (Resolve-Path .).Path -KernelRoot (Resolve-Path ../kernel-native-source).Path -KernelArtifactDirectory "$env:RUNNER_TEMP/approved-native-inputs"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item "$env:RUNNER_TEMP/reviewed-input-provenance.json" artifacts/windows-x64/
 
       - uses: actions/upload-artifact@v4
         with:
           retention-days: 14
-          name: windows-x86_64
-          path: |
-            desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-            SHA256SUMS.txt
+          name: windows-x64-native-development-build
+          if-no-files-found: error
+          path: distribution/artifacts/windows-x64/
 
   # Windows ARM64 release candidate build
   build-windows-arm64:
-    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && inputs.native_target == 'windows-arm64'
     name: Build Windows ARM64
     needs: [frontend-tests]
     runs-on: windows-11-arm
@@ -366,7 +611,7 @@ jobs:
 
   # Linux x86_64 Build
   build-linux-x64:
-    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && inputs.native_target == 'linux-x64'
     name: Build Linux x86_64
     needs: [frontend-tests]
     runs-on: ubuntu-22.04
@@ -422,7 +667,7 @@ jobs:
 
   # macOS ARM64 Build
   build-macos-arm64:
-    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && inputs.native_target == 'macos-arm64'
     name: Build macOS ARM64
     needs: [frontend-tests]
     runs-on: macos-14

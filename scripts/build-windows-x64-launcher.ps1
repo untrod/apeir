@@ -4,6 +4,7 @@ param(
     [string]$Target = "x86_64-pc-windows-msvc",
     [string]$ExpectedVersion = "0.1.0-rc1",
     [string]$ArtifactRoot = "",
+    [string]$KernelArtifactDirectory = "",
     [switch]$SkipValidation,
     [switch]$SkipSidecarSmoke,
     [switch]$SkipRuntimeSidecarBuild
@@ -40,19 +41,23 @@ if (-not $preflight.ready) {
     -KernelRoot $kernel `
     -RepoRoot $repo `
     -Target $Target `
+    -ArtifactDirectory $KernelArtifactDirectory `
     -SkipBuild
 if ($LASTEXITCODE -ne 0) { throw "Kernel component verification failed." }
 
 if (-not $SkipRuntimeSidecarBuild) {
-    & python -c "import PyInstaller"
+    & python -c "import PyInstaller; import cyclonedx_py"
     if ($LASTEXITCODE -ne 0) {
-        throw "PyInstaller is missing. Install the project installer-build extra before building."
+        throw "Build/SBOM tools are missing. Install the project installer-build extra before building."
     }
 }
 
 if (-not $SkipValidation) {
-    & python -m pytest -q
-    if ($LASTEXITCODE -ne 0) { throw "Runtime tests failed." }
+    Push-Location -LiteralPath $repo
+    try {
+        & python -m pytest -q
+        if ($LASTEXITCODE -ne 0) { throw "Runtime tests failed." }
+    } finally { Pop-Location }
 
     Push-Location -LiteralPath $desktop
     try {
@@ -91,6 +96,49 @@ Copy-Item -LiteralPath $runtimeBuildOutput -Destination $runtimeSidecar -Force
 $kernelSidecar = Join-Path $binaryRoot "nousd-$Target.exe"
 $workerSidecar = Join-Path $binaryRoot "nous-provider-worker-$Target.exe"
 
+# A development machine's system CRT does not qualify a clean user's host.
+# Stage only signed redistributables from the selected Visual Studio install.
+$redistRoot = Join-Path $preflight.visual_studio_path "VC\Redist\MSVC"
+$crtDirectory = Get-ChildItem -LiteralPath $redistRoot -Directory |
+    Where-Object { $_.Name -match '^\d+(\.\d+){1,3}$' } |
+    Sort-Object { [version]$_.Name } -Descending |
+    ForEach-Object { Get-ChildItem -LiteralPath (Join-Path $_.FullName 'x64') -Directory -Filter 'Microsoft.VC*.CRT' -ErrorAction SilentlyContinue } |
+    Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'vcruntime140.dll') } |
+    Select-Object -First 1
+if (-not $crtDirectory) { throw "Trusted x64 Visual C++ redistributables are missing." }
+$resourceMap = [ordered]@{}
+$nativeDependencies = foreach ($name in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'concrt140.dll')) {
+    $source = Join-Path $crtDirectory.FullName $name
+    if (-not (Test-Path -LiteralPath $source)) { continue }
+    $signature = Get-AuthenticodeSignature -LiteralPath $source
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') {
+        throw "Visual C++ redistributable does not have a valid Microsoft signature."
+    }
+    $destination = Join-Path $binaryRoot $name
+    Copy-Item -LiteralPath $source -Destination $destination -Force
+    $resourceMap[$destination] = $name
+    [ordered]@{
+        name = $name
+        source = $source
+        file_version = (Get-Item -LiteralPath $source).VersionInfo.FileVersion
+        sha256 = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
+        signature_status = $signature.Status.ToString()
+        signer_thumbprint = $signature.SignerCertificate.Thumbprint
+    }
+}
+$nativeDependencies = @($nativeDependencies)
+if (-not ($nativeDependencies | Where-Object { $_.name -eq 'vcruntime140.dll' })) { throw 'Required x64 CRT was not staged.' }
+$resourceOverlay = Join-Path $binaryRoot 'windows-x64-resources.generated.json'
+@{ bundle = @{ resources = $resourceMap } } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resourceOverlay -Encoding utf8
+
+# Tests and Runtime construction can take time; recheck the actual immutable
+# inputs immediately before executing native sidecars.
+& python (Join-Path $repo "scripts\ci\verify_kernel_components.py") --repo-root $repo --kernel-root $kernel
+if ($LASTEXITCODE -ne 0) { throw "Kernel components changed before native smoke." }
+foreach ($dependency in $nativeDependencies) {
+    if ((Get-FileHash (Join-Path $binaryRoot $dependency.name) -Algorithm SHA256).Hash -ne $dependency.sha256) { throw 'Native runtime dependency changed before smoke.' }
+}
+
 if (-not $SkipSidecarSmoke) {
     $nativeValidation = & (Join-Path $repo "scripts\ci\verify_windows_native_sidecars.ps1") `
         -SidecarPath $runtimeSidecar `
@@ -107,7 +155,10 @@ $manifestPath = Join-Path $tauriRoot "Cargo.toml"
 $quotedManifest = '"' + $manifestPath + '"'
 Invoke-NousDeveloperCommand "cargo check --locked --target $Target --manifest-path $quotedManifest"
 Invoke-NousDeveloperCommand "cargo test --locked --target $Target --manifest-path $quotedManifest"
-Invoke-NousDeveloperCommand "cd /d `"$desktop`" && npm run tauri:build:x64"
+Invoke-NousDeveloperCommand "cd /d `"$desktop`" && npm run tauri:build:x64 -- --config `"$resourceOverlay`""
+
+& python (Join-Path $repo "scripts\ci\verify_kernel_components.py") --repo-root $repo --kernel-root $kernel
+if ($LASTEXITCODE -ne 0) { throw "Kernel components changed during Desktop packaging." }
 
 $releaseRoot = Join-Path $tauriRoot "target\$Target\release"
 $launcher = Join-Path $releaseRoot "apeir-control-center.exe"
@@ -146,6 +197,19 @@ Copy-Item -LiteralPath $launcher -Destination (Join-Path $portableRoot "APEIR.ex
 Copy-Item -LiteralPath $runtimeSidecar -Destination (Join-Path $portableRoot "nous-runtime.exe")
 Copy-Item -LiteralPath $kernelSidecar -Destination (Join-Path $portableRoot "nousd.exe")
 Copy-Item -LiteralPath $workerSidecar -Destination (Join-Path $portableRoot "nous-provider-worker.exe")
+foreach ($dependency in $nativeDependencies) {
+    $source = Join-Path $binaryRoot $dependency.name
+    if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne $dependency.sha256) { throw 'Native runtime dependency changed during packaging.' }
+    $copy = Join-Path $portableRoot $dependency.name
+    Copy-Item -LiteralPath $source -Destination $copy
+    if ((Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash -ne $dependency.sha256) { throw 'Portable runtime dependency changed during copy.' }
+}
+foreach ($artifact in $component.artifacts) {
+    $copied = Join-Path $portableRoot "$($artifact.name).exe"
+    if ((Get-FileHash -LiteralPath $copied -Algorithm SHA256).Hash -ne $artifact.sha256) {
+        throw "Portable Kernel bytes do not match the approved component lock."
+    }
+}
 $publishedInstaller = Join-Path $artifactRoot $installer.Name
 Copy-Item -LiteralPath $installer.FullName -Destination $publishedInstaller -Force
 
@@ -163,6 +227,7 @@ $artifactFiles = @(
     $publishedInstaller,
     $portableZip
 )
+$artifactFiles += @($nativeDependencies | ForEach-Object { Join-Path $portableRoot $_.name })
 $artifactRootPrefix = ([System.IO.Path]::GetFullPath($artifactRoot)).TrimEnd(
     [System.IO.Path]::DirectorySeparatorChar,
     [System.IO.Path]::AltDirectorySeparatorChar
@@ -227,7 +292,11 @@ $nativeReport = [ordered]@{
     status = if ($SkipSidecarSmoke) { "skipped" } else { "passed" }
     validated_at_utc = $buildTimestamp
     target = $Target
-    host_os = "Windows 10"
+    host_os = (Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture)
+    supported_os_baseline = "Windows 10 X64"
+    scope = "native sidecar smoke and build; not installed Desktop qualification"
+    installation_acceptance = "NOT_RUN"
+    full_validation_executed = -not $SkipValidation
     toolchain = $toolchain
     smoke = $nativeValidation
 }
@@ -259,8 +328,37 @@ $artifactManifest = Join-Path $artifactRoot "APEIR-$ExpectedVersion-windows-x64.
 $manifest | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath $artifactManifest -Encoding utf8
 $releaseManifest = Join-Path $artifactRoot "release-manifest.json"
 $manifest | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath $releaseManifest -Encoding utf8
+$dependencyReport = Join-Path $artifactRoot "native-dependencies.json"
+@{
+    source = 'Visual Studio x64 Microsoft.VC*.CRT redistributable directory'
+    licensing = 'Redistribution is governed by the applicable Visual Studio license and REDIST list; retain source and notices in release review.'
+    dependencies = $nativeDependencies
+} | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $dependencyReport -Encoding utf8
 
-$evidenceHashes = foreach ($path in @($nativeReportPath, $artifactManifest, $releaseManifest)) {
+$pythonSbom = Join-Path $artifactRoot "python-build-environment.cdx.json"
+& python -m cyclonedx_py environment --output-file $pythonSbom
+if ($LASTEXITCODE -ne 0) { throw "Python build-environment SBOM generation failed." }
+$sourceManifest = Join-Path $artifactRoot "source-manifest.json"
+[ordered]@{
+    distribution_revision = $runtimeRevision
+    kernel_revision = $actualRevision
+    kernel_cargo_lock_sha256 = (Get-FileHash (Join-Path $kernel 'Cargo.lock') -Algorithm SHA256).Hash
+    desktop_cargo_lock_sha256 = (Get-FileHash (Join-Path $tauriRoot 'Cargo.lock') -Algorithm SHA256).Hash
+    component_lock_sha256 = (Get-FileHash $lockPath -Algorithm SHA256).Hash
+    sbom_scope = 'Python build environment; Rust dependencies retained in original Cargo.lock files. Complete release supply-chain qualification remains separate.'
+} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $sourceManifest -Encoding utf8
+Copy-Item (Join-Path $kernel 'Cargo.lock') (Join-Path $artifactRoot 'kernel-Cargo.lock') -Force
+Copy-Item (Join-Path $tauriRoot 'Cargo.lock') (Join-Path $artifactRoot 'desktop-Cargo.lock') -Force
+$platformNotes = Join-Path $artifactRoot "platform-support.txt"
+@"
+APEIR $ExpectedVersion unsigned native development build.
+Target: Windows 10 x64; actual build OS is recorded in native-validation-report.json.
+Windows 10 install/upgrade/uninstall, Defender and signing acceptance: NOT_RUN by this builder.
+Python build-environment SBOM is not an assertion of complete native payload provenance.
+Use RELEASE_RUNBOOK.md before claiming NATIVE_PREVIEW_READY or publishing a Release.
+"@ | Set-Content -LiteralPath $platformNotes -Encoding utf8
+
+$evidenceHashes = foreach ($path in @($nativeReportPath, $artifactManifest, $releaseManifest, $pythonSbom, $sourceManifest, $platformNotes, $dependencyReport, (Join-Path $artifactRoot 'kernel-Cargo.lock'), (Join-Path $artifactRoot 'desktop-Cargo.lock'))) {
     $item = Get-Item -LiteralPath $path
     [ordered]@{
         name = $item.Name

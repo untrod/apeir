@@ -5,11 +5,18 @@ import json
 import struct
 import subprocess
 import sys
+import stat
+import zipfile
 from pathlib import Path
 
 import pytest
 
-from scripts.ci.verify_kernel_components import main, report_rebuild, verify
+from scripts.ci.verify_kernel_components import (
+    admit_artifact,
+    main,
+    report_rebuild,
+    verify,
+)
 
 
 def _write_pe(path: Path, machine: int = 0xAA64) -> None:
@@ -45,6 +52,172 @@ def _write_lock(path: Path, artifact: Path, digest: str) -> None:
         ),
         encoding="utf-8",
     )
+
+
+@pytest.fixture
+def native_bundle(tmp_path):
+    """Synthetic PE admission contracts, never native execution qualification."""
+    binary = tmp_path / "fixture.exe"
+    _write_pe(binary, machine=0x8664)
+    content = binary.read_bytes()
+    native_paths = [
+        f"desktop/src-tauri/binaries/{name}-x86_64-pc-windows-msvc.exe"
+        for name in ("nousd", "nous-provider-worker")
+    ]
+    lock = tmp_path / "lock.json"
+    _write_lock(lock, Path(native_paths[0]), hashlib.sha256(content).hexdigest())
+    document = json.loads(lock.read_text())
+    component = document["components"]["nous-kernel"]
+    component.update(target="x86_64-pc-windows-msvc", nki_versions=[1, 2, 3])
+    component["artifacts"][0]["pe_machine"] = "0x8664"
+    component["artifacts"].append(
+        {
+            **component["artifacts"][0],
+            "name": "nous-provider-worker",
+            "path": native_paths[1],
+        }
+    )
+    lock.write_text(json.dumps(document))
+    files = {path: content for path in native_paths + ["nous-runtime.exe"]}
+    manifest = {
+        "kernel_revision": "abc123",
+        "distribution_revision": "1" * 40,
+        "github_repository": "untrod/apeir",
+        "source_build": "PASS",
+        "native_smoke": "success",
+        "files": [
+            {"path": path, "sha256": hashlib.sha256(data).hexdigest()}
+            for path, data in files.items()
+        ],
+    }
+    smoke = {
+        key: True
+        for key in (
+            "kernel_ready",
+            "authenticated_status",
+            "provider_worker_health",
+            "invalid_nki_runtime_start_rejected",
+            "invalid_http_sessions_rejected",
+            "token_owner_only_dacl",
+            "process_tree_closed",
+            "kernel_process_tree_closed",
+            "final_runtime_process_closed",
+            "restarted_authenticated_status",
+        )
+    }
+    smoke["target"] = "x86_64-pc-windows-msvc"
+    nki = {
+        "status": "PASS",
+        "original_workload_id": "native-smoke-denied-model-" + "2" * 32,
+        "original_profile_sha256": "3" * 64,
+        "request_versions_exercised": [1, 2, 3],
+    }
+    recovery = {**nki, "recovery_query_only": True, "model_operation_submissions": 0}
+    files.update(
+        {
+            name: json.dumps(value).encode()
+            for name, value in {
+                "candidate-manifest.json": manifest,
+                "native-smoke.json": smoke,
+                "nki-initial.json": nki,
+                "nki-recovery.json": recovery,
+            }.items()
+        }
+    )
+
+    def bundle(fault=None):
+        entries = dict(files)
+        if fault == "path":
+            entries["../escaped.exe"] = b"not admitted"
+        elif fault == "missing-worker":
+            entries.pop(native_paths[1])
+        elif fault == "tamper-worker":
+            entries[native_paths[1]] += b"changed"
+        elif fault == "false-smoke":
+            invalid = {**smoke, "token_owner_only_dacl": False}
+            entries["native-smoke.json"] = json.dumps(invalid).encode()
+        elif fault == "producer":
+            entries["candidate-manifest.json"] = json.dumps(
+                {**manifest, "distribution_revision": "4" * 40}
+            ).encode()
+        entries["SHA256SUMS.txt"] = "".join(
+            f"{hashlib.sha256(data).hexdigest()}  {path}\n"
+            for path, data in entries.items()
+        ).encode()
+        archive = tmp_path / "native.zip"
+        with zipfile.ZipFile(archive, "w") as zipped:
+            for path, data in entries.items():
+                if fault == "symlink" and path == "nous-runtime.exe":
+                    info = zipfile.ZipInfo(path)
+                    info.create_system = 3
+                    info.external_attr = (stat.S_IFLNK | 0o777) << 16
+                    zipped.writestr(info, data)
+                else:
+                    zipped.writestr(path, data)
+        if fault == "bomb":
+            data = bytearray(archive.read_bytes())
+            central = data.index(b"PK\x01\x02")
+            struct.pack_into("<I", data, central + 24, 513 * 1024 * 1024)
+            archive.write_bytes(data)
+        return archive, hashlib.sha256(archive.read_bytes()).hexdigest()
+
+    return lock, tmp_path / "admitted", bundle, files
+
+
+def test_reviewed_archive_uses_real_lock_admission_and_does_not_replace_output(
+    native_bundle,
+):
+    lock, output, bundle, files = native_bundle
+    archive, digest = bundle()
+    result = admit_artifact(archive, digest, output, lock, "1" * 40)
+    assert result["status"] == "ok"
+    assert result["installation_acceptance"] == "NOT_RUN"
+    assert all((output / path).read_bytes() == data for path, data in files.items())
+    with pytest.raises(ValueError, match="existing directory"):
+        admit_artifact(archive, digest, output, lock, "1" * 40)
+    assert all((output / path).read_bytes() == data for path, data in files.items())
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "path",
+        "symlink",
+        "bomb",
+        "missing-worker",
+        "tamper-worker",
+        "false-smoke",
+        "producer",
+        "outer-sha",
+    ],
+)
+def test_bad_archive_never_publishes_any_native_input(native_bundle, fault):
+    lock, output, bundle, _ = native_bundle
+    original_lock = lock.read_bytes()
+    archive, digest = bundle(fault)
+    with pytest.raises((ValueError, FileNotFoundError)):
+        admit_artifact(
+            archive,
+            "0" * 64 if fault == "outer-sha" else digest,
+            output,
+            lock,
+            "1" * 40,
+        )
+    assert not output.exists()
+    assert lock.read_bytes() == original_lock
+    assert not list(output.parent.glob("native-admission-*"))
+
+
+def test_smoke_manifest_cannot_approve_hashes_outside_component_lock(native_bundle):
+    lock, output, bundle, _ = native_bundle
+    archive, digest = bundle()
+    document = json.loads(lock.read_text())
+    document["components"]["nous-kernel"]["artifacts"][0]["sha256"] = "0" * 64
+    lock.write_text(json.dumps(document))
+    original = lock.read_bytes()
+    with pytest.raises(ValueError, match="hash mismatch"):
+        admit_artifact(archive, digest, output, lock, "1" * 40)
+    assert lock.read_bytes() == original and not output.exists()
 
 
 def test_component_lock_verifies_hash_and_architecture(tmp_path: Path) -> None:
