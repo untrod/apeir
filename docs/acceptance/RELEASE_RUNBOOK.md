@@ -31,6 +31,35 @@ and component-lock update; do not replace the historical lock values. Even an
 exact `MATCH` leaves NKI runtime and Windows 10 installation acceptance `NOT_RUN`
 until exercised below. A Windows CI runner is not a clean Windows 10 install test.
 
+### Candidate compatibility before lock migration
+
+When bounded recovery of the original bytes has failed, the same diagnostic can
+explicitly qualify **unapproved candidates** using `qualify_kernel_candidate`:
+
+```bash
+gh workflow run desktop-build.yml --ref <reviewed-distribution-branch> -f rebuild_locked_kernel=true -f qualify_kernel_candidate=true
+```
+
+This performs two clean Windows builds with recorded Rust1.99.1, MSVC/SDK,
+Cargo.lock, source revision, allowed build variables, signatures and dependencies.
+The existing real sidecar smoke tests NKI1/2/3, bad/missing authentication,
+unsupported protocol versions, forbidden model credentials before provider spawn,
+Runtime startup refusal with a bad NKI session, authenticated HTTP, and fault
+restart/query of the original failed workload. The build host's Python only
+drives the existing NKI client; native child PATH/Python configuration is scrubbed.
+Fault cleanup is not graceful Desktop-exit or Windows10 installation acceptance.
+
+The original-lock comparison retains its nonzero exit on mismatched bytes. Later
+candidate-only steps run explicitly to collect compatibility evidence; they do
+not turn this failed integrity Gate into PASS. Candidate files are outside the
+Distribution's staged binary directory. The two `unapproved-kernel-candidate-*`
+artifacts and comparison report expire after14 days; preserve their exact archive
+digests and files before expiry for review. Failed smoke remains FAIL in the
+candidate manifest. No Runtime databases, session tokens or raw service logs are
+uploaded. Neither candidate retention nor matching two builds approves relocking,
+packaging, signing or publication. Nonidentical bytes or build environments must
+be reported rather than described as fully reproducible.
+
 ## 2. Verify source
 
 ```powershell
