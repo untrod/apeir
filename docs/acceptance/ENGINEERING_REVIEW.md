@@ -74,6 +74,61 @@ with5 Windows-only cases skipped on Linux. Type/lint/build, full npm audit
 (0 findings) and documentation checks passed. Exact candidate CI remains a
 separate gate; these local results do not certify a future merge commit.
 
+### Named layout library follow-up
+
+REUSE the existing Studio schema, current Runtime health read, protected-layout
+replacement guard and UI-reset owner. EXTEND presentation only with bounded
+named snapshots and four document kinds; no Runtime DB, task, credential store
+or permission authority is added. Workspace namespacing uses an opaque digest
+of the authenticated endpoint/directory and rechecks that source on load/edit.
+A new Controller never displays the other namespace’s saved workspace entries.
+Global/templates are intentionally portable, without any Runtime content.
+
+Actual sandboxed Chromium with two owned CLI/HTTP Runtimes exercises workspace
+save, template copy/rename/export/load, full page reload and Controller A→B
+namespace separation. A second real browser window saves concurrently; the stale
+first editor must reload and both valid entries remain. These presentation
+actions issue zero Runtime mutations. Software validation rejects invalid fields,
+namespace mismatch, duplicate IDs, oversize collections, stale revisions and
+unavailable writer locks, preserving prior stored bytes on quota failure.
+Native Windows/media/Provider/hardware qualification remains separate.
+
+### Shared Usage transport measurement — 2026-10-24
+
+The public `desktop/scripts/benchmark-studio-usage.mjs` builds isolated fixtures
+from two clean checkouts, rendering two unchanged existing collapsed StatusBar
+components with the same Vite/React compiler and an owned model-disabled Runtime.
+This measures the shared Usage hook, not whole Desktop or Model Lab performance.
+Baseline/UI and fixed backend: `8502b4c87b5118d11c6c7b64acbda7706a60f423`;
+candidate/UI: `c5501c00f690d8f5b643103c012cdd613c6d69a9`. Linux x64,
+Node24.19.0, Vite7.3.7, sandboxed Chromium156.0.8078.4; alternating AB/BA/AB,
+3 paired11-second windows per build. No model, native or physical task runs.
+
+| Measured quantity | Baseline | Candidate |
+| --- | --- | --- |
+| Usage HTTP GETs, each window including initial reads | 6,6,6 | 3,3,3 |
+| First exploratory renderer TaskDuration p50 / p95 / p99, ms | 16.928 /17.765 /17.765 | 21.693 /30.921 /30.921 |
+| Browser-process CPU, second instrumented series, seconds | 0.06,0.05,0.05 | 0.06,0.07,0.09 |
+| Browser-process CPU p50 / p95 / p99, seconds | 0.05 /0.06 /0.06 | 0.07 /0.09 /0.09 |
+| Renderer TaskDuration p50 / p95 / p99 in that second series, ms | 28.591 /29.645 /29.645 | 27.679 /28.403 /28.403 |
+| Largest observed renderer heap-after in second series, bytes | 2879964 | 2796396 |
+| API failures / Runtime mutations in qualified fixtures | 0 /0 | 0 /0 |
+
+Only the reduction in duplicate Usage reads is established. **Overall performance
+qualification remains PARTIAL**: observed browser CPU increased, and no stable
+causal attribution follows from n=3 or10ms-granularity CPU counters. The p95/p99
+figures are sample maxima, not robust tail estimates. TaskDuration is not CPU;
+CDP SystemInfo CPU covers this owned browser group, not Runtime or whole-host CPU.
+Heap-after is not peak memory. There is no overall speed, Token, Provider-cost,
+network-byte, native/Windows or cross-machine performance improvement claim.
+
+An initial full Model Lab scenario was excluded: it correctly received403 for
+an absent human session, and it uses its own Model Lab snapshot instead of the
+hook being measured. Its failure evidence was retained; no failed sample was
+relaxed into a successful hook measurement. A fixture-layout click failure was
+also retained. The qualified fixture keeps bars collapsed, matching the recorded
+scenario. No test deadline or authorization assertion was weakened.
+
 ## Governance schema admission — 2026-10-23
 
 R2 rechecked main `e3cd2a20`, composed candidate `c8ec9f3` and frozen Kernel.

@@ -43,8 +43,8 @@ Closing a panel does not cancel backend Work. Existing editor/Operations
 preferences remain intact; only a safe initial preset is derived from old tabs.
 
 `apeir.studio.layout.v1` currently stores the global presentation choice. The
-schema distinguishes global/workspace/dashboard/template documents; named
-workspace libraries remain pending. Dashboard configuration is the same schema’s
+schema distinguishes global/workspace/dashboard/template documents. The named
+layout library stores bounded copies of that same presentation schema. Dashboard configuration is the same schema’s
 strictly bounded presentation-only `config` for the `dashboard` panel. Import admits
 only geometry, display fields, panel type references and validated widget settings:96KiB,100 nodes,24
 panels,8 levels, finite positive sizes and unique IDs. Unknown types render
@@ -82,6 +82,34 @@ The Interactive preset currently composes text Chat/Models/Diagnostics only;
 ASR/TTS, vision, microphone and Avatar are PENDING. Visual Workflow editing,
 An isolated external UI SDK remains PENDING. Workflow
 panels display actual existing Workflow records, not a graph executor.
+
+### Named layout library
+
+The existing Studio shell now saves named Global, Workspace, Template and
+Dashboard documents using the same layout validator. `apeir.studio.library.v1`
+is presentation configuration, not a Runtime state database. A versioned
+collection admits16 entries/1MiB, unique IDs, strict scope fields and only fully
+validated Studio documents. Dashboard saves retain only Dashboard panels.
+Copy, rename, remove, export and reload never create or cancel Work.
+
+Workspace namespaces hash the current Controller endpoint and its authenticated
+`/api/v1/health/detailed` workspace directory. Neither the path nor endpoint is
+saved in the library namespace; bearer/identity/permissions are not inputs or
+stored fields. This is a presentation namespace, not authorization or encryption.
+Workspace load/edit rechecks the actual directory, so another directory or
+Controller cannot silently inherit the saved workspace choice. Other workspace
+entries remain preserved and hidden; Global/templates are intentionally reusable. Selection is explicit; the existing
+last-active-layout preference remains a global presentation fallback, not an
+automatic per-project backend switch.
+
+Browser Web Locks serialize configuration writes across windows and an optimistic
+revision rejects stale editors. A quota or validation failure retains previous
+bytes. If the browser lacks the configuration lock, library writes are BLOCKED;
+ordinary layout export and Runtime reads continue. Storage changes request an
+explicit reload. Unmount retires pending namespace reads and queued library
+interactions. The existing UI reset includes the new presentation key; it does
+not erase Runtime history. Library loading reuses the original protected-editor
+replacement guard. Layout copies never contain unsaved file text or approval.
 
 ### Dashboard data and layout ownership
 
