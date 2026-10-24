@@ -354,7 +354,7 @@ jobs:
               'distribution_revision': revision,
               'kind': 'Static source-browser Studio frontend; not native Desktop or a release',
               'runtime_requirement': 'Install the Distribution from the same source revision; authenticate to its actual API',
-              'validation': 'Frontend unit/type/lint/build and two actual model-disabled CLI/HTTP/Chromium integration cases passed in this job',
+              'validation': 'Frontend unit/type/lint/build and the checked-in model-disabled CLI/HTTP/Chromium integration cases passed in this job',
               'kernel_reference': json.loads(lock.read_text())['components']['nous-kernel']['revision'],
               'component_lock_sha256': hashlib.sha256(lock.read_bytes()).hexdigest(),
               'kernel_binary_integrity': 'NOT_RUN', 'native_installation': 'NOT_RUN', 'real_model': 'NOT_RUN',

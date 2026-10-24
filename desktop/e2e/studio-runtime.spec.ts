@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import { createServer } from "node:net";
 
 const token = "APEIR_FAKE_ONLY_STUDIO_BROWSER_9342";
+const producers: ChildProcess[] = [];
 const runtimes: Array<{ process: ChildProcess; directory: string; url: string }> = [];
 
 async function port() {
@@ -36,21 +37,21 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => {
   const failures: string[] = [];
-  for (const runtime of runtimes) {
-    if (runtime.process.exitCode === null) {
+  for (const process of [...producers, ...runtimes.map(runtime => runtime.process)]) {
+    if (process.exitCode === null && process.signalCode === null) {
       const completed = await new Promise<boolean>(resolve => {
         const timeout = setTimeout(() => resolve(false), 5000);
-        runtime.process.once("exit", () => { clearTimeout(timeout); resolve(true); });
-        runtime.process.kill("SIGTERM");
+        process.once("exit", () => { clearTimeout(timeout); resolve(true); });
+        process.kill("SIGTERM");
       });
       if (!completed) {
-        const exited = new Promise<void>(resolve => runtime.process.once("exit", () => resolve()));
-        runtime.process.kill("SIGKILL"); await exited;
+        const exited = new Promise<void>(resolve => process.once("exit", () => resolve()));
+        process.kill("SIGKILL"); await exited;
         failures.push("Owned Runtime failed normal test teardown");
       }
     }
-    await rm(runtime.directory, { recursive: true, force: true });
   }
+  for (const runtime of runtimes) await rm(runtime.directory, { recursive: true, force: true });
   expect(failures).toEqual([]);
 });
 
@@ -100,6 +101,46 @@ test("Studio restores safe layouts, preserves drafts while docking and isolates 
   const file = await downloaded; const path = await file.path();
   expect(await readFile(path!, "utf8")).toContain("PRIVATE_DRAFT_CONTROLLER_A");
   await page.screenshot({ path: info.outputPath("studio-controller-isolation-source-browser.png"), fullPage: true });
+  expect(errors).toEqual([]); expect(mutations).toEqual([]);
+});
+
+test("EventStream widgets retain their authenticated workspace owner across Controller changes", async ({ page }, info) => {
+  const errors: string[] = [], mutations: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("request", request => { if (request.url().includes("/api/") && !["GET", "OPTIONS"].includes(request.method())) mutations.push(request.url()); });
+  for (const [index, runtime] of runtimes.entries()) {
+    // Trusted test producer, separate process. This is diagnostic fixture data, not Work evidence.
+    const producer = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-c", `from nous_runtime.events.bus import get_event_bus; b=get_event_bus(); b.publish("qualification.workspace-${index}"); b.shutdown()`], { cwd: resolve(".."), env: { ...globalThis.process.env, NOUS_WORKSPACE_ROOT: runtime.directory }, stdio: "ignore" });
+    producers.push(producer);
+    const exit = await new Promise<number | null>((resolve, reject) => {
+      const timer = setTimeout(() => { producer.kill("SIGTERM"); reject(new Error("Owned diagnostic producer startup deadline exceeded")); }, 10000);
+      producer.once("error", error => { clearTimeout(timer); reject(error); });
+      producer.once("exit", code => { clearTimeout(timer); resolve(code); });
+    });
+    expect(exit).toBe(0);
+  }
+  await open(page);
+  await page.getByRole("combobox", { name: "Template", exact: true }).selectOption("blank");
+  await page.getByRole("button", { name: "Apply preset", exact: true }).click();
+  await page.getByRole("button", { name: /Add panel/ }).click();
+  await page.getByRole("textbox", { name: "Search panels" }).fill("dashboard");
+  await page.getByRole("button", { name: /Dashboard.*Existing Runtime/ }).click();
+  await page.getByRole("combobox", { name: "Widget type", exact: true }).selectOption("events");
+  await page.getByRole("button", { name: "Add widget", exact: true }).click();
+  await expect(page.getByText("qualification.workspace-0", { exact: false })).toBeVisible();
+  await expect(page.getByText("qualification.workspace-1", { exact: false })).toHaveCount(0);
+  await page.getByRole("button", { name: "Save dashboard", exact: true }).click();
+  await page.getByRole("button", { name: /Add panel/ }).click();
+  await page.getByRole("textbox", { name: "Search panels" }).fill("operations console");
+  await page.getByRole("button", { name: /Operations Console/ }).click();
+  await page.getByText("Controller connection", { exact: true }).click();
+  await page.getByRole("textbox", { name: "API URL" }).fill(runtimes[1].url);
+  await page.getByLabel("Service session token", { exact: true }).fill(token);
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByText("Controller connection changed.", { exact: false })).toBeVisible();
+  await expect(page.getByText("qualification.workspace-1", { exact: false })).toBeVisible();
+  await expect(page.getByText("qualification.workspace-0", { exact: false })).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath("studio-event-workspace-owner-source-browser.png"), fullPage: true });
   expect(errors).toEqual([]); expect(mutations).toEqual([]);
 });
 

@@ -3785,3 +3785,22 @@ failure logs and private browser records are retained. Exact-source CI and
 protected resulting-main acceptance remain required; no performance percentage or
 overall product PASS is inferred from these correctness checks.
 
+
+## Event projection owner admission — 2026-10-24
+
+REUSE the existing RuntimeEventBus singleton, retained SQLite projection and
+original event-ID cursor. FIX its configured-owner admission and absolute path
+pinning; changing a process owner fails closed until an explicit Runtime restart.
+No event system, root authority, database pool or automatic evidence migration
+is added. Original records outside the configured owner are left intact; they
+cannot be silently assigned to another workspace. Per-Run EventStream and Work
+records are unaffected. Detailed failure evidence is retained privately.
+
+Five original deterministic ownership/replay tests failed on main `d14859c`.
+The same tests pass after the bounded owner fix, including actual independent
+CLI/HTTP startup, original event IDs, rejected unrelated cursors, relative paths
+and deterministic concurrent first-owner admission. Event/replay/Control Plane
+regression passed52 tests locally. Source-browser qualification covers the
+existing EventStream widget through the real authenticated Controller switch;
+no model, physical or native qualification is inferred. Exact PR and resulting
+main CI remain separate requirements.
