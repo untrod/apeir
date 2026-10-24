@@ -329,3 +329,46 @@ def test_successful_static_probes_renew_resource_report_before_placement(
                 await server.stop()
 
     asyncio.run(scenario())
+
+
+def test_dashboard_resources_are_current_bounded_signed_report_values(
+    tmp_path, monkeypatch
+):
+    async def scenario():
+        clock = ControllerClock(monkeypatch)
+        service = NodeRuntimeService(NodeRuntimeConfig(tmp_path / "node"))
+        server = NodeRelayServer(heartbeat_seconds=5)
+        server.register_node(service.identity.node_id, service.identity.public_key)
+        disconnected = _observe_disconnect(server, monkeypatch)
+        url = await server.start()
+        try:
+            async with connect(url) as websocket:
+                await _exchange(
+                    websocket, _message(service, "REGISTER", 1, _registration(service))
+                )
+                assert server.controller_status()["nodes"][0]["resources"] is None
+                report = {**_resources(), "cpu_logical": 8, "private": "not-projected"}
+                await _exchange(
+                    websocket, _message(service, "RESOURCE_REPORT", 2, report)
+                )
+                row = server.controller_status()["nodes"][0]
+                assert row["resources"] == {
+                    "cpu_logical": 8,
+                    "memory_total_bytes": 1024**3,
+                    "memory_available_bytes": 1024**3,
+                }
+                report.update(cpu_logical=True, memory_available_bytes=2**60)
+                await _exchange(
+                    websocket, _message(service, "RESOURCE_REPORT", 3, report)
+                )
+                assert server.controller_status()["nodes"][0]["resources"] == {
+                    "memory_total_bytes": 1024**3
+                }
+                clock.advance(31)
+                assert server.controller_status()["nodes"][0]["resources"] is None
+            await asyncio.wait_for(disconnected.wait(), timeout=5)
+            assert server.controller_status()["nodes"][0]["resources"] is None
+        finally:
+            await server.stop()
+
+    asyncio.run(scenario())

@@ -692,6 +692,34 @@ class NodeRelayServer:
                 heartbeat_seconds=self.heartbeat_seconds,
             )
             observation_age = projection.observation_age_seconds
+            # Read-only, bounded projection of this connection's signed report.
+            # Stale/disconnected/revoked reports cannot look like live telemetry.
+            resources = None
+            report = observation.get("RESOURCE_REPORT", {})
+            if (
+                connected
+                and resource_report_current
+                and projection.resource_report_fresh
+                and isinstance(report, dict)
+            ):
+                resources = {
+                    key: report[key]
+                    for key in (
+                        "cpu_logical",
+                        "memory_total_bytes",
+                        "memory_available_bytes",
+                    )
+                    if type(report.get(key)) is int and 0 <= report[key] <= 2**53 - 1
+                }
+                if resources.get("cpu_logical") == 0:
+                    resources.pop("cpu_logical")
+                if (
+                    "memory_available_bytes" in resources
+                    and "memory_total_bytes" in resources
+                    and resources["memory_available_bytes"]
+                    > resources["memory_total_bytes"]
+                ):
+                    resources.pop("memory_available_bytes")
             if connected:
                 liveness = "CONNECTED"
             elif observation_age is None:
@@ -732,6 +760,7 @@ class NodeRelayServer:
                     "resource_observed_at": resource_observed_at,
                     "resource_report_current": resource_report_current,
                     "resource_report_fresh": projection.resource_report_fresh,
+                    "resources": resources,
                     "has_device_report": "DEVICE_REPORT" in observation,
                 }
             )

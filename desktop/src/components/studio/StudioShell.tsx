@@ -141,17 +141,18 @@ function StudioSession({ epoch, remember, onProtectionChange }: { epoch: number;
     {picker && <section className="studio-picker" aria-label="Panel library"><label>{t("Search panels", "搜索面板")}<input autoFocus value={query} onChange={event => setQuery(event.target.value)} /></label>{STUDIO_PANELS.filter(panel => `${panel.en} ${panel.zh} ${panel.type}`.toLowerCase().includes(query.toLowerCase())).map(panel => <button key={panel.type} onClick={() => open(panel.type)}><strong>{panel[locale]}</strong><small>{panel.owner}</small></button>)}</section>}
     {message && <div role="status" className="studio-notice">{message}<button onClick={() => setMessage("")}>{t("Dismiss", "关闭提示")}</button></div>}
     <div className="studio-dock" data-layout-revision={revision}><Layout model={model} factory={node => <StudioPanelSlot host={getHost(node.getId())} />} onAction={action} onModelChange={() => setRevision(value => value + 1)} /></div>
-    {tabs.map(node => <StablePanel key={node.getId()} node={node} host={getHost(node.getId())} dirty={dirty.current} onProtectionChange={onProtectionChange} onSnapshot={value => remember(`${epoch}:${node.getId()}`, value)} open={open} inspect={setSelection} />)}
+    {tabs.map(node => <StablePanel key={node.getId()} node={node} host={getHost(node.getId())} dirty={dirty.current} onProtectionChange={onProtectionChange} onSnapshot={value => remember(`${epoch}:${node.getId()}`, value)} open={open} inspect={setSelection} config={node.getConfig()} locale={locale} saveLayout={save} updateConfig={config => { if (JSON.stringify(node.getConfig()) !== JSON.stringify(config)) { model.doAction(Actions.updateNodeAttributes(node.getId(), { config })); setRevision(value => value + 1); } }} />)}
     <DetailDrawer view={selection} onClose={() => setSelection(null)} />
     <footer className="studio-footer">{t("Layout is presentation, never permission. Closing a panel does not cancel Work.", "布局不授予权限；关闭面板不会取消后台任务。")}</footer>
   </section></StudioSnapshot>;
 }
 
-function StablePanel({ node, host, dirty, onSnapshot, open, onProtectionChange, inspect }: { node: TabNode; host: HTMLElement; dirty: Set<string>; onSnapshot: (drafts: WorkbenchDraft[]) => void; open: (type: string) => void; onProtectionChange: (value: boolean) => void; inspect: (view: DrawerView) => void }) {
+function StablePanel({ node, host, dirty, onSnapshot, open, onProtectionChange, inspect, config, locale, updateConfig, saveLayout }: { config: unknown; locale: "en" | "zh"; updateConfig: (config: unknown) => void; saveLayout: () => void; node: TabNode; host: HTMLElement; dirty: Set<string>; onSnapshot: (drafts: WorkbenchDraft[]) => void; open: (type: string) => void; onProtectionChange: (value: boolean) => void; inspect: (view: DrawerView) => void }) {
   const callbacks = useRef({ onSnapshot, open }); callbacks.current = { onSnapshot, open };
   const id = node.getId();
   const onDraftChange = useCallback((value: boolean) => { if (value) dirty.add(id); else dirty.delete(id); onProtectionChange(dirty.size > 0); }, [dirty, id, onProtectionChange]);
   const onDraftSnapshot = useCallback((value: WorkbenchDraft[]) => callbacks.current.onSnapshot(value), []);
   const openPanel = useCallback((type: string) => callbacks.current.open(type), []);
-  return createPortal(<StudioPanel type={node.getComponent() ?? "missing"} onDraftChange={onDraftChange} onDraftSnapshot={onDraftSnapshot} open={openPanel} inspect={inspect} />, host, id);
+  const isVisible = useCallback(() => host.isConnected && host.getClientRects().length > 0 && getComputedStyle(host).visibility !== "hidden", [host]);
+  return createPortal(<StudioPanel config={config} locale={locale} updateConfig={updateConfig} saveLayout={saveLayout} isVisible={isVisible} type={node.getComponent() ?? "missing"} onDraftChange={onDraftChange} onDraftSnapshot={onDraftSnapshot} open={openPanel} inspect={inspect} />, host, id);
 }

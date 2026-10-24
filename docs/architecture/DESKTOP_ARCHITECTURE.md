@@ -44,8 +44,9 @@ preferences remain intact; only a safe initial preset is derived from old tabs.
 
 `apeir.studio.layout.v1` currently stores the global presentation choice. The
 schema distinguishes global/workspace/dashboard/template documents; named
-workspace libraries and Dashboard editing are not yet qualified. Import admits
-only geometry, display fields and panel type references:96KiB,100 nodes,24
+workspace libraries remain pending. Dashboard configuration is the same schema’s
+strictly bounded presentation-only `config` for the `dashboard` panel. Import admits
+only geometry, display fields, panel type references and validated widget settings:96KiB,100 nodes,24
 panels,8 levels, finite positive sizes and unique IDs. Unknown types render
 Missing Component and load no code. No module URL, callback, resource identity,
 token, content or grant is accepted. Popouts and executable third-party UI are
@@ -79,8 +80,45 @@ fulfilled old response cannot leak across a later connection change.
 
 The Interactive preset currently composes text Chat/Models/Diagnostics only;
 ASR/TTS, vision, microphone and Avatar are PENDING. Visual Workflow editing,
-Dashboard widgets and an isolated external UI SDK remain PENDING. Workflow
+An isolated external UI SDK remains PENDING. Workflow
 panels display actual existing Workflow records, not a graph executor.
+
+### Dashboard data and layout ownership
+
+Add the Dashboard panel from the existing panel library. The same version1
+layout carries at most32 widget instances, fixed12-column geometry, non-overlap,
+finite integer bounds, display titles and pause flags. Unknown widget types
+render Missing Component; config admits no module, URL, Runtime record, resource
+identity, grant or credential. Import/export uses the same validator; saving a
+Dashboard saves the surrounding Studio layout. Widget duplication gets a new
+presentation ID. Settings provide keyboard-accessible position and size edits.
+
+React-Grid-Layout2.3.0 (MIT, pinned) supplies drag/resize. Its no-overlap strategy
+prevents a moved widget from leaving a collision that the persisted schema would
+reject. Moving widgets does not invoke model, Work or device operations. The
+original Studio portal host preserves the mounted Dashboard when its panel moves.
+
+REUSE `/api/v1/health/detailed` for API/Kernel readiness and the existing
+Operations projection for Node/Device/Work, receipt/verification metadata,
+Governance audit and incidents. One transient read coordinator deduplicates each
+source, polls visible readers at five seconds, aborts its GETs on retirement and
+rejects stale Controller responses. Existing CostController/EntityStore usage
+reads now share one visibility-aware subscription; aborting an old statistics
+GET never cancels or refunds a model request. UNKNOWN prices/usages remain UNKNOWN.
+
+The Node Controller now projects only bounded CPU capacity and RAM integers from
+its existing current signed resource report. Stale, disconnected or revoked
+nodes expose no live resource values. This adds no collector, identity, scheduling
+permission or protocol. CPU utilization, GPU utilization, network throughput and
+sensor metrics are UNSUPPORTED where no qualified source exists.
+
+EventStream widgets reuse the singleton EventClient, cursor and ingestion path;
+its last200 accepted events are a transient read-only view, not another durable
+event store. Multiple widgets do not start additional loops. The last widget
+stops only a transport it owns, preserving an existing App consumer. Session
+replacement clears the view synchronously. Governance audit remains a distinct
+widget. Hidden views suppress their display notifications; they do not cancel
+unrelated backend Work or the App’s shared transport.
 
 ## Data flow
 

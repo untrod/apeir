@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  optimizeDeps: { include: ["react-grid-layout", "react-grid-layout/core"] },
   server: { port: 5173, strictPort: true },
   envPrefix: "NOUS_",
   build: { target: "esnext" },

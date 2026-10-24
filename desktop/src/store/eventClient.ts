@@ -10,7 +10,7 @@
  */
 
 import { entityStore } from "./entityStore";
-import { ApiError, captureRuntimeConnection, fetchEventStream, type RuntimeEventEnvelope } from "../lib/api";
+import { ApiError, captureRuntimeConnection, fetchEventStream, subscribeRuntimeConfig, type RuntimeEventEnvelope } from "../lib/api";
 
 
 // Configuration
@@ -35,6 +35,34 @@ interface EventClientConfig {
 
 
 class EventClientImpl {
+  private recent: readonly RuntimeEventEnvelope[] = [];
+  private listeners = new Set<() => void>();
+  private view: { status: "paused" | "loading" | "ready" | "error"; events: readonly RuntimeEventEnvelope[] } = { status: "paused", events: this.recent };
+  constructor() {
+    subscribeRuntimeConfig(() => { this.recent = []; this.eventCursors.clear(); this.stop(); });
+  }
+  /** Bounded, read-only presentation of the existing transport; never durable evidence. */
+  subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
+  getSnapshot = () => this.view;
+  private presentationReaders = 0;
+  private presentationGeneration: number | null = null;
+  acquirePresentationReader(): () => void {
+    this.presentationReaders++;
+    if (this.stopped && this.view.status !== "error") { this.start({ mode: "polling" }); this.presentationGeneration = this.generation; }
+    return () => {
+      this.presentationReaders--;
+      if (!this.presentationReaders && this.presentationGeneration === this.generation) { this.stop(); this.presentationGeneration = null; }
+    };
+  }
+  private publish(status: typeof this.view.status): void {
+    this.view = { status, events: this.recent };
+    this.listeners.forEach(listener => { try { listener(); } catch { /* A failed display must not stop the shared event transport. */ } });
+  }
+  private remember(events: readonly RuntimeEventEnvelope[]): void {
+    const ids = new Set(this.recent.map(event => event.event_id));
+    const added = events.filter(event => typeof event.event_id === "string" && event.event_id && !ids.has(event.event_id));
+    this.recent = [...this.recent, ...added].slice(-200); this.publish("ready");
+  }
   private ws: WebSocket | null = null;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -51,6 +79,7 @@ class EventClientImpl {
     this.connection = captureRuntimeConnection();
     if (config) this.config = { ...this.config, ...config };
     this.stopped = false;
+    this.publish("loading");
     this.reconnectAttempt = 0;
     const generation = this.generation;
     const connection = captureRuntimeConnection();
@@ -69,6 +98,7 @@ class EventClientImpl {
   stop(): void {
     this.stopped = true;
     this.generation++;
+    this.publish("paused");
     if (this.ws) { this.ws.close(); this.ws = null; }
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     if (this.pollTimer) { clearTimeout(this.pollTimer); this.pollTimer = null; }
@@ -92,6 +122,7 @@ class EventClientImpl {
         try {
           const event: RuntimeEventEnvelope = JSON.parse(evt.data);
           entityStore.ingestEvent(event);
+          if (current()) this.remember([event]);
         } catch { /* skip malformed */ }
       };
       ws.onclose = () => {
@@ -150,6 +181,8 @@ class EventClientImpl {
       entityStore.ingestEvent(event);
     }
     if (!current()) return false;
+    this.remember(result.events);
+    if (!current()) return false;
     if (ids.length) this.eventCursors.set(domain, ids[ids.length - 1]);
     return result.events.length === BACKFILL_BATCH_SIZE;
   }
@@ -160,6 +193,7 @@ class EventClientImpl {
       this.stop();
       this.config.onError?.();
     }
+    this.publish("error");
     // Transient read failures retain the original cursor and bounded polling.
   }
 

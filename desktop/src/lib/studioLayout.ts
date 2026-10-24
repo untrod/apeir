@@ -1,5 +1,6 @@
 import type { IJsonModel, IJsonRowNode } from "flexlayout-react";
 import { Actions, GroupAction, type Action } from "flexlayout-react";
+import { validateDashboard } from "./studioDashboard";
 
 export function discardsProtectedPanel(action: Action, protectedIds: ReadonlySet<string>): boolean {
   if (action instanceof GroupAction) return action.actions.some(item => discardsProtectedPanel(item, protectedIds));
@@ -35,7 +36,7 @@ export function parseStudioLayout(input: string): StudioLayout {
   function node(input: unknown, parent: string, depth: number): Record<string, unknown> {
     if (++count > 100 || depth > 8) throw new Error("Layout structure exceeds limits.");
     const value = record(input);
-    fields(value, ["type", "id", "weight", "children", "component", "name", "selected", "active", "maximized"]);
+    fields(value, ["type", "id", "weight", "children", "component", "name", "selected", "active", "maximized", "config"]);
     const { type, id } = value;
     if (typeof id !== "string" || !nodeIdPattern.test(id) || ids.has(id)) throw new Error("Invalid or duplicate layout identity.");
     ids.add(id);
@@ -45,7 +46,12 @@ export function parseStudioLayout(input: string): StudioLayout {
       if (++panels > 24 || typeof value.component !== "string" || !idPattern.test(value.component)) throw new Error("Invalid panel type or panel count.");
       if (value.children !== undefined || value.selected !== undefined || value.active !== undefined || value.maximized !== undefined) throw new Error("Invalid panel configuration.");
       if (value.name !== undefined && (typeof value.name !== "string" || value.name.length > 80)) throw new Error("Invalid panel title.");
+      if (value.config !== undefined) {
+        if (value.component !== "dashboard") throw new Error("This panel does not accept layout configuration.");
+        value.config = validateDashboard(value.config);
+      }
     } else {
+      if (value.config !== undefined) throw new Error("Invalid container configuration.");
       if (value.component !== undefined || value.name !== undefined || !Array.isArray(value.children)) throw new Error("Invalid layout container.");
       const children = value.children.map(item => node(item, String(type), depth + 1));
       value.children = children;
@@ -66,6 +72,7 @@ export function captureStudioLayout(model: IJsonModel, previous: StudioLayout): 
   function clean(input: unknown): unknown {
     const value = record(input); const result: Record<string, unknown> = {};
     for (const key of ["type", "id", "weight", "component", "name", "selected", "active", "maximized"]) if (value[key] !== undefined) result[key] = value[key];
+    if (value.config !== undefined && value.component === "dashboard") result.config = validateDashboard(value.config);
     if (Array.isArray(value.children)) result.children = value.children.map(clean);
     return result;
   }
@@ -77,7 +84,7 @@ export const STUDIO_TEMPLATES: Record<string, { en: string; zh: string; panels: 
   software: { en: "Software Development", zh: "软件开发", panels: [["editor"], ["chat", "tasks"], ["evidence", "activity"]] },
   agents: { en: "AI Agent Development", zh: "智能体开发", panels: [["chat"], ["models", "workflow"], ["tasks", "usage"]] },
   embedded: { en: "Embedded Engineering", zh: "嵌入式工程", panels: [["editor"], ["devices", "nodes"], ["environment", "evidence"]] },
-  network: { en: "Network Operations", zh: "网络运维", panels: [["nodes", "devices"], ["diagnostics", "activity"], ["chat", "evidence"]] },
+  network: { en: "Network Operations", zh: "网络运维", panels: [["dashboard", "nodes", "devices"], ["diagnostics", "activity"], ["chat", "evidence"]] },
   scientific: { en: "Scientific Research", zh: "科学研究", panels: [["simulation", "documents"], ["chat", "environment"], ["evidence", "usage"]] },
   interactive: { en: "Interactive Agent Studio", zh: "交互智能体", panels: [["chat"], ["models", "diagnostics"]] },
   blank: { en: "Blank Workspace", zh: "空白工作区", panels: [[]] },
