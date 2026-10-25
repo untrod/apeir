@@ -320,37 +320,67 @@ class GovernanceStore:
             ]
 
     def save_proposal(self, proposal_dict: dict[str, Any]) -> bool:
-        with self._lock:
-            try:
-                with _db_connect(self.db_path) as db:
-                    db.execute(
-                        """INSERT OR IGNORE INTO governance_proposals
-                           (proposal_id, proposal_hash, action_type, capability_id,
-                            parameter_hash, parameter_summary, target_node,
-                            target_workspace, data_classification, side_effect_class,
-                            reversibility, created_at, expires_at, proposal_json)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            proposal_dict["proposal_id"],
-                            proposal_dict["proposal_hash"],
-                            proposal_dict.get("action_type", ""),
-                            proposal_dict.get("capability_id", ""),
-                            proposal_dict.get("parameter_hash", ""),
-                            proposal_dict.get("parameter_summary", ""),
-                            proposal_dict.get("target_node", ""),
-                            proposal_dict.get("target_workspace", ""),
-                            proposal_dict.get("data_classification", "internal"),
-                            proposal_dict.get("side_effect_class", "unknown"),
-                            proposal_dict.get("reversibility", "unknown"),
-                            proposal_dict.get("created_at", ""),
-                            proposal_dict.get("expires_at", ""),
-                            json.dumps(proposal_dict),
-                        ),
-                    )
-                return True
-            except Exception as e:
-                _log.warning("save_proposal: %s", e)
-                return False
+        try:
+            with self.operation_transaction() as db:
+                self._insert_proposal(db, proposal_dict)
+            return True
+        except Exception as exc:
+            _log.warning("save_proposal: %s", exc)
+            return False
+
+    @staticmethod
+    def _insert_proposal(db, proposal_dict: dict[str, Any]) -> None:
+        db.execute(
+            """INSERT OR IGNORE INTO governance_proposals
+               (proposal_id, proposal_hash, action_type, capability_id,
+                parameter_hash, parameter_summary, target_node,
+                target_workspace, data_classification, side_effect_class,
+                reversibility, created_at, expires_at, proposal_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                proposal_dict["proposal_id"],
+                proposal_dict["proposal_hash"],
+                proposal_dict.get("action_type", ""),
+                proposal_dict.get("capability_id", ""),
+                proposal_dict.get("parameter_hash", ""),
+                proposal_dict.get("parameter_summary", ""),
+                proposal_dict.get("target_node", ""),
+                proposal_dict.get("target_workspace", ""),
+                proposal_dict.get("data_classification", "internal"),
+                proposal_dict.get("side_effect_class", "unknown"),
+                proposal_dict.get("reversibility", "unknown"),
+                proposal_dict.get("created_at", ""),
+                proposal_dict.get("expires_at", ""),
+                json.dumps(proposal_dict),
+            ),
+        )
+
+    def save_authorization(
+        self,
+        proposal: dict[str, Any] | None,
+        decision: dict[str, Any],
+        audit: dict[str, Any],
+    ) -> str:
+        """Publish the original decision and evidence atomically; return failure code.
+
+        Keep FULL/WAL durability and the existing chain in one transaction. There
+        is no fallback or retry after a failed/uncertain commit.
+        """
+        stage = "PROPOSAL" if proposal is not None else "DECISION"
+        try:
+            with self.operation_transaction() as db:
+                if proposal is not None:
+                    self._insert_proposal(db, proposal)
+                stage = "DECISION"
+                self._insert_decision(db, decision)
+                stage = "AUDIT"
+                self._insert_audit(db, audit)
+                stage = "AUTHORIZATION"
+            return ""
+        except Exception:
+            # Content-free diagnostics: never copy SQL, paths or request values.
+            _log.warning("Authorization publication failed: stage=%s", stage)
+            return stage + "_STORE_UNAVAILABLE"
 
     def get_proposal(self, proposal_hash: str) -> dict[str, Any] | None:
         with self._lock:
@@ -369,39 +399,42 @@ class GovernanceStore:
     # Decision
 
     def save_decision(self, decision_dict: dict[str, Any]) -> bool:
-        with self._lock:
-            try:
-                with _db_connect(self.db_path) as db:
-                    db.execute(
-                        """INSERT OR IGNORE INTO governance_decisions
-                           (decision_id, proposal_hash, context_id, action_mode, allowed,
-                            reason_code, reason_message, rule_class, policy_id,
-                            constitution_rule, risk_json, lease_id, delegation_id,
-                            decided_at, decision_ttl, decision_json)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            decision_dict["decision_id"],
-                            decision_dict["proposal_hash"],
-                            decision_dict.get("context_id", ""),
-                            decision_dict.get("action_mode", "DENY"),
-                            int(decision_dict.get("allowed", False)),
-                            decision_dict.get("reason_code", ""),
-                            decision_dict.get("reason_message", ""),
-                            decision_dict.get("rule_class", ""),
-                            decision_dict.get("policy_id", ""),
-                            decision_dict.get("constitution_rule", ""),
-                            json.dumps(decision_dict.get("risk_envelope")),
-                            decision_dict.get("lease_id", ""),
-                            decision_dict.get("delegation_id", ""),
-                            decision_dict.get("decided_at", ""),
-                            int(decision_dict.get("decision_ttl", 60)),
-                            json.dumps(decision_dict),
-                        ),
-                    )
-                return True
-            except Exception as e:
-                _log.warning("save_decision: %s", e)
-                return False
+        try:
+            with self.operation_transaction() as db:
+                self._insert_decision(db, decision_dict)
+            return True
+        except Exception as exc:
+            _log.warning("save_decision: %s", exc)
+            return False
+
+    @staticmethod
+    def _insert_decision(db, decision_dict: dict[str, Any]) -> None:
+        db.execute(
+            """INSERT OR IGNORE INTO governance_decisions
+               (decision_id, proposal_hash, context_id, action_mode, allowed,
+                reason_code, reason_message, rule_class, policy_id,
+                constitution_rule, risk_json, lease_id, delegation_id,
+                decided_at, decision_ttl, decision_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                decision_dict["decision_id"],
+                decision_dict["proposal_hash"],
+                decision_dict.get("context_id", ""),
+                decision_dict.get("action_mode", "DENY"),
+                int(decision_dict.get("allowed", False)),
+                decision_dict.get("reason_code", ""),
+                decision_dict.get("reason_message", ""),
+                decision_dict.get("rule_class", ""),
+                decision_dict.get("policy_id", ""),
+                decision_dict.get("constitution_rule", ""),
+                json.dumps(decision_dict.get("risk_envelope")),
+                decision_dict.get("lease_id", ""),
+                decision_dict.get("delegation_id", ""),
+                decision_dict.get("decided_at", ""),
+                int(decision_dict.get("decision_ttl", 60)),
+                json.dumps(decision_dict),
+            ),
+        )
 
     def get_decision(self, decision_id: str) -> dict[str, Any] | None:
         with self._lock:
@@ -882,35 +915,34 @@ class GovernanceStore:
     # Audit
 
     def save_audit(self, audit_dict: dict[str, Any]) -> bool:
-        with self._lock:
-            try:
-                with _db_connect(self.db_path) as db:
-                    db.execute("BEGIN IMMEDIATE")
-                    prev = db.execute(
-                        "SELECT * FROM governance_audit ORDER BY rowid DESC LIMIT 1"
-                    ).fetchone()
-                    prev_hash = self._audit_row_hash(prev) if prev else ""
-                    db.execute(
-                        """INSERT INTO governance_audit
-                           (audit_id, event_type, decision_id, proposal_hash,
-                            evidence_json, recorded_at, previous_audit_hash)
-                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            audit_dict["bundle_id"],
-                            audit_dict.get("event_type", ""),
-                            audit_dict.get("decision_id", ""),
-                            audit_dict.get("proposal_hash", ""),
-                            json.dumps(
-                                redact_sensitive_data(audit_dict.get("evidence", {}))
-                            ),
-                            audit_dict.get("recorded_at", ""),
-                            prev_hash,
-                        ),
-                    )
-                return True
-            except Exception as e:
-                _log.warning("save_audit: %s", e)
-                return False
+        try:
+            with self.operation_transaction() as db:
+                self._insert_audit(db, audit_dict)
+            return True
+        except Exception as exc:
+            _log.warning("save_audit: %s", exc)
+            return False
+
+    def _insert_audit(self, db, audit_dict: dict[str, Any]) -> None:
+        prev = db.execute(
+            "SELECT * FROM governance_audit ORDER BY rowid DESC LIMIT 1"
+        ).fetchone()
+        prev_hash = self._audit_row_hash(prev) if prev else ""
+        db.execute(
+            """INSERT INTO governance_audit
+               (audit_id, event_type, decision_id, proposal_hash,
+                evidence_json, recorded_at, previous_audit_hash)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                audit_dict["bundle_id"],
+                audit_dict.get("event_type", ""),
+                audit_dict.get("decision_id", ""),
+                audit_dict.get("proposal_hash", ""),
+                json.dumps(redact_sensitive_data(audit_dict.get("evidence", {}))),
+                audit_dict.get("recorded_at", ""),
+                prev_hash,
+            ),
+        )
 
     def verify_audit_chain(self) -> bool:
         """Verify append order and content hashes for governance audit evidence."""
