@@ -4090,3 +4090,11 @@ wheel consumer, hash/manifest/report uploads and all native component gates.
 No real model, host command sandbox, real IdP, remote physical device, Windows10
 installation, signing or formal release qualification follows from these results.
 R4 unapproved candidates and their original hash mismatch remain independent.
+
+The clean base-wheel consumer at SDK candidate `a7d7505` then found an undeclared
+`packaging` import in dependency validation, despite development tests passing.
+The original failure (`No module named packaging`) is retained separately. The
+fix declares the normal pure-Python package dependency in Distribution metadata;
+it does not add a private module or manually patch the consumer environment.
+A rebuilt wheel must pass the same external public client and restart sequence
+in a new venv before claiming that installed path PASS.
