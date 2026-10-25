@@ -4058,3 +4058,40 @@ providing earlier original evidence. Local affected startup/control/reaping
 regression:39 passed. Exact Windows and resulting-main qualification remain
 PENDING until their real CI completes. Frozen Rust Kernel and component lock are
 unchanged; the patch is in Distribution's existing process-session reader.
+
+### R5 Windows integration follow-up: durable authorization publication
+
+PR #97 candidate `d685a06` exposed two unchanged Windows Core tests in run
+`40209354483`, job `121217158218`. The original full log is retained. MCP's
+original five-second HTTP call timed out while Governance reported a 1094 ms
+commit; the Node heartbeat observer independently raised PermissionError reading
+an atomically replaced status file. Its missing finally cleanup left a daemon
+thread reaching a later test's hostname-probe fault injection. These observations
+do not establish one root cause for Issues #4/#8/#82/#85/#88.
+
+The existing Gate previously committed proposal, decision and chained audit
+separately. A real SQLite trace reproduces three commits for one decision and
+retained partial records on later insertion failure. The correction reuses the
+same Store, SQL inserts, operation_transaction and hash chain to publish the
+three records in one FULL/WAL transaction. Commit/insert failure denies authority;
+an uncertain commit is not retried. Existing individual Store methods and
+compatibility-store failure contracts remain available. There is no pool,
+additional database, credential change or new authorization authority.
+
+A controlled Linux HTTP experiment with 0.7 seconds injected per actual SQLite
+write commit reproduces the original five-second MCP timeout. The candidate
+returns the original approval-required result in 4.226 seconds (six commits,
+zero tool effects); this is fault-model evidence, not a Windows latency guarantee
+or a general performance improvement percentage. All original HTTP deadlines,
+durability settings and approval requirements remain unchanged.
+
+The live-heartbeat test now always stops and joins its owned daemon in finally.
+A transient unreadable/missing status is not an ONLINE observation: it reobserves
+within the original five seconds, and explicitly requires a fresh sequence >= 2.
+The final STOPPED/watchdog/telemetry assertions and three-second join remain.
+The injected read-failure counterexample is retained; permanent unreadability
+still fails. No Node delivery, identity, permission or workload replay behavior
+is relaxed. New regressions cover atomic rollback at each insert/commit, independent
+writers' audit bindings, uncertain commit with one publication attempt, and both
+ordinary and interrupted live status reads. Current candidate and resulting-main
+Windows CI must qualify independently of these local experiments.

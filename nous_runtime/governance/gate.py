@@ -547,6 +547,26 @@ class ExecutionAuthorizationGate(OperationAuthorizationMixin):
         *,
         persist_proposal: bool = True,
     ) -> AuthorizationDecision:
+        publish = getattr(self.store, "save_authorization", None)
+        if callable(publish):
+            try:
+                failure = publish(
+                    proposal.to_dict() if persist_proposal else None,
+                    decision.to_dict(),
+                    self._audit_bundle(decision, proposal, context).to_dict(),
+                )
+            except Exception:
+                failure = "AUTHORIZATION_STORE_UNAVAILABLE"
+            if failure != "":
+                return self._store_unavailable(
+                    proposal,
+                    context,
+                    failure
+                    if isinstance(failure, str)
+                    else "AUTHORIZATION_STORE_UNAVAILABLE",
+                )
+            return decision
+        # Compatibility stores retain their existing fail-closed method contract.
         if persist_proposal and not self.store.save_proposal(proposal.to_dict()):
             return self._store_unavailable(
                 proposal, context, "PROPOSAL_STORE_UNAVAILABLE"
@@ -566,19 +586,27 @@ class ExecutionAuthorizationGate(OperationAuthorizationMixin):
         context: AuthorizationContext,
     ) -> bool:
         try:
-            bundle = AuthorizationEvidenceBundle(
-                decision_id=decision.decision_id,
-                proposal_hash=proposal.proposal_hash,
-                event_type="authorization_decision",
-                evidence={
-                    "action_mode": decision.action_mode,
-                    "reason_code": decision.reason_code,
-                    "capability_id": proposal.capability_id,
-                    "subject_id": context.subject_id,
-                    "subject_type": context.subject_type,
-                },
-            )
+            bundle = self._audit_bundle(decision, proposal, context)
             return self.store.save_audit(bundle.to_dict())
         except Exception as e:
             _log.error("Failed to write audit evidence: %s", e)
             return False
+
+    @staticmethod
+    def _audit_bundle(
+        decision: AuthorizationDecision,
+        proposal: ActionProposal,
+        context: AuthorizationContext,
+    ) -> AuthorizationEvidenceBundle:
+        return AuthorizationEvidenceBundle(
+            decision_id=decision.decision_id,
+            proposal_hash=proposal.proposal_hash,
+            event_type="authorization_decision",
+            evidence={
+                "action_mode": decision.action_mode,
+                "reason_code": decision.reason_code,
+                "capability_id": proposal.capability_id,
+                "subject_id": context.subject_id,
+                "subject_type": context.subject_type,
+            },
+        )

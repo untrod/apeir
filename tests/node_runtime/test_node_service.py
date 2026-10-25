@@ -403,7 +403,10 @@ def test_workload_stop_is_prestart_idempotent_and_never_claims_to_stop_terminal_
     assert stopped_terminal["stop_result"] == "ALREADY_TERMINAL"
 
 
-def test_node_daemon_heartbeats_watchdog_and_graceful_shutdown(tmp_path: Path):
+@pytest.mark.parametrize("transient_read_failure", [False, True])
+def test_node_daemon_heartbeats_watchdog_and_graceful_shutdown(
+    tmp_path: Path, monkeypatch, transient_read_failure
+):
     service = NodeRuntimeService(
         NodeRuntimeConfig(state_dir=tmp_path / "node", heartbeat_seconds=0.05)
     )
@@ -411,16 +414,39 @@ def test_node_daemon_heartbeats_watchdog_and_graceful_shutdown(tmp_path: Path):
         target=service.run_forever,
         kwargs={"install_signal_handlers": False},
     )
+    original_read = Path.read_text
+    denied = False
+
+    def read(path, *args, **kwargs):
+        nonlocal denied
+        if path == service.status_path and transient_read_failure and not denied:
+            denied = True
+            raise PermissionError("injected concurrent status replacement")
+        return original_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read)
     thread.start()
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline:
-        if service.status_path.is_file():
-            status = json.loads(service.status_path.read_text(encoding="utf-8"))
+    status = {}
+    try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                status = json.loads(service.status_path.read_text(encoding="utf-8"))
+            except (FileNotFoundError, PermissionError):
+                # A live atomic replacement is not an observed heartbeat.
+                # Reobserve this status within the original deadline; never
+                # rerun the daemon or accept a cached ONLINE observation.
+                status = {}
             if status.get("heartbeat_sequence", 0) >= 2:
                 break
-        time.sleep(0.02)
-    service.stop()
-    thread.join(timeout=3)
+            time.sleep(0.02)
+    finally:
+        service.stop()
+        thread.join(timeout=3)
+        assert not thread.is_alive()
+
+    assert status.get("heartbeat_sequence", 0) >= 2
+    assert denied is transient_read_failure
 
     assert not thread.is_alive()
     final = json.loads(service.status_path.read_text(encoding="utf-8"))
