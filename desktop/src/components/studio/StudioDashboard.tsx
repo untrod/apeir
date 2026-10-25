@@ -76,7 +76,7 @@ export function DeviceTopology({ nodes, devices, locale }: { nodes: Record<strin
 }
 function DataWidget({ type, active, inspect, open, locale }: { type: string; active: () => boolean; inspect: PanelProps["inspect"]; open: PanelProps["open"]; locale: Locale }) {
   const { data, loading, error, health } = useStudioSnapshot(), t = translate(locale);
-  if (type.startsWith("ui:")) return <StudioExtensionView type={type} isVisible={active} />;
+  if (type.startsWith("ui:")) return <StudioExtensionView type={type} isVisible={active} locale={locale} />;
   if (type === "usage") return <UsageWidget active={active} locale={locale} />;
   if (type === "events") return <EventWidget active={active} locale={locale} />;
   if (["gpu", "network", "sensors"].includes(type)) return <Empty state="UNSUPPORTED">{t("No metric source", "暂无指标来源")}</Empty>;

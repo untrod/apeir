@@ -569,7 +569,7 @@ test("Declarative UI extension uses public review and approval, real status, rev
     const denied = await fetch(`${runtimes[0].url}/api/v1/studio/extensions/data?${new URLSearchParams({ component_type: widgetType, expected_digest: record.digest, source: "runtime.status" })}`, { headers: { Authorization: `Bearer ${token}` } });
     expect((await denied.json()).ok).toBe(false);
     await page.locator(".flexlayout__tab_button").filter({ hasText: "Dashboard" }).first().click();
-    await expect(page.getByRole("status").filter({ hasText: "DISABLED / 已禁用" })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "DISABLED" })).toBeVisible();
     await page.locator(".flexlayout__tab_button").filter({ hasText: "UI Extensions" }).first().click();
     await approveAndRetry("Enable");
     await writeFile(manifestPath, JSON.stringify({ ...original, description: "Conflicting same-version content" }));
@@ -597,7 +597,7 @@ test("Declarative UI extension uses public review and approval, real status, rev
     }
     await switchController(1);
     await page.locator(".flexlayout__tab_button").filter({ hasText: "Dashboard" }).first().click();
-    await expect(page.getByRole("status").filter({ hasText: "Missing Extension / 缺失扩展" })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "Missing Extension" })).toBeVisible();
     await switchController(0);
     await page.locator(".flexlayout__tab_button").filter({ hasText: "UI Extensions" }).first().click();
     await expect(manager.getByText(/1.1.0 · UNVERIFIED/)).toBeVisible();
@@ -614,7 +614,7 @@ test("Declarative UI extension uses public review and approval, real status, rev
     await expect(manager.getByText(/1.1.0 · UNVERIFIED/)).toBeVisible();
     await approveAndRetry("Remove");
     await page.locator(".flexlayout__tab_button").filter({ hasText: "Dashboard" }).first().click();
-    await expect(page.getByRole("status").filter({ hasText: "Missing Extension / 缺失扩展" })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "Missing Extension" })).toBeVisible();
     const foreign = await fetch(`${runtimes[1].url}/api/v1/studio/extensions/data?${new URLSearchParams({ component_type: widgetType, expected_digest: record.digest, source: "runtime.status" })}`, { headers: { Authorization: `Bearer ${token}` } });
     expect((await foreign.json()).ok).toBe(false);
     expect(errors).toEqual([]);

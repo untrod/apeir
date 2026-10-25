@@ -64,10 +64,10 @@ export const STUDIO_PANELS: readonly PanelContribution[] = [
 
 export function useStudioPanels(): readonly PanelContribution[] {
   const { extensions } = useStudioSnapshot();
-  return [...STUDIO_PANELS, ...availableContributions(extensions.data, "panel").map(({ record, contribution }) => ({ type: contribution.type, en: contribution.title, zh: contribution.title, owner: `${record.extension_id} · UNVERIFIED`, render: (props: PanelProps) => <StudioExtensionView type={contribution.type} isVisible={props.isVisible} /> }))];
+  return [...STUDIO_PANELS, ...availableContributions(extensions.data, "panel").map(({ record, contribution }) => ({ type: contribution.type, en: contribution.title, zh: contribution.title, owner: `${record.extension_id} · UNVERIFIED`, render: (props: PanelProps) => <StudioExtensionView type={contribution.type} isVisible={props.isVisible} locale={props.locale} /> }))];
 }
 export function StudioPanel({ type, ...props }: PanelProps & { type: string }) {
   const definition = useStudioPanels().find(panel => panel.type === type);
-  if (type.startsWith("ui:")) return <ErrorBoundary><StudioExtensionView type={type} isVisible={props.isVisible} /></ErrorBoundary>;
+  if (type.startsWith("ui:")) return <ErrorBoundary><StudioExtensionView type={type} isVisible={props.isVisible} locale={props.locale} /></ErrorBoundary>;
   return <ErrorBoundary>{definition ? definition.render(props) : <section role="status" className="studio-projection"><h2>Missing Component / 缺失组件</h2><p>{type}</p><p>No code was loaded. Install a reviewed compatible extension before using this panel.</p></section>}</ErrorBoundary>;
 }

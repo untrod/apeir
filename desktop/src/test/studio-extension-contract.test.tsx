@@ -52,6 +52,27 @@ it("shares one extension read and prevents superseded reads restoring revoked da
   expect(view.container.textContent).toBe("NOT_ENABLED");
   expect(shared.extensions.data?.extensions[0].enabled).toBe(false);
 });
+it("uses the selected host language without reacquiring data or changing publisher content", async () => {
+  setConfig({ url: "http://localhost:8770", token: "APEIR_FAKE_ONLY_EXTENSION_LOCALE" });
+  const original = snapshot();
+  const value = { ...original, extensions: [{ ...original.extensions[0], contributions: [{ ...original.extensions[0].contributions[0], events: ["runtime.started"], view: { kind: "chart", source: "runtime.status", field: "jobs_pending", label: "Publisher chart title" } }] }] };
+  vi.mocked(api).mockImplementation(async path => path === "/api/v1/studio/extensions" ? value : {});
+  const visible = () => true;
+  const renderView = (locale: "en" | "zh") => <StudioSnapshot><StudioExtensionView type={component} isVisible={visible} locale={locale} /></StudioSnapshot>;
+  const view = render(renderView("en"));
+  await waitFor(() => expect(screen.getByText("1 sample · current session")).toBeVisible());
+  expect(screen.getByText("Lifecycle events", { exact: true })).toBeVisible();
+  expect(screen.getByText("Source", { exact: true })).toBeVisible();
+  const reads = vi.mocked(api).mock.calls.filter(([path]) => path.endsWith("/extensions")).length;
+  view.rerender(renderView("zh"));
+  expect(screen.getByText("1 个样本 · 当前会话")).toBeVisible();
+  expect(screen.getByText("生命周期事件", { exact: true })).toBeVisible();
+  expect(screen.getByText("来源", { exact: true })).toBeVisible();
+  expect(screen.getByText("Publisher chart title", { exact: true })).toBeVisible();
+  expect(screen.queryByText("Lifecycle events", { exact: true })).toBeNull();
+  expect(vi.mocked(api).mock.calls.filter(([path]) => path.endsWith("/extensions"))).toHaveLength(reads);
+  expect(vi.mocked(api).mock.calls.every(([, options]) => !options?.method || options.method === "GET")).toBe(true);
+});
 it("admits a bounded valid multi-package catalog without accepting malformed record primitives", () => {
   const value = snapshot();
   const view = { kind: "stack", children: Array.from({ length: 3 }, () => ({ kind: "stack", children: Array.from({ length: 10 }, () => ({ kind: "text", text: "x".repeat(2048) })) })) };
