@@ -2312,11 +2312,13 @@ def _authorize_mutation_route(
                     presentation_workspace() / ".nous" / "extensions" / "registry.json"
                 ),
             )
-            required_permissions = (
-                ("workflow.execute",)
-                if route_path.endswith("/action")
-                else ("workspace.write",)
-            )
+            if route_path.endswith("/action"):
+                affected_resources = (
+                    str(presentation_workspace() / ".nous" / "workflows.db"),
+                )
+                required_permissions = ("workflow.execute",)
+            else:
+                required_permissions = ("workspace.write",)
         proposal = ActionProposal(
             action_type="api.mutation",
             capability_id=capability_id,

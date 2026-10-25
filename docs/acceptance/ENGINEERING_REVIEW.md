@@ -4128,3 +4128,13 @@ The source renderer now separates `RECEIPT_VERIFIED` from the actual reported
 `effect_verification.verdict`; absent or invalid verdicts stay UNKNOWN. Regression
 cases cover receipt-verified UNKNOWN/MISMATCH, digest-only MATCH and a separately
 reported effect MATCH. No verification is calculated or granted by the UI.
+
+Final new-host review bound optional Widget actions to the existing canonical
+Workflow resource, rather than the presentation Registry path. Install/enable
+permissions remain Registry-scoped; execution requires permission on the actual
+`.nous/workflows.db`, and reuses canonical Workflow read admission. The reviewed
+proposal additionally names the originally declared Workflow ID/version, without
+copying raw inputs. Regression proves that display-resource permissions alone
+cannot authorize a Workflow target and that the genuine original Gate lease still
+admits the correctly scoped pure action. This corrects the new, unmerged SDK
+adapter; no parallel permission system or Workflow executor was introduced.

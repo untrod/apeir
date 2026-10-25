@@ -520,6 +520,28 @@ class StudioExtensionHost:
                 "verification": "NOT_PHYSICAL_VERIFICATION",
             }
 
+    @staticmethod
+    def _action_params(contribution, action):
+        def actions(view):
+            return ([view] if view.get("kind") == "action" else []) + [
+                found for child in view.get("children", []) for found in actions(child)
+            ]
+
+        candidates = [
+            item for item in actions(contribution["view"]) if item["action"] == action
+        ]
+        if len(candidates) != 1 or action != "workflow.run":
+            raise PermissionError(
+                "Action was not uniquely declared by this contribution"
+            )
+        return candidates[0]["params"]
+
+    def action_reference(self, component, expected_digest, action):
+        with self.registry._writer_lock():
+            _, contribution = self._contribution(component, expected_digest)
+            params = self._action_params(contribution, action)
+            return {"workflow_id": params["workflow_id"], "version": params["version"]}
+
     def request_action(self, component, expected_digest, action, *, idempotency_key):
         from nous_runtime.workflow import WorkflowRuntime
         from nous_runtime.workflow.store import WorkflowStore
@@ -533,23 +555,7 @@ class StudioExtensionHost:
         with self.registry._writer_lock():
             _, contribution = self._contribution(component, expected_digest)
 
-            def actions(view):
-                return ([view] if view.get("kind") == "action" else []) + [
-                    found
-                    for child in view.get("children", [])
-                    for found in actions(child)
-                ]
-
-            candidates = [
-                item
-                for item in actions(contribution["view"])
-                if item["action"] == action
-            ]
-            if len(candidates) != 1 or action != "workflow.run":
-                raise PermissionError(
-                    "Action was not uniquely declared by this contribution"
-                )
-            params = candidates[0]["params"]
+            params = self._action_params(contribution, action)
             runtime = WorkflowRuntime(str(self.root))
             definition = runtime.store.get_definition(
                 params["workflow_id"], params["version"]

@@ -174,7 +174,12 @@ def handle_studio_extension_events(params=None, *, authorization_context=None):
 
 
 def handle_studio_extension_action(body, *, authorization_context=None):
-    host = _admit(authorization_context, permission="workflow.execute")
+    host = _admit(authorization_context)
+    # Reuse canonical Workflow read admission, in addition to dispatcher execution
+    # admission on workflows.db. A display resource is not an execution target.
+    from nous_runtime.api.workflow_routes import _read
+
+    _read(authorization_context)
 
     def action():
         _exact(body, {"component_type", "expected_digest", "action", "idempotency_key"})
@@ -253,6 +258,10 @@ def studio_mutation_summary(route_path, body, authorization_context):
         _component(values)
         if values["action"] != "workflow.run":
             raise ValueError("Unsupported governed Studio action")
+        host = _admit(authorization_context)
+        component, digest = _component(values)
+        reference = host.action_reference(component, digest, values["action"])
+        return {**values, **reference}
     else:
         raise ValueError("Unsupported Studio mutation")
     _digest(values["expected_digest"])

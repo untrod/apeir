@@ -31,7 +31,24 @@ def client(tmp_path, monkeypatch):
     gate = ExecutionAuthorizationGate(
         GovernanceStore(tmp_path / ".nous"),
         permission_engine=PermissionEngine(
-            (PermissionRule(_subject_id(), "governance.approve", resource),)
+            (
+                PermissionRule(_subject_id(), "governance.approve", resource),
+                PermissionRule(
+                    _subject_id(),
+                    "governance.approve",
+                    str(tmp_path / ".nous" / "workflows.db"),
+                ),
+                PermissionRule(
+                    "api-service",
+                    "workspace.read",
+                    str(tmp_path / ".nous" / "workflows.db"),
+                ),
+                PermissionRule(
+                    "api-service",
+                    "workflow.execute",
+                    str(tmp_path / ".nous" / "workflows.db"),
+                ),
+            )
             + tuple(
                 PermissionRule("api-service", permission, resource)
                 for permission in (
@@ -285,6 +302,13 @@ def test_declared_workflow_action_still_needs_original_gate_permission_and_lease
     }
     pending = call("POST", "/api/v1/studio/extensions/action", body)
     assert pending["error"]["code"] == "NOUS_APPROVAL_REQUIRED"
+    original_request = gate.store.get_approval_request(
+        pending["error"]["details"]["approval_request_id"]
+    )
+    original_proposal = gate.store.get_proposal(original_request["proposal_hash"])
+    assert original_proposal["affected_resources"] == [
+        str(root / ".nous" / "workflows.db")
+    ]
     assert runtime.store.list_runs() == []
     first = call("POST", "/api/v1/studio/extensions/action", body, approve=True)
     assert first["ok"], first
