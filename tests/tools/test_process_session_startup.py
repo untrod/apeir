@@ -7,6 +7,7 @@ import time
 import pytest
 
 from nous_runtime.tools import process_session
+from nous_runtime.kernel import process_session_host
 from nous_runtime.tools.process_session import ProcessSessionStore
 
 
@@ -20,7 +21,30 @@ def test_startup_reobserves_original_identity_without_spawning_again(
     original_write = process_session._atomic_json
     launches, probes = [], []
     controls = []
+    identity_reads = []
+    host_read_failures = []
+    creation_token = process_session_host.process_creation_token
+    read_text = process_session.Path.read_text
     cleanup_miss_pending = False
+
+    def token(pid):
+        value = creation_token(pid)
+        identity_reads.append({"pid": pid, "creation_time": value})
+        return value
+
+    def text(path, *args, **kwargs):
+        try:
+            return read_text(path, *args, **kwargs)
+        except OSError as error:
+            if path.name == "host.json":
+                host_read_failures.append(
+                    {
+                        "type": type(error).__name__,
+                        "errno": error.errno,
+                        "winerror": getattr(error, "winerror", None),
+                    }
+                )
+            raise
 
     def launch(spec):
         launches.append(spec)
@@ -44,6 +68,8 @@ def test_startup_reobserves_original_identity_without_spawning_again(
     monkeypatch.setattr(process_session.ProcessSandboxHost, "launch", launch)
     monkeypatch.setattr(process_session, "process_identity_matches", matches)
     monkeypatch.setattr(process_session, "_atomic_json", write)
+    monkeypatch.setattr(process_session_host, "process_creation_token", token)
+    monkeypatch.setattr(process_session.Path, "read_text", text)
     store = ProcessSessionStore(tmp_path)
     result = store.start(
         [sys.executable, "-u", "-c", "import sys; sys.stdin.readline()"],
@@ -63,10 +89,13 @@ def test_startup_reobserves_original_identity_without_spawning_again(
         assert probes[1] == probes[3]
         assert result["process_identity"] == probes[0]
         assert result["helper_identity"] == probes[1]
-        assert (
-            ProcessSessionStore(tmp_path).attach(result["session_id"])["state"]
-            == "RUNNING"
-        )
+        attached = ProcessSessionStore(tmp_path).attach(result["session_id"])
+        assert attached["state"] == "RUNNING", {
+            "attached": attached,
+            "host_state": store._host_state(result["session_id"]),
+            "identity_reads": identity_reads,
+            "host_read_failures": host_read_failures,
+        }
     finally:
         # A failed assertion must not leave a verified original test process.
         # Unknown identities remain non-controllable; never kill a bare PID.
@@ -314,4 +343,75 @@ def test_startup_snapshot_does_not_authorize_later_unreadable_host(
     finally:
         missing = False
         monkeypatch.undo()
+        _cleanup_original_session(store, result["session_id"])
+
+
+def test_attachment_uses_original_record_read_not_a_separate_path_probe(
+    tmp_path, monkeypatch
+):
+    """A negative pathname sample is not the outcome of opening the bound record."""
+    store = ProcessSessionStore(tmp_path)
+    result = store.start(
+        [sys.executable, "-u", "-c", "import sys; sys.stdin.readline()"],
+        cwd=tmp_path,
+        environment={
+            "PATH": os.defpath,
+            **({"SystemRoot": os.environ["SystemRoot"]} if os.name == "nt" else {}),
+        },
+        work_id="work-direct-original-record",
+        tool_call_id="call-direct-original-record",
+    )
+    host_path = store.root / result["session_id"] / "host.json"
+    is_file = process_session.Path.is_file
+
+    def negative_path_probe(path):
+        return False if path == host_path else is_file(path)
+
+    try:
+        assert result["state"] == "RUNNING", result
+        with monkeypatch.context() as fault:
+            fault.setattr(process_session.Path, "is_file", negative_path_probe)
+            attached = ProcessSessionStore(tmp_path).attach(result["session_id"])
+            assert attached["state"] == "RUNNING", attached
+            assert attached["process_identity"] == result["process_identity"]
+            assert attached["helper_identity"] == result["helper_identity"]
+            assert not list((host_path.parent / "control").glob("*.json"))
+    finally:
+        _cleanup_original_session(store, result["session_id"])
+
+
+@pytest.mark.parametrize("failure", [PermissionError, FileNotFoundError])
+def test_direct_original_record_read_failure_remains_uncontrollable(
+    tmp_path, monkeypatch, failure
+):
+    store = ProcessSessionStore(tmp_path)
+    result = store.start(
+        [sys.executable, "-u", "-c", "import sys; sys.stdin.readline()"],
+        cwd=tmp_path,
+        environment={
+            "PATH": os.defpath,
+            **({"SystemRoot": os.environ["SystemRoot"]} if os.name == "nt" else {}),
+        },
+        work_id="work-unreadable-direct-record",
+        tool_call_id="call-unreadable-direct-record",
+    )
+    host_path = store.root / result["session_id"] / "host.json"
+    read_text = process_session.Path.read_text
+
+    def unreadable(path, *args, **kwargs):
+        if path == host_path:
+            raise failure("owned qualification read unavailable")
+        return read_text(path, *args, **kwargs)
+
+    try:
+        assert result["state"] == "RUNNING", result
+        with monkeypatch.context() as fault:
+            fault.setattr(process_session.Path, "read_text", unreadable)
+            current = ProcessSessionStore(tmp_path).attach(result["session_id"])
+            assert current["state"] == "RECOVERY_REQUIRED"
+            assert current["stdin_available"] is False
+            with pytest.raises(ValueError, match="process session is not running"):
+                store.write_stdin(result["session_id"], "not authorized\n")
+            assert not list((host_path.parent / "control").glob("*.json"))
+    finally:
         _cleanup_original_session(store, result["session_id"])

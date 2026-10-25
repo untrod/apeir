@@ -4138,3 +4138,32 @@ copying raw inputs. Regression proves that display-resource permissions alone
 cannot authorize a Workflow target and that the genuine original Gate lease still
 admits the correctly scoped pure action. This corrects the new, unmerged SDK
 adapter; no parallel permission system or Workflow executor was introduced.
+
+### Resulting-main ProcessSession attachment investigation — 2026-10-25
+
+Resulting main `daa71091a3c91dc911400ebf8b6af91ab90eb668` passed Core/Desktop/
+Security but failed Windows Multi-Arch run40205953411, job121206804852:
+`test_startup_reobserves_original_identity_without_spawning_again[True-2]`.
+Startup returned RUNNING; immediate reattachment returned RECOVERY_REQUIRED.
+The original assertion did not include that attachment's reason. The full raw
+job log is retained; neither a retry nor historical PR success qualifies main.
+Issue85 and the older Windows reliability issues remain open.
+
+Code review identified a separate negative pathname check before reading the
+helper's repeatedly replaced `host.json`. A controlled negative pathname sample
+reproduced the same false missing-record projection while a current bound record
+and both live original identities were readable. Removing that redundant precheck
+uses one direct current record read. Missing, inaccessible or malformed records
+still fail closed; OS PID/creation-time and original command/helper binding checks
+remain mandatory. No previous snapshot is reused, no control is replayed and no
+deadline or timeout is increased. This is a demonstrated admission-path fix,
+not proof that the original Windows incident had that particular OS cause.
+
+The original startup test retains its exact RUNNING, identity, single-launch and
+single-control assertions and now includes attachment state, current host state,
+content-free OS read errors and sampled creation tokens on failure. Windows
+Multi-Arch runs the original failing case before its unchanged complete suite,
+providing earlier original evidence. Local affected startup/control/reaping
+regression:39 passed. Exact Windows and resulting-main qualification remain
+PENDING until their real CI completes. Frozen Rust Kernel and component lock are
+unchanged; the patch is in Distribution's existing process-session reader.

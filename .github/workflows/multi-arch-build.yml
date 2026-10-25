@@ -111,6 +111,9 @@ jobs:
           pip install --upgrade pip
           pip install ".[tier1,dev,a2a,mcp]"
 
+      - name: Verify original process attachment before full regression
+        run: python -m pytest "tests/tools/test_process_session_startup.py::test_startup_reobserves_original_identity_without_spawning_again[True-2]" -vv
+
       - name: Run tests
         run: python -m pytest tests/ -m "unit or integration" -v --ignore=tests/lite/
 
