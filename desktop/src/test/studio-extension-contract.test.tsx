@@ -15,7 +15,7 @@ it("accepts only bounded declared views, rejects script and module configuration
   expect(availableContributions(parseStudioUIView(value), "widget")).toHaveLength(1);
   expect(availableContributions(parseStudioUIView(snapshot(false)), "widget")).toHaveLength(0);
   for (const view of [{ kind: "html", html: "<script>" }, { kind: "text", text: "x", module: "https://untrusted.invalid/a.js" }]) {
-    const modified = structuredClone(value); modified.extensions[0].contributions[0].view = view as typeof modified.extensions[0].contributions[0].view;
+    const modified = { ...value, extensions: [{ ...value.extensions[0], contributions: [{ ...value.extensions[0].contributions[0], view }] }] };
     expect(() => parseStudioUIView(modified)).toThrow();
   }
 });

@@ -17,6 +17,7 @@ import {
   api,
   ApiError,
   captureRuntimeConnection,
+  governedStudioMutation as mutate,
   humanMutation,
 } from "../../lib/api";
 import {
@@ -59,23 +60,6 @@ function download(name: string, value: unknown) {
   link.download = name;
   link.click();
   URL.revokeObjectURL(url);
-}
-async function mutate<T>(path: string, body: Record<string, unknown>) {
-  // A read-only identity probe precedes the mutation. No operation is retried.
-  let human = false;
-  try {
-    await api("/api/v1/control/human/session");
-    human = true;
-  } catch (error) {
-    if (
-      !(error instanceof ApiError) ||
-      !["NOUS_FORBIDDEN", "NOUS_UNAUTHENTICATED"].includes(error.code)
-    )
-      throw error;
-  }
-  return human
-    ? humanMutation<T>(path, body)
-    : api<T>(path, { method: "POST", body: JSON.stringify(body) });
 }
 export function StudioWorkflow({
   locale,

@@ -130,7 +130,7 @@ export function StudioDashboard({ config, updateConfig, isVisible, locale, inspe
     if (dashboard.widgets.length >= 32) { setMessage("Widget limit reached (32)."); return; }
     if (!source && !WIDGET_TYPES.includes(type as typeof WIDGET_TYPES[number]) && !contributions.some(item => item.contribution.type === type)) { setMessage("Extension unavailable; select an enabled component."); return; }
     const y = Math.max(0, ...dashboard.widgets.map(widget => widget.y + widget.h));
-    change([...dashboard.widgets, { ...(source || { type, title: "", x: 0, y, w: 4, h: 4, paused: false }), id: `widget-${crypto.randomUUID()}`, y }]);
+    change([...dashboard.widgets, { ...(source || { type, title: contributions.find(item => item.contribution.type === type)?.contribution.title || "", x: 0, y, w: 4, h: 4, paused: false }), id: `widget-${crypto.randomUUID()}`, y }]);
   };
   const positions = (layout: Layout) => {
     if (!editing) return;

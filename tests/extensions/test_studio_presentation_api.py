@@ -234,3 +234,71 @@ def test_studio_widget_cannot_select_unrequested_actions_or_bypass_disabled_stat
     assert not call("POST", "/api/v1/studio/extensions/action", action, approve=True)[
         "ok"
     ]
+
+
+def test_declared_workflow_action_still_needs_original_gate_permission_and_lease(
+    client,
+):
+    from nous_runtime.workflow import (
+        WorkflowDefinition,
+        WorkflowRuntime,
+        WorkflowStep,
+        StepType,
+        TriggerType,
+    )
+    from tests.extensions.test_studio_presentation import action_manifest
+
+    call, gate, root = client
+    runtime = WorkflowRuntime(str(root))
+    runtime.register(
+        WorkflowDefinition(
+            "monitor.reference",
+            "1.0.0",
+            TriggerType.MANUAL,
+            (
+                WorkflowStep(
+                    "result", StepType.TRANSFORM, params={"value": "actual pure result"}
+                ),
+            ),
+        )
+    )
+    raw = json.dumps(action_manifest())
+    review = call("POST", "/api/v1/studio/extensions/review", {"source_manifest": raw})[
+        "data"
+    ]
+    record = call(
+        "POST",
+        "/api/v1/studio/extensions/install",
+        {
+            "source_manifest": raw,
+            "expected_digest": review["digest"],
+            "expected_previous_digest": "",
+        },
+        approve=True,
+    )["data"]
+    assert configure(call, record)["ok"]
+    body = {
+        "component_type": record["contributions"][1]["type"],
+        "expected_digest": record["digest"],
+        "action": "workflow.run",
+        "idempotency_key": "approved-original-widget-key",
+    }
+    pending = call("POST", "/api/v1/studio/extensions/action", body)
+    assert pending["error"]["code"] == "NOUS_APPROVAL_REQUIRED"
+    assert runtime.store.list_runs() == []
+    first = call("POST", "/api/v1/studio/extensions/action", body, approve=True)
+    assert first["ok"], first
+    result = first["data"]
+    assert result["state"] == "completed"
+    assert result["outputs"]["result"]["value"] == "actual pure result"
+    repeated = call("POST", "/api/v1/studio/extensions/action", body, approve=True)
+    assert repeated["data"]["run_id"] == result["run_id"]
+    assert len(runtime.store.list_runs()) == 1
+    gate.permission_engine = PermissionEngine()
+    denied = call(
+        "POST",
+        "/api/v1/studio/extensions/action",
+        {**body, "idempotency_key": "after-revocation"},
+    )
+    assert not denied["ok"]
+    assert len(runtime.store.list_runs()) == 1

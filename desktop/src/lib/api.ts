@@ -554,11 +554,15 @@ export async function humanMutation<T = unknown>(path: string, body: Record<stri
 }
 
 /** Same service/human surface, with no automatic replay of a mutation. */
-export async function governedStudioMutation<T>(path: string, body: Record<string, unknown>, guard: () => void) {
+export async function governedStudioMutation<T>(path: string, body: Record<string, unknown>, guard: () => void = () => {}) {
   const current = captureRuntimeConnection(); current(); guard();
-  const session = await api<{ authenticated?: boolean }>("/api/v1/control/human/session");
+  let human = false;
+  try { await api("/api/v1/control/human/session"); human = true; }
+  catch (error) {
+    if (!(error instanceof ApiError) || !["NOUS_FORBIDDEN", "NOUS_UNAUTHENTICATED"].includes(error.code)) throw error;
+  }
   current(); guard();
-  const result = session.authenticated === true
+  const result = human
     ? await humanMutation<T>(path, body, guard)
     : await api<T>(path, { method: "POST", body: JSON.stringify(body) });
   current(); guard(); return result;

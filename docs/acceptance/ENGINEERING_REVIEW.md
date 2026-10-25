@@ -4029,3 +4029,64 @@ Fault injection covers connection refusal and pre-serving timeout, then exercise
 the real CLI/HTTP path. The affected EventStream/startup/hygiene checks passed29
 locally. This corrects probe handling; it does not qualify or close the separate
 historical Windows SQLite, relay, signed-response or Automation timing issues.
+
+### R5 declarative UI host qualification — 2026-10-25
+
+The Studio UI child schema (`apeir.studio-ui/v1`) is additive metadata in the
+existing Extension IR. Existing Registry, package/provenance verification, CAS
+and pins, Governance dispatcher, current-human nonce, Workflow Runtime and Studio
+layout/subscription owners are reused. This is data-only rendering; executable
+third-party JavaScript remains BLOCKED pending isolation. Kernel revision,
+component-lock bytes and historical tags are unchanged.
+
+The actual source CLI/HTTP + sandbox-enabled Chromium consumer acquired the
+System Monitor manifest outside the checkout, reviewed its digest, requested
+installation, used a separate public OS-owner CLI approval, enabled it, read
+actual Runtime status, added a Panel and Dashboard Widget and saved version-1
+layout. It checked default-disabled installation/update, same-version content
+conflict, disablement denying new data reads, enablement, update, browser reload,
+Controller A/B absence isolation, actual Runtime process restart, retained package
+state, uninstall and inert missing-component slots. It does not inject test grants
+or import private Runtime modules to install the example. The example's standalone
+standard-library HTTP client uses those same public endpoints. Source screenshot:
+[`studio-extension-runtime-source.png`](../media/studio-extension-runtime-source.png).
+
+A first real browser attempt exposed an incorrectly assumed human-session response
+shape in the new shared UI helper. It denied the service request before install.
+The fix reuses the existing read-only session probe, catches only its explicit
+no-human errors, and checks the original Controller before dispatch. Current humans
+still need the exact-body nonce; a failed mutation is never retried automatically.
+The Workflow panel reuses the same helper while retaining its strictly human-only
+step approval. Regression cases cover service/human surfaces, nonce/body binding,
+Controller switch during the probe and a lost mutation response.
+
+Registry/CAS tests cover digest and version binding, same-version replacement,
+stale installer review, original package integrity, mirrored display-state lock,
+no execution grants, dependency failure, denied undeclared reads, schema/code/URL
+rejection, escaped literal HTML and retained missing-layout state. Real Gate/API
+tests additionally require the original lease for optional declared pure Workflow
+actions, preserve the same idempotent Run and reject new actions after permission
+revocation. Unsupported command handlers do not create a Run. No Widget creates
+execution authority; approval, handler execution and physical verification remain
+separate gates.
+
+The first full nine-case source-browser suite passed; an additional extension
+case then passed Controller A/B and process-restart checks in 13.7 seconds. The
+affected Extension/Workflow/Governance/Control Plane/repository suite passed
+1,013 cases with 33 explicit platform skips; the additional actual action API case
+passed separately. These local results are not exact resulting-main CI. Retained
+pre-fix failures include incorrect test fixtures, original helper denial and UI
+locator errors; no timeout or safety assertion was weakened. Current-head required
+CI and resulting-main CI must qualify their exact submissions independently.
+
+The first SDK acquisition profile accepts bounded native JSON manifests and
+already-installed compatible dependencies. It does not acquire executable UI,
+resolve remote packages or certify publisher claims. Its lifecycle event interface
+is bounded metadata reads from the original bus, not an additional event stream.
+Chart samples are transient display data, not persisted observations. The Source
+Preview job now also runs on normal main pushes, preserving its clean isolated
+wheel consumer, hash/manifest/report uploads and all native component gates.
+
+No real model, host command sandbox, real IdP, remote physical device, Windows10
+installation, signing or formal release qualification follows from these results.
+R4 unapproved candidates and their original hash mismatch remain independent.

@@ -210,3 +210,149 @@ def test_public_schema_accepts_the_actual_reference_contract():
     value = manifest()["metadata"]["apeir_studio"]
     Draft202012Validator(schema).validate(value)
     assert schema["properties"]["schema"]["const"] == STUDIO_UI_SCHEMA_VERSION
+
+
+def action_manifest():
+    value = manifest()
+    value["capabilities"].append(
+        {
+            "capability": "workflow.run",
+            "access": "execute",
+            "scope": ["current-workspace"],
+            "required": True,
+        }
+    )
+    value["metadata"]["apeir_studio"]["contributions"][1]["view"] = {
+        "kind": "action",
+        "label": "Run reviewed workflow",
+        "action": "workflow.run",
+        "params": {
+            "workflow_id": "monitor.reference",
+            "version": "1.0.0",
+            "inputs": {"message": "reference"},
+        },
+    }
+    return value
+
+
+def test_governed_action_uses_original_pure_runtime_and_idempotent_history(tmp_path):
+    from nous_runtime.workflow import (
+        WorkflowRuntime,
+        WorkflowDefinition,
+        WorkflowStep,
+        StepType,
+        TriggerType,
+    )
+
+    runtime = WorkflowRuntime(str(tmp_path))
+    runtime.register(
+        WorkflowDefinition(
+            "monitor.reference",
+            "1.0.0",
+            trigger=TriggerType.MANUAL,
+            steps=(
+                WorkflowStep(
+                    "output", StepType.TRANSFORM, params={"value": "observed"}
+                ),
+            ),
+        )
+    )
+    host = StudioExtensionHost(tmp_path)
+    record = install(host, action_manifest())
+    enable(host, record)
+    component = record["contributions"][1]["type"]
+    first = host.request_action(
+        component,
+        record["digest"],
+        "workflow.run",
+        idempotency_key="original-reference",
+    )
+    assert first["state"] == "completed"
+    assert first["outputs"]["output"]["value"] == "observed"
+    repeat = StudioExtensionHost(tmp_path).request_action(
+        component,
+        record["digest"],
+        "workflow.run",
+        idempotency_key="original-reference",
+    )
+    assert repeat["run_id"] == first["run_id"]
+    assert len(runtime.store.list_runs()) == 1
+    enable(host, record, False)
+    with pytest.raises(PermissionError):
+        host.request_action(
+            component,
+            record["digest"],
+            "workflow.run",
+            idempotency_key="new-after-disable",
+        )
+    assert len(runtime.store.list_runs()) == 1
+
+
+def test_unsupported_host_work_cannot_be_executed_by_an_extension(tmp_path):
+    from nous_runtime.workflow import (
+        WorkflowRuntime,
+        WorkflowDefinition,
+        WorkflowStep,
+        StepType,
+        TriggerType,
+    )
+
+    runtime = WorkflowRuntime(str(tmp_path))
+    runtime.register(
+        WorkflowDefinition(
+            "monitor.reference",
+            "1.0.0",
+            trigger=TriggerType.MANUAL,
+            steps=(WorkflowStep("shell", StepType.COMMAND, action="host.shell"),),
+        )
+    )
+    host = StudioExtensionHost(tmp_path)
+    record = install(host, action_manifest())
+    enable(host, record)
+    with pytest.raises(PermissionError, match="pure Workflow host"):
+        host.request_action(
+            record["contributions"][1]["type"],
+            record["digest"],
+            "workflow.run",
+            idempotency_key="forbidden-host",
+        )
+    assert runtime.store.list_runs() == []
+
+
+def test_action_request_is_not_a_grant_and_ambiguous_actions_are_rejected(tmp_path):
+    value = action_manifest()
+    value["capabilities"] = [
+        item for item in value["capabilities"] if item["capability"] != "workflow.run"
+    ]
+    with pytest.raises(ValueError, match="execute request"):
+        StudioExtensionHost(tmp_path).review(json.dumps(value))
+    view = action_manifest()["metadata"]["apeir_studio"]
+    action = view["contributions"][1]["view"]
+    view["contributions"][1]["view"] = {
+        "kind": "stack",
+        "children": [action, deepcopy(action)],
+    }
+    with pytest.raises(ValueError, match="only one"):
+        validate_presentation(view)
+
+
+def test_stale_review_cannot_overwrite_another_installer_and_dependencies_are_not_downloaded(
+    tmp_path,
+):
+    host, other = StudioExtensionHost(tmp_path), StudioExtensionHost(tmp_path)
+    reviewed = host.review(json.dumps(manifest()))
+    newer = manifest()
+    newer["version"] = "1.1.0"
+    installed = install(other, newer)
+    with pytest.raises(PermissionError, match="changed"):
+        host.install(
+            json.dumps(manifest()),
+            expected_digest=reviewed["digest"],
+            expected_previous_digest="",
+        )
+    assert host.record(installed["extension_id"])["version"] == "1.1.0"
+    dependent = manifest()
+    dependent["extension_id"] = "examples/dependent"
+    dependent["dependencies"] = {"missing/dependency": ">=1"}
+    with pytest.raises((ValueError, TypeError)):
+        host.review(json.dumps(dependent))

@@ -129,6 +129,31 @@ class StudioExtensionHost:
             or len(value["metadata"]["publisher"]) > 128
         ):
             raise ValueError("Invalid unverified publisher description")
+        dependencies = value.get("dependencies", {})
+        if not isinstance(dependencies, dict) or any(
+            not isinstance(key, str) or not isinstance(constraint, str)
+            for key, constraint in dependencies.items()
+        ):
+            raise ValueError(
+                "UI dependencies must map extension IDs to version constraints"
+            )
+        for request in value.get("capabilities", []):
+            if (
+                not isinstance(request, dict)
+                or set(request)
+                - {"capability", "access", "scope", "reason", "required"}
+                or any(
+                    not isinstance(request.get(key), str)
+                    for key in ("capability", "access")
+                )
+                or "required" in request
+                and type(request["required"]) is not bool
+                or not isinstance(request.get("scope", []), list)
+                or any(not isinstance(scope, str) for scope in request.get("scope", []))
+                or "reason" in request
+                and not isinstance(request["reason"], str)
+            ):
+                raise ValueError("Invalid Studio capability request declaration")
         manifest = ExtensionManifest.from_dict(value).require_valid()
         declared = {item.capability: item.access for item in manifest.capabilities}
         if set(declared) - {

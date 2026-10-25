@@ -3,7 +3,7 @@ import { ApiError, api, captureRuntimeConnection, governedStudioMutation } from 
 import type { StudioUIContribution, StudioUIExtension, StudioUIView, StudioView } from "../../lib/studioExtensions";
 import { useStudioSnapshot } from "./StudioData";
 
-const display = (value: unknown) => value === null || value === undefined || value === "" ? "UNKNOWN" : typeof value === "boolean" ? value ? "ONLINE" : "OFFLINE" : String(value);
+const display = (value: unknown) => value === null || value === undefined || value === "" ? "UNKNOWN" : String(value);
 /** Trusted React rendering of strictly validated data. No dynamic code, HTML or URLs. */
 function View({ view, status, record, contribution }: { view: StudioView; status: StudioUIView["status"]; record: StudioUIExtension; contribution: StudioUIContribution }) {
   if (view.kind === "stack") return <div className="studio-extension-stack">{view.label && <strong>{view.label}</strong>}{view.children.map((child, i) => <View key={i} view={child} status={status} record={record} contribution={contribution} />)}</div>;
@@ -12,7 +12,7 @@ function View({ view, status, record, contribution }: { view: StudioView; status
   if (view.kind === "table") return <table><caption>{view.label}</caption><tbody>{view.fields.map((field, i) => <tr key={i}><th scope="row">{field.label}</th><td>{display(status?.[field.field])}</td></tr>)}</tbody></table>;
   const value = status?.[view.field];
   if (view.kind === "chart") return <StatusChart label={view.label || view.field} value={value} />;
-  return <div className="studio-extension-value"><small>{view.label || view.field}</small><strong className={view.kind === "status" ? "studio-status studio-status-neutral" : "studio-metric-value"}>{display(value)}</strong></div>;
+  return <div className="studio-extension-value"><small>{view.label || view.field}</small><strong className={view.kind === "status" ? "studio-status studio-status-neutral" : "studio-metric-value"}>{view.kind === "status" && typeof value === "boolean" ? view.field === "running" ? value ? "ONLINE" : "OFFLINE" : view.field === "kernel_ready" ? value ? "READY" : "NOT_READY" : String(value) : display(value)}</strong></div>;
 }
 function StatusChart({ label, value }: { label: string; value: unknown }) {
   const { extensions } = useStudioSnapshot();
@@ -30,7 +30,7 @@ function GovernedAction({ view, record, contribution }: { view: Extract<StudioVi
   return <div><button disabled={busy || !retry} onClick={async () => {
     setBusy(true); setResult(""); setRetry(false);
     try { const original = await governedStudioMutation<{ run_id: string; state: string }>("/api/v1/studio/extensions/action", { component_type: contribution.type, expected_digest: record.digest, action: view.action, idempotency_key: key }, check); check(); setResult(`${original.run_id} · ${original.state}`); }
-    catch (error) { try { check(); setResult(String(error)); setRetry(error instanceof ApiError && error.code === "NOUS_APPROVAL_REQUIRED"); } catch { /* Original request remains managed by Runtime. */ } }
+    catch (error) { try { check(); setResult(error instanceof ApiError ? `${error.code} · ${error.message} · ${JSON.stringify(error.details || {})}` : String(error)); setRetry(error instanceof ApiError && error.code === "NOUS_APPROVAL_REQUIRED"); } catch { /* Original request remains managed by Runtime. */ } }
     finally { if (alive.current) setBusy(false); }
   }}>{busy ? "RUNNING" : view.label}</button><output>{result}</output></div>;
 }
