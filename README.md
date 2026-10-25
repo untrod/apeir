@@ -24,7 +24,7 @@ Models, Agents and UI extensions cannot authorize themselves.
 - Browse projects, review file diffs and submit version-bound changes for approval.
 - Arrange docked panels and read-only Dashboards; save, import and reuse layouts.
 - Inspect real Runtime/Kernel status, registered Nodes, Devices, Work and evidence.
-- Use durable Workflow through the existing CLI and inspect its records in Studio.
+- Create Workflow graphs, validate/register canonical definitions and run the bound pure steps through Governance; inspect original Run history in Studio.
 - Install reviewed Skill instructions and use the public Provider SDK.
 - Run the offline [Verified Execution Demo](examples/hello_runtime/README.md),
   including rejection, UNKNOWN, response-loss reconciliation and restart.

@@ -48,7 +48,7 @@ Save/Load/Reset/Import/Export retain the bounded version1 schema. Resolve unsave
 drafts/pending actions before closing editors or replacing layouts. Layout export
 contains no file content, credentials, Work or approval identity.
 
-Node, Device, Workflow, Evidence and Activity panels share the real Operations
+Node, Device, Evidence and Activity panels share the real Operations
 projection and its refresh action; empty results are not ONLINE or verified
 success. Use Operations for original governed controls. Supported commands reuse
 Workbench profiles and strict sandbox admission; missing isolation is BLOCKED.
@@ -94,6 +94,64 @@ does not prove Kernel availability, a model invocation or a physical effect.
 EventStream is the existing cursor-driven bus; Governance audit is separate.
 The same authenticated Controller supplies all visible widgets. Source browser
 checks cover actual HTTP reads and zero mutation requests, not native installation.
+
+### Visual Workflow Builder
+
+Choose **Add panel → Workflow Builder**. The stable `workflow` panel now edits
+and reads the same WorkflowDefinition/WorkflowStore as the public CLI. Add nodes,
+drag dependency handles, Shift-select/duplicate steps, delete selected nodes or
+edges, arrange the graph and undo/redo. **Apply parameters** validates the edited
+JSON before it can be run. The arrows are execution dependencies, not automatic
+output-to-input data bindings.
+
+**Validate** calls the existing Compiler. **Register** creates an immutable
+`workflow_id@version`; change the version when modifying a registered definition.
+**Run** verifies that the reviewed draft matches that version and supplies a
+stable idempotency key. A lost response does not justify creating another task:
+refresh history and inspect the original Run. No action is retried automatically.
+Run details expose original IDs, definition/input digests, step states, outputs
+and durable EventStream history under the `runtime-service` scope. These are
+computational records, not independent physical-effect verification.
+
+This endpoint binds only the existing pure **TRANSFORM**, **CONDITION**, **WAIT**
+and **APPROVAL** handlers. WAIT is an immediate barrier, not a timed delay;
+CONDITION compares `params.input` with `params.equals`; TRANSFORM returns
+`params.value` and the run inputs. APPROVAL waits for a current authenticated
+human with `governance.approve` permission on `workflow:RUN_ID:STEP_ID`. The
+existing human-session nonce and Governance controls remain required. Ordinary
+resume never supplies approval. Agent, Capability, Connector and Command
+handlers, custom actions, expression conditions and compensation hosts are
+UNSUPPORTED in this endpoint; imported definitions retain their fields and can
+be inspected/exported. A successful validation does not mean a host is bound.
+
+Registration, execution, cancellation and recovery use the existing API mutation
+Gate against the actual server workspace, never a body-selected target. Owner
+policy must allow the applicable workspace read/write or workflow execution
+permission; pending API approval identifiers can be reviewed in Operations.
+Unavailable human identity configuration stays BLOCKED, not self-approved.
+For a Gate-bound API request, a trusted local owner can instead inspect
+`apeir --no-intelligence approval show APPROVAL_ID --json` in the owning workspace
+and explicitly approve it with `apeir --no-intelligence approval approve
+APPROVAL_ID`. The existing Broker verifies the current OS-owner context and
+issues one proposal/subject-bound lease; retry only the original reviewed request.
+Unbound compatibility approval records do not become execution permission.
+
+**Save draft** explicitly downloads a private version1 bundle containing the
+canonical definition and separate canvas positions. **Import** restores that
+bundle or a canonical definition, after confirming replacement of an unsaved
+draft. **Export definition** emits CLI-compatible JSON without coordinates.
+These files may contain private parameters: they are not layout exports and
+should not be published without review. Graph drafts remain in memory while
+panels move; they are not silently stored in browser LocalStorage. Save a draft
+before closing/reloading. On Controller change, the existing private-draft export
+retains the retired draft instead of sending it to the new Controller. Registered
+definitions and original runs survive Runtime restart through WorkflowStore.
+Importing or arranging a graph never runs it or grants permission.
+
+The existing [Hello Workflow](../../examples/hello_workflow/README.md) can be
+imported unchanged. The same exported definition is accepted by `apeir
+--no-intelligence workflow validate workflow.json --json`. A missing strict
+sandbox still blocks engineering commands; this editor does not add host Shell.
 
 The shared Usage transport has a reproducible, model-disabled component
 microbenchmark. Prepare two clean detached checkouts and install their Desktop

@@ -62,6 +62,7 @@ def approval_list(
         for request in mgr.get_pending()
         if request.get("operation_governance")
         or request.get("requested_by") == _subject_id()
+        or mgr.store.get_proposal(request["proposal_hash"]) is not None
     ]
     if json_output:
         typer.echo(json.dumps({"pending": pending, "count": len(pending)}, indent=2))
@@ -136,7 +137,19 @@ def approval_approve(request_id: str = typer.Argument(..., help="Approval reques
         response = ApprovalBroker(mgr.store).approve_operation_once(
             request_id, _build_context(), gate=ExecutionAuthorizationGate(mgr.store)
         )
+    elif mgr.store.get_proposal(req["proposal_hash"]) is not None:
+        from nous_runtime.governance.gate import ExecutionAuthorizationGate
+        from nous_runtime.governance.broker import ApprovalBroker
+
+        response = ApprovalBroker(mgr.store).respond_legacy(
+            request_id,
+            "approve",
+            _build_context(),
+            gate=ExecutionAuthorizationGate(mgr.store),
+        )
     else:
+        # Unbound compatibility requests record a decision only; they do not
+        # manufacture an execution lease.
         response = mgr.approve(request_id, _subject_id())
     typer.echo(f"Approved. Response: {response.response_id}")
 
@@ -162,6 +175,17 @@ def approval_deny(
 
         response = ApprovalBroker(mgr.store).deny_operation(
             request_id, _build_context(), gate=ExecutionAuthorizationGate(mgr.store)
+        )
+    elif mgr.store.get_proposal(req["proposal_hash"]) is not None:
+        from nous_runtime.governance.gate import ExecutionAuthorizationGate
+        from nous_runtime.governance.broker import ApprovalBroker
+
+        response = ApprovalBroker(mgr.store).respond_legacy(
+            request_id,
+            "deny",
+            _build_context(),
+            gate=ExecutionAuthorizationGate(mgr.store),
+            reason=reason,
         )
     else:
         response = mgr.deny(request_id, _subject_id(), reason=reason)

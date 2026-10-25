@@ -13,12 +13,9 @@ from typing import Any, Callable
 from nous_runtime.core.redaction import redact_sensitive_data
 from nous_runtime.locking import file_lock
 from nous_runtime.workflow.models import (
-    StepType,
-    TriggerType,
     WorkflowDefinition,
     WorkflowRun,
     WorkflowState,
-    WorkflowStep,
 )
 
 
@@ -130,6 +127,37 @@ class WorkflowStore:
             }
             for row in rows
         ]
+
+    def list_definition_summaries(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        """Bounded picker data; do not load private parameters into an index."""
+        with self._db() as connection:
+            rows = connection.execute(
+                "SELECT workflow_id, version FROM workflow_definitions ORDER BY workflow_id, version LIMIT ?",
+                (max(1, min(int(limit), 100)),),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_run_summaries(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        """Original run identity/state without repeatedly transferring results."""
+        with self._db() as connection:
+            rows = connection.execute(
+                "SELECT run_id FROM workflow_runs ORDER BY rowid DESC LIMIT ?",
+                (max(1, min(int(limit), 100)),),
+            ).fetchall()
+            summaries = []
+            for row in rows:
+                # Reuse the canonical persisted-identity checks. An index column
+                # alone must not turn a damaged original record into success.
+                run = self._require_run(connection, row["run_id"])
+                summaries.append(
+                    {
+                        "run_id": run.run_id,
+                        "workflow_id": run.workflow_id,
+                        "workflow_version": run.workflow_version,
+                        "state": run.state.value,
+                    }
+                )
+            return summaries
 
     def get_definition(
         self, workflow_id: str, version: str
@@ -655,55 +683,15 @@ class WorkflowStore:
 
     @staticmethod
     def _definition_dict(definition: WorkflowDefinition) -> dict[str, Any]:
-        return {
-            "workflow_id": definition.workflow_id,
-            "version": definition.version,
-            "trigger": definition.trigger.value,
-            "steps": [
-                {
-                    "step_id": step.step_id,
-                    "step_type": step.step_type.value,
-                    "action": step.action,
-                    "depends_on": list(step.depends_on),
-                    "condition": step.condition,
-                    "retries": step.retries,
-                    "timeout_seconds": step.timeout_seconds,
-                    "approval_required": step.approval_required,
-                    "compensation": step.compensation,
-                    "params": step.params,
-                }
-                for step in definition.steps
-            ],
-            "inputs_schema": definition.inputs_schema,
-            "outputs_schema": definition.outputs_schema,
-            "audit_metadata": definition.audit_metadata,
-        }
+        from nous_runtime.workflow.models import definition_to_dict
+
+        return definition_to_dict(definition)
 
     @staticmethod
     def _definition(data: dict[str, Any]) -> WorkflowDefinition:
-        return WorkflowDefinition(
-            str(data["workflow_id"]),
-            str(data["version"]),
-            TriggerType(str(data["trigger"])),
-            tuple(
-                WorkflowStep(
-                    str(item["step_id"]),
-                    StepType(str(item["step_type"])),
-                    str(item.get("action") or ""),
-                    tuple(item.get("depends_on") or ()),
-                    str(item.get("condition") or ""),
-                    int(item.get("retries") or 0),
-                    float(item.get("timeout_seconds") or 60),
-                    bool(item.get("approval_required", False)),
-                    str(item.get("compensation") or ""),
-                    dict(item.get("params") or {}),
-                )
-                for item in data.get("steps") or ()
-            ),
-            dict(data.get("inputs_schema") or {}),
-            dict(data.get("outputs_schema") or {}),
-            dict(data.get("audit_metadata") or {}),
-        )
+        from nous_runtime.workflow.models import definition_from_dict
+
+        return definition_from_dict(data)
 
     @staticmethod
     def _run_dict(run: WorkflowRun) -> dict[str, Any]:

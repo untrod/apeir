@@ -3943,6 +3943,77 @@ existing EventStream widget through the real authenticated Controller switch;
 no model, physical or native qualification is inferred. Exact PR and resulting
 main CI remain separate requirements.
 
+## R5 Workflow Builder software integration — 2026-10-25
+
+REUSE WorkflowDefinition, Compiler, TaskGraph, WorkflowRuntime, WorkflowStore,
+EventStream, API authentication/nonce, Gate, Broker/LeaseManager, human-session
+identity/permissions, stable Studio panel portals and private-draft protection.
+EXTEND the existing `workflow` panel and HTTP route family; no new executor,
+scheduler, event bus, database or authority is introduced. Public JSON codecs in
+the existing models now serve CLI and Store. FIX CAPABILITY-without-action to
+return a validation error instead of an incidental compiler KeyError.
+
+The React Flow12.12.0 MIT editor supports nodes/dependency edges, multi-selection,
+copy/delete, parameter JSON, layout/undo/redo and explicit portable draft files.
+Coordinates stay separate from canonical CLI definitions and Studio version1
+layouts. Unapplied/invalid parameters block registration/execution. Moving a
+panel retains its React state; Controller retirement retains private draft export
+and cannot import old authorization into the new Controller. Graph imports do
+not execute. Pure Wait/Condition/Transform/Approval handlers are the only bound
+step types. Host-specific actions, command/Agent/Connector/Capability execution,
+expression conditions and compensation hosts are unavailable here. WAIT is an
+immediate barrier. Declared JSON input/output schemas do not imply typed output
+routing; edges represent dependencies.
+
+Governed mutations bind the actual server workspace and immutable definition,
+not a request-body workspace. Run submission compares the reviewed draft with
+the registered version and uses an original idempotency key. Run recovery never
+accepts client `approved_steps`. Step approval additionally requires the existing
+nonserialized current human identity and original-step permission; the same
+HTTP human nonce protects that request. An ordinary service lease cannot approve
+it. Index endpoints transfer bounded identity/state summaries; private definitions
+and results are fetched explicitly. The existing Store persists original IDs,
+bindings, checkpoints and outcome uncertainty; no independent physical effect is
+claimed from these computational results.
+
+Actual sandbox-enabled Chromium/CLI/HTTP qualification creates and connects two
+steps, validates, exports a canonical definition accepted by the existing CLI,
+saves/restores a private draft, registers through a one-use approval lease, runs
+the real pure handlers, inspects original events, restarts the owned Runtime and
+loads the same Run ID. A different Controller cannot retrieve it, and a missing
+bearer is rejected. The independent test approver uses the actual public CLI and its attested local
+OS-owner context outside the browser; this is software authority-fixture
+evidence, not real-IdP qualification. Separate cryptographic fake-IdP tests exercise current human
+approval, wrong scope, serialized identity, changed binding and revocation.
+Full exact-commit required CI and protected resulting-main acceptance remain
+separate gates. No model, strong-sandbox command, physical, Windows native,
+Token-saving or end-to-end performance PASS follows from this software scope.
+
+
+A clean Python3.12 wheel consumer outside the checkout additionally reproduced
+an existing public CLI disconnect: approving a Gate-bound API request recorded
+APPROVED without issuing its execution lease, so the original registration
+remained blocked. The CLI now routes bound approval/denial through the existing
+ApprovalBroker's attested-human/original-proposal checks and one-use lease
+transaction. Unbound compatibility decisions retain their old non-executing
+semantics. Local listing includes the owner's Gate-bound API requests. Original
+installed-wheel failure evidence and process-cleanup results are retained
+privately. This is a necessary source-user path, not a new approval authority.
+
+After the CLI fix, a new clean Python3.12.14 virtual environment installed the
+wheel for `e0dbf6ffcf8994803096918fb7fbd41a19c35fb7` (SHA256
+`6d3a4f41a1568d23696cbf8366d0fe764527a3db81c724571bb5013f4be92f02`).
+From an owned temporary workspace outside the checkout, the public installed CLI
+validated the definition, supplied the original API approval and admitted
+registration/execution through the real HTTP Gate. After stopping and restarting
+the installed Runtime, detail/events and repeated same-key submission retained
+Run `wfr_fd79c162e6c948c8b12c9c6658a09955`, with exactly one persisted run. Normal
+process cleanup passed. The browser path also uses this public CLI approval,
+not a low-level lease fixture. This is Linux installed-wheel software evidence;
+exact resulting-main qualification, model, sandbox and native gates remain
+independent.
+
+
 ### R5 source-entry CI follow-up — 2026-10-25
 
 PR95 at `a7b919f3351f07ceb9237c0e0b05f2971c804580` failed Core run
