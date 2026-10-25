@@ -141,10 +141,23 @@ class WorkflowStore:
         """Original run identity/state without repeatedly transferring results."""
         with self._db() as connection:
             rows = connection.execute(
-                "SELECT run_id, workflow_id, workflow_version, state FROM workflow_runs ORDER BY rowid DESC LIMIT ?",
+                "SELECT run_id FROM workflow_runs ORDER BY rowid DESC LIMIT ?",
                 (max(1, min(int(limit), 100)),),
             ).fetchall()
-        return [dict(row) for row in rows]
+            summaries = []
+            for row in rows:
+                # Reuse the canonical persisted-identity checks. An index column
+                # alone must not turn a damaged original record into success.
+                run = self._require_run(connection, row["run_id"])
+                summaries.append(
+                    {
+                        "run_id": run.run_id,
+                        "workflow_id": run.workflow_id,
+                        "workflow_version": run.workflow_version,
+                        "state": run.state.value,
+                    }
+                )
+            return summaries
 
     def get_definition(
         self, workflow_id: str, version: str

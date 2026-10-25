@@ -409,3 +409,21 @@ def test_uncertain_original_host_can_be_cancelled_without_replaying_or_claiming_
     assert effects == [original.run_id]
     assert original_host.resume(original.run_id).state.value == "unknown"
     assert effects == [original.run_id]
+
+
+def test_history_summary_does_not_bypass_original_identity_validation(api):
+    import sqlite3
+    from nous_runtime.workflow import WorkflowRuntime
+    from nous_runtime.workflow.store import WorkflowBindingError
+
+    _, _, root = api
+    runtime = WorkflowRuntime(str(root))
+    definition = definition_from_dict(spec())
+    runtime.register(definition)
+    run = runtime.start(definition.workflow_id, definition.version)
+    with sqlite3.connect(runtime.store.path) as db:
+        db.execute(
+            "UPDATE workflow_runs SET state='unknown' WHERE run_id=?", (run.run_id,)
+        )
+    with pytest.raises(WorkflowBindingError):
+        runtime.store.list_run_summaries()
