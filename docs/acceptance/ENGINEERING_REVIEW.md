@@ -4098,3 +4098,17 @@ fix declares the normal pure-Python package dependency in Distribution metadata;
 it does not add a private module or manually patch the consumer environment.
 A rebuilt wheel must pass the same external public client and restart sequence
 in a new venv before claiming that installed path PASS.
+
+The corrected base Wheel at `4d8d19e` passed in a new Python
+3.12.14 venv outside the checkout. Its SHA-256 is
+`b237e8011ccbe441210e8efb0b3a7490423504aebd1bc9ffc3584b8fe5a154ef`. The copied standalone example
+client performed review, install, enable, real sanitized read, lifecycle metadata
+read, disable/denial, same-version conflict, update, restart recovery and remove.
+Every mutation used the public original owner approval CLI; there were no private
+Runtime imports or manually added consumer dependencies. Original Workflow Run
+`wfr_9557396af0664f2eae45cb1328d05c9b` remained unchanged after restart and repeated original
+idempotency key. This is Linux installed-source software evidence, not a native
+or physical qualification. Initial undeclared-dependency and local disk-exhaustion
+failures remain retained; a fresh venv was used after freeing only reproducible
+inactive frontend dependency directories. Original source and native evidence
+were preserved.
