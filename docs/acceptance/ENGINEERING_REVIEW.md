@@ -8,6 +8,52 @@ This record distinguishes reproduced defects, inspected risks and unqualified
 external dependencies. It is not an exhaustive proof that the repository is
 bug-free, a physical acceptance, or production certification.
 
+## R5 completion code audit and public entry review — 2026-10-25
+
+Audit base:Distribution62cbe6ff53a769172067740370f26fb18eb3c094;
+frozen Kernel87fd1b2ff28ef14ab1a515a58162592b452fda2e. Both remote heads
+were checked, all five latest-main workflows passed, no PR was open and only
+main existed before starting this work. This audit does not promote a feature
+from an enum, interface or screenshot to an execution qualification.
+
+| Capability / owner | Classification | Actual entry / consumer / evidence |
+| --- | --- | --- |
+| Docking/layout: `desktop/src/components/studio/StudioShell.tsx`, `lib/studioLayout.ts`, `lib/studioLibrary.ts` | REUSE | Existing Studio panel table, version1 presentation and protected drafts; `desktop/e2e/studio-runtime.spec.ts` exercises real API/browser layout and Controller isolation |
+| Dashboard: `StudioDashboard.tsx`, `StudioData.tsx` | REUSE | Shared Operations/health/Usage/EventClient reads; no widget execution authority; same E2E and bounded-layout tests |
+| Workflow models/compiler/runtime/store/CLI: `nous_runtime/workflow/` | EXTEND | Public `apeir workflow`; durable definitions, checkpoints and original runs; `tests/test_workflow_runtime.py`, `tests/test_workflow_safety.py`; graphical editing and definition management HTTP consumers missing |
+| Generic Workflow handlers | EXTEND | Transform, immediate wait/barrier, input condition and approval builtins exist. Agent/capability/connector/command require trusted host handlers; enum membership is not generic execution availability |
+| Automation: `automation/consumer.py` and existing WorkflowStore | REUSE | Durable bounded simulated-reality consumer, existing Console/API; recurring/general triggers retain their documented limits |
+| AgentSession/Work/TaskPlan | REUSE | Existing supervisor, PlanWorkflowBridge and original Work/Run identities; existing Work/Automation integration tests; no new Agent authority |
+| Governance/ApprovalBroker/human sessions | REUSE | Existing API admission, exact operation bindings, human mutation nonces and revocation; `tests/governance`, `tests/control_plane` |
+| Extension/Skill/CAS: `extensions/registry.py`, `skills/`, `artifacts/` | EXTEND | Verified packages, source/digest/provenance, lifecycle and original CAS already exist. Studio declarative contributions and host data bridge are missing; no second package registry is needed |
+| Provider SDK/model configuration | REUSE | `sdk/provider/python`, existing Gateway/NKI and Model Center; examples use public contracts; real account qualification remains independent |
+| Workspace/Proposal/Diff | REUSE | Existing developer API, current file SHA and human-reviewed write consumer; `tests/test_workspace_proposals.py` and Desktop tests |
+| ProcessSession/Environment | REUSE / BLOCKED | Existing bounded execution and cancellation; untrusted execution requires the original strong sandbox. UI existence is not PTY or OCI qualification |
+| Events/evidence/effect verification | REUSE | Configured-owner RuntimeEventBus, per-Run EventStream, CAS and current verifiers; original journals remain authoritative for their respective scopes |
+| Nodes/Devices/Environment | REUSE | Existing Controller/Node signed reports, Reality registry and EnvironmentRuntime; software tests do not replace Jetson/ESP32 physical qualification |
+| Native Desktop/Kernel/install | BLOCKED | Current Tauri/sidecar/official packaging pipeline exists. Original locked Windows bytes remain unavailable; deterministic R4 candidates await explicit lock approval. Windows10 lifecycle is PENDING |
+
+The tracked Markdown inventory covers235 Distribution and66 frozen-Kernel files,
+with hashes, titles, local-link checks and legacy-brand occurrences retained in
+private audit evidence. Both inventories have0 broken local links and0 identical
+content groups. Legacy Nous identifiers are compatibility/history, not a blanket
+rename target. Kernel Markdown is read-only in this change; its historical CI
+badge uses the prior owner URL and its scoped native claims do not qualify the
+current Distribution installer. External redirects and live service availability
+are not established by the local-link checker.
+
+REUSE the existing README pair, canonical Quick Start and Studio guide. The
+public entry now separates source downloads, developer checkout and blocked
+native installation. Its screenshot is an unedited actual source-browser capture
+of the accepted Studio implementation, with no Provider or hardware success
+invented. The latest qualified source manifests remain pinned to62cbe6f; a docs
+commit is not substituted for that software qualification. Archive and per-file
+checksums, clean wheel install, actual HTTP/GUI file read, layout restore and
+model-free shutdown were independently exercised. Documentation regression:
+320 PASS,5 Windows-only cases not executed on this Linux host. CLI/source steps
+reuse the exact qualified artifacts; Windows activation syntax is an existing
+instruction, not a claim of current native installation acceptance.
+
 ## Studio composition review — 2026-10-24
 
 Starting main `9048af81` includes normally merged R4 PR #90; its component lock
@@ -3966,3 +4012,20 @@ process cleanup passed. The browser path also uses this public CLI approval,
 not a low-level lease fixture. This is Linux installed-wheel software evidence;
 exact resulting-main qualification, model, sandbox and native gates remain
 independent.
+
+
+### R5 source-entry CI follow-up — 2026-10-25
+
+PR95 at `a7b919f3351f07ceb9237c0e0b05f2971c804580` failed Core run
+[40181568192](https://github.com/untrod/apeir/actions/runs/40181568192), Linux
+Python3.10 job121133551259. The README omitted the existing local-first contract;
+the text was restored in both languages. Separately, the actual CLI event-owner
+startup probe raised `TimeoutError` before receiving HTTP headers. The CLI binds
+before initialization to protect the active session on port conflict; a connected
+socket therefore does not establish HTTP readiness. The read-only startup loop
+now handles this transient outcome, with the same1-second request timeout,
+10-second overall deadline and unchanged original/foreign-event assertions.
+Fault injection covers connection refusal and pre-serving timeout, then exercises
+the real CLI/HTTP path. The affected EventStream/startup/hygiene checks passed29
+locally. This corrects probe handling; it does not qualify or close the separate
+historical Windows SQLite, relay, signed-response or Automation timing issues.
