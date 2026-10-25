@@ -650,8 +650,8 @@ class ProcessSessionStore:
 
     def _host_state(self, session_id: str) -> dict[str, Any]:
         path = self._directory(session_id) / "host.json"
-        if not path.is_file():
-            return {}
+        # Read one current publication directly. A separate pathname sample may
+        # already be obsolete while the bound helper replaces its journal.
         try:
             value = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
