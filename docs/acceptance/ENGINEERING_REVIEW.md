@@ -4120,3 +4120,11 @@ per-view types, depth, source and action limits are unchanged. A 20-package
 counterexample now loads, while malformed rendered record primitives and the
 65th package fail admission. This is a bounded contract fix, not a performance
 improvement claim.
+
+The original DistributedWork contract defines `VERIFIED` as receipt verification
+before independent effect admission (`record_effect_verification` requires that
+stage). Dashboard previously rendered that stage using the generic success tone.
+The source renderer now separates `RECEIPT_VERIFIED` from the actual reported
+`effect_verification.verdict`; absent or invalid verdicts stay UNKNOWN. Regression
+cases cover receipt-verified UNKNOWN/MISMATCH, digest-only MATCH and a separately
+reported effect MATCH. No verification is calculated or granted by the UI.

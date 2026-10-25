@@ -68,3 +68,5 @@
 .studio-status-warning { color:color-mix(in srgb,var(--nous-warning) 80%,var(--nous-text)); }
 .studio-status-danger { color:color-mix(in srgb,var(--nous-danger) 80%,var(--nous-text)); }
 .studio-status-info { color:color-mix(in srgb,var(--nous-info) 80%,var(--nous-text)); }
+.studio-work-outcome { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 10px; }
+.studio-work-outcome > span:last-child { white-space: nowrap; }

@@ -26,8 +26,15 @@ const record = (value: unknown): Record<string, unknown> => value !== null && ty
 type Locale = "en" | "zh";
 const translate = (locale: Locale) => (en: string, zh: string) => locale === "zh" ? zh : en;
 function Status({ state }: { state: string }) {
-  const tone = ["READY", "ONLINE", "CONNECTED", "MATCH", "VERIFIED"].includes(state) ? "success" : ["ERROR", "FAILED", "MISMATCH", "REVOKED"].includes(state) ? "danger" : ["BLOCKED", "UNCONFIGURED", "WAITING_APPROVAL"].includes(state) ? "warning" : state === "RUNNING" ? "info" : "neutral";
+  const tone = ["READY", "ONLINE", "CONNECTED", "MATCH"].includes(state) ? "success" : ["ERROR", "FAILED", "MISMATCH", "REVOKED"].includes(state) ? "danger" : ["BLOCKED", "UNCONFIGURED", "WAITING_APPROVAL"].includes(state) ? "warning" : state === "RUNNING" ? "info" : "neutral";
   return <span className={`studio-status studio-status-${tone}`} data-state={state}><span aria-hidden="true" />{state}</span>;
+}
+/** Receipt stage and independent effect verdict are separate Runtime projections. */
+export function WorkOutcome({ row, locale }: { row: Record<string, unknown>; locale: Locale }) {
+  const stage = row.state === "VERIFIED" ? "RECEIPT_VERIFIED" : text(row.state ?? row.status);
+  const reported = record(row.effect_verification).verdict;
+  const effect = typeof reported === "string" && ["MATCH", "MISMATCH", "UNKNOWN"].includes(reported) ? reported : "UNKNOWN";
+  return <span className="studio-work-outcome"><Status state={stage} /><span>{translate(locale)("Effect", "效果")}: <Status state={effect} /></span></span>;
 }
 function Empty({ children, state = "UNKNOWN" }: { children: React.ReactNode; state?: string }) {
   return <div className="studio-empty" role="status"><Status state={state} /><span>{children}</span></div>;
@@ -89,7 +96,7 @@ function DataWidget({ type, active, inspect, open, locale }: { type: string; act
   if (!Array.isArray(rows)) return <Empty>{t("No supported source", "暂无受支持的数据源")}</Empty>;
   if (!rows.length) return <Empty>{t("No records reported", "暂无记录")}</Empty>;
   return <>{type === "nodes" && <div className="studio-node-count"><strong>{rows.filter(row => row.connected === true).length}</strong><span>{t("connected", "已连接")} / {rows.length}</span></div>}{rows.slice(0, 40).map((row, i) => <div key={String(row.node_id ?? row.device_id ?? row.work_id ?? row.sequence ?? i)} className="studio-widget-row">
-    {type === "resources" ? <ResourceRow row={row} locale={locale} /> : <><div className="studio-row-heading"><strong>{text(row.node_name ?? row.node_id ?? row.device_id ?? row.work_id ?? row.event_type ?? row.action ?? row.incident_id ?? `Record ${i + 1}`)}</strong><Status state={type === "nodes" ? row.connected === true ? "CONNECTED" : row.connected === false ? "OFFLINE" : "UNKNOWN" : text(row.state ?? row.status ?? row.lifecycle ?? row.verdict ?? row.event_type)} /></div>
+    {type === "resources" ? <ResourceRow row={row} locale={locale} /> : <><div className="studio-row-heading"><strong>{text(row.node_name ?? row.node_id ?? row.device_id ?? row.work_id ?? row.event_type ?? row.action ?? row.incident_id ?? `Record ${i + 1}`)}</strong>{["works", "evidence"].includes(type) ? <WorkOutcome row={row} locale={locale} /> : <Status state={type === "nodes" ? row.connected === true ? "CONNECTED" : row.connected === false ? "OFFLINE" : "UNKNOWN" : text(row.state ?? row.status ?? row.lifecycle ?? row.verdict ?? row.event_type)} />}</div>
       {type === "nodes" ? <div className="studio-card-bottom"><small>{t("Trust", "信任")}: {text(row.trust_status)}</small><button onClick={() => typeof row.node_id === "string" && inspect({ kind: "node", nodeId: row.node_id })}>{t("Inspect", "检查")} <StudioIcon name="arrow" /></button></div> : <button className="studio-detail-link" onClick={() => open(type === "diagnostics" ? "operations" : type === "works" ? "tasks" : type)}>{t("Details", "详情")} <StudioIcon name="arrow" /></button>}
     </>}
   </div>)}{["evidence", "activity"].includes(type) && <details className="studio-card-details"><summary>{t("Source", "来源")}</summary>{type === "evidence" ? t("Distributed Work receipt / verification metadata. Receipt is not independent Observation or physical verification.", "分布式任务回执与验证元数据。回执不代表独立观测或物理验证。") : t("GovernanceStore audit", "GovernanceStore 审计")}</details>}</>;
