@@ -424,6 +424,12 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   await expect(builder.locator(".react-flow__node")).toHaveCount(2);
   await builder.locator(".react-flow__node").first().locator(".react-flow__handle.source").dragTo(builder.locator(".react-flow__node").nth(1).locator(".react-flow__handle.target"));
   await expect(builder.locator(".react-flow__edge")).toHaveCount(1);
+  await builder.locator(".react-flow__node").nth(1).click();
+  await page.keyboard.press("Delete");
+  await expect(builder.locator(".react-flow__node")).toHaveCount(1);
+  await builder.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(builder.locator(".react-flow__node")).toHaveCount(2);
+  await expect(builder.locator(".react-flow__edge")).toHaveCount(1);
   await builder.getByRole("button", { name: "Arrange", exact: true }).click();
   await builder.locator(".react-flow__node").first().click();
   await builder.getByRole("textbox", { name: "Step parameters", exact: true }).fill("{");
@@ -472,9 +478,17 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   await approveRecordedProposal();
   await builder.getByRole("button", { name: "Run", exact: true }).click();
   await expect(builder.locator(".studio-workflow-result pre")).toContainText('"state": "completed"');
+  await builder.getByText("Raw record / events", { exact: true }).click();
   const evidence = await builder.locator(".studio-workflow-result pre").textContent();
   expect(evidence).toContain("workflow.completed"); expect(evidence).toContain("Hello APEIR");
   const runId = JSON.parse(evidence!).run.run_id as string;
+  await builder.getByText("Raw record / events", { exact: true }).click();
+  await expect(builder.locator(".react-flow__node").first()).toContainText("completed");
+  await expect.poll(async () => {
+    const canvas = await builder.locator(".studio-workflow-canvas").boundingBox();
+    const nodes = await builder.locator(".react-flow__node").evaluateAll(nodes => nodes.map(node => { const rect = node.getBoundingClientRect(); return { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom }; }));
+    return !!canvas && nodes.every(rect => rect.x >= canvas.x && rect.y >= canvas.y && rect.right <= canvas.x + canvas.width && rect.bottom <= canvas.y + canvas.height);
+  }).toBe(true);
   await page.screenshot({ path: info.outputPath("workflow-real-runtime-source-browser.png"), fullPage: true });
   // Restart the actual owned CLI process against its original durable workspace.
   const originalRuntime = runtimes[0];

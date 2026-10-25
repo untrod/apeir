@@ -13,3 +13,6 @@
 .studio-workflow-history { text-align:left; overflow-wrap:anywhere; } .studio-workflow-history small { display:block; font-size:10px; }
 .studio-workflow-result { max-height:35%; overflow:auto; padding:8px; border-top:1px solid var(--nous-border); } .studio-workflow-result span { display:block; } .studio-workflow-result pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; }
 @media(max-width:650px) { .studio-workflow-body aside { width:160px; } }
+
+.studio-workflow-step-states { display:flex; gap:6px; flex-wrap:wrap; list-style:none; padding:0; margin:6px 0; } .studio-workflow-step-states li { display:flex; gap:8px; padding:3px 6px; border:1px solid var(--nous-border); }
+.studio-workflow .react-flow { --xy-edge-stroke:var(--nous-text-secondary); --xy-handle-background-color:var(--nous-accent); }
