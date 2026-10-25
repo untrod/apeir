@@ -427,3 +427,46 @@ def test_history_summary_does_not_bypass_original_identity_validation(api):
         )
     with pytest.raises(WorkflowBindingError):
         runtime.store.list_run_summaries()
+
+
+def test_public_cli_approval_issues_the_original_api_subject_one_use_lease(api, capsys):
+    import typer
+    from nous_runtime.governance.cli import approval_approve, approval_list
+
+    call, gate, _ = api
+    body = {"definition": spec()}
+    pending = call("POST", "/api/v1/workflow/register", body)
+    request_id = pending["error"]["details"]["approval_request_id"]
+    capsys.readouterr()
+    approval_list(json_output=True)
+    assert request_id in capsys.readouterr().out
+    approval_approve(request_id)
+    assert gate.store.get_approval_request(request_id)["status"] == "APPROVED"
+    leases = gate.store.list_active_leases("api-service")
+    assert len(leases) == 1 and leases[0]["remaining_uses"] == 1
+    registered = call("POST", "/api/v1/workflow/register", body)
+    assert registered["ok"]
+    assert gate.store.get_lease(leases[0]["lease_id"])["remaining_uses"] == 0
+    with pytest.raises(typer.Exit):
+        approval_approve(request_id)
+    assert gate.store.list_active_leases("api-service") == []
+
+
+def test_public_cli_api_decisions_keep_current_human_and_denial_boundaries(
+    api, monkeypatch
+):
+    import nous_runtime.governance.cli as cli
+
+    call, gate, _ = api
+    pending = call("POST", "/api/v1/workflow/register", {"definition": spec()})
+    request_id = pending["error"]["details"]["approval_request_id"]
+    original_subject = cli._subject_id
+    monkeypatch.setattr(cli, "_subject_id", lambda: "api-service")
+    with pytest.raises(PermissionError):
+        cli.approval_approve(request_id)
+    assert gate.store.list_active_leases("api-service") == []
+    monkeypatch.setattr(cli, "_subject_id", original_subject)
+    cli.approval_deny(request_id, reason="qualification explicitly denied")
+    record = gate.store.get_approval_request(request_id)
+    assert record["status"] == "DENIED"
+    assert gate.store.list_active_leases("api-service") == []

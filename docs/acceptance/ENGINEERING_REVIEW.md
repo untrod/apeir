@@ -3942,3 +3942,14 @@ approval, wrong scope, serialized identity, changed binding and revocation.
 Full exact-commit required CI and protected resulting-main acceptance remain
 separate gates. No model, strong-sandbox command, physical, Windows native,
 Token-saving or end-to-end performance PASS follows from this software scope.
+
+
+A clean Python3.12 wheel consumer outside the checkout additionally reproduced
+an existing public CLI disconnect: approving a Gate-bound API request recorded
+APPROVED without issuing its execution lease, so the original registration
+remained blocked. The CLI now routes bound approval/denial through the existing
+ApprovalBroker's attested-human/original-proposal checks and one-use lease
+transaction. Unbound compatibility decisions retain their old non-executing
+semantics. Local listing includes the owner's Gate-bound API requests. Original
+installed-wheel failure evidence and process-cleanup results are retained
+privately. This is a necessary source-user path, not a new approval authority.

@@ -129,6 +129,12 @@ Gate against the actual server workspace, never a body-selected target. Owner
 policy must allow the applicable workspace read/write or workflow execution
 permission; pending API approval identifiers can be reviewed in Operations.
 Unavailable human identity configuration stays BLOCKED, not self-approved.
+For a Gate-bound API request, a trusted local owner can instead inspect
+`apeir --no-intelligence approval show APPROVAL_ID --json` in the owning workspace
+and explicitly approve it with `apeir --no-intelligence approval approve
+APPROVAL_ID`. The existing Broker verifies the current OS-owner context and
+issues one proposal/subject-bound lease; retry only the original reviewed request.
+Unbound compatibility approval records do not become execution permission.
 
 **Save draft** explicitly downloads a private version1 bundle containing the
 canonical definition and separate canvas positions. **Import** restores that
