@@ -553,6 +553,17 @@ export async function humanMutation<T = unknown>(path: string, body: Record<stri
   return result;
 }
 
+/** Same service/human surface, with no automatic replay of a mutation. */
+export async function governedStudioMutation<T>(path: string, body: Record<string, unknown>, guard: () => void) {
+  const current = captureRuntimeConnection(); current(); guard();
+  const session = await api<{ authenticated?: boolean }>("/api/v1/control/human/session");
+  current(); guard();
+  const result = session.authenticated === true
+    ? await humanMutation<T>(path, body, guard)
+    : await api<T>(path, { method: "POST", body: JSON.stringify(body) });
+  current(); guard(); return result;
+}
+
 // Automations: management proposes intent; it supplies no execution authority.
 export async function fetchAutomations(guard: () => void = () => {}) {
   const current = captureRuntimeConnection();

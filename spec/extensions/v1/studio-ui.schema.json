@@ -1,0 +1,378 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/untrod/apeir/spec/extensions/v1/studio-ui.schema.json",
+  "title": "APEIR declarative Studio UI contributions v1",
+  "description": "Metadata in the existing Extension IR. No permission grant. Arbitrary JavaScript is unsupported.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "contributions"
+  ],
+  "properties": {
+    "schema": {
+      "const": "apeir.studio-ui/v1"
+    },
+    "contributions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "view"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,31}$"
+          },
+          "kind": {
+            "enum": [
+              "panel",
+              "widget"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "subscriptions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "runtime.status",
+                "runtime.lifecycle"
+              ]
+            }
+          },
+          "events": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "runtime.started",
+                "runtime.stopped"
+              ]
+            }
+          },
+          "view": {
+            "$ref": "#/$defs/view"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "leaf": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "text"
+          ],
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "kind": {
+              "const": "text"
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "source",
+            "field"
+          ],
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "kind": {
+              "const": "metric"
+            },
+            "source": {
+              "const": "runtime.status"
+            },
+            "field": {
+              "enum": [
+                "capabilities",
+                "devices",
+                "events",
+                "jobs_pending",
+                "kernel_ready",
+                "kernel_state",
+                "providers",
+                "running",
+                "version"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "source",
+            "field"
+          ],
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "kind": {
+              "const": "status"
+            },
+            "source": {
+              "const": "runtime.status"
+            },
+            "field": {
+              "enum": [
+                "capabilities",
+                "devices",
+                "events",
+                "jobs_pending",
+                "kernel_ready",
+                "kernel_state",
+                "providers",
+                "running",
+                "version"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "source",
+            "field"
+          ],
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "kind": {
+              "const": "chart"
+            },
+            "source": {
+              "const": "runtime.status"
+            },
+            "field": {
+              "enum": [
+                "capabilities",
+                "devices",
+                "events",
+                "jobs_pending",
+                "kernel_ready",
+                "kernel_state",
+                "providers",
+                "running",
+                "version"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "source",
+            "fields"
+          ],
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "kind": {
+              "const": "table"
+            },
+            "source": {
+              "const": "runtime.status"
+            },
+            "fields": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 12,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "field",
+                  "label"
+                ],
+                "properties": {
+                  "field": {
+                    "enum": [
+                      "capabilities",
+                      "devices",
+                      "events",
+                      "jobs_pending",
+                      "kernel_ready",
+                      "kernel_state",
+                      "providers",
+                      "running",
+                      "version"
+                    ]
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "label",
+            "action",
+            "params"
+          ],
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "kind": {
+              "const": "action"
+            },
+            "action": {
+              "const": "workflow.run"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "workflow_id",
+                "version"
+              ],
+              "properties": {
+                "workflow_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+                },
+                "version": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+                },
+                "inputs": {
+                  "type": "object",
+                  "propertyNames": {
+                    "pattern": "^(?!_)"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "child": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/leaf"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "children"
+          ],
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "kind": {
+              "const": "stack"
+            },
+            "children": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 12,
+              "items": {
+                "$ref": "#/$defs/leaf"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "view": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/leaf"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "children"
+          ],
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "kind": {
+              "const": "stack"
+            },
+            "children": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 12,
+              "items": {
+                "$ref": "#/$defs/child"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

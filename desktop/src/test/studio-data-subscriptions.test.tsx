@@ -14,15 +14,16 @@ it("deduplicates independent widget reads, pauses hidden polling and retires own
   const view = render(<StudioSnapshot><Reader /></StudioSnapshot>);
   await act(async () => { await vi.advanceTimersByTimeAsync(0); });
   expect(shared.loading).toBe(false);
-  expect(api).toHaveBeenCalledTimes(1);
+  const operationReads = () => vi.mocked(api).mock.calls.filter(([path]) => path === "/api/v1/control/operations").length;
+  expect(operationReads()).toBe(1);
   let visible = true;
   const stopA = shared.subscribeLive(() => visible, ["operations"]), stopB = shared.subscribeLive(() => visible, ["operations"]);
-  await act(async () => { await vi.advanceTimersByTimeAsync(30); }); expect(api).toHaveBeenCalledTimes(1);
-  await act(async () => { await vi.advanceTimersByTimeAsync(5000); }); expect(api).toHaveBeenCalledTimes(2);
-  visible = false; await act(async () => { await vi.advanceTimersByTimeAsync(10000); }); expect(api).toHaveBeenCalledTimes(2);
+  await act(async () => { await vi.advanceTimersByTimeAsync(30); }); expect(operationReads()).toBe(1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(5000); }); expect(operationReads()).toBe(2);
+  visible = false; await act(async () => { await vi.advanceTimersByTimeAsync(10000); }); expect(operationReads()).toBe(2);
   visible = true;
-  await act(async () => { await vi.advanceTimersByTimeAsync(5000); }); expect(api).toHaveBeenCalledTimes(3);
-  stopA(); stopB(); view.unmount(); await vi.advanceTimersByTimeAsync(5000); expect(api).toHaveBeenCalledTimes(3);
+  await act(async () => { await vi.advanceTimersByTimeAsync(5000); }); expect(operationReads()).toBe(3);
+  stopA(); stopB(); view.unmount(); await vi.advanceTimersByTimeAsync(5000); expect(operationReads()).toBe(3);
 });
 it("never publishes a retired Controller response into the new scoped provider", async () => {
   setConfig({ url: "http://localhost:8770", token: "dashboard.fake.a" });

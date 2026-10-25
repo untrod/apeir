@@ -45,6 +45,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
+from nous_runtime.api.studio_extension_routes import (
+    STUDIO_EXTENSION_GOVERNANCE,
+    STUDIO_EXTENSION_ROUTES,
+)
 from nous_runtime.api.responses import err_response, ok_response
 from nous_runtime.extensions.mcp_server import handle_mcp_call
 from nous_runtime.core.errors import ArtifactError
@@ -1952,6 +1956,12 @@ try:
 except ImportError:
     DEVELOPER_AUTHENTICATED_ROUTES = set()
 
+# Declarative UI contributions reuse the authenticated dispatcher and existing Registry.
+ROUTES.update(STUDIO_EXTENSION_ROUTES)
+DEVELOPER_AUTHENTICATED_ROUTES = set(DEVELOPER_AUTHENTICATED_ROUTES) | set(
+    STUDIO_EXTENSION_ROUTES.values()
+)
+
 # Research routes - governed network, Source, Snapshot, and Evidence
 try:
     from nous_runtime.api.research_routes import RESEARCH_ROUTES
@@ -2135,6 +2145,8 @@ for legacy_key, canonical_key in LEGACY_ROUTE_ALIASES.items():
     if governance is not None:
         GOVERNED_MUTATION_ROUTES.setdefault(legacy_key, governance)
 
+GOVERNED_MUTATION_ROUTES.update(STUDIO_EXTENSION_GOVERNANCE)
+
 _PATH_PARAMETER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
 
@@ -2291,12 +2303,33 @@ def _authorize_mutation_route(
             required_permissions = ("runtime.execute", "scientific.compute")
             retry_behavior = "unsafe"
 
+        studio_workspace = None
+        if route_path.startswith("/api/v1/studio/extensions/"):
+            from nous_runtime.api.studio_extension_routes import (
+                workspace as presentation_workspace,
+            )
+
+            from nous_runtime.api.studio_extension_routes import studio_mutation_summary
+
+            safe_body = studio_mutation_summary(route_path, body, authorization_context)
+            proposal_params = {"body": safe_body, "path_params": dict(params)}
+            studio_workspace = presentation_workspace()
+            affected_resources = (
+                str(studio_workspace / ".nous" / "extensions" / "registry.json"),
+            )
+            required_permissions = (
+                ("workflow.execute",)
+                if route_path.endswith("/action")
+                else ("workspace.write",)
+            )
         proposal = ActionProposal(
             action_type="api.mutation",
             capability_id=capability_id,
             params=proposal_params,
             parameter_summary=f"{method} {route_path}",
-            target_workspace=str((body or {}).get("workspace") or ""),
+            target_workspace=str(studio_workspace)
+            if studio_workspace is not None
+            else str((body or {}).get("workspace") or ""),
             affected_resources=affected_resources,
             data_classification=data_classification,
             external_recipients=external_recipients,

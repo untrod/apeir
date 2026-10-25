@@ -64,7 +64,14 @@ class ToolSpec:
         errors: list[str] = []
         if not _TOOL.fullmatch(self.name):
             errors.append(f"invalid tool name: {self.name}")
-        if self.effect not in {"none", "read", "write", "execute", "network", "unknown"}:
+        if self.effect not in {
+            "none",
+            "read",
+            "write",
+            "execute",
+            "network",
+            "unknown",
+        }:
             errors.append(f"invalid effect for tool {self.name}: {self.effect}")
         if not isinstance(self.input_schema, dict):
             errors.append(f"input_schema for {self.name} must be an object")
@@ -84,8 +91,13 @@ class SkillSpec:
 
     def validate(self) -> list[str]:
         errors: list[str] = []
-        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", self.name) or len(self.name) > 64:
-            errors.append("skill name must be 1-64 lowercase letters, digits, or hyphens")
+        if (
+            not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", self.name)
+            or len(self.name) > 64
+        ):
+            errors.append(
+                "skill name must be 1-64 lowercase letters, digits, or hyphens"
+            )
         if not self.description or len(self.description) > 1024:
             errors.append("skill description must be 1-1024 characters")
         if not self.instructions.strip():
@@ -141,10 +153,20 @@ class ExtensionManifest:
             errors.append(f"invalid extension id: {self.extension_id}")
         if not _SEMVER.fullmatch(self.version):
             errors.append(f"invalid extension version: {self.version}")
-        allowed_kinds = {"skill", "tool", "plugin", "provider", "agent", "template", "pack"}
+        allowed_kinds = {
+            "skill",
+            "tool",
+            "plugin",
+            "provider",
+            "agent",
+            "template",
+            "pack",
+        }
         invalid_kinds = set(self.kinds) - allowed_kinds
         if not self.kinds or invalid_kinds:
-            errors.append("invalid extension kinds: " + ", ".join(sorted(invalid_kinds)))
+            errors.append(
+                "invalid extension kinds: " + ", ".join(sorted(invalid_kinds))
+            )
         if len(set(self.kinds)) != len(self.kinds):
             errors.append("duplicate extension kind")
         for skill in self.skills:
@@ -156,14 +178,28 @@ class ExtensionManifest:
         for dependency, constraint in self.dependencies.items():
             if not _ID.fullmatch(dependency) or not str(constraint).strip():
                 errors.append(f"invalid dependency: {dependency}")
-        if self.provenance and not re.fullmatch(r"sha256:[0-9a-f]{64}", self.provenance.digest):
+        if "apeir_studio" in self.metadata:
+            from nous_runtime.extensions.presentation_contract import (
+                validate_presentation,
+            )
+
+            try:
+                validate_presentation(self.metadata["apeir_studio"])
+            except (TypeError, ValueError, OverflowError, RecursionError) as exc:
+                errors.append(str(exc))
+        if self.provenance and not re.fullmatch(
+            r"sha256:[0-9a-f]{64}", self.provenance.digest
+        ):
             errors.append("provenance digest must be lowercase sha256")
         return errors
 
     def require_valid(self) -> "ExtensionManifest":
         errors = self.validate()
         if errors:
-            raise ValueError("invalid extension manifest:\n" + "\n".join(f"  - {error}" for error in errors))
+            raise ValueError(
+                "invalid extension manifest:\n"
+                + "\n".join(f"  - {error}" for error in errors)
+            )
         return self
 
     def to_dict(self) -> dict[str, Any]:
@@ -213,7 +249,9 @@ class ExtensionManifest:
             version=str(data.get("version") or ""),
             description=str(data.get("description") or ""),
             source_format=str(data.get("source_format") or "nous-native"),
-            compatibility_level=CompatibilityLevel(int(data.get("compatibility_level", 0))),
+            compatibility_level=CompatibilityLevel(
+                int(data.get("compatibility_level", 0))
+            ),
             kinds=tuple(str(item) for item in data.get("kinds") or ()),
             skills=tuple(
                 SkillSpec(
@@ -222,9 +260,16 @@ class ExtensionManifest:
                     instructions=str(item.get("instructions") or ""),
                     license=str(item.get("license") or ""),
                     compatibility=str(item.get("compatibility") or ""),
-                    allowed_tools=tuple(str(value) for value in item.get("allowed_tools") or ()),
-                    resources=tuple(str(value) for value in item.get("resources") or ()),
-                    metadata={str(key): str(value) for key, value in (item.get("metadata") or {}).items()},
+                    allowed_tools=tuple(
+                        str(value) for value in item.get("allowed_tools") or ()
+                    ),
+                    resources=tuple(
+                        str(value) for value in item.get("resources") or ()
+                    ),
+                    metadata={
+                        str(key): str(value)
+                        for key, value in (item.get("metadata") or {}).items()
+                    },
                 )
                 for item in data.get("skills") or ()
             ),
@@ -239,8 +284,13 @@ class ExtensionManifest:
                 )
                 for item in data.get("capabilities") or ()
             ),
-            entry_points=tuple(EntryPoint(**item) for item in data.get("entry_points") or ()),
-            dependencies={str(key): str(value) for key, value in (data.get("dependencies") or {}).items()},
+            entry_points=tuple(
+                EntryPoint(**item) for item in data.get("entry_points") or ()
+            ),
+            dependencies={
+                str(key): str(value)
+                for key, value in (data.get("dependencies") or {}).items()
+            },
             license=str(data.get("license") or ""),
             metadata=dict(data.get("metadata") or {}),
             provenance=Provenance(**provenance) if provenance else None,

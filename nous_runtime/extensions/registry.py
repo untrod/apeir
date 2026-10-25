@@ -99,6 +99,17 @@ class ExtensionRegistry:
         manifest = self.inspector.inspect(source)
         assert manifest.provenance is not None
         digest = manifest.provenance.digest.removeprefix("sha256:")
+        previous = self.get_record(manifest.extension_id)
+        if (
+            previous
+            and previous.get("version") == manifest.version
+            and previous.get("digest") != manifest.provenance.digest
+        ):
+            old = self.verify(manifest.extension_id)
+            if "apeir_studio" in manifest.metadata or "apeir_studio" in old.metadata:
+                raise ValueError(
+                    "Studio extension version cannot replace different content"
+                )
         object_root = self.objects / digest
         package_root = object_root / "package"
         object_created = not object_root.exists()
@@ -180,6 +191,7 @@ class ExtensionRegistry:
             "source_format": manifest.source_format,
             "compatibility_level": int(manifest.compatibility_level),
             "state": "installed",
+            "presentation_enabled": False,
             "authority": "none",
             "previous_digest": str(previous.get("digest") or ""),
             "previous_granted_capabilities": list(
@@ -240,6 +252,10 @@ class ExtensionRegistry:
         ):
             if locked.get(field) != record.get(field):
                 raise ValueError(f"extension lock {field} does not match registry")
+        if type(record.get("presentation_enabled", False)) is not bool or locked.get(
+            "presentation_enabled", False
+        ) != record.get("presentation_enabled", False):
+            raise ValueError("Extension presentation state does not match its lock")
         if locked.get("artifact_ref", "") != record.get("artifact_ref", ""):
             raise ValueError(
                 "extension lock artifact reference does not match registry"
@@ -258,6 +274,41 @@ class ExtensionRegistry:
             raise ValueError("Kernel admission projection was modified")
         verify_supply_chain_records(object_root, manifest, record)
         return manifest
+
+    @_registry_writer
+    def set_presentation_enabled(
+        self,
+        extension_id: str,
+        enabled: bool,
+        *,
+        expected_digest: str,
+        expected_version: str,
+        before_publish: Callable[[], None] | None = None,
+    ) -> dict[str, Any]:
+        """Toggle declarative rendering only; never change execution grants."""
+        if type(enabled) is not bool or not expected_digest or not expected_version:
+            raise ValueError("A reviewed presentation content binding is required")
+        manifest = self.verify(extension_id)
+        record = self.get_record(extension_id) or {}
+        if "apeir_studio" not in manifest.metadata:
+            raise ValueError("Extension has no declarative Studio contribution")
+        if record.get("state") == "revoked":
+            raise PermissionError("Revoked extension cannot enable presentation")
+        if (
+            record.get("digest") != expected_digest
+            or record.get("version") != expected_version
+        ):
+            raise PermissionError(
+                "Extension changed; review its original content again"
+            )
+        if before_publish is not None:
+            before_publish()
+        index = self._index()
+        index["extensions"][extension_id]["presentation_enabled"] = enabled
+        _write_json(self.index_path, index)
+        self._write_lock(index)
+        self.verify(extension_id)
+        return self.get_record(extension_id) or {}
 
     def admission_request(self, extension_id: str) -> dict[str, Any]:
         """Return the verified, supply-chain-bound projection for the Kernel."""
@@ -696,6 +747,7 @@ class ExtensionRegistry:
                     "digest": record["digest"],
                     "source_format": record["source_format"],
                     "authority": record.get("authority", "none"),
+                    "presentation_enabled": record.get("presentation_enabled", False),
                     "granted_capabilities": list(
                         record.get("granted_capabilities") or ()
                     ),

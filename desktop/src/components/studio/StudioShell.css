@@ -70,3 +70,20 @@
 @media (max-width:480px) { .studio-toolbar { flex-wrap:wrap; }.studio-brand { flex:1; }.studio-toolbar-actions { flex-wrap:wrap; justify-content:flex-end; gap:4px; }.studio-menu-content { width:min(256px,calc(100vw - 40px)); }.studio-footer span:last-child { display:none; } }
 .studio-icon { vertical-align:middle; flex-shrink:0; }.studio-toolbar button,.studio-dashboard-toolbar button { display:inline-flex; align-items:center; justify-content:center; gap:5px; }
 @media (pointer:coarse) { .studio-toolbar button,.studio-menu > summary { min-height:40px; }.dashboard-editing .studio-widget > header > button:not(.studio-widget-grip) { min-height:40px; min-width:36px; } }
+
+/* Data-only extension contributions use the host theme and existing state tokens. */
+.studio-extension-view { padding: 10px; overflow: auto; min-width: 0; }
+.studio-extension-stack { display: grid; gap: 12px; }
+.studio-extension-value { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.studio-extension-value small, .studio-extension-chart small { color: var(--nous-text-secondary); }
+.studio-extension-view p, .studio-extension-review dd { overflow-wrap: anywhere; white-space: pre-wrap; }
+.studio-extension-view table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.studio-extension-view th, .studio-extension-view td { padding: 5px; text-align: left; border-bottom: 1px solid var(--nous-border); }
+.studio-extension-view th { font-weight: 500; }
+.studio-extension-chart { display: grid; gap: 4px; }
+.studio-extension-chart svg { width: 100%; height: 48px; color: var(--nous-accent); }
+.studio-extension-record, .studio-extension-review { padding: 12px 0; border-bottom: 1px solid var(--nous-border); }
+.studio-extension-record button, .studio-extension-review button { margin: 6px 6px 0 0; }
+.studio-extension-message { overflow-wrap: anywhere; font-size: 12px; }
+.studio-extension-review dl { margin: 8px 0; font-size: 12px; }
+.studio-extension-review dd { margin: 0 0 8px; }

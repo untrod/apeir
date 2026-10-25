@@ -8,6 +8,9 @@ import { TaskCenter } from "../TaskCenter";
 import { OperationsConsole, type OperationsSnapshot } from "../OperationsConsole";
 import { useStudioSnapshot } from "./StudioData";
 export { StudioSnapshot } from "./StudioData";
+import { StudioExtensionView } from "./StudioExtensionView";
+import { StudioExtensions } from "./StudioExtensions";
+import { availableContributions } from "../../lib/studioExtensions";
 import { StudioDashboard, StudioUsage } from "./StudioDashboard";
 import { ErrorBoundary } from "../ErrorBoundary";
 import type { DrawerView } from "../DetailDrawer";
@@ -29,6 +32,7 @@ function Projection({ collection }: { collection: keyof OperationsSnapshot | "ru
 
 // This registry owns presentation only. Contributions cannot create Capability grants.
 export const STUDIO_PANELS: readonly PanelContribution[] = [
+  { type: "extensions", en: "UI Extensions", zh: "界面扩展", owner: "ExtensionRegistry / Governance", render: props => <StudioExtensions {...props} /> },
   { type: "dashboard", en: "Dashboard", zh: "仪表盘", owner: "Existing Runtime projections / read-only", render: props => <StudioDashboard {...props} /> },
   { type: "chat", en: "Chat", zh: "对话", owner: "Conversation / Model Gateway", render: p => <ChatView onCardClick={event => {
     const data = event.payload || {};
@@ -56,7 +60,12 @@ export const STUDIO_PANELS: readonly PanelContribution[] = [
   { type: "operations", en: "Operations Console", zh: "操作控制台", owner: "Existing Console / Governance", render: () => <OperationsConsole /> },
 ];
 
+export function useStudioPanels(): readonly PanelContribution[] {
+  const { extensions } = useStudioSnapshot();
+  return [...STUDIO_PANELS, ...availableContributions(extensions.data, "panel").map(({ record, contribution }) => ({ type: contribution.type, en: contribution.title, zh: contribution.title, owner: `${record.extension_id} · UNVERIFIED`, render: (props: PanelProps) => <StudioExtensionView type={contribution.type} isVisible={props.isVisible} /> }))];
+}
 export function StudioPanel({ type, ...props }: PanelProps & { type: string }) {
-  const definition = STUDIO_PANELS.find(panel => panel.type === type);
+  const definition = useStudioPanels().find(panel => panel.type === type);
+  if (type.startsWith("ui:")) return <ErrorBoundary><StudioExtensionView type={type} isVisible={props.isVisible} /></ErrorBoundary>;
   return <ErrorBoundary>{definition ? definition.render(props) : <section role="status" className="studio-projection"><h2>Missing Component / 缺失组件</h2><p>{type}</p><p>No code was loaded. Install a reviewed compatible extension before using this panel.</p></section>}</ErrorBoundary>;
 }
