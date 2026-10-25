@@ -1,3 +1,5 @@
+import { lazy, Suspense } from "react";
+const StudioWorkflow = lazy(() => import("./StudioWorkflow").then(module => ({ default: module.StudioWorkflow })));
 import { ChatView } from "../ChatView";
 import { DeveloperWorkbench, type WorkbenchDraft } from "../DeveloperWorkbench";
 import { DeveloperPlatform } from "../DeveloperPlatform";
@@ -43,7 +45,7 @@ export const STUDIO_PANELS: readonly PanelContribution[] = [
   { type: "models", en: "Models", zh: "模型", owner: "Model Center / Gateway", render: () => <DeveloperPlatform modelsOnly /> },
   { type: "nodes", en: "Nodes", zh: "计算节点", owner: "Controller projection", render: () => <Projection collection="nodes" /> },
   { type: "devices", en: "Devices", zh: "设备", owner: "Reality DeviceRegistry projection", render: () => <Projection collection="devices" /> },
-  { type: "workflow", en: "Workflow Records", zh: "工作流记录", owner: "WorkflowStore projection", render: () => <Projection collection="workflows" /> },
+  { type: "workflow", en: "Workflow Builder", zh: "工作流编辑", owner: "WorkflowRuntime / Store / Governance", render: p => <Suspense fallback={<p role="status">LOADING · Workflow</p>}><StudioWorkflow {...p} /></Suspense> },
   { type: "environment", en: "Environment", zh: "环境", owner: "EnvironmentRuntime", render: () => <EnvironmentInspector /> },
   { type: "inspector", en: "Inspector", zh: "检查器", owner: "Existing Operations Console", render: () => <OperationsConsole /> },
   { type: "evidence", en: "Evidence Metadata", zh: "证据元数据", owner: "DistributedWork receipt / verification metadata", render: () => <Projection collection="evidence" /> },

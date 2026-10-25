@@ -25,12 +25,14 @@ test.beforeAll(async () => {
     await writeFile(join(directory, "example.py"), "def add(a, b):\n    return a + b\n");
     const selected = await port();
     const process = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-m", "nous_runtime.cli.main", "--no-intelligence", "runtime-api", "start", "--port", String(selected)], {
-      cwd: resolve(".."), env: { ...globalThis.process.env, NOUS_WORKSPACE_ROOT: directory, NOUS_API_TOKEN: token }, stdio: "ignore",
+      cwd: resolve(".."), env: { ...globalThis.process.env, NOUS_WORKSPACE_ROOT: directory, NOUS_API_TOKEN: token }, stdio: ["ignore", "pipe", "pipe"],
     });
-    process.on("error", () => {});
+    let diagnostics = "";
+    for (const output of [process.stdout, process.stderr]) output?.on("data", chunk => { diagnostics = (diagnostics + String(chunk)).slice(-8192); });
+    process.on("error", error => { diagnostics = error.message; });
     const runtime = { process, directory, url: `http://127.0.0.1:${selected}` }; runtimes.push(runtime);
     await expect.poll(async () => {
-      if (process.exitCode !== null) throw new Error("Owned Runtime exited before readiness");
+      if (process.exitCode !== null) throw new Error(`Owned Runtime exited before readiness (${process.exitCode}): ${diagnostics}`);
       try { return (await fetch(`${runtime.url}/api/v1/status`, { headers: { Authorization: `Bearer ${token}` } })).ok; } catch { return false; }
     }, { message: "Actual model-disabled Runtime startup", timeout: 10000 }).toBe(true);
   }
@@ -402,4 +404,97 @@ test("Studio retains readable controls at browser 2x DPI with touch and keyboard
     await page.screenshot({ path: info.outputPath("studio-overview-2x-touch-source-browser.png"), fullPage: true, animations: "disabled" });
     expect(errors).toEqual([]); expect(mutations).toEqual([]);
   } finally { await context.close(); }
+});
+
+test("Workflow Builder registers and runs the canonical definition, retains the original run and rejects self-approval", async ({ page }, info) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await open(page);
+  await page.getByRole("button", { name: /Add panel/ }).click();
+  await page.getByRole("textbox", { name: "Search panels" }).fill("workflow");
+  await page.getByRole("button", { name: /Workflow Builder/ }).click();
+  const builder = page.getByRole("region", { name: "Workflow Builder" });
+  await expect(builder).toBeVisible();
+  await expect(builder.locator(".react-flow__node")).toHaveCount(1);
+  await builder.getByRole("textbox", { name: "Workflow ID", exact: true }).fill("studio.browser-real");
+  await builder.getByRole("combobox", { name: "Step type" }).selectOption("wait");
+  await builder.getByRole("button", { name: "Add step", exact: true }).click();
+  await builder.getByRole("button", { name: "Validate", exact: true }).click();
+  await expect(builder.getByRole("status")).toContainText("VALID");
+  await expect(builder.locator(".react-flow__node")).toHaveCount(2);
+  await builder.locator(".react-flow__node").first().locator(".react-flow__handle.source").dragTo(builder.locator(".react-flow__node").nth(1).locator(".react-flow__handle.target"));
+  await expect(builder.locator(".react-flow__edge")).toHaveCount(1);
+  await builder.getByRole("button", { name: "Arrange", exact: true }).click();
+  await builder.locator(".react-flow__node").first().click();
+  await builder.getByRole("textbox", { name: "Step parameters", exact: true }).fill("{");
+  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
+  await builder.getByRole("button", { name: "Apply parameters", exact: true }).click();
+  await expect(builder.getByRole("alert")).toBeVisible();
+  await builder.getByRole("textbox", { name: "Step parameters", exact: true }).fill('{"value":"Hello APEIR"}');
+  await builder.getByRole("button", { name: "Apply parameters", exact: true }).click();
+  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
+  await builder.locator("summary").filter({ hasText: /^Draft/ }).click();
+  const draftDownload = page.waitForEvent("download");
+  await builder.getByRole("button", { name: "Save draft", exact: true }).click();
+  const portableDraft = await draftDownload, draftPath = info.outputPath("workflow-draft.json"); await portableDraft.saveAs(draftPath);
+  const savedDraft = JSON.parse(await readFile(draftPath, "utf8"));
+  expect(savedDraft.definition.steps[1].depends_on).toEqual(["transform"]);
+  await builder.getByRole("textbox", { name: "Workflow ID", exact: true }).fill("unsaved.other");
+  page.once("dialog", dialog => void dialog.accept());
+  await builder.locator('input[type="file"]').setInputFiles(draftPath);
+  await expect(builder.getByRole("textbox", { name: "Workflow ID", exact: true })).toHaveValue("studio.browser-real");
+  const definitionDownload = page.waitForEvent("download");
+  await builder.getByRole("button", { name: "Export definition", exact: true }).click();
+  const exported = await definitionDownload, definitionPath = info.outputPath("workflow-definition.json"); await exported.saveAs(definitionPath);
+  const definition = JSON.parse(await readFile(definitionPath, "utf8")); expect(definition).not.toHaveProperty("positions");
+  const cli = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-m", "nous_runtime.cli.main", "--no-intelligence", "workflow", "validate", definitionPath, "--json"], { cwd: runtimes[0].directory, env: { ...globalThis.process.env, PYTHONPATH: resolve(".."), NOUS_WORKSPACE_ROOT: runtimes[0].directory }, stdio: "ignore" });
+  producers.push(cli); expect(await new Promise<number | null>((resolve, reject) => { cli.once("exit", resolve); cli.once("error", reject); })).toBe(0);
+
+  async function approveRecordedProposal() {
+    const message = await builder.getByRole("alert").textContent();
+    const requestId = message?.match(/Approval: ([A-Za-z0-9_-]+)/)?.[1];
+    expect(requestId).toBeTruthy();
+    // Trusted qualification approver, separate from the browser/service subject.
+    // Uses the actual GovernanceStore/LeaseManager; not a production IdP claim.
+    const code = `from nous_runtime.governance import GovernanceStore; from nous_runtime.governance.broker import ApprovalBroker; from nous_runtime.governance.contracts import ActionProposal,ApprovalResponse; from nous_runtime.governance.lease import LeaseManager; s=GovernanceStore(); b=ApprovalBroker(store=s); pending=b.get_pending(); import sys; p=next(p for p in pending if p['request_id']==sys.argv[1]); proposal=ActionProposal.from_dict(s.get_proposal(p['proposal_hash'])); LeaseManager(s).issue(proposal,ApprovalResponse(request_id=p['request_id'],proposal_hash=proposal.proposal_hash,decision='APPROVED',approver_id='qualification-host-owner'),subject_id='api-service')`;
+    const child = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-c", code, requestId!], { cwd: resolve(".."), env: { ...globalThis.process.env, NOUS_WORKSPACE_ROOT: runtimes[0].directory }, stdio: "ignore" });
+    producers.push(child);
+    const result = await new Promise<number | null>((resolve, reject) => { child.once("exit", resolve); child.once("error", reject); });
+    expect(result).toBe(0);
+  }
+  await builder.getByRole("button", { name: "Register", exact: true }).click();
+  await expect(builder.getByRole("alert")).toContainText("Approval:");
+  await approveRecordedProposal();
+  await builder.getByRole("button", { name: "Register", exact: true }).click();
+  await expect(builder.getByRole("status")).toContainText("REGISTERED");
+  await builder.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(builder.getByRole("alert")).toContainText("Approval:");
+  await approveRecordedProposal();
+  await builder.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(builder.locator(".studio-workflow-result pre")).toContainText('"state": "completed"');
+  const evidence = await builder.locator(".studio-workflow-result pre").textContent();
+  expect(evidence).toContain("workflow.completed"); expect(evidence).toContain("Hello APEIR");
+  const runId = JSON.parse(evidence!).run.run_id as string;
+  await page.screenshot({ path: info.outputPath("workflow-real-runtime-source-browser.png"), fullPage: true });
+  // Restart the actual owned CLI process against its original durable workspace.
+  const originalRuntime = runtimes[0];
+  const exited = new Promise<void>((resolve, reject) => {
+    const deadline = setTimeout(() => reject(new Error("Original Runtime did not stop")), 5000);
+    originalRuntime.process.once("exit", () => { clearTimeout(deadline); resolve(); });
+  });
+  originalRuntime.process.kill("SIGTERM"); await exited;
+  const restarted = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-m", "nous_runtime.cli.main", "--no-intelligence", "runtime-api", "start", "--port", new URL(originalRuntime.url).port], { cwd: resolve(".."), env: { ...globalThis.process.env, NOUS_WORKSPACE_ROOT: originalRuntime.directory, NOUS_API_TOKEN: token }, stdio: "ignore" });
+  restarted.on("error", () => {}); originalRuntime.process = restarted;
+  await expect.poll(async () => { try { return (await fetch(`${originalRuntime.url}/api/v1/status`, { headers: { Authorization: `Bearer ${token}` } })).ok; } catch { return false; } }, { timeout: 10000 }).toBe(true);
+  const unauthenticated = await fetch(`${originalRuntime.url}/api/v1/workflow`);
+  expect(unauthenticated.status).toBe(401);
+  const otherController = await fetch(`${runtimes[1].url}/api/v1/workflow/runs/${runId}`, { headers: { Authorization: `Bearer ${token}` } });
+  expect((await otherController.json()).ok).toBe(false);
+  await page.reload(); await page.getByRole("button", { name: /APEIR Studio/ }).click();
+  await page.getByRole("button", { name: /Add panel/ }).click();
+  await page.getByRole("textbox", { name: "Search panels" }).fill("workflow");
+  await page.getByRole("button", { name: /Workflow Builder/ }).click();
+  await page.getByRole("button", { name: new RegExp(runId) }).click();
+  await expect(page.locator(".studio-workflow-result pre")).toContainText(runId);
+  expect(errors).toEqual([]);
 });

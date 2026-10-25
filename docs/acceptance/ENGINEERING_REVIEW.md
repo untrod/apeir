@@ -3896,3 +3896,49 @@ regression passed52 tests locally. Source-browser qualification covers the
 existing EventStream widget through the real authenticated Controller switch;
 no model, physical or native qualification is inferred. Exact PR and resulting
 main CI remain separate requirements.
+
+## R5 Workflow Builder software integration — 2026-10-25
+
+REUSE WorkflowDefinition, Compiler, TaskGraph, WorkflowRuntime, WorkflowStore,
+EventStream, API authentication/nonce, Gate, Broker/LeaseManager, human-session
+identity/permissions, stable Studio panel portals and private-draft protection.
+EXTEND the existing `workflow` panel and HTTP route family; no new executor,
+scheduler, event bus, database or authority is introduced. Public JSON codecs in
+the existing models now serve CLI and Store. FIX CAPABILITY-without-action to
+return a validation error instead of an incidental compiler KeyError.
+
+The React Flow12.12.0 MIT editor supports nodes/dependency edges, multi-selection,
+copy/delete, parameter JSON, layout/undo/redo and explicit portable draft files.
+Coordinates stay separate from canonical CLI definitions and Studio version1
+layouts. Unapplied/invalid parameters block registration/execution. Moving a
+panel retains its React state; Controller retirement retains private draft export
+and cannot import old authorization into the new Controller. Graph imports do
+not execute. Pure Wait/Condition/Transform/Approval handlers are the only bound
+step types. Host-specific actions, command/Agent/Connector/Capability execution,
+expression conditions and compensation hosts are unavailable here. WAIT is an
+immediate barrier. Declared JSON input/output schemas do not imply typed output
+routing; edges represent dependencies.
+
+Governed mutations bind the actual server workspace and immutable definition,
+not a request-body workspace. Run submission compares the reviewed draft with
+the registered version and uses an original idempotency key. Run recovery never
+accepts client `approved_steps`. Step approval additionally requires the existing
+nonserialized current human identity and original-step permission; the same
+HTTP human nonce protects that request. An ordinary service lease cannot approve
+it. Index endpoints transfer bounded identity/state summaries; private definitions
+and results are fetched explicitly. The existing Store persists original IDs,
+bindings, checkpoints and outcome uncertainty; no independent physical effect is
+claimed from these computational results.
+
+Actual sandbox-enabled Chromium/CLI/HTTP qualification creates and connects two
+steps, validates, exports a canonical definition accepted by the existing CLI,
+saves/restores a private draft, registers through a one-use approval lease, runs
+the real pure handlers, inspects original events, restarts the owned Runtime and
+loads the same Run ID. A different Controller cannot retrieve it, and a missing
+bearer is rejected. The trusted test approver uses the existing Store/LeaseManager
+outside the browser; this is software authority-fixture evidence, not real-IdP
+qualification. Separate cryptographic fake-IdP tests exercise current human
+approval, wrong scope, serialized identity, changed binding and revocation.
+Full exact-commit required CI and protected resulting-main acceptance remain
+separate gates. No model, strong-sandbox command, physical, Windows native,
+Token-saving or end-to-end performance PASS follows from this software scope.

@@ -1,0 +1,15 @@
+.studio-workflow { display:flex; flex-direction:column; height:100%; min-height:320px; color:var(--nous-text); background:var(--nous-bg); font-size:12px; }
+.studio-workflow-toolbar { display:flex; flex-wrap:wrap; gap:5px; align-items:center; padding:8px; border-bottom:1px solid var(--nous-border); }
+.studio-workflow input,.studio-workflow select,.studio-workflow textarea { color:var(--nous-text); background:var(--nous-bg); border:1px solid var(--nous-border); padding:5px; border-radius:3px; max-width:100%; }
+.studio-workflow-toolbar input { width:145px; } .studio-workflow-toolbar input[aria-label="Workflow version"] { width:90px; }
+.studio-workflow button { font:inherit; padding:5px 8px; } .studio-workflow [role="alert"],.studio-workflow [role="status"] { margin:5px 8px; }
+.studio-workflow-body { display:flex; flex:1; min-height:280px; overflow:hidden; }
+.studio-workflow-body aside { display:flex; flex-direction:column; gap:7px; width:205px; flex-shrink:0; padding:8px; overflow:auto; border-right:1px solid var(--nous-border); }
+.studio-workflow label { display:flex; flex-direction:column; gap:4px; } .studio-workflow textarea { min-height:80px; resize:vertical; font:11px var(--nous-mono,monospace); }
+.studio-workflow-canvas { flex:1; min-width:160px; }
+.studio-workflow .react-flow { --xy-background-color:var(--nous-bg); --xy-node-background-color:var(--nous-surface); --xy-node-color:var(--nous-text); --xy-node-border:1px solid var(--nous-border); --xy-controls-button-background-color:var(--nous-bg); --xy-controls-button-color:var(--nous-text); --xy-controls-button-border-color:var(--nous-border); }
+.studio-workflow .react-flow__node span { display:block; font-size:10px; margin-top:6px; }
+.studio-workflow .react-flow__node.selected { outline:2px solid var(--nous-accent); }
+.studio-workflow-history { text-align:left; overflow-wrap:anywhere; } .studio-workflow-history small { display:block; font-size:10px; }
+.studio-workflow-result { max-height:35%; overflow:auto; padding:8px; border-top:1px solid var(--nous-border); } .studio-workflow-result span { display:block; } .studio-workflow-result pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; }
+@media(max-width:650px) { .studio-workflow-body aside { width:160px; } }
