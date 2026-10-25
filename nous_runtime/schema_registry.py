@@ -106,6 +106,9 @@ WORKSPACE_SCHEMA_VERSION = "2.0.0"
 # Vendor-neutral extension interchange contract
 EXTENSION_SCHEMA_VERSION = "nous.extension/v1"
 
+# Declarative Studio contributions carried by the existing Extension IR metadata.
+STUDIO_UI_SCHEMA_VERSION = "apeir.studio-ui/v1"
+
 
 # Registry introspection
 

@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { expect, it } from "vitest";
-import { DeviceTopology, ResourceRow } from "../components/studio/StudioDashboard";
+import { DeviceTopology, ResourceRow, WorkOutcome } from "../components/studio/StudioDashboard";
 
 const report = { node_id: "fixture-node", connected: true, trust_status: "TRUSTED", resource_report_current: true, resource_report_fresh: true, resources: { cpu_logical: 8, memory_available_bytes: 3 * 1073741824, memory_total_bytes: 8 * 1073741824 } };
 it("plots only a current trusted memory report and distinguishes CPU capacity from utilization", () => {
@@ -28,4 +28,19 @@ it("shows only exact reported node/device bindings, retaining unknown or missing
   expect(within(unknown).queryByText("bound")).not.toBeInTheDocument();
   view.rerender(<DeviceTopology nodes={[]} devices={[]} locale="zh" />);
   expect(screen.getByText("暂无节点或设备")).toBeInTheDocument();
+});
+
+it.each(["UNKNOWN", "MISMATCH"])("does not show receipt-VERIFIED as effect success for %s", verdict => {
+  const view = render(<WorkOutcome row={{ state: "VERIFIED", effect_verification: { verdict } }} locale="en" />);
+  expect(screen.getByText("RECEIPT_VERIFIED")).toBeVisible();
+  expect(screen.getByText(verdict)).toBeVisible();
+  expect(view.container.querySelector(".studio-status-success")).toBeNull();
+});
+it("keeps digest integrity distinct from an absent physical effect verdict", () => {
+  const view = render(<WorkOutcome row={{ state: "VERIFIED", integrity: "MATCH" }} locale="zh" />);
+  expect(screen.getByText("UNKNOWN")).toBeVisible();
+  expect(view.container.querySelector(".studio-status-success")).toBeNull();
+  view.rerender(<WorkOutcome row={{ state: "VERIFIED", effect_verification: { verdict: "MATCH" } }} locale="en" />);
+  expect(screen.getByText("MATCH")).toBeVisible();
+  expect(screen.getByText("RECEIPT_VERIFIED")).not.toHaveClass("studio-status-success");
 });

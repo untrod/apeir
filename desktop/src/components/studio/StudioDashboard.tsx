@@ -8,6 +8,8 @@ import { useStudioSnapshot } from "./StudioData";
 import { useCostSummary } from "../../store/hooks";
 import { eventClient } from "../../store/eventClient";
 import { usageNumber, usageTotal } from "../../lib/usageAccounting";
+import { availableContributions } from "../../lib/studioExtensions";
+import { StudioExtensionView } from "./StudioExtensionView";
 import { StudioIcon } from "./StudioIcon";
 import { useStudioPresentation } from "./StudioPresentation";
 import { UsageAccounting } from "../UsageAccounting";
@@ -24,8 +26,15 @@ const record = (value: unknown): Record<string, unknown> => value !== null && ty
 type Locale = "en" | "zh";
 const translate = (locale: Locale) => (en: string, zh: string) => locale === "zh" ? zh : en;
 function Status({ state }: { state: string }) {
-  const tone = ["READY", "ONLINE", "CONNECTED", "MATCH", "VERIFIED"].includes(state) ? "success" : ["ERROR", "FAILED", "MISMATCH", "REVOKED"].includes(state) ? "danger" : ["BLOCKED", "UNCONFIGURED", "WAITING_APPROVAL"].includes(state) ? "warning" : state === "RUNNING" ? "info" : "neutral";
+  const tone = ["READY", "ONLINE", "CONNECTED", "MATCH"].includes(state) ? "success" : ["ERROR", "FAILED", "MISMATCH", "REVOKED"].includes(state) ? "danger" : ["BLOCKED", "UNCONFIGURED", "WAITING_APPROVAL"].includes(state) ? "warning" : state === "RUNNING" ? "info" : "neutral";
   return <span className={`studio-status studio-status-${tone}`} data-state={state}><span aria-hidden="true" />{state}</span>;
+}
+/** Receipt stage and independent effect verdict are separate Runtime projections. */
+export function WorkOutcome({ row, locale }: { row: Record<string, unknown>; locale: Locale }) {
+  const stage = row.state === "VERIFIED" ? "RECEIPT_VERIFIED" : text(row.state ?? row.status);
+  const reported = record(row.effect_verification).verdict;
+  const effect = typeof reported === "string" && ["MATCH", "MISMATCH", "UNKNOWN"].includes(reported) ? reported : "UNKNOWN";
+  return <span className="studio-work-outcome"><Status state={stage} /><span>{translate(locale)("Effect", "效果")}: <Status state={effect} /></span></span>;
 }
 function Empty({ children, state = "UNKNOWN" }: { children: React.ReactNode; state?: string }) {
   return <div className="studio-empty" role="status"><Status state={state} /><span>{children}</span></div>;
@@ -67,6 +76,7 @@ export function DeviceTopology({ nodes, devices, locale }: { nodes: Record<strin
 }
 function DataWidget({ type, active, inspect, open, locale }: { type: string; active: () => boolean; inspect: PanelProps["inspect"]; open: PanelProps["open"]; locale: Locale }) {
   const { data, loading, error, health } = useStudioSnapshot(), t = translate(locale);
+  if (type.startsWith("ui:")) return <StudioExtensionView type={type} isVisible={active} locale={locale} />;
   if (type === "usage") return <UsageWidget active={active} locale={locale} />;
   if (type === "events") return <EventWidget active={active} locale={locale} />;
   if (["gpu", "network", "sensors"].includes(type)) return <Empty state="UNSUPPORTED">{t("No metric source", "暂无指标来源")}</Empty>;
@@ -86,7 +96,7 @@ function DataWidget({ type, active, inspect, open, locale }: { type: string; act
   if (!Array.isArray(rows)) return <Empty>{t("No supported source", "暂无受支持的数据源")}</Empty>;
   if (!rows.length) return <Empty>{t("No records reported", "暂无记录")}</Empty>;
   return <>{type === "nodes" && <div className="studio-node-count"><strong>{rows.filter(row => row.connected === true).length}</strong><span>{t("connected", "已连接")} / {rows.length}</span></div>}{rows.slice(0, 40).map((row, i) => <div key={String(row.node_id ?? row.device_id ?? row.work_id ?? row.sequence ?? i)} className="studio-widget-row">
-    {type === "resources" ? <ResourceRow row={row} locale={locale} /> : <><div className="studio-row-heading"><strong>{text(row.node_name ?? row.node_id ?? row.device_id ?? row.work_id ?? row.event_type ?? row.action ?? row.incident_id ?? `Record ${i + 1}`)}</strong><Status state={type === "nodes" ? row.connected === true ? "CONNECTED" : row.connected === false ? "OFFLINE" : "UNKNOWN" : text(row.state ?? row.status ?? row.lifecycle ?? row.verdict ?? row.event_type)} /></div>
+    {type === "resources" ? <ResourceRow row={row} locale={locale} /> : <><div className="studio-row-heading"><strong>{text(row.node_name ?? row.node_id ?? row.device_id ?? row.work_id ?? row.event_type ?? row.action ?? row.incident_id ?? `Record ${i + 1}`)}</strong>{["works", "evidence"].includes(type) ? <WorkOutcome row={row} locale={locale} /> : <Status state={type === "nodes" ? row.connected === true ? "CONNECTED" : row.connected === false ? "OFFLINE" : "UNKNOWN" : text(row.state ?? row.status ?? row.lifecycle ?? row.verdict ?? row.event_type)} />}</div>
       {type === "nodes" ? <div className="studio-card-bottom"><small>{t("Trust", "信任")}: {text(row.trust_status)}</small><button onClick={() => typeof row.node_id === "string" && inspect({ kind: "node", nodeId: row.node_id })}>{t("Inspect", "检查")} <StudioIcon name="arrow" /></button></div> : <button className="studio-detail-link" onClick={() => open(type === "diagnostics" ? "operations" : type === "works" ? "tasks" : type)}>{t("Details", "详情")} <StudioIcon name="arrow" /></button>}
     </>}
   </div>)}{["evidence", "activity"].includes(type) && <details className="studio-card-details"><summary>{t("Source", "来源")}</summary>{type === "evidence" ? t("Distributed Work receipt / verification metadata. Receipt is not independent Observation or physical verification.", "分布式任务回执与验证元数据。回执不代表独立观测或物理验证。") : t("GovernanceStore audit", "GovernanceStore 审计")}</details>}</>;
@@ -96,7 +106,7 @@ function Widget({ widget, isVisible, inspect, open, locale }: { widget: Dashboar
   const active = useCallback(() => !widget.paused && isVisible() && document.visibilityState !== "hidden", [widget.paused, isVisible]);
   useEffect(() => {
     if (["usage", "events", "gpu", "network", "sensors"].includes(widget.type)) return;
-    return subscribeLive(active, [widget.type === "kernel" || widget.type === "runtime" ? "health" : "operations"]);
+    return subscribeLive(active, [widget.type.startsWith("ui:") ? "extensions" : widget.type === "kernel" || widget.type === "runtime" ? "health" : "operations"]);
   }, [active, subscribeLive, widget.type]);
   return widget.paused ? <Empty state="PAUSED">{translate(locale)("Updates paused", "已暂停刷新")}</Empty> : <DataWidget type={widget.type} active={active} inspect={inspect} open={open} locale={locale} />;
 }
@@ -109,7 +119,8 @@ export function StudioDashboard({ config, updateConfig, isVisible, locale, inspe
   const { editing } = useStudioPresentation();
   const dashboard = config === undefined ? defaultDashboard() : validateDashboard(config);
   const { width, mounted, containerRef } = useContainerWidth();
-  const { refresh } = useStudioSnapshot();
+  const { refresh, extensions } = useStudioSnapshot();
+  const contributions = availableContributions(extensions.data, "widget");
   const [type, setType] = useState("nodes"), [selected, setSelected] = useState<string | null>(null), [message, setMessage] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const menu = useRef<HTMLDetailsElement>(null);
@@ -120,12 +131,13 @@ export function StudioDashboard({ config, updateConfig, isVisible, locale, inspe
     return () => { window.removeEventListener("keydown", key); window.removeEventListener("pointerdown", outside); };
   }, []);
   const t = (en: string, zh: string) => locale === "zh" ? zh : en;
-  const title = (widget: DashboardWidget) => widget.title || titles[widget.type]?.[locale === "zh" ? 1 : 0] || widget.type;
+  const title = (widget: DashboardWidget) => widget.title || titles[widget.type]?.[locale === "zh" ? 1 : 0] || contributions.find(item => item.contribution.type === widget.type)?.contribution.title || widget.type;
   const change = (widgets: DashboardWidget[]) => { try { updateConfig(validateDashboard({ schemaVersion: 1, widgets })); setMessage(""); } catch (error) { setMessage(String(error)); } };
   const add = (source?: DashboardWidget) => {
     if (dashboard.widgets.length >= 32) { setMessage("Widget limit reached (32)."); return; }
+    if (!source && !WIDGET_TYPES.includes(type as typeof WIDGET_TYPES[number]) && !contributions.some(item => item.contribution.type === type)) { setMessage("Extension unavailable; select an enabled component."); return; }
     const y = Math.max(0, ...dashboard.widgets.map(widget => widget.y + widget.h));
-    change([...dashboard.widgets, { ...(source || { type, title: "", x: 0, y, w: 4, h: 4, paused: false }), id: `widget-${crypto.randomUUID()}`, y }]);
+    change([...dashboard.widgets, { ...(source || { type, title: contributions.find(item => item.contribution.type === type)?.contribution.title || "", x: 0, y, w: 4, h: 4, paused: false }), id: `widget-${crypto.randomUUID()}`, y }]);
   };
   const positions = (layout: Layout) => {
     if (!editing) return;
@@ -141,7 +153,7 @@ export function StudioDashboard({ config, updateConfig, isVisible, locale, inspe
   };
   return <section className={`studio-dashboard ${editing ? "dashboard-editing" : "dashboard-browsing"}`} aria-label="Dashboard builder">
     <header className="studio-dashboard-toolbar"><strong>{t("Overview", "概览")}</strong><span className="studio-dashboard-mode">{editing ? t("Editing layout", "正在编辑布局") : ""}</span><button onClick={() => refresh()} title={t("Refresh shared Runtime data", "刷新 Runtime 数据")}>{t("Refresh data", "刷新数据")} <StudioIcon name="refresh" /></button>
-    {editing && <><label><select aria-label="Widget type" value={type} onChange={event => setType(event.target.value)}>{WIDGET_TYPES.map(type => <option key={type} value={type}>{titles[type][locale === "zh" ? 1 : 0]}</option>)}</select></label><button onClick={() => add()}><StudioIcon name="add" />{t("Add widget", "添加组件")}</button><details className="studio-menu studio-dashboard-menu" ref={menu}><summary aria-label={t("Dashboard options", "仪表盘选项")}>···</summary><div className="studio-menu-content"><button onClick={saveLayout}>{t("Save dashboard", "保存仪表盘")}</button><button onClick={exportLayout}>{t("Export dashboard", "导出仪表盘")}</button><button onClick={() => input.current?.click()}>{t("Import dashboard", "导入仪表盘")}</button><button onClick={() => change(compactDashboard().widgets)}>{t("Reset dashboard", "重置仪表盘")}</button></div></details></>}
+    {editing && <><label><select aria-label="Widget type" value={type} onChange={event => setType(event.target.value)}>{WIDGET_TYPES.map(type => <option key={type} value={type}>{titles[type][locale === "zh" ? 1 : 0]}</option>)}{contributions.map(({ contribution }) => <option key={contribution.type} value={contribution.type}>{contribution.title}</option>)}</select></label><button onClick={() => add()}><StudioIcon name="add" />{t("Add widget", "添加组件")}</button><details className="studio-menu studio-dashboard-menu" ref={menu}><summary aria-label={t("Dashboard options", "仪表盘选项")}>···</summary><div className="studio-menu-content"><button onClick={saveLayout}>{t("Save dashboard", "保存仪表盘")}</button><button onClick={exportLayout}>{t("Export dashboard", "导出仪表盘")}</button><button onClick={() => input.current?.click()}>{t("Import dashboard", "导入仪表盘")}</button><button onClick={() => change(compactDashboard().widgets)}>{t("Reset dashboard", "重置仪表盘")}</button></div></details></>}
     </header>
     {message && <p role="alert">{message}</p>}
     <input hidden ref={input} type="file" aria-label="Import dashboard" accept="application/json,.json" onChange={async event => {

@@ -1043,3 +1043,63 @@ workspace-isolation, paid usage, cancellation or recovery qualification. Officia
 CLI authentication metadata was available, but scoped filesystem/credential and
 native tool admission must be qualified before enabling a model Turn; an
 instruction prompt is not that boundary.
+
+## Declarative UI Extension SDK
+
+Studio UI contributions use the existing Native Extension IR, ExtensionRegistry,
+CAS and Governance. The data-only child contract is
+[`apeir.studio-ui/v1`](../../spec/extensions/v1/studio-ui.schema.json), under
+`metadata.apeir_studio`. Existing non-UI packages and version-1 layouts retain
+their contracts. The [System Monitor example](../../examples/studio_system_monitor/README.md)
+contains a standalone public HTTP client and an actual Panel/Widget manifest.
+Copy it outside the repository; developing a standard declarative contribution
+requires no Core change or private Python import.
+
+| SDK capability | Public contract |
+| --- | --- |
+| Register Panel / Widget | Manifest `contributions` with `kind: panel/widget`; stable local ID, title and validated `view` |
+| Read allowed data | `GET /api/v1/studio/extensions/data` with `component_type`, `expected_digest`, `source=runtime.status` |
+| Read allowed events | `GET /api/v1/studio/extensions/events` with component/digest; bounded declared lifecycle metadata from the original bus |
+| Request governed action | `POST /api/v1/studio/extensions/action`: original component/digest, declared `workflow.run`, original `idempotency_key` |
+| Presentation settings | Existing Panel layout and Dashboard title/position/size/pause configuration; normal version-1 import/export |
+| Review / install | `POST .../review` then `POST .../install`, reviewed source digest and expected previous digest |
+| Enable / disable / remove | `POST .../configure` or `.../remove`, binding original identity/version/digest |
+| Shared Studio projection | `GET /api/v1/studio/extensions`; one existing visibility-aware read coordinator, not a timer per Widget |
+
+The example client exercises these exact endpoints. API authentication, current
+workspace permissions and, for mutations, the existing Gate are mandatory.
+Current authenticated humans additionally use the existing exact-body nonce.
+A service request can wait for a separate human approval; it cannot approve itself.
+Raw manifest text is not copied into the governance proposal: its reviewed digest
+binds the source bytes. Source content is retained in the existing CAS with the
+existing package verification and provenance records. Publisher text and an
+import compatibility level are not a signature or certification.
+
+Views support escaped text, metric, status, table, bounded current-session chart,
+stack and one optional governed action per contribution. There is no HTML render,
+JavaScript expression, module URL, iframe code injection, credential, Tauri IPC or
+unrestricted file/network/process access. The shared catalog consumer admits up to 5 MiB (64 packages of at most 64 KiB
+of presentation metadata plus record envelopes), without widening view or action
+schemas. This avoids rejecting valid multi-package catalogs at the original
+1 MiB client limit. Data is restricted to the host's sanitized
+Runtime status fields and declared lifecycle event metadata. Unavailable fields
+remain UNKNOWN. Chart samples are transient display history, not persisted evidence.
+
+Install and enable are separate. Updates require a new immutable version and
+start disabled; stale review bindings cannot overwrite another installation.
+Disable/revoke/remove denies new component access. Existing uncertain Work remains
+in its original Runtime history. Missing/uninstalled contributions keep inert layout
+slots. Moving or loading a panel never starts an action. After a lost mutation
+response, refresh and inspect original state; the UI does not replay it automatically.
+The host's package writer fence and CAS pins are reused; no second registry,
+permission database or event bus is created.
+
+The first acquisition profile imports bounded native JSON manifests, not arbitrary
+ZIP/JavaScript applications. Dependencies are checked against already verified
+installed packages, without fetching or granting them. Only bound pure Workflow
+handlers may be requested through the optional action; other hosts are explicitly
+unavailable. Executable custom UI remains BLOCKED until target-platform isolation
+is independently demonstrated. Neither this SDK nor browser acceptance qualifies
+Windows native installation, real model accounts or physical effects.
+
+![System Monitor Widget using real model-disabled Runtime status in source Chromium; not native installation acceptance](../media/studio-extension-runtime-source.png)

@@ -12,17 +12,24 @@ blockers remain in [ROADMAP](../../../ROADMAP.md).
 
 ## Source Preview
 
-The current independently installed and browser-qualified source revision is
-`62cbe6ff53a769172067740370f26fb18eb3c094` (2026-10-25).
-Download both artifacts from that same [Desktop CI run](https://github.com/untrod/apeir/actions/runs/40144930113):
+Open [Desktop CI](https://github.com/untrod/apeir/actions/workflows/desktop-build.yml)
+and select a successful **main** run. Its **Artifacts** section provides:
 
-- [Python Source Preview](https://github.com/untrod/apeir/actions/runs/40144930113/artifacts/12580500976)
-- [Studio source frontend](https://github.com/untrod/apeir/actions/runs/40144930113/artifacts/12579679819)
+- `apeir-python-source-preview-<commit>` — Python Wheel, hashes and installed-consumer report.
+- `apeir-studio-source-frontend-<commit>` — built browser UI, hashes and source manifest.
 
-GitHub sign-in is required; artifacts have seven-day retention. If expired,
-use a newer accepted source build from [Desktop CI](https://github.com/untrod/apeir/actions/workflows/desktop-build.yml),
-checking its validation report. Do not substitute an unrelated wheel or GUI.
-These are source packages, not a native installer or permanent signed Release.
+The existing source job runs on main pushes and manual dispatch. Download both
+from the same commit, check the included validation reports and corresponding
+Core/Security/Multi-Arch results. A frontend-only artifact from a PR is not a
+complete Source Preview. GitHub sign-in is required; artifacts have seven-day
+retention. These are source packages, not an EXE, native installer or signed Release.
+
+A separately installed and browser-qualified historical source snapshot is
+`62cbe6ff53a769172067740370f26fb18eb3c094` (2026-10-25):
+[Python package](https://github.com/untrod/apeir/actions/runs/40144930113/artifacts/12580500976)
+and [Studio frontend](https://github.com/untrod/apeir/actions/runs/40144930113/artifacts/12579679819).
+It predates the visual Workflow Builder and declarative UI SDK; do not treat it
+as qualification of those additions. Use a newer accepted matching build for them.
 
 Extract the two ZIPs into separate directories. Compare their manifest
 `distribution_revision` values and verify the files against their `SHA256SUMS.txt`.
@@ -68,7 +75,8 @@ or unrestricted commands. Stop both foreground servers when finished.
 
 For the first safe execution, use [the simulated Demo](#first-verified-execution).
 For SDK examples or source changes, use the checkout at the exact manifest revision:
-`git checkout --detach 62cbe6ff53a769172067740370f26fb18eb3c094`.
+`git checkout --detach <distribution_revision>` (replace the placeholder with the
+manifest SHA).
 Wheel users skip the editable `pip install -e .` command; it is an alternative install.
 
 ## Developer Setup

@@ -4030,6 +4030,115 @@ the real CLI/HTTP path. The affected EventStream/startup/hygiene checks passed29
 locally. This corrects probe handling; it does not qualify or close the separate
 historical Windows SQLite, relay, signed-response or Automation timing issues.
 
+### R5 declarative UI host qualification — 2026-10-25
+
+The Studio UI child schema (`apeir.studio-ui/v1`) is additive metadata in the
+existing Extension IR. Existing Registry, package/provenance verification, CAS
+and pins, Governance dispatcher, current-human nonce, Workflow Runtime and Studio
+layout/subscription owners are reused. This is data-only rendering; executable
+third-party JavaScript remains BLOCKED pending isolation. Kernel revision,
+component-lock bytes and historical tags are unchanged.
+
+The actual source CLI/HTTP + sandbox-enabled Chromium consumer acquired the
+System Monitor manifest outside the checkout, reviewed its digest, requested
+installation, used a separate public OS-owner CLI approval, enabled it, read
+actual Runtime status, added a Panel and Dashboard Widget and saved version-1
+layout. It checked default-disabled installation/update, same-version content
+conflict, disablement denying new data reads, enablement, update, browser reload,
+Controller A/B absence isolation, actual Runtime process restart, retained package
+state, uninstall and inert missing-component slots. It does not inject test grants
+or import private Runtime modules to install the example. The example's standalone
+standard-library HTTP client uses those same public endpoints. Source screenshot:
+[`studio-extension-runtime-source.png`](../media/studio-extension-runtime-source.png).
+
+A first real browser attempt exposed an incorrectly assumed human-session response
+shape in the new shared UI helper. It denied the service request before install.
+The fix reuses the existing read-only session probe, catches only its explicit
+no-human errors, and checks the original Controller before dispatch. Current humans
+still need the exact-body nonce; a failed mutation is never retried automatically.
+The Workflow panel reuses the same helper while retaining its strictly human-only
+step approval. Regression cases cover service/human surfaces, nonce/body binding,
+Controller switch during the probe and a lost mutation response.
+
+Registry/CAS tests cover digest and version binding, same-version replacement,
+stale installer review, original package integrity, mirrored display-state lock,
+no execution grants, dependency failure, denied undeclared reads, schema/code/URL
+rejection, escaped literal HTML and retained missing-layout state. Real Gate/API
+tests additionally require the original lease for optional declared pure Workflow
+actions, preserve the same idempotent Run and reject new actions after permission
+revocation. Unsupported command handlers do not create a Run. No Widget creates
+execution authority; approval, handler execution and physical verification remain
+separate gates.
+
+The first full nine-case source-browser suite passed; an additional extension
+case then passed Controller A/B and process-restart checks in 13.7 seconds. The
+affected Extension/Workflow/Governance/Control Plane/repository suite passed
+1,013 cases with 33 explicit platform skips; the additional actual action API case
+passed separately. These local results are not exact resulting-main CI. Retained
+pre-fix failures include incorrect test fixtures, original helper denial and UI
+locator errors; no timeout or safety assertion was weakened. Current-head required
+CI and resulting-main CI must qualify their exact submissions independently.
+
+The first SDK acquisition profile accepts bounded native JSON manifests and
+already-installed compatible dependencies. It does not acquire executable UI,
+resolve remote packages or certify publisher claims. Its lifecycle event interface
+is bounded metadata reads from the original bus, not an additional event stream.
+Chart samples are transient display data, not persisted observations. The Source
+Preview job now also runs on normal main pushes, preserving its clean isolated
+wheel consumer, hash/manifest/report uploads and all native component gates.
+
+No real model, host command sandbox, real IdP, remote physical device, Windows10
+installation, signing or formal release qualification follows from these results.
+R4 unapproved candidates and their original hash mismatch remain independent.
+
+The clean base-wheel consumer at SDK candidate `a7d7505` then found an undeclared
+`packaging` import in dependency validation, despite development tests passing.
+The original failure (`No module named packaging`) is retained separately. The
+fix declares the normal pure-Python package dependency in Distribution metadata;
+it does not add a private module or manually patch the consumer environment.
+A rebuilt wheel must pass the same external public client and restart sequence
+in a new venv before claiming that installed path PASS.
+
+The corrected base Wheel at `4d8d19e` passed in a new Python
+3.12.14 venv outside the checkout. Its SHA-256 is
+`b237e8011ccbe441210e8efb0b3a7490423504aebd1bc9ffc3584b8fe5a154ef`. The copied standalone example
+client performed review, install, enable, real sanitized read, lifecycle metadata
+read, disable/denial, same-version conflict, update, restart recovery and remove.
+Every mutation used the public original owner approval CLI; there were no private
+Runtime imports or manually added consumer dependencies. Original Workflow Run
+`wfr_9557396af0664f2eae45cb1328d05c9b` remained unchanged after restart and repeated original
+idempotency key. This is Linux installed-source software evidence, not a native
+or physical qualification. Initial undeclared-dependency and local disk-exhaustion
+failures remain retained; a fresh venv was used after freeing only reproducible
+inactive frontend dependency directories. Original source and native evidence
+were preserved.
+
+Final contract review also reproduced a valid multi-package response exceeding
+the first 1 MiB frontend/example-client projection bound. The fixed 5 MiB
+consumer limit matches 64 bounded 64 KiB UI packages plus verified envelopes;
+per-view types, depth, source and action limits are unchanged. A 20-package
+counterexample now loads, while malformed rendered record primitives and the
+65th package fail admission. This is a bounded contract fix, not a performance
+improvement claim.
+
+The original DistributedWork contract defines `VERIFIED` as receipt verification
+before independent effect admission (`record_effect_verification` requires that
+stage). Dashboard previously rendered that stage using the generic success tone.
+The source renderer now separates `RECEIPT_VERIFIED` from the actual reported
+`effect_verification.verdict`; absent or invalid verdicts stay UNKNOWN. Regression
+cases cover receipt-verified UNKNOWN/MISMATCH, digest-only MATCH and a separately
+reported effect MATCH. No verification is calculated or granted by the UI.
+
+Final new-host review bound optional Widget actions to the existing canonical
+Workflow resource, rather than the presentation Registry path. Install/enable
+permissions remain Registry-scoped; execution requires permission on the actual
+`.nous/workflows.db`, and reuses canonical Workflow read admission. The reviewed
+proposal additionally names the originally declared Workflow ID/version, without
+copying raw inputs. Regression proves that display-resource permissions alone
+cannot authorize a Workflow target and that the genuine original Gate lease still
+admits the correctly scoped pure action. This corrects the new, unmerged SDK
+adapter; no parallel permission system or Workflow executor was introduced.
+
 ### Resulting-main ProcessSession attachment investigation — 2026-10-25
 
 Resulting main `daa71091a3c91dc911400ebf8b6af91ab90eb668` passed Core/Desktop/
@@ -4095,3 +4204,24 @@ is relaxed. New regressions cover atomic rollback at each insert/commit, indepen
 writers' audit bindings, uncertain commit with one publication attempt, and both
 ordinary and interrupted live status reads. Current candidate and resulting-main
 Windows CI must qualify independently of these local experiments.
+
+The SDK/process/Governance source combination at `856a377` passed nine actual
+sandboxed Chromium cases, including public human approvals, original Workflow
+registration/run/restart, extension lifecycle/revocation and Controller/layout
+isolation. A newly built base wheel installed in a new outside-checkout Python
+3.12.14 venv has SHA-256
+`27b3294081df4b525726a485c054e05c0022a5e0d26bc01b655acb835ffe8833`.
+The copied standalone SDK client (`python -I`) passed install/update/disable,
+permission rejection and restart through public CLI/API. Original Run
+`wfr_0c73efadbd264159a443e4a054a6f3b4` survived repeat-key recovery unchanged.
+Official source qualification kept production models without Kernel BLOCKED,
+usage UNKNOWN, unauthenticated requests denied and owned shutdown clean.
+
+The compiled frontend and installed wheel from that same `856a377` source also
+passed actual browser extension use, graphical Workflow execution and a manually
+edited two-file proposal: separate original owner approval, actual file writes,
+fresh file MATCH and original Work `work_1e8dadd98bbe5e1a8a9344e21001a070`.
+Installed simulated lost-response recovery retained effect_count=1. These Linux,
+model-disabled runtime-service results do not imply a generated model proposal,
+a sandboxed test execution, native installation or physical verification. Exact
+protected-main integration and corresponding CI/artifacts qualify separately.

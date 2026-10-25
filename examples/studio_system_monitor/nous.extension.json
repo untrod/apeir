@@ -1,0 +1,52 @@
+{
+  "schema": "nous.extension/v1",
+  "extension_id": "examples/studio-system-monitor",
+  "version": "1.0.0",
+  "description": "Read-only Runtime status through the restricted APEIR Studio host",
+  "source_format": "nous-native-v1",
+  "compatibility_level": 2,
+  "kinds": ["plugin"],
+  "license": "Apache-2.0",
+  "capabilities": [
+    {"capability": "runtime.status.read", "access": "read", "scope": ["current-workspace"], "required": true},
+    {"capability": "runtime.lifecycle.read", "access": "read", "scope": ["current-workspace"], "required": false}
+  ],
+  "metadata": {
+    "publisher": "APEIR SDK example (unverified claim)",
+    "apeir_studio": {
+      "schema": "apeir.studio-ui/v1",
+      "contributions": [
+        {
+          "id": "system-monitor",
+          "kind": "panel",
+          "title": "System Monitor",
+          "subscriptions": ["runtime.status", "runtime.lifecycle"],
+          "events": ["runtime.started", "runtime.stopped"],
+          "view": {
+            "kind": "stack",
+            "children": [
+              {"kind": "status", "label": "Runtime", "source": "runtime.status", "field": "running"},
+              {"kind": "status", "label": "Kernel", "source": "runtime.status", "field": "kernel_state"},
+              {"kind": "metric", "label": "Registered capabilities", "source": "runtime.status", "field": "capabilities"},
+              {"kind": "chart", "label": "Pending jobs", "source": "runtime.status", "field": "jobs_pending"},
+              {"kind": "table", "label": "Runtime details", "source": "runtime.status", "fields": [{"field": "version", "label": "Version"}, {"field": "providers", "label": "Registered providers"}]}
+            ]
+          }
+        },
+        {
+          "id": "runtime-status",
+          "kind": "widget",
+          "title": "Runtime Monitor",
+          "subscriptions": ["runtime.status"],
+          "view": {
+            "kind": "stack",
+            "children": [
+              {"kind": "status", "label": "Runtime", "source": "runtime.status", "field": "running"},
+              {"kind": "metric", "label": "Pending jobs", "source": "runtime.status", "field": "jobs_pending"}
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -7,7 +7,7 @@ import { useTheme } from "../../theme";
 import { compactDashboard } from "../../lib/studioDashboard";
 import { typo } from "../../design";
 import { captureStudioLayout, createStudioLayout, discardsProtectedPanel, loadStudioLayout, MAX_LAYOUT_BYTES, parseStudioLayout, STUDIO_LAYOUT_KEY, STUDIO_TEMPLATES, studioModel, type StudioLayout } from "../../lib/studioLayout";
-import { STUDIO_PANELS, StudioPanel, StudioSnapshot } from "./StudioPanels";
+import { useStudioPanels, StudioPanel, StudioSnapshot } from "./StudioPanels";
 import type { WorkbenchDraft } from "../DeveloperWorkbench";
 import { StudioIcon } from "./StudioIcon";
 import { StudioPresentation } from "./StudioPresentation";
@@ -57,8 +57,13 @@ export function StudioShell({ onProtectedChange, onExit }: { onProtectedChange?:
   </div>;
 }
 
-function StudioSession({ epoch, remember, onProtectionChange, onExit }: { onExit?: () => void; epoch: number; remember: (key: string, value: WorkbenchDraft[]) => void; onProtectionChange: (value: boolean) => void }) {
+function StudioSession(props: React.ComponentProps<typeof StudioWorkspace>) {
+  return <StudioSnapshot><StudioWorkspace {...props} /></StudioSnapshot>;
+}
+
+function StudioWorkspace({ epoch, remember, onProtectionChange, onExit }: { onExit?: () => void; epoch: number; remember: (key: string, value: WorkbenchDraft[]) => void; onProtectionChange: (value: boolean) => void }) {
   const { mode, setMode } = useTheme();
+  const panels = useStudioPanels();
   const initial = useMemo(() => {
     try { return { layout: loadStudioLayout(localStorage), error: "" }; }
     catch (error) { return { layout: createStudioLayout(), error: `Saved layout was rejected and preserved: ${String(error)}` }; }
@@ -118,12 +123,12 @@ function StudioSession({ epoch, remember, onProtectionChange, onExit }: { onExit
     for (const [id, host] of hosts.current) if (!live.has(id)) { host.remove(); hosts.current.delete(id); }
   });
   const open = (type: string) => {
-    if (!STUDIO_PANELS.some(panel => panel.type === type)) return;
+    if (!panels.some(panel => panel.type === type)) return;
     if (tabs.length >= 24) { setMessage("Panel limit reached (24)."); return; }
     let group = model.getActiveTabset();
     if (!group) model.visitNodes(node => { if (!group && node.getType() === "tabset") group = node as ReturnType<Model["getActiveTabset"]>; });
     if (!group) { setMessage("Reset to a workspace template before adding a panel."); return; }
-    const panel = STUDIO_PANELS.find(panel => panel.type === type)!;
+    const panel = panels.find(panel => panel.type === type)!;
     model.doAction(Actions.addTab({ type: "tab", id: `panel-${crypto.randomUUID()}`, component: type, name: panel[locale], ...(type === "dashboard" ? { config: compactDashboard() } : {}) }, group.getId(), DockLocation.CENTER, -1));
     setRevision(value => value + 1); setPicker(false);
   };
@@ -140,7 +145,7 @@ function StudioSession({ epoch, remember, onProtectionChange, onExit }: { onExit
     if ([Actions.POPOUT_TAB, Actions.POPOUT_TABSET, Actions.CREATE_SUBLAYOUT].includes(action.type)) return undefined;
     return action;
   };
-  return <StudioSnapshot><StudioPresentation.Provider value={{ editing }}><section className={`studio-session ${editing ? "studio-editing" : "studio-browsing"}`} aria-label="APEIR Studio">
+  return <StudioPresentation.Provider value={{ editing }}><section className={`studio-session ${editing ? "studio-editing" : "studio-browsing"}`} aria-label="APEIR Studio">
     <header className="studio-toolbar">
       <div className="studio-brand"><span className="studio-brand-mark" aria-hidden="true">A</span><strong>Studio</strong><span className="studio-workspace-name">{document.name}</span></div>
       <span className="studio-controller" title={getConfig().url}>{t("Runtime", "运行时")} · {getConfig().url.replace(/^https?:\/\//, "")}</span>
@@ -170,14 +175,14 @@ function StudioSession({ epoch, remember, onProtectionChange, onExit }: { onExit
         try { if (file.size > MAX_LAYOUT_BYTES) throw new Error("Layout exceeds 96 KiB."); const text = await file.text(); replace(parseStudioLayout(text)); } catch (error) { setMessage(String(error)); }
       }} />
     </header>
-    {picker && <section className="studio-picker" aria-label="Panel library"><label>{t("Search panels", "搜索面板")}<input autoFocus value={query} onChange={event => setQuery(event.target.value)} /></label>{STUDIO_PANELS.filter(panel => `${panel.en} ${panel.zh} ${panel.type}`.toLowerCase().includes(query.toLowerCase())).map(panel => <button title={panel.owner} key={panel.type} onClick={() => open(panel.type)}><strong>{panel[locale]}</strong></button>)}</section>}
+    {picker && <section className="studio-picker" aria-label="Panel library"><label>{t("Search panels", "搜索面板")}<input autoFocus value={query} onChange={event => setQuery(event.target.value)} /></label>{panels.filter(panel => `${panel.en} ${panel.zh} ${panel.type}`.toLowerCase().includes(query.toLowerCase())).map(panel => <button title={panel.owner} key={panel.type} onClick={() => open(panel.type)}><strong>{panel[locale]}</strong></button>)}</section>}
     {library && <StudioLayoutLibrary locale={locale} current={() => captureStudioLayout(model.toJson(), document)} load={replace} exportLayout={layout => download(JSON.stringify(layout, null, 2), "apeir-studio-layout.json")} close={() => setLibrary(false)} />}
     {message && message !== t("Layout saved.", "布局已保存。") && <div role="status" className="studio-notice">{message}<button onClick={() => setMessage("")}>{t("Dismiss", "关闭提示")}</button></div>}
-    <div className="studio-dock" data-layout-revision={revision}><Layout model={model} factory={node => <StudioPanelSlot host={getHost(node.getId())} />} onAction={action} onRenderTab={(node, values) => { const panel = STUDIO_PANELS.find(panel => panel.type === node.getComponent()); if (panel && [panel.type, panel.en, panel.zh].includes(node.getName())) values.content = panel[locale]; }} onModelChange={() => setRevision(value => value + 1)} /></div>
+    <div className="studio-dock" data-layout-revision={revision}><Layout model={model} factory={node => <StudioPanelSlot host={getHost(node.getId())} />} onAction={action} onRenderTab={(node, values) => { const panel = panels.find(panel => panel.type === node.getComponent()); if (panel && [panel.type, panel.en, panel.zh].includes(node.getName())) values.content = panel[locale]; }} onModelChange={() => setRevision(value => value + 1)} /></div>
     {tabs.map(node => <StablePanel key={node.getId()} node={node} host={getHost(node.getId())} dirty={dirty.current} onProtectionChange={onProtectionChange} onSnapshot={value => remember(`${epoch}:${node.getId()}`, value)} open={open} inspect={setSelection} config={node.getConfig()} locale={locale} saveLayout={save} updateConfig={config => { if (JSON.stringify(node.getConfig()) !== JSON.stringify(config)) { model.doAction(Actions.updateNodeAttributes(node.getId(), { config })); setRevision(value => value + 1); } }} />)}
     <DetailDrawer view={selection} onClose={() => setSelection(null)} />
     <footer className="studio-footer"><span role="status">{message === t("Layout saved.", "布局已保存。") ? message : `${tabs.length} ${t(tabs.length === 1 ? "panel" : "panels", "个面板")}`}</span><span>{editing ? t("Editing layout", "正在编辑布局") : t("Workspace", "工作区")} · Ctrl/⌘ ⇧ P</span></footer>
-  </section></StudioPresentation.Provider></StudioSnapshot>;
+  </section></StudioPresentation.Provider>;
 }
 
 function StablePanel({ node, host, dirty, onSnapshot, open, onProtectionChange, inspect, config, locale, updateConfig, saveLayout }: { config: unknown; locale: "en" | "zh"; updateConfig: (config: unknown) => void; saveLayout: () => void; node: TabNode; host: HTMLElement; dirty: Set<string>; onSnapshot: (drafts: WorkbenchDraft[]) => void; open: (type: string) => void; onProtectionChange: (value: boolean) => void; inspect: (view: DrawerView) => void }) {

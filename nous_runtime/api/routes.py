@@ -46,6 +46,10 @@ from typing import Any
 
 from urllib.parse import unquote, urlsplit
 
+from nous_runtime.api.studio_extension_routes import (
+    STUDIO_EXTENSION_GOVERNANCE,
+    STUDIO_EXTENSION_ROUTES,
+)
 from nous_runtime.api.responses import err_response, ok_response
 from nous_runtime.api.workflow_routes import (
     WORKFLOW_GOVERNANCE,
@@ -1932,11 +1936,13 @@ try:
 except ImportError:
     DEVELOPER_AUTHENTICATED_ROUTES = set()
 
-# Workflow Studio uses the existing canonical runtime and authenticated dispatcher.
-
+# Studio projections share the canonical authenticated dispatcher.
+ROUTES.update(STUDIO_EXTENSION_ROUTES)
 ROUTES.update(WORKFLOW_ROUTES)
-DEVELOPER_AUTHENTICATED_ROUTES = set(DEVELOPER_AUTHENTICATED_ROUTES) | set(
-    WORKFLOW_ROUTES.values()
+DEVELOPER_AUTHENTICATED_ROUTES = (
+    set(DEVELOPER_AUTHENTICATED_ROUTES)
+    | set(STUDIO_EXTENSION_ROUTES.values())
+    | set(WORKFLOW_ROUTES.values())
 )
 
 # Research routes - governed network, Source, Snapshot, and Evidence
@@ -2122,6 +2128,7 @@ for legacy_key, canonical_key in LEGACY_ROUTE_ALIASES.items():
     if governance is not None:
         GOVERNED_MUTATION_ROUTES.setdefault(legacy_key, governance)
 
+GOVERNED_MUTATION_ROUTES.update(STUDIO_EXTENSION_GOVERNANCE)
 GOVERNED_MUTATION_ROUTES.update(WORKFLOW_GOVERNANCE)
 
 _PATH_PARAMETER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
@@ -2291,6 +2298,27 @@ def _authorize_mutation_route(
                 if capability_id == "workflow.register"
                 else ("workflow.execute",)
             )
+        if route_path.startswith("/api/v1/studio/extensions/"):
+            from nous_runtime.api.studio_extension_routes import (
+                workspace as presentation_workspace,
+                studio_mutation_summary,
+            )
+
+            safe_body = studio_mutation_summary(route_path, body, authorization_context)
+            proposal_params = {"body": safe_body, "path_params": dict(params)}
+            target_workspace = str(presentation_workspace())
+            affected_resources = (
+                str(
+                    presentation_workspace() / ".nous" / "extensions" / "registry.json"
+                ),
+            )
+            if route_path.endswith("/action"):
+                affected_resources = (
+                    str(presentation_workspace() / ".nous" / "workflows.db"),
+                )
+                required_permissions = ("workflow.execute",)
+            else:
+                required_permissions = ("workspace.write",)
         proposal = ActionProposal(
             action_type="api.mutation",
             capability_id=capability_id,
