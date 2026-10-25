@@ -3,109 +3,93 @@
 An open execution, governance and verification runtime for heterogeneous
 intelligence and real-world resources.
 
-APEIR uses local-first durable state and replaceable Providers.
-It connects intelligence from models, external agents, algorithms or humans
-to governed Work on heterogeneous Nodes and Devices. It records authorization,
-execution evidence and independently observed effects so that recovery can
-reconcile what happened. A successful response alone does not prove an effect.
+[**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
+[**Quick Start**](docs/operations/getting-started/QUICK_START.md) ·
+[**Documentation**](docs/operations/README.md) · [简体中文](README.zh-CN.md)
 
-[Roadmap and status](ROADMAP.md) · [Architecture](docs/architecture/README.md) ·
-[Operations](docs/operations/README.md) · [Developer SDK](docs/development/DEVELOPER_PLATFORM.md) ·
-[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [简体中文](README.zh-CN.md)
+![APEIR Studio connected to a model-free Runtime](docs/media/studio-source-overview.png)
 
-[APEIR Studio](docs/development/DEVELOPER_PLATFORM.md#apeir-studio) is the modular
-Desktop workspace over this Runtime: dock existing views and save safe layouts.
-The current source-browser preview includes reproducible Runtime integration
-checks; it is not a qualified Windows installer. Feature limits remain in ROADMAP.
+*Actual Studio source-browser capture with an owned local Runtime. Missing Kernel,
+Node and model data remain unconfigured or unknown. This is not an installed EXE.*
 
-## Architecture
+## Overview
 
-```text
-Goal → AgentSession / Plan → durable Workflow
-                              ↓
-                     Governance / human approval
-                              ↓
-                Distributed Work → Node → Provider → Device
-                              ↓
-                    Receipt + Artifact evidence
-                              ↓
-             independent Observation → EffectVerification → COMMIT
-```
+APEIR Studio is the desktop workspace over APEIR Runtime. Arrange project,
+conversation, task, resource and evidence panels while the existing Runtime owns
+execution, Governance owns authorization, and durable records support recovery.
+Models, Agents and UI extensions cannot authorize themselves.
 
-Models and placement are never authorities. Credentials are scoped to authorized
-execution. UNKNOWN fails closed, and uncertain effects are reconciled rather
-than blindly retried. Device identity is independent of its transport address.
-The [five canonical architecture contracts](docs/architecture/README.md) explain
-these boundaries and distinguish Runtime-service execution from Kernel-managed
-NKI workloads. The independently released [APEIR Kernel](https://github.com/untrod/apeir-kernel)
+## What you can do
+
+- Browse projects, review file diffs and submit version-bound changes for approval.
+- Arrange docked panels and read-only Dashboards; save, import and reuse layouts.
+- Inspect real Runtime/Kernel status, registered Nodes, Devices, Work and evidence.
+- Use durable Workflow through the existing CLI and inspect its records in Studio.
+- Install reviewed Skill instructions and use the public Provider SDK.
+- Run the offline [Verified Execution Demo](examples/hello_runtime/README.md),
+  including rejection, UNKNOWN, response-loss reconciliation and restart.
+
+Model calls require their configured Provider and authenticated Kernel. Commands
+require their existing permissions and qualified sandbox. Instruction installation
+is not tool authorization; execution success is not independent effect verification.
+
+## Quick Start
+
+Follow the [single installation and first-run guide](docs/operations/getting-started/QUICK_START.md).
+It separates downloadable **Source Preview**, **Developer Setup** and
+**Native Installation**. Source inspection and the simulated Demo need no API key
+or hardware. Downloadable source packages are not Windows installers.
+
+**Windows EXE / NSIS: BLOCKED.** Exact locked Kernel binaries are unavailable;
+reviewed replacement candidates await maintainer approval and Windows10 lifecycle
+qualification. See the [native delivery evidence](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#r4-trusted-candidate-evidence--2026-10-24).
+No qualified installer or formal Release is currently advertised.
+
+## Developer Platform
+
+The [Studio guide](docs/development/DEVELOPER_PLATFORM.md#apeir-studio) covers
+panels, keyboard navigation, layout editing, model configuration and current limits.
+Use [Developer Setup](docs/operations/getting-started/QUICK_START.md#developer-setup)
+for source changes and browser debugging. Studio is part of this Distribution;
+the independently maintained [Kernel](https://github.com/untrod/apeir-kernel)
 is pinned by [component lock](runtime-components.lock.json).
 
-## Current status
+## SDK & Extensions
 
-Distribution is `0.1.0-rc1`, for development and evaluation. M3.1–M3.4 software,
-M3.5 Control Plane and M3.6 SDK software Gates have passed within their documented
-scope. Generic external-agent OCI, OPA policy and OpenBao KV-v2 software references
-are exercised within their documented scopes;
-other M4 integrations remain incomplete. Serial/ESP32 host contracts are read-only
-preparation.
-**M3.3-C physical acceptance, M5 physical writes/power-loss and a second hardware
-family remain PENDING. M6/M7 are not accepted.** Native locked-binary hash
-verification is BLOCKED by missing binaries. See the [exact matrix](ROADMAP.md).
+Start with the [public Developer Platform](docs/development/DEVELOPER_PLATFORM.md),
+[Provider example](examples/hello_provider/README.md) and
+[Skill example](examples/hello_skill/README.md).
+Executable third-party Studio UI is not enabled. Visual Workflow editing,
+declarative UI contributions and their qualification are tracked in ROADMAP;
+an installed package never grants execution permission.
 
-The Operations Console uses backend state for health, Work, Nodes, Devices,
-approvals, evidence and recovery, with responsive mobile controls. It does not
-grant authority. Real IdP deployment and native/physical qualification are
-separate from deterministic Cloud contract tests.
+## Current Status
 
-## Developer Preview
+Distribution `0.1.0-rc1` is a **Source Developer Preview**.
+Source installation and scoped software scenarios are qualified; the complete
+product remains PARTIAL. Real model accounts, strict execution isolation,
+Windows native installation, real IdP and physical Jetson/ESP32 writes have
+separate prerequisites. [ROADMAP](ROADMAP.md) is the single status source.
 
-Start with the [Verified Execution Demo](examples/hello_runtime/README.md):
-a real simulated firmware state change through existing Governance, original
-Work, signed Node execution, Receipt, independent Observation and MATCH-only
-EffectVerification. No API key or hardware is needed. The failure gallery
-exercises Deny, MISMATCH, UNKNOWN, response loss without another mutation, and
-persistent restart. Results are Runtime records, not preset success JSON.
+UNKNOWN fails closed. Receipt is not Observation. An uncertain effect is
+reconciled instead of blindly executed again.
 
-The [Provider](examples/hello_provider/README.md) and
-[Skill](examples/hello_skill/README.md) examples use the public SDK and existing
-Registries. Read-only Work execution and loading Skill instructions have
-different scopes; neither grants device permission.
-The [scientific reference](docs/architecture/GOVERNED_SCIENTIFIC_RUNTIME.md)
-already composes simulation, independent numerical comparison, Claim/Evidence
-and DOCX/PDF reporting. Its current Cloud run is BLOCKED by the existing strong
-sandbox prerequisite; no substitute host execution or new report is claimed.
-The gallery includes a [short video script](examples/hello_runtime/README.md#five-minute-video-script),
-reproducible commands, actual result fields and feedback guidance.
+## Documentation
 
-This is a source Developer Preview, not a production binary release. Kernel
-traversal, native packaging/signatures, real IdP and physical hardware have
-separate acceptance gates. Evaluate in dedicated workspaces and share sanitized
-reproductions through [issues](https://github.com/untrod/apeir/issues).
+[Architecture contracts](docs/architecture/README.md) ·
+[Operations](docs/operations/README.md) ·
+[Compute Mesh](docs/operations/compute-mesh/OPERATIONS.md) ·
+[Engineering review](docs/acceptance/ENGINEERING_REVIEW.md) ·
+[Release Runbook](docs/acceptance/RELEASE_RUNBOOK.md)
 
-## Quick start
+## Contributing
 
-Follow the [source Quick Start](docs/operations/getting-started/QUICK_START.md)
-for the single recommended installation and first-run path. It needs no API key
-or hardware. Distribution and SDK versions have separate compatibility contracts;
-this source preview is not a certified binary release.
+Read [CONTRIBUTING](CONTRIBUTING.md) and [SECURITY](SECURITY.md).
+Use [Issues](https://github.com/untrod/apeir/issues) for sanitized reproductions;
+report vulnerabilities privately. `nous_runtime`, `nous`, `NOUS_*` and existing
+wire identifiers remain compatibility names.
 
-For Controller/Node launch and deployment, use the
-[operations guides](docs/operations/README.md) and
-[Compute Mesh runbook](docs/operations/compute-mesh/OPERATIONS.md).
-Production Kernel-managed paths fail closed if Kernel is unavailable. Desktop
-development uses Node.js 22 and Rust stable; Windows native builds also require
-MSVC/SDK and the exact locked Kernel artifacts:
+## License
 
-```bash
-npm --prefix desktop ci
-npm --prefix desktop run lint
-npm --prefix desktop test
-npm --prefix desktop run typecheck
-npm --prefix desktop run build
-```
-
-The public brand is APEIR / APEIR Runtime. `nous_runtime`, `nous`, `NOUS_*` and
-existing wire identifiers remain internal/compatibility names. Source archives
-exclude credentials, generated binaries, local databases and private evidence.
-
-Apache-2.0: [LICENSE](LICENSE), [NOTICE](NOTICE), [third-party notices](THIRD_PARTY_NOTICES.md).
+Apache-2.0: [LICENSE](LICENSE), [NOTICE](NOTICE),
+[third-party notices](THIRD_PARTY_NOTICES.md).
