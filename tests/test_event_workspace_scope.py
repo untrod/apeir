@@ -100,7 +100,9 @@ def test_concurrent_initialization_retains_exactly_one_owner(tmp_path):
 
 
 @pytest.mark.parametrize("early_probe_error", [None, URLError, TimeoutError])
-def test_real_cli_http_replays_only_its_original_workspace_events(tmp_path, early_probe_error):
+def test_real_cli_http_replays_only_its_original_workspace_events(
+    tmp_path, early_probe_error
+):
     source = str(Path(__file__).resolve().parents[1])
     launcher = tmp_path / "launcher"
     launcher.mkdir()
