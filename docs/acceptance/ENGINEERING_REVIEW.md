@@ -3935,9 +3935,9 @@ steps, validates, exports a canonical definition accepted by the existing CLI,
 saves/restores a private draft, registers through a one-use approval lease, runs
 the real pure handlers, inspects original events, restarts the owned Runtime and
 loads the same Run ID. A different Controller cannot retrieve it, and a missing
-bearer is rejected. The trusted test approver uses the existing Store/LeaseManager
-outside the browser; this is software authority-fixture evidence, not real-IdP
-qualification. Separate cryptographic fake-IdP tests exercise current human
+bearer is rejected. The independent test approver uses the actual public CLI and its attested local
+OS-owner context outside the browser; this is software authority-fixture
+evidence, not real-IdP qualification. Separate cryptographic fake-IdP tests exercise current human
 approval, wrong scope, serialized identity, changed binding and revocation.
 Full exact-commit required CI and protected resulting-main acceptance remain
 separate gates. No model, strong-sandbox command, physical, Windows native,
@@ -3953,3 +3953,16 @@ transaction. Unbound compatibility decisions retain their old non-executing
 semantics. Local listing includes the owner's Gate-bound API requests. Original
 installed-wheel failure evidence and process-cleanup results are retained
 privately. This is a necessary source-user path, not a new approval authority.
+
+After the CLI fix, a new clean Python3.12.14 virtual environment installed the
+wheel for `e0dbf6ffcf8994803096918fb7fbd41a19c35fb7` (SHA256
+`6d3a4f41a1568d23696cbf8366d0fe764527a3db81c724571bb5013f4be92f02`).
+From an owned temporary workspace outside the checkout, the public installed CLI
+validated the definition, supplied the original API approval and admitted
+registration/execution through the real HTTP Gate. After stopping and restarting
+the installed Runtime, detail/events and repeated same-key submission retained
+Run `wfr_fd79c162e6c948c8b12c9c6658a09955`, with exactly one persisted run. Normal
+process cleanup passed. The browser path also uses this public CLI approval,
+not a low-level lease fixture. This is Linux installed-wheel software evidence;
+exact resulting-main qualification, model, sandbox and native gates remain
+independent.

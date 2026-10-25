@@ -460,10 +460,9 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
     const message = await builder.getByRole("alert").textContent();
     const requestId = message?.match(/Approval: ([A-Za-z0-9_-]+)/)?.[1];
     expect(requestId).toBeTruthy();
-    // Trusted qualification approver, separate from the browser/service subject.
-    // Uses the actual GovernanceStore/LeaseManager; not a production IdP claim.
-    const code = `from nous_runtime.governance import GovernanceStore; from nous_runtime.governance.broker import ApprovalBroker; from nous_runtime.governance.contracts import ActionProposal,ApprovalResponse; from nous_runtime.governance.lease import LeaseManager; s=GovernanceStore(); b=ApprovalBroker(store=s); pending=b.get_pending(); import sys; p=next(p for p in pending if p['request_id']==sys.argv[1]); proposal=ActionProposal.from_dict(s.get_proposal(p['proposal_hash'])); LeaseManager(s).issue(proposal,ApprovalResponse(request_id=p['request_id'],proposal_hash=proposal.proposal_hash,decision='APPROVED',approver_id='qualification-host-owner'),subject_id='api-service')`;
-    const child = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-c", code, requestId!], { cwd: resolve(".."), env: { ...globalThis.process.env, NOUS_WORKSPACE_ROOT: runtimes[0].directory }, stdio: "ignore" });
+    // The actual public CLI supplies the attested local OS-owner approval.
+    // It remains separate from the browser/service subject, not a real-IdP claim.
+    const child = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-m", "nous_runtime.cli.main", "--no-intelligence", "approval", "approve", requestId!], { cwd: runtimes[0].directory, env: { ...globalThis.process.env, PYTHONPATH: resolve(".."), NOUS_WORKSPACE_ROOT: runtimes[0].directory }, stdio: "ignore" });
     producers.push(child);
     const result = await new Promise<number | null>((resolve, reject) => { child.once("exit", resolve); child.once("error", reject); });
     expect(result).toBe(0);
