@@ -4204,3 +4204,24 @@ is relaxed. New regressions cover atomic rollback at each insert/commit, indepen
 writers' audit bindings, uncertain commit with one publication attempt, and both
 ordinary and interrupted live status reads. Current candidate and resulting-main
 Windows CI must qualify independently of these local experiments.
+
+The SDK/process/Governance source combination at `856a377` passed nine actual
+sandboxed Chromium cases, including public human approvals, original Workflow
+registration/run/restart, extension lifecycle/revocation and Controller/layout
+isolation. A newly built base wheel installed in a new outside-checkout Python
+3.12.14 venv has SHA-256
+`27b3294081df4b525726a485c054e05c0022a5e0d26bc01b655acb835ffe8833`.
+The copied standalone SDK client (`python -I`) passed install/update/disable,
+permission rejection and restart through public CLI/API. Original Run
+`wfr_0c73efadbd264159a443e4a054a6f3b4` survived repeat-key recovery unchanged.
+Official source qualification kept production models without Kernel BLOCKED,
+usage UNKNOWN, unauthenticated requests denied and owned shutdown clean.
+
+The compiled frontend and installed wheel from that same `856a377` source also
+passed actual browser extension use, graphical Workflow execution and a manually
+edited two-file proposal: separate original owner approval, actual file writes,
+fresh file MATCH and original Work `work_1e8dadd98bbe5e1a8a9344e21001a070`.
+Installed simulated lost-response recovery retained effect_count=1. These Linux,
+model-disabled runtime-service results do not imply a generated model proposal,
+a sandboxed test execution, native installation or physical verification. Exact
+protected-main integration and corresponding CI/artifacts qualify separately.
