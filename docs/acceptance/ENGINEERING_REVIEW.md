@@ -4112,3 +4112,11 @@ or physical qualification. Initial undeclared-dependency and local disk-exhausti
 failures remain retained; a fresh venv was used after freeing only reproducible
 inactive frontend dependency directories. Original source and native evidence
 were preserved.
+
+Final contract review also reproduced a valid multi-package response exceeding
+the first 1 MiB frontend/example-client projection bound. The fixed 5 MiB
+consumer limit matches 64 bounded 64 KiB UI packages plus verified envelopes;
+per-view types, depth, source and action limits are unchanged. A 20-package
+counterexample now loads, while malformed rendered record primitives and the
+65th package fail admission. This is a bounded contract fix, not a performance
+improvement claim.

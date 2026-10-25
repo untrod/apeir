@@ -1078,7 +1078,10 @@ import compatibility level are not a signature or certification.
 Views support escaped text, metric, status, table, bounded current-session chart,
 stack and one optional governed action per contribution. There is no HTML render,
 JavaScript expression, module URL, iframe code injection, credential, Tauri IPC or
-unrestricted file/network/process access. Data is restricted to the host's sanitized
+unrestricted file/network/process access. The shared catalog consumer admits up to 5 MiB (64 packages of at most 64 KiB
+of presentation metadata plus record envelopes), without widening view or action
+schemas. This avoids rejecting valid multi-package catalogs at the original
+1 MiB client limit. Data is restricted to the host's sanitized
 Runtime status fields and declared lifecycle event metadata. Unavailable fields
 remain UNKNOWN. Chart samples are transient display history, not persisted evidence.
 

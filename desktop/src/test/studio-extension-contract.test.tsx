@@ -52,3 +52,12 @@ it("shares one extension read and prevents superseded reads restoring revoked da
   expect(view.container.textContent).toBe("NOT_ENABLED");
   expect(shared.extensions.data?.extensions[0].enabled).toBe(false);
 });
+it("admits a bounded valid multi-package catalog without accepting malformed record primitives", () => {
+  const value = snapshot();
+  const view = { kind: "stack", children: Array.from({ length: 3 }, () => ({ kind: "stack", children: Array.from({ length: 10 }, () => ({ kind: "text", text: "x".repeat(2048) })) })) };
+  const extensions = Array.from({ length: 20 }, (_, i) => ({ ...value.extensions[0], extension_id: `example/test-${i}`, contributions: [{ ...value.extensions[0].contributions[0], type: `ui:${i.toString(16).padStart(32, "0")}:test`, view }] }));
+  expect(JSON.stringify(extensions).length).toBeGreaterThan(1024 * 1024);
+  expect(parseStudioUIView({ ...value, extensions }).extensions).toHaveLength(20);
+  expect(() => parseStudioUIView({ ...value, extensions: [{ ...value.extensions[0], authority: { code: "not text" } }] })).toThrow();
+  expect(() => parseStudioUIView({ ...value, extensions: Array(65).fill(value.extensions[0]) })).toThrow();
+});

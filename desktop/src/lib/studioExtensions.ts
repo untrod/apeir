@@ -1,5 +1,8 @@
 /** Public data-only Studio host contract. These declarations grant no authority. */
 export const STUDIO_UI_SCHEMA = "apeir.studio-ui/v1";
+// 64 installed packages, each with at most 64 KiB of presentation metadata,
+// plus stable component identities and verified record envelopes.
+export const MAX_STUDIO_UI_PROJECTION_BYTES = 5 * 1024 * 1024;
 export const STUDIO_UI_FIELDS = ["running", "version", "providers", "capabilities", "devices", "events", "jobs_pending", "kernel_state", "kernel_ready"] as const;
 export type StudioField = typeof STUDIO_UI_FIELDS[number];
 export type StudioView =
@@ -38,11 +41,11 @@ function validateView(value: unknown, depth = 0): value is StudioView {
 }
 export function parseStudioUIView(input: unknown): StudioUIView {
   const value = object(input);
-  if (JSON.stringify(input).length > 1048576 || !Array.isArray(value.extensions) || value.extensions.length > 64 || value.execution_scope !== "runtime-service" || value.executable_ui !== "BLOCKED" || !boundedText(value.received_at, 64)) throw new Error("Unsupported Studio host response");
+  if (new TextEncoder().encode(JSON.stringify(input)).byteLength > MAX_STUDIO_UI_PROJECTION_BYTES || !Array.isArray(value.extensions) || value.extensions.length > 64 || value.execution_scope !== "runtime-service" || value.executable_ui !== "BLOCKED" || !boundedText(value.received_at, 64)) throw new Error("Unsupported Studio host response");
   const types = new Set<string>();
   for (const item of value.extensions) {
     const record = object(item);
-    if (!boundedText(record.extension_id, 256) || !boundedText(record.version, 128) || typeof record.digest !== "string" || !digest.test(record.digest) || typeof record.enabled !== "boolean" || !Array.isArray(record.contributions) || record.contributions.length > 16) throw new Error("Invalid Studio extension identity");
+    if (!boundedText(record.extension_id, 256) || !boundedText(record.version, 128) || typeof record.digest !== "string" || !digest.test(record.digest) || typeof record.enabled !== "boolean" || ![record.state, record.authority, record.publisher_trust, record.signature_status].every(field => boundedText(field, 256)) || !Array.isArray(record.contributions) || record.contributions.length > 16) throw new Error("Invalid Studio extension identity");
     for (const raw of record.contributions) {
       const contribution = object(raw);
       if (typeof contribution.type !== "string" || !component.test(contribution.type) || types.has(contribution.type) || !["panel", "widget"].includes(String(contribution.kind)) || !boundedText(contribution.title, 64) || !validateView(contribution.view)) throw new Error("Unsupported Studio contribution");

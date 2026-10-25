@@ -58,8 +58,8 @@ class StudioHost:
         except HTTPError as error:
             response = error
         with response:
-            payload = response.read(1048577)
-        if len(payload) > 1048576:
+            payload = response.read(5 * 1024 * 1024 + 1)
+        if len(payload) > 5 * 1024 * 1024:
             raise ValueError("Runtime response exceeds the example client bound")
         value = json.loads(payload)
         if not value.get("ok"):
