@@ -1,30 +1,79 @@
-# Source Quick Start
+# Quick Start
 
-This is the recommended entry point for APEIR Developer Preview. Use Git,
-Python 3.10–3.12 and a writable checkout. No model API key, GPU or real device
-is needed for source inspection and simulated examples. Current acceptance
-and blockers live only in [ROADMAP](../../../ROADMAP.md).
+Choose the path matching the deliverable you have. No API key, GPU or device is
+needed for the Source Preview and simulated Demo. Current qualification and
+blockers remain in [ROADMAP](../../../ROADMAP.md).
 
-A maintainer's manual **Desktop CI** run can provide the
-`apeir-python-source-preview-<commit>` artifact in
-[GitHub Actions](https://github.com/untrod/apeir/actions/workflows/desktop-build.yml).
-It expires after seven days. The job installs its own wheel and exercises the
-existing simulated recovery Demo and public model-free API startup, authentication
-and shutdown; `source-preview-validation.json` reports that scope. The artifact
-includes this same Quick Start with links pinned to its source revision, not a
-separate installation guide. Check the source revision and `SHA256SUMS.txt` before
-installing the wheel with `python -m pip install path/to/apeir_distribution-0.1.0rc1-py3-none-any.whl`.
-For the matching Desktop sources or SDK examples, clone the repository and run
-`git checkout --detach <distribution_revision>`, replacing the placeholder with
-the exact value in `source-preview-manifest.json`. Do not use a different main
-revision alongside the downloaded wheel. Wheel users skip the editable
-`pip install -e .` command below; it is the alternative source-install path.
-This Python source package provides CLI/Runtime libraries, not APEIR.exe or a
-Windows installer. Desktop source still needs the checkout below; real model,
-Kernel, sandbox and native-release prerequisites remain separate. The manifest
-does not claim those Gates passed.
+| Path | What you get | Status |
+| --- | --- | --- |
+| [Source Preview](#source-preview) | Downloaded Python Runtime and built Studio browser UI | Source-qualified; no EXE |
+| [Developer Setup](#developer-setup) | Editable checkout and Studio development server | Source development |
+| [Native Installation](#native-installation) | Windows Portable / NSIS | BLOCKED; no qualified installer |
 
-## Install
+## Source Preview
+
+The current independently installed and browser-qualified source revision is
+`62cbe6ff53a769172067740370f26fb18eb3c094` (2026-10-25).
+Download both artifacts from that same [Desktop CI run](https://github.com/untrod/apeir/actions/runs/40144930113):
+
+- [Python Source Preview](https://github.com/untrod/apeir/actions/runs/40144930113/artifacts/12580500976)
+- [Studio source frontend](https://github.com/untrod/apeir/actions/runs/40144930113/artifacts/12579679819)
+
+GitHub sign-in is required; artifacts have seven-day retention. If expired,
+use a newer accepted source build from [Desktop CI](https://github.com/untrod/apeir/actions/workflows/desktop-build.yml),
+checking its validation report. Do not substitute an unrelated wheel or GUI.
+These are source packages, not a native installer or permanent signed Release.
+
+Extract the two ZIPs into separate directories. Compare their manifest
+`distribution_revision` values and verify the files against their `SHA256SUMS.txt`.
+This cross-platform command runs from either extracted directory:
+
+```bash
+python -c "import hashlib,pathlib; r=pathlib.Path('.'); rows=[s.split('  ',1) for s in (r/'SHA256SUMS.txt').read_text().splitlines()]; assert all(hashlib.sha256((r/p).read_bytes()).hexdigest()==h for h,p in rows); print('SHA-256 PASS')"
+```
+
+Create a clean environment and install the extracted wheel:
+
+```bash
+python -m venv .venv
+```
+
+Activate using the commands in [Developer Setup](#developer-setup). From the
+extracted Python package directory, with that environment active:
+
+```bash
+python -m pip install ./apeir_distribution-0.1.0rc1-py3-none-any.whl
+apeir version
+apeir --help
+```
+
+Use an empty project directory for Runtime state. In that directory, run:
+
+```bash
+apeir --no-intelligence runtime-api start
+```
+
+Keep that terminal open. In another activated terminal, from the extracted
+Studio frontend directory, run:
+
+```bash
+python -m http.server 5186 --bind 127.0.0.1 --directory app
+```
+
+Open `http://127.0.0.1:5186`. Follow [the connection steps](#model-free-runtime-api-and-source-interface)
+to enter the protected local session token and choose **APEIR Studio / Open workspace**.
+The built interface needs no Node.js or Rust installation. Missing model, Kernel
+and sandbox prerequisites remain visible; this does not enable production inference
+or unrestricted commands. Stop both foreground servers when finished.
+
+For the first safe execution, use [the simulated Demo](#first-verified-execution).
+For SDK examples or source changes, use the checkout at the exact manifest revision:
+`git checkout --detach 62cbe6ff53a769172067740370f26fb18eb3c094`.
+Wheel users skip the editable `pip install -e .` command; it is an alternative install.
+
+## Developer Setup
+
+### Install from the checkout
 
 ```bash
 git clone https://github.com/untrod/apeir.git
@@ -341,3 +390,17 @@ control path was blocked by the strict ProcessSandbox. A fixture-only OCI
 reference test does not qualify this default API path. Do not change isolation
 or inject an unrestricted runner to make the UI report success. Lost responses
 need inspection/reconciliation before any new side effect.
+
+## Native Installation
+
+**BLOCKED — no current Windows EXE / Portable / NSIS download is qualified.**
+Source Preview does not install the Rust Kernel or package a native Desktop.
+The two original locked Kernel Windows binaries are unavailable. Reviewed R4
+rebuilds passed scoped native-process tests but differ from the unchanged lock;
+relocking requires maintainer approval. Windows10 install/upgrade/uninstall,
+signing and release authorization remain separate.
+
+See the [recorded component evidence](../deployment/WINDOWS_10_X64_LAUNCHER.md#r4-trusted-candidate-evidence--2026-10-24)
+and [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md). Never rename a source
+ZIP to an installer or bypass component admission. A future approved native
+artifact will be linked here after its actual qualification.
