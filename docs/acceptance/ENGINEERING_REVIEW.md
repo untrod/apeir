@@ -3942,3 +3942,19 @@ regression passed52 tests locally. Source-browser qualification covers the
 existing EventStream widget through the real authenticated Controller switch;
 no model, physical or native qualification is inferred. Exact PR and resulting
 main CI remain separate requirements.
+
+### R5 source-entry CI follow-up — 2026-10-25
+
+PR95 at `a7b919f3351f07ceb9237c0e0b05f2971c804580` failed Core run
+[40181568192](https://github.com/untrod/apeir/actions/runs/40181568192), Linux
+Python3.10 job121133551259. The README omitted the existing local-first contract;
+the text was restored in both languages. Separately, the actual CLI event-owner
+startup probe raised `TimeoutError` before receiving HTTP headers. The CLI binds
+before initialization to protect the active session on port conflict; a connected
+socket therefore does not establish HTTP readiness. The read-only startup loop
+now handles this transient outcome, with the same1-second request timeout,
+10-second overall deadline and unchanged original/foreign-event assertions.
+Fault injection covers connection refusal and pre-serving timeout, then exercises
+the real CLI/HTTP path. The affected EventStream/startup/hygiene checks passed29
+locally. This corrects probe handling; it does not qualify or close the separate
+historical Windows SQLite, relay, signed-response or Automation timing issues.

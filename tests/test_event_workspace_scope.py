@@ -99,7 +99,8 @@ def test_concurrent_initialization_retains_exactly_one_owner(tmp_path):
     assert sorted(outcomes) == ["owned", "rejected"]
 
 
-def test_real_cli_http_replays_only_its_original_workspace_events(tmp_path):
+@pytest.mark.parametrize("early_probe_error", [None, URLError, TimeoutError])
+def test_real_cli_http_replays_only_its_original_workspace_events(tmp_path, early_probe_error):
     source = str(Path(__file__).resolve().parents[1])
     launcher = tmp_path / "launcher"
     launcher.mkdir()
@@ -145,7 +146,17 @@ def test_real_cli_http_replays_only_its_original_workspace_events(tmp_path):
         stderr=subprocess.DEVNULL,
     )
 
+    first_probe = True
+
     def request(**query):
+        nonlocal first_probe
+        if first_probe:
+            first_probe = False
+            if early_probe_error is not None:
+                # The CLI intentionally binds before initialization, preventing
+                # a second launch from rotating an existing session. A connected
+                # socket is not proof that the HTTP serving loop is ready yet.
+                raise early_probe_error("injected pre-serving startup probe")
         url = f"http://127.0.0.1:{port}/api/v1/events/stream?" + urlencode(query)
         return urlopen(
             Request(url, headers={"Authorization": "Bearer " + token}), timeout=1
@@ -161,7 +172,10 @@ def test_real_cli_http_replays_only_its_original_workspace_events(tmp_path):
                 with request(domain="qualification") as stream:
                     response = json.load(stream)
                 break
-            except URLError:
+            except (URLError, TimeoutError):
+                # Retry only read-only readiness probes within the same original
+                # 10-second startup deadline. Foreign cursor assertions and the
+                # one-second request deadline below remain unchanged.
                 time.sleep(0.05)
         assert response is not None, "Owned CLI HTTP startup deadline exceeded"
         assert response["ok"] is True
