@@ -331,6 +331,10 @@ def handle_workflow_run_action(run_id: str, body: dict, *, authorization_context
         definition = runtime.store.get_definition(
             original.workflow_id, original.workflow_version
         )
+        if body["action"] == "cancel":
+            # Cancellation is an original-run admission flag, not handler replay.
+            # The Store preserves UNKNOWN if a started effect needs reconciliation.
+            return ok_response(_view(runtime.cancel(run_id)))
         if definition is None or unsupported_steps(definition):
             return err_response(
                 "NOUS_NOT_AVAILABLE", "Original host handlers are required for recovery"

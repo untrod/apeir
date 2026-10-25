@@ -366,3 +366,46 @@ def test_step_approval_requires_current_nonserialized_human_and_original_scope(
     auth.logout(context)
     with pytest.raises(PermissionError):
         handle_workflow_run_action(waiting.run_id, body, authorization_context=context)
+
+
+def test_uncertain_original_host_can_be_cancelled_without_replaying_or_claiming_success(
+    api,
+):
+    from nous_runtime.workflow import WorkflowRuntime
+
+    call, _, root = api
+    effects = []
+
+    def response_lost(step, context):
+        effects.append(context["run_id"])
+        raise RuntimeError("qualification response lost after recorded test effect")
+
+    definition = definition_from_dict(
+        spec(
+            {
+                "step_id": "effect",
+                "step_type": "capability",
+                "action": "qualification.effect",
+            }
+        )
+    )
+    original_host = WorkflowRuntime(
+        str(root), handlers={"qualification.effect": response_lost}
+    )
+    original_host.register(definition)
+    original = original_host.start(
+        definition.workflow_id, definition.version, idempotency_key="uncertain-original"
+    )
+    assert original.state.value == "unknown" and effects == [original.run_id]
+    detail = call("GET", f"/api/v1/workflow/runs/{original.run_id}")
+    assert detail["data"]["run"]["state"] == "unknown"
+    path = f"/api/v1/workflow/runs/{original.run_id}/action"
+    resumed = call("POST", path, {"action": "resume"}, approve=True)
+    assert resumed["error"]["code"] == "NOUS_NOT_AVAILABLE"
+    cancelled = call("POST", path, {"action": "cancel"}, approve=True)
+    assert cancelled["ok"], cancelled
+    assert cancelled["data"]["state"] == "unknown"
+    assert cancelled["data"]["cancellation_requested"] is True
+    assert effects == [original.run_id]
+    assert original_host.resume(original.run_id).state.value == "unknown"
+    assert effects == [original.run_id]
