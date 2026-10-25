@@ -43,6 +43,7 @@ import os
 import re
 from pathlib import Path
 from typing import Any
+
 from urllib.parse import unquote, urlsplit
 
 from nous_runtime.api.studio_extension_routes import (
@@ -50,6 +51,11 @@ from nous_runtime.api.studio_extension_routes import (
     STUDIO_EXTENSION_ROUTES,
 )
 from nous_runtime.api.responses import err_response, ok_response
+from nous_runtime.api.workflow_routes import (
+    WORKFLOW_GOVERNANCE,
+    WORKFLOW_ROUTES,
+    handle_workflow_run,
+)
 from nous_runtime.extensions.mcp_server import handle_mcp_call
 from nous_runtime.core.errors import ArtifactError
 
@@ -1604,32 +1610,6 @@ def handle_operation_approval(request_id: str) -> dict[str, Any]:
         return err_response("NOUS_APPROVAL_NOT_FOUND", "Operation approval unavailable")
 
 
-def handle_workflow_run(body: dict[str, Any]) -> dict[str, Any]:
-    """Start a registered workflow through the existing Workflow Runtime."""
-    try:
-        from nous_runtime.workflow import WorkflowRuntime
-
-        runtime = WorkflowRuntime(os.environ.get("NOUS_WORKSPACE_ROOT", "."))
-        run = runtime.start(
-            str(body.get("workflow_id") or ""),
-            str(body.get("version") or "1.0.0"),
-            dict(body.get("inputs") or {}),
-            idempotency_key=str(body.get("idempotency_key") or ""),
-        )
-        return ok_response(
-            {
-                "run_id": run.run_id,
-                "workflow_id": run.workflow_id,
-                "state": run.state.value,
-                "step_states": dict(run.step_states),
-                "outputs": dict(run.outputs),
-                "error": run.error,
-            }
-        )
-    except (KeyError, ValueError) as exc:
-        return err_response("NOUS_INVALID_REQUEST", str(exc))
-
-
 def _model_center_service():
     from nous_runtime.model_runtime.center import ModelCenterService
 
@@ -1956,10 +1936,13 @@ try:
 except ImportError:
     DEVELOPER_AUTHENTICATED_ROUTES = set()
 
-# Declarative UI contributions reuse the authenticated dispatcher and existing Registry.
+# Studio projections share the canonical authenticated dispatcher.
 ROUTES.update(STUDIO_EXTENSION_ROUTES)
-DEVELOPER_AUTHENTICATED_ROUTES = set(DEVELOPER_AUTHENTICATED_ROUTES) | set(
-    STUDIO_EXTENSION_ROUTES.values()
+ROUTES.update(WORKFLOW_ROUTES)
+DEVELOPER_AUTHENTICATED_ROUTES = (
+    set(DEVELOPER_AUTHENTICATED_ROUTES)
+    | set(STUDIO_EXTENSION_ROUTES.values())
+    | set(WORKFLOW_ROUTES.values())
 )
 
 # Research routes - governed network, Source, Snapshot, and Evidence
@@ -2146,6 +2129,7 @@ for legacy_key, canonical_key in LEGACY_ROUTE_ALIASES.items():
         GOVERNED_MUTATION_ROUTES.setdefault(legacy_key, governance)
 
 GOVERNED_MUTATION_ROUTES.update(STUDIO_EXTENSION_GOVERNANCE)
+GOVERNED_MUTATION_ROUTES.update(WORKFLOW_GOVERNANCE)
 
 _PATH_PARAMETER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
@@ -2303,19 +2287,30 @@ def _authorize_mutation_route(
             required_permissions = ("runtime.execute", "scientific.compute")
             retry_behavior = "unsafe"
 
-        studio_workspace = None
+        target_workspace = str((body or {}).get("workspace") or "")
+        if route_path.startswith("/api/v1/workflow/"):
+            from nous_runtime.api.workflow_routes import workspace as workflow_workspace
+
+            target_workspace = str(workflow_workspace())
+            affected_resources = (str(workflow_workspace() / ".nous" / "workflows.db"),)
+            required_permissions = (
+                ("workspace.write",)
+                if capability_id == "workflow.register"
+                else ("workflow.execute",)
+            )
         if route_path.startswith("/api/v1/studio/extensions/"):
             from nous_runtime.api.studio_extension_routes import (
                 workspace as presentation_workspace,
+                studio_mutation_summary,
             )
-
-            from nous_runtime.api.studio_extension_routes import studio_mutation_summary
 
             safe_body = studio_mutation_summary(route_path, body, authorization_context)
             proposal_params = {"body": safe_body, "path_params": dict(params)}
-            studio_workspace = presentation_workspace()
+            target_workspace = str(presentation_workspace())
             affected_resources = (
-                str(studio_workspace / ".nous" / "extensions" / "registry.json"),
+                str(
+                    presentation_workspace() / ".nous" / "extensions" / "registry.json"
+                ),
             )
             required_permissions = (
                 ("workflow.execute",)
@@ -2327,9 +2322,7 @@ def _authorize_mutation_route(
             capability_id=capability_id,
             params=proposal_params,
             parameter_summary=f"{method} {route_path}",
-            target_workspace=str(studio_workspace)
-            if studio_workspace is not None
-            else str((body or {}).get("workspace") or ""),
+            target_workspace=target_workspace,
             affected_resources=affected_resources,
             data_classification=data_classification,
             external_recipients=external_recipients,

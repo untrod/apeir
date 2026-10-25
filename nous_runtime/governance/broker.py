@@ -245,7 +245,7 @@ class ApprovalBroker:
             return self.deny_operation(request_id, context, gate=gate)
         raise ValueError("Operation approval supports only Approve Once and Deny")
 
-    def respond_legacy(self, request_id, action, context, *, gate):
+    def respond_legacy(self, request_id, action, context, *, gate, reason=""):
         """Bind legacy API decisions to the existing human authority and journal."""
         from pathlib import Path
         from nous_runtime.control_plane.human_sessions import (
@@ -362,13 +362,13 @@ class ApprovalBroker:
             return self.approve(
                 request_id,
                 approver_id=context.subject_id,
-                reason="Authenticated human approved the original proposal",
+                reason=reason or "Authenticated human approved the original proposal",
                 admission_check=admit,
             )
         return self.deny(
             request_id,
             approver_id=context.subject_id,
-            reason="Authenticated human denied the original proposal",
+            reason=reason or "Authenticated human denied the original proposal",
             admission_check=admit,
         )
 
