@@ -1,6 +1,6 @@
 # APEIR
 
-面向异构智能与现实资源的开放执行、治理和验证运行时。
+面向异构智能与现实资源的开放执行、治理和验证运行时。本地优先，远程执行边界明确。
 
 [**源码预览下载**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
 [**快速开始**](docs/operations/getting-started/QUICK_START.md) ·

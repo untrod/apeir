@@ -1,7 +1,7 @@
 # APEIR
 
 An open execution, governance and verification runtime for heterogeneous
-intelligence and real-world resources.
+intelligence and real-world resources. Local-first, with explicit remote execution boundaries.
 
 [**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
 [**Quick Start**](docs/operations/getting-started/QUICK_START.md) ·
