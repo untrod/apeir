@@ -58,11 +58,11 @@ test.afterAll(async () => {
 });
 
 async function open(page: Page) {
+  page.on("pageerror", error => console.error(error.stack || error.message));
   await page.addInitScript(({ url, token }) => {
     sessionStorage.setItem("nous_server_url", url); sessionStorage.setItem("nous_server_token", token);
   }, { url: runtimes[0].url, token });
   await page.goto("/");
-  await page.getByRole("button", { name: /APEIR Studio/ }).click();
   await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
 }
 
@@ -90,7 +90,7 @@ test("Studio restores safe layouts, preserves drafts while docking and isolates 
   await workspaceMenu(page);
   await page.getByRole("button", { name: "Save layout", exact: true }).click();
   const saved = await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"));
-  await page.reload(); await page.getByRole("button", { name: /APEIR Studio/ }).click();
+  await page.reload(); await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"))).toBe(saved);
   await page.getByRole("button", { name: /example.py/ }).click();
   const editor = page.getByRole("textbox", { name: "Code editor", exact: true });
@@ -103,7 +103,7 @@ test("Studio restores safe layouts, preserves drafts while docking and isolates 
   await expect(page.getByText("Save or resolve protected editor drafts", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: /Add panel/ }).click();
   await page.getByRole("textbox", { name: "Search panels" }).fill("operations console");
-  await page.getByRole("button", { name: /Operations Console/ }).click();
+  await page.getByRole("button", { name: "Operations Console", exact: true }).click();
   await page.getByText("Controller connection", { exact: true }).click();
   await page.getByRole("textbox", { name: "API URL" }).fill(runtimes[1].url);
   await page.getByLabel("Service session token", { exact: true }).fill(token);
@@ -139,7 +139,7 @@ test("EventStream widgets retain their authenticated workspace owner across Cont
   await page.getByRole("button", { name: "Apply preset", exact: true }).click();
   await page.getByRole("button", { name: /Add panel/ }).click();
   await page.getByRole("textbox", { name: "Search panels" }).fill("dashboard");
-  await page.getByRole("button", { name: /Dashboard/ }).click();
+  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   await page.getByRole("button", { name: "Edit layout", exact: true }).click();
   await page.getByRole("combobox", { name: "Widget type", exact: true }).selectOption("events");
   await page.getByRole("button", { name: "Add widget", exact: true }).click();
@@ -149,12 +149,13 @@ test("EventStream widgets retain their authenticated workspace owner across Cont
   await page.getByRole("button", { name: "Save dashboard", exact: true }).click();
   await page.getByRole("button", { name: /Add panel/ }).click();
   await page.getByRole("textbox", { name: "Search panels" }).fill("operations console");
-  await page.getByRole("button", { name: /Operations Console/ }).click();
+  await page.getByRole("button", { name: "Operations Console", exact: true }).click();
   await page.getByText("Controller connection", { exact: true }).click();
   await page.getByRole("textbox", { name: "API URL" }).fill(runtimes[1].url);
   await page.getByLabel("Service session token", { exact: true }).fill(token);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByText("Controller connection changed.", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Open Dashboard", exact: true }).click();
   await expect(page.getByText("qualification.workspace-1", { exact: false })).toBeVisible();
   await expect(page.getByText("qualification.workspace-0", { exact: false })).toHaveCount(0);
   await page.screenshot({ path: info.outputPath("studio-event-workspace-owner-source-browser.png"), fullPage: true });
@@ -189,7 +190,7 @@ test("Dashboard uses real Runtime reads, moves/resizes widgets and restores safe
   await page.getByRole("button", { name: "Apply preset", exact: true }).click();
   await page.getByRole("button", { name: /Add panel/ }).click();
   await page.getByRole("textbox", { name: "Search panels" }).fill("dashboard");
-  await page.getByRole("button", { name: /Dashboard/ }).click();
+  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   await expect(page.getByRole("region", { name: "Dashboard builder" })).toBeVisible();
   await page.getByRole("button", { name: "Edit layout", exact: true }).click();
   // A pre-polish version-1 Dashboard keeps its exact six-row geometry.
@@ -226,7 +227,7 @@ test("Dashboard uses real Runtime reads, moves/resizes widgets and restores safe
   const downloaded = page.waitForEvent("download"); await page.getByRole("button", { name: "Export dashboard", exact: true }).click();
   const file = await downloaded; const path = await file.path(); const exported = await readFile(path!, "utf8");
   expect(JSON.parse(exported).kind).toBe("dashboard");
-  await page.reload(); await page.getByRole("button", { name: /APEIR Studio/ }).click();
+  await page.reload(); await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Move My authorized nodes", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Edit layout", exact: true }).click();
   await expect(page.getByRole("button", { name: "Move My authorized nodes", exact: true })).toBeVisible();
@@ -276,11 +277,11 @@ test("named templates and Workspace layouts persist without crossing Controller 
   await library.getByRole("button", { name: "Load selected", exact: true }).click();
   await workspaceMenu(page);
   await page.getByRole("button", { name: "Save layout", exact: true }).click();
-  await page.reload(); await page.getByRole("button", { name: /APEIR Studio/ }).click();
+  await page.reload(); await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("apeir.studio.layout.v1")!).name)).toBe("Renamed template");
   await page.getByRole("button", { name: /Add panel/ }).click();
   await page.getByRole("textbox", { name: "Search panels" }).fill("operations console");
-  await page.getByRole("button", { name: /Operations Console/ }).click();
+  await page.getByRole("button", { name: "Operations Console", exact: true }).click();
   await page.getByText("Controller connection", { exact: true }).click();
   await page.getByRole("textbox", { name: "API URL" }).fill(runtimes[1].url);
   await page.getByLabel("Service session token", { exact: true }).fill(token);
@@ -377,7 +378,7 @@ test("Studio keeps the everyday view compact and layout editing explicit across 
   await expect(card).toHaveCSS("position", "relative");
   await expect.poll(async () => { const bounds = await dashboard.locator(".studio-widget").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect())); return bounds.every(bounds => bounds.x >= 0 && bounds.right <= 390); }).toBe(true);
   await page.screenshot({ path: info.outputPath("studio-overview-zh-small-source-browser.png"), fullPage: true, animations: "disabled" });
-  await page.reload(); await page.getByRole("button", { name: /APEIR Studio/ }).click();
+  await page.reload(); await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "编辑布局", exact: true })).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("apeir.studio.layout.v1")!).schemaVersion)).toBe(1);
   expect(errors).toEqual([]); expect(mutations).toEqual([]);
@@ -412,7 +413,7 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   await open(page);
   await page.getByRole("button", { name: /Add panel/ }).click();
   await page.getByRole("textbox", { name: "Search panels" }).fill("workflow");
-  await page.getByRole("button", { name: /Workflow Builder/ }).click();
+  await page.getByRole("button", { name: "Workflow Builder", exact: true }).click();
   const builder = page.getByRole("region", { name: "Workflow Builder" });
   await expect(builder).toBeVisible();
   await expect(builder.locator(".react-flow__node")).toHaveCount(1);
@@ -503,10 +504,10 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   expect(unauthenticated.status).toBe(401);
   const otherController = await fetch(`${runtimes[1].url}/api/v1/workflow/runs/${runId}`, { headers: { Authorization: `Bearer ${token}` } });
   expect((await otherController.json()).ok).toBe(false);
-  await page.reload(); await page.getByRole("button", { name: /APEIR Studio/ }).click();
+  await page.reload(); await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /Add panel/ }).click();
   await page.getByRole("textbox", { name: "Search panels" }).fill("workflow");
-  await page.getByRole("button", { name: /Workflow Builder/ }).click();
+  await page.getByRole("button", { name: "Workflow Builder", exact: true }).click();
   await page.getByRole("button", { name: new RegExp(runId) }).click();
   await expect(page.locator(".studio-workflow-result pre")).toContainText(runId);
   expect(errors).toEqual([]);
@@ -581,8 +582,16 @@ test("Declarative UI extension uses public review and approval, real status, rev
     await approveAndRetry("Request install");
     await expect(manager.getByText("DISABLED", { exact: true })).toBeVisible();
     await approveAndRetry("Enable");
-    await page.reload(); await page.getByRole("button", { name: /APEIR Studio/ }).click();
-    expect(await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"))).toBe(layout);
+    await expect.poll(() => page.evaluate(() => {
+      const saved = JSON.parse(localStorage.getItem("apeir.studio.layout.v1") || "null");
+      const groups = saved?.layout?.children || [];
+      return groups.some((group: { selected?: number; children?: Array<{ component?: string }> }) => group.children?.[group.selected ?? 0]?.component === "extensions");
+    })).toBe(true);
+    const latestLayout = await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"));
+    const content = (raw: string | null) => JSON.parse(raw!, (key, value) => ["selected", "active"].includes(key) ? undefined : value);
+    expect(content(latestLayout)).toEqual(content(layout));
+    await page.reload(); await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"))).toBe(latestLayout);
     await page.locator(".flexlayout__tab_button").filter({ hasText: "UI Extensions" }).first().click();
     await expect(manager.getByText(/1.1.0 · UNVERIFIED/)).toBeVisible();
     async function switchController(index: number) {
@@ -607,9 +616,14 @@ test("Declarative UI extension uses public review and approval, real status, rev
       runtime.process.once("exit", () => { clearTimeout(deadline); resolve(); });
     });
     runtime.process.kill("SIGTERM"); await exited;
-    runtime.process = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-m", "nous_runtime.cli.main", "--no-intelligence", "runtime-api", "start", "--port", new URL(runtime.url).port], { cwd: resolve(".."), env: { ...globalThis.process.env, NOUS_WORKSPACE_ROOT: runtime.directory, NOUS_API_TOKEN: token }, stdio: "ignore" });
-    runtime.process.on("error", () => {});
-    await expect.poll(async () => { try { return (await fetch(`${runtime.url}/api/v1/status`, { headers: { Authorization: `Bearer ${token}` } })).ok; } catch { return false; } }, { timeout: 10000 }).toBe(true);
+    runtime.process = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-m", "nous_runtime.cli.main", "--no-intelligence", "runtime-api", "start", "--port", new URL(runtime.url).port], { cwd: resolve(".."), env: { ...globalThis.process.env, NOUS_WORKSPACE_ROOT: runtime.directory, NOUS_API_TOKEN: token }, stdio: ["ignore", "pipe", "pipe"] });
+    let restartDiagnostics = "";
+    for (const output of [runtime.process.stdout, runtime.process.stderr]) output?.on("data", chunk => { restartDiagnostics = (restartDiagnostics + String(chunk)).slice(-8192); });
+    runtime.process.on("error", error => { restartDiagnostics = error.message; });
+    await expect.poll(async () => {
+      if (runtime.process.exitCode !== null) throw new Error(`Original extension Runtime restart failed (${runtime.process.exitCode}): ${restartDiagnostics}`);
+      try { return (await fetch(`${runtime.url}/api/v1/status`, { headers: { Authorization: `Bearer ${token}` } })).ok; } catch { return false; }
+    }, { timeout: 10000 }).toBe(true);
     await manager.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(manager.getByText(/1.1.0 · UNVERIFIED/)).toBeVisible();
     await approveAndRetry("Remove");
@@ -619,4 +633,80 @@ test("Declarative UI extension uses public review and approval, real status, rev
     expect((await foreign.json()).ok).toBe(false);
     expect(errors).toEqual([]);
   } finally { await rm(acquired, { recursive: true, force: true }); }
+});
+
+test("Studio opens the conversation workspace and manages existing windows without replay or draft loss", async ({ page }, info) => {
+  const mutations: string[] = []; const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("request", request => { if (request.url().includes("/api/") && !["GET", "OPTIONS"].includes(request.method())) mutations.push(request.url()); });
+  await open(page);
+  const rail = page.getByRole("navigation", { name: "Studio panels", exact: true });
+  await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toBeVisible();
+  await expect(page.getByText("Loading conversation...", { exact: true })).toBeHidden();
+  const prompt = page.getByRole("region", { name: "AI conversation", exact: true }).getByRole("textbox", { name: "Message", exact: true });
+  expect((await prompt.boundingBox())!.height).toBeGreaterThanOrEqual(24);
+  await expect(rail.getByRole("button", { name: "Open Chat", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Conversations", exact: true }).click();
+  await expect(page.getByLabel("Conversation history", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Conversations", exact: true }).click();
+  await page.getByRole("button", { name: /example.py/ }).click();
+  const editor = page.getByRole("textbox", { name: "Code editor", exact: true });
+  await expect(editor).toHaveValue("def add(a, b):\n    return a + b\n");
+  await page.screenshot({ path: info.outputPath("studio-default-conversation-source.png"), fullPage: true });
+  await prompt.fill("UNSENT_WINDOW_PROMPT");
+  await editor.fill("UNSAVED_WINDOW_DRAFT");
+  await page.locator(".flexlayout__tab_button").filter({ hasText: "Workspace Editor" }).first().dragTo(page.locator(".flexlayout__tab_button").filter({ hasText: "Chat" }).first());
+  await expect(editor).toHaveValue("UNSAVED_WINDOW_DRAFT");
+  // Snapping and maximizing are ordinary window actions; Edit layout remains off.
+  await expect(page.getByRole("button", { name: "Edit layout", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("button", { name: "Arrange Workspace Editor", exact: true }).click();
+  const windows = page.getByRole("menu", { name: "Window arrangement", exact: true });
+  await expect(windows.getByRole("menuitem", { name: "Snap left", exact: true })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(windows.getByRole("menuitem", { name: "Snap right", exact: true })).toBeFocused();
+  await windows.getByRole("menuitem", { name: "Snap bottom", exact: true }).click();
+  await expect(editor).toHaveValue("UNSAVED_WINDOW_DRAFT");
+  await page.getByRole("button", { name: "Arrange Workspace Editor", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Maximize panel", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Show all panels", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toBeHidden();
+  // Navigation restores the obscured existing Chat, rather than adding duplicates.
+  await rail.getByRole("button", { name: "Open Chat", exact: true }).click();
+  await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toHaveCount(1);
+  await expect(prompt).toHaveValue("UNSENT_WINDOW_PROMPT");
+  await expect(editor).toHaveValue("UNSAVED_WINDOW_DRAFT");
+  await page.getByRole("button", { name: "Arrange Workspace Editor", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Close panel", exact: true }).click();
+  await expect(page.getByText("Save or resolve this panel's draft", { exact: false })).toBeVisible();
+  await expect(editor).toHaveValue("UNSAVED_WINDOW_DRAFT");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1") || "")).toContain('"component":"editor"');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1") || "")).toContain('"component":"chat"');
+  const chatBounds = await page.getByRole("region", { name: "AI conversation", exact: true }).boundingBox();
+  const editorBounds = await editor.boundingBox();
+  expect(chatBounds!.y + chatBounds!.height).toBeLessThanOrEqual(editorBounds!.y);
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain("UNSAVED_WINDOW_DRAFT");
+  await page.screenshot({ path: info.outputPath("studio-conversation-window-management-source.png"), fullPage: true });
+  expect(mutations).toEqual([]); expect(errors).toEqual([]);
+});
+
+test("Studio recovers a dashboard-only or empty saved workspace without deleting its legacy layout", async ({ page }, info) => {
+  const legacy = { schemaVersion: 1, kind: "workspace", name: "My dashboard", locale: "en", layout: { type: "row", id: "root", children: [{ type: "tabset", id: "main", maximized: true, children: [{ type: "tab", id: "overview", component: "dashboard", name: "Dashboard" }] }] } };
+  await page.addInitScript(value => { if (!localStorage.getItem("apeir.studio.layout.v1")) localStorage.setItem("apeir.studio.layout.v1", JSON.stringify(value)); }, legacy);
+  await open(page);
+  await expect(page.getByRole("region", { name: "Dashboard builder" })).toBeVisible();
+  await page.getByRole("button", { name: "Open Chat", exact: true }).click();
+  await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem("apeir.studio.layout.v1") || "null")))).toContain('"id":"overview"');
+  await expect.poll(() => page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem("apeir.studio.layout.v1") || "null")))).toContain('"component":"chat"');
+  await page.reload();
+  await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toBeVisible();
+  // A valid imported v1 layout may have no tabsets at all; opening a panel repairs presentation only.
+  const empty = { ...legacy, name: "Empty", layout: { type: "row", id: "root", children: [] } };
+  await workspaceMenu(page);
+  await page.getByLabel("Import Studio layout", { exact: true }).setInputFiles({ name: "empty.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(empty)) });
+  await expect(page.getByRole("region", { name: "Empty workspace", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Start a conversation", exact: true }).click();
+  await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toBeVisible();
+  await page.screenshot({ path: info.outputPath("studio-recovered-empty-workspace-source.png"), fullPage: true });
 });

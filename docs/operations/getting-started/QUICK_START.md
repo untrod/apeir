@@ -68,7 +68,8 @@ python -m http.server 5186 --bind 127.0.0.1 --directory app
 ```
 
 Open `http://127.0.0.1:5186`. Follow [the connection steps](#model-free-runtime-api-and-source-interface)
-to enter the protected local session token and choose **APEIR Studio / Open workspace**.
+to enter the protected local session token. Current source builds open Studio
+directly; older previews use **APEIR Studio / Open workspace**.
 The built interface needs no Node.js or Rust installation. Missing model, Kernel
 and sandbox prerequisites remain visible; this does not enable production inference
 or unrestricted commands. Stop both foreground servers when finished.
@@ -232,7 +233,7 @@ python -m http.server 5186 --bind 127.0.0.1 --directory app
 ```
 
 Open `http://127.0.0.1:5186`, connect to the actual authenticated Runtime as above,
-then select **APEIR Studio / Open workspace**. The same Studio source and theme
+then enter Studio (older previews use **APEIR Studio / Open workspace**). The same Studio source and theme
 are used by Tauri. Use the [Studio guide](../../development/DEVELOPER_PLATFORM.md#apeir-studio)
 for panels, safe layout import/export and current feature limits. Real model,
 sandbox, native installation and physical acceptance remain separate gates.

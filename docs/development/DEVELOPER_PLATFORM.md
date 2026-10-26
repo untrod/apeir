@@ -33,17 +33,32 @@ npm ci
 npm run dev
 ```
 
-Open the Vite address, connect Operations to your authenticated Runtime, then
-choose **APEIR Studio / Open workspace**. The native sidebar has **Studio**;
-source browser validation is not Windows EXE acceptance.
+Open the Vite address and connect to your authenticated Runtime. The application
+opens Studio directly, with Chat and the workspace editor in a new General
+layout. Existing saved layouts retain their panels and geometry; a dashboard-only
+layout is not reset. Source browser validation is not Windows EXE acceptance.
+
+![Studio conversation and project windows, real model-disabled Runtime on Linux Chromium](../media/studio-workspace-source.png)
 
 Use **Workspace** for presets, saved layouts, import/export, language and theme.
-**Add panel** opens the searchable panel list. The everyday view keeps layout
-controls hidden. Choose **Edit layout** (Ctrl/Cmd+Alt+L) to drag tab headers,
-resize splitters, close panels or arrange Dashboard widgets; **Done editing**
-returns to normal use without stopping background Work. Maximize and tab selection
-remain available in either mode. Ctrl/Cmd+Shift+P opens panel search;
-Ctrl/Cmd+Alt+S saves presentation. Escape closes transient menus/settings.
+The left rail reveals existing Chat, Files, Tasks, Workflow, Dashboard, Models,
+Nodes, Evidence and Console panels without creating duplicates. **More** or
+**Add panel** opens the searchable full panel list, including professional views
+and installed UI contributions; Add panel can create a separate instance.
+Chat's **Conversations** button opens the original conversation history.
+
+Drag tab headers to an edge to split or to another tab strip to group them.
+Drag splitters to resize. The title-bar arrangement button snaps a panel left,
+right, top or bottom, maximizes/restores it, or closes it. Double-click a tab
+strip to maximize/restore its group; **Show all panels** restores a maximized
+view. These window actions work in normal mode. **Edit layout**
+(Ctrl/Cmd+Alt+L) enables Dashboard widget arrangement; **Done editing** does not
+stop background Work. Floating OS windows remain disabled.
+
+Panel arrangement and selected tabs save automatically after a short debounce;
+Ctrl/Cmd+Alt+S also saves explicitly. Rejected saved layout bytes are preserved
+until the user explicitly saves or loads a replacement. Ctrl/Cmd+Shift+P opens
+panel search; Escape closes transient menus/settings.
 Save/Load/Reset/Import/Export retain the bounded version1 schema. Resolve unsaved
 drafts/pending actions before closing editors or replacing layouts. Layout export
 contains no file content, credentials, Work or approval identity.
@@ -53,6 +68,13 @@ projection and its refresh action; empty results are not ONLINE or verified
 success. Use Operations for original governed controls. Supported commands reuse
 Workbench profiles and strict sandbox admission; missing isolation is BLOCKED.
 Controlled Commands is not an interactive PTY.
+
+Browser Studio also initializes the existing EntityStore after authenticated
+Runtime health succeeds; it does not wait for native-only bootstrap. Original
+`task_id` summaries and full Work projections use the same task adapter, including
+historical cached rows. Missing steps/progress stay UNKNOWN and unsupported task
+states do not enable controls. This is presentation compatibility, not an
+additional task authority or model/native qualification.
 
 Use **Workspace → Layout library** for named layouts. **Save current as new** records the
 current arrangement under Global, Workspace, Template or Dashboard. Workspace

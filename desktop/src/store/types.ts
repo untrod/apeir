@@ -67,11 +67,11 @@ export interface Message extends EntityBase {
 
 
 export type TaskStatus =
-  | "created" | "queued" | "planning" | "awaiting_approval"
+  | "created" | "queued" | "planned" | "planning" | "waiting" | "awaiting_approval"
   | "dispatching" | "running" | "waiting_for_model" | "waiting_for_node"
   | "waiting_user" | "paused" | "blocked" | "recovering" | "verifying"
   | "completed" | "completed_with_warnings"
-  | "failed" | "failed_verification" | "cancelled";
+  | "failed" | "failed_verification" | "cancelled" | "unknown";
 
 export type TaskPriority = "low" | "normal" | "high" | "critical";
 
@@ -100,6 +100,8 @@ export interface Task extends EntityBase {
   trace_id?: string;
   steps: TaskStep[];
   progress_pct: number;
+  progress_reported?: boolean;
+  steps_reported?: boolean;
   duration_ms?: number;
   error?: string;
   result_summary?: string;
