@@ -4225,3 +4225,29 @@ Installed simulated lost-response recovery retained effect_count=1. These Linux,
 model-disabled runtime-service results do not imply a generated model proposal,
 a sandboxed test execution, native installation or physical verification. Exact
 protected-main integration and corresponding CI/artifacts qualify separately.
+
+## Windows ProcessSession ACK observation — 2026-10-26
+
+PR100 Core40363014941 failed the original kill/terminal-state test when opening
+its already-published ACK raised PermissionError. The full job retained
+1 failed/5825 passed/95 skipped; the original assertion and log are preserved.
+Three new real-process counterexamples reproduce transient permission/missing
+reads and persistent unreadability. All three fail before the correction.
+
+The existing ProcessSessionStore now opens the original ACK directly and
+reobserves only FileNotFoundError/PermissionError within its unchanged five-second
+deadline. It writes one control request; it never repeats a signal, restarts the
+process or treats an unreadable ACK as success. Permanent unreadability still
+raises the original timeout, and recovery independently observes the original
+process. Malformed JSON is not hidden by the read retry. Local process/control,
+startup, identity-denial and descendant-reaping regressions pass (37 cases).
+Current Windows qualification remains required.
+
+Native run40363123393 separately failed the original startup/attach assertion
+(RECOVERY_REQUIRED instead of RUNNING) before packaging. Its displayed context
+was truncated, so neither an OS identity-query miss nor a journal-read race is
+established as its cause. The original assertion is unchanged; compact failure
+context and an opt-in ProcessSession path in the existing diagnostic workflow
+preserve the actual refusal reason. This diagnostic cannot satisfy Core gate.
+Issue85 remains open. No Portable/NSIS or Windows10 installation PASS follows
+from these software tests.

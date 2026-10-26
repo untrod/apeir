@@ -54,8 +54,9 @@ It separates downloadable **Source Preview**, **Developer Setup** and
 **Native Installation**. Source inspection and the simulated Demo need no API key
 or hardware. Downloadable source packages are not Windows installers.
 
-**Windows download:** component migration is approved and internal unsigned
-Portable/NSIS builds are being validated in [PR #101](https://github.com/untrod/apeir/pull/101).
+**Windows download:** component migration was approved and merged in
+[PR #101](https://github.com/untrod/apeir/pull/101); internal unsigned Portable/NSIS
+builds still require successful full validation.
 A qualified Windows 10 installer is not yet available. Source Preview downloads
 are not EXE packages; see the [native delivery record](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md).
 

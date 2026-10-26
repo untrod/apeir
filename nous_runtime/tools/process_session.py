@@ -593,8 +593,14 @@ class ProcessSessionStore:
         deadline = time.monotonic() + 5.0
         ack_path = directory / "ack" / f"{control_id}.json"
         while time.monotonic() < deadline:
-            if ack_path.is_file():
+            try:
                 ack = json.loads(ack_path.read_text(encoding="utf-8"))
+            except (FileNotFoundError, PermissionError):
+                # Publication can be briefly inaccessible on Windows. Observe
+                # this original acknowledgement within the existing deadline;
+                # the persisted control may already have taken effect.
+                time.sleep(0.025)
+            else:
                 if not bool(ack.get("ok")):
                     raise RuntimeError(
                         str(ack.get("error") or "process control failed")
@@ -607,7 +613,6 @@ class ProcessSessionStore:
                     "action": action,
                     "state": self.status(session_id)["state"],
                 }
-            time.sleep(0.025)
         raise RuntimeError("process host did not acknowledge the control request")
 
     def _materialize_logs(self, session: ProcessSession) -> None:
