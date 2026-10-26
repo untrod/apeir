@@ -356,6 +356,64 @@ def test_chat_handler_runs_a_bounded_workspace_tool_loop(tmp_path) -> None:
     assert facade.requests[1].messages[-1]["role"] == "tool"
 
 
+def test_archived_conversation_reaches_adapter_and_content_free_manifest(tmp_path):
+    from nous_runtime.conversation import ConversationMessage, ConversationStore
+    from nous_runtime.events import EventStream
+
+    store = ConversationStore(tmp_path, active_window=2)
+    conversation = store.create("workspace", "owner")
+    archived = "ARCHIVED_ONLY_REQUIREMENT: preserve the original protocol"
+    for text in (archived, "Recent context", "Continue the project"):
+        store.append(ConversationMessage(conversation.conversation_id, "user", text))
+    window = store.context_window(conversation.conversation_id)
+    assert archived in window["summary"]
+    assert all(archived not in item["content"] for item in window["messages"])
+    facade, adapter = build_facade("Review complete")
+    requests = []
+    original = adapter.invoke
+
+    async def capture(request, descriptor, instance):
+        requests.append(request)
+        return await original(request, descriptor, instance)
+
+    adapter.invoke = capture
+    stream = EventStream(str(tmp_path))
+    result = GatewayChatHandler(facade)(
+        SimpleNamespace(
+            request_id="archived-input",
+            user_input="Continue the project",
+            constraints={
+                "agent_mode": "chat",
+                "conversation_summary": window["summary"],
+                "conversation_messages": window["messages"],
+            },
+        ),
+        {"event_stream": stream},
+    )
+    assert result["ok"] and len(requests) == 1
+    messages = requests[0].messages
+    matches = [item for item in messages if archived in item.get("content", "")]
+    assert len(matches) == 1 and matches[0]["role"] == "user"
+    assert "untrusted" in matches[0]["content"]
+    assert messages[-1]["content"] == "Continue the project"
+    assert sum(item["content"] == "Continue the project" for item in messages) == 1
+    replay = EventStream(str(tmp_path)).load_events("archived-input")
+    manifest = next(
+        event.payload["input_manifest"]
+        for event in replay
+        if event.event_type == "model.invocation.started"
+    )
+    summaries = [
+        item
+        for item in manifest["messages"]
+        if item["source"]["kind"] == "conversation_summary"
+    ]
+    assert len(summaries) == 1
+    assert summaries[0]["source"]["complete_history"] is False
+    assert archived not in json.dumps(manifest)
+    assert manifest["estimated_input_tokens"] > 0
+
+
 def test_chat_handler_injects_context_as_untrusted_evidence() -> None:
     class Facade:
         def __init__(self) -> None:

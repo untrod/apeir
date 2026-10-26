@@ -304,6 +304,14 @@ Failed reads never appear as successful file access. Source IDs
 are hashed, not copied; message text, file contents and tool arguments are not
 duplicated into this manifest. Available tool declarations are not permission.
 
+The existing ConversationStore's bounded archived excerpt is included in the
+actual Chat messages as untrusted user data, alongside the recent message
+window. Its manifest source is `conversation_summary`, with
+`complete_history=false`; this excerpt is not full history or authorization.
+Previously it was retained only in Gateway metadata and could be absent from
+the Provider payload. Original conversation history remains in its existing
+store; no summarization model call or cross-task context cache is added.
+
 The manifest identifies the application Gateway input after Agent admission,
 not the provider's final HTTP envelope or proof of provider receipt. Retries,
 provider-specific formatting and collaborative worker/reviewer calls are not
