@@ -1,16 +1,27 @@
-# APEIR
+# APEIR Studio
 
-An open execution, governance and verification runtime for heterogeneous
-intelligence and real-world resources. Local-first, with explicit remote execution boundaries.
+A developer workspace for project files, governed workflows and execution
+evidence, powered by APEIR Runtime.
 
 [**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
 [**Quick Start**](docs/operations/getting-started/QUICK_START.md) ·
-[**Documentation**](docs/operations/README.md) · [简体中文](README.zh-CN.md)
+[**SDK & Extensions**](docs/development/DEVELOPER_PLATFORM.md#declarative-ui-extension-sdk) ·
+[**Documentation**](docs/README.md) · [简体中文](README.zh-CN.md)
 
-![APEIR Studio connected to a model-free Runtime](docs/media/studio-source-overview.png)
+![APEIR Studio with Chat, project files and a split editor](docs/media/studio-workspace-source.png)
 
-*Actual Studio source-browser capture with an owned local Runtime. Missing Kernel,
-Node and model data remain unconfigured or unknown. This is not an installed EXE.*
+*Actual source-browser interface connected to a local, model-disabled Runtime.
+This is a Source Developer Preview, not a Windows installation screenshot.*
+
+## Start here
+
+- **Try the workspace:** download matching Runtime and Studio bundles, then follow
+  [Quick Start](docs/operations/getting-started/QUICK_START.md). Python 3.10+ is
+  required; the built browser interface needs no Node.js or Rust.
+- **Develop APEIR:** use [Developer Setup](docs/operations/getting-started/QUICK_START.md#developer-setup)
+  for the editable checkout, UI development server and tests.
+- **Extend Studio:** start with the [System Monitor example](examples/studio_system_monitor/README.md)
+  or the [Provider example](examples/hello_provider/README.md).
 
 ## Overview
 
@@ -40,10 +51,10 @@ It separates downloadable **Source Preview**, **Developer Setup** and
 **Native Installation**. Source inspection and the simulated Demo need no API key
 or hardware. Downloadable source packages are not Windows installers.
 
-**Windows EXE / NSIS: BLOCKED.** Exact locked Kernel binaries are unavailable;
-reviewed replacement candidates await maintainer approval and Windows10 lifecycle
-qualification. See the [native delivery evidence](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#r4-trusted-candidate-evidence--2026-10-24).
-No qualified installer or formal Release is currently advertised.
+**Windows download:** component migration is approved and internal unsigned
+Portable/NSIS builds are being validated in [PR #101](https://github.com/untrod/apeir/pull/101).
+A qualified Windows 10 installer is not yet available. Source Preview downloads
+are not EXE packages; see the [native delivery record](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md).
 
 ## Developer Platform
 
@@ -59,9 +70,10 @@ is pinned by [component lock](runtime-components.lock.json).
 Start with the [public Developer Platform](docs/development/DEVELOPER_PLATFORM.md),
 [Provider example](examples/hello_provider/README.md) and
 [Skill example](examples/hello_skill/README.md).
-Executable third-party Studio UI is not enabled. Visual Workflow editing,
-declarative UI contributions and their qualification are tracked in ROADMAP;
-an installed package never grants execution permission.
+The [declarative UI SDK](docs/development/DEVELOPER_PLATFORM.md#declarative-ui-extension-sdk)
+adds reviewed panels and widgets without loading arbitrary JavaScript in the
+trusted window. Executable third-party Studio UI remains disabled until its
+isolation is qualified. Installing a package never grants execution permission.
 
 ## Current Status
 

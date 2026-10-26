@@ -1,5 +1,10 @@
 # APEIR documentation
 
+New to APEIR? Start with [Quick Start](operations/getting-started/QUICK_START.md),
+then follow the [Studio guide](development/DEVELOPER_PLATFORM.md#apeir-studio).
+For your own panel, begin with the
+[System Monitor example](../examples/studio_system_monitor/README.md).
+
 The [roadmap](../ROADMAP.md) is the sole current milestone-status source.
 
 | Domain | Responsibility |
@@ -10,6 +15,7 @@ The [roadmap](../ROADMAP.md) is the sole current milestone-status source.
 | [Acceptance](acceptance/README.md) | Dated evidence, limitations and release discipline |
 | [RFCs](rfc/README.md) | Proposed contracts and architecture decisions; not acceptance claims |
 
-Begin with the [constitution](architecture/DISTRIBUTION.md). Historical evidence
+For architecture or execution changes, read the
+[constitution](architecture/DISTRIBUTION.md) first. Historical evidence
 retains its original revision/scope; Git history and immutable checkpoint tags
 preserve obsolete designs without a documentation archive.

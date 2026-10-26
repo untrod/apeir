@@ -3,12 +3,20 @@
 Current overall milestone status is authoritative in [ROADMAP](../../ROADMAP.md).
 Acceptance counts below are dated, scoped records, not broader qualification.
 
-The APEIR Developer Platform is a control surface over the Runtime. It does not
-own a second scheduler, project database, model registry, or execution path.
+Use Studio to work on a project, inspect a workflow, or build an extension.
+The interface uses the existing Runtime services and their permission checks.
+
+| Your goal | Start here |
+| --- | --- |
+| Install and open Studio | [Quick Start](../operations/getting-started/QUICK_START.md) |
+| Arrange project and conversation panels | [Studio](#apeir-studio) |
+| Build and run a supported graph | [Workflow Builder](#visual-workflow-builder) |
+| Create a read-only panel or widget | [UI Extension SDK](#declarative-ui-extension-sdk) |
+| Connect an execution or model Provider | [Provider example](../../examples/hello_provider/README.md) |
 
 ## Surfaces
 
-The desktop `Develop` page provides the following views:
+Studio's panel library and the existing `Develop` views provide:
 
 - **Workbench** provides workspace-scoped file browsing, bounded multi-file UTF-8 editor tabs, unified diff preview, compare-and-swap atomic writes, and fixed-profile strict execution.
 - **Research** provides approval-gated public web fetch, persistent sources, immutable snapshots, artifacts, injection scan results, and run evidence.
@@ -38,7 +46,18 @@ opens Studio directly, with Chat and the workspace editor in a new General
 layout. Existing saved layouts retain their panels and geometry; a dashboard-only
 layout is not reset. Source browser validation is not Windows EXE acceptance.
 
+On a fresh browser session, use **Workspace → Operations Console → Controller
+connection** to enter the Runtime URL and protected service session token, then
+return with **APEIR Studio / Open workspace**. The
+[connection guide](../operations/getting-started/QUICK_START.md#model-free-runtime-api-and-source-interface)
+explains which token to use. A Provider API key does not belong in that form.
+
 ![Studio conversation and project windows, real model-disabled Runtime on Linux Chromium](../media/studio-workspace-source.png)
+
+The current screenshots come from the
+[actual source-browser qualification](https://github.com/untrod/apeir/actions/runs/40351274217)
+at `f9e8301`, using an owned model-disabled Runtime and Linux Chromium.
+They do not qualify Windows installation, live inference or physical devices.
 
 Use **Workspace** for presets, saved layouts, import/export, language and theme.
 The left rail reveals existing Chat, Files, Tasks, Workflow, Dashboard, Models,
@@ -117,6 +136,8 @@ EventStream is the existing cursor-driven bus; Governance audit is separate.
 The same authenticated Controller supplies all visible widgets. Source browser
 checks cover actual HTTP reads and zero mutation requests, not native installation.
 
+![Dark-theme Dashboard connected to the actual model-disabled Runtime; absent resources remain UNKNOWN](../media/studio-source-overview.png)
+
 ### Visual Workflow Builder
 
 Choose **Add panel → Workflow Builder**. The stable `workflow` panel now edits
@@ -134,6 +155,8 @@ refresh history and inspect the original Run. No action is retried automatically
 Run details expose original IDs, definition/input digests, step states, outputs
 and durable EventStream history under the `runtime-service` scope. These are
 computational records, not independent physical-effect verification.
+
+![Workflow Builder showing a registered pure workflow, completed steps and its original Run](../media/studio-workflow-source.png)
 
 This endpoint binds only the existing pure **TRANSFORM**, **CONDITION**, **WAIT**
 and **APPROVAL** handlers. WAIT is an immediate barrier, not a timed delay;
