@@ -73,6 +73,13 @@ variance, belong in the lock-migration PR before approval.
 
 ## 2. Verify source
 
+The 2026-10-26 maintainer approval covers the reviewed frozen-source binary
+hash migration and internal unsigned builds only. The exact producer, archive
+digest, old/new hashes and retained compatibility evidence are recorded in the
+[Windows migration record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#approved-component-lock-migration--2026-10-26).
+Apply normal PR/CI integration; this approval does not replace current native
+smoke, Windows10 installation, signing or publication gates.
+
 ```powershell
 python -m ruff check nous_runtime tests scripts integrations sdk
 python -m pytest -q

@@ -37,11 +37,11 @@ The current lock targets Windows x64 and freezes Kernel
 
 | File under `desktop/src-tauri/binaries/` | SHA-256 |
 | --- | --- |
-| `nousd-x86_64-pc-windows-msvc.exe` | `62AFAC19A5315BF9BBE19BBB1A3BE3011C1B4FA47E0653782E19F0BF7CC63E1B` |
-| `nous-provider-worker-x86_64-pc-windows-msvc.exe` | `C4B65DB9844E752653C5CE8694105D1820BDF076B633E61F137DA7AC597F52B7` |
+| `nousd-x86_64-pc-windows-msvc.exe` | `5453D0D78F5076722C8408E16629E656F6DE18526229F9A1E7EC6AE77664716C` |
+| `nous-provider-worker-x86_64-pc-windows-msvc.exe` | `7CA450E42C64D25E1F450BB892AF7F21346BC094A1EEF1952A1B933933FAA973` |
 
-Obtain the original pinned release bundle from the maintainer and stage those
-two files without changing the lock. `stage-kernel-components.ps1 -SkipBuild`
+Obtain the reviewed exact bundle described below and stage those two files
+without changing the lock. `stage-kernel-components.ps1 -SkipBuild`
 checks the Kernel checkout revision and invokes the actual PE/hash verifier; it
 does not rebuild them. With an explicit `-ArtifactDirectory`, it verifies every
 input against the maintained lock before copying any staged component, then
@@ -75,7 +75,7 @@ audited sources; it does not claim a maintainer's private backup was examined.
 | `nousd` | `8F12A0A583AD27523849C1646C6C64F5ABE5E681CFBF2FC5320274224E6A907D` | `5453D0D78F5076722C8408E16629E656F6DE18526229F9A1E7EC6AE77664716C` |
 | `nous-provider-worker` | `1DB92D70426F8E601E739E5A0203FC52E11F4FED008E51ECC424F782DCF5752B` | `7CA450E42C64D25E1F450BB892AF7F21346BC094A1EEF1952A1B933933FAA973` |
 
-The old lock values above are unchanged. The first R4 pair reproduced20-byte
+At that audit the old lock values were unchanged. The first R4 pair reproduced20-byte
 timestamp/debug-identity variance with otherwise equal PE contents; both real
 smoke runs passed. Candidate-only `RUSTFLAGS=-C link-arg=/Brepro` then produced
 identical **unmodified Kernel EXE bytes** in two clean recorded environments:
@@ -100,9 +100,34 @@ evidence. ZIP SHA-256 is
 `cc98ba7c98c32abdf2132facf4da4283e921aa093840044dfb54cd2e7e808536`.
 Artifacts expire after14 days; a maintainer must retain the exact approved bytes
 in controlled durable storage before relying on them for ongoing distribution.
-All are unsigned candidates; old-lock integrity remains BLOCKED pending separate
-maintainer approval. No NSIS/Portable or Windows10 installation PASS follows
-from this source build and compatibility result.
+Those historical producer records identify unsigned, then-unapproved candidates;
+they are preserved unchanged. No NSIS/Portable or Windows10 installation PASS
+follows from this source build and compatibility result.
+
+### Approved component-lock migration — 2026-10-26
+
+The maintainer explicitly approved the two exact candidate hashes above for a
+reviewed lock migration and **internal unsigned Portable/NSIS builds**. This
+approval does not include signing, a formal Release or Windows10 installation
+acceptance. Kernel source, component version, paths, lock schema and declared
+NKI1/2 support remain unchanged. Historical tags and producer manifests retain
+their original values; the original hashes were
+`62AFAC19A5315BF9BBE19BBB1A3BE3011C1B4FA47E0653782E19F0BF7CC63E1B`
+and `C4B65DB9844E752653C5CE8694105D1820BDF076B633E61F137DA7AC597F52B7`.
+
+The migration changes only the two binary digests in the maintained lock.
+The existing verifier independently admitted the actual x64 PE files and full
+archive against that lock, including its checksums, producer revision and real
+NKI recovery records. This is component integrity, not current installed Desktop
+qualification. Normal PR checks and merge remain required before delivery.
+
+Use producer run `40084421303`, artifact `12556562701` and the ZIP digest above.
+The exact archive is retained privately for review; its Actions copy expires on
+2026-11-07. A controlled durable distribution location still needs qualification;
+never substitute a moving download or weaken admission after expiry.
+Rollback must use a reviewed lock/source rollback with the corresponding exact
+bytes. The unavailable historical EXEs cannot be reconstructed by changing their
+hashes, and no previously published artifact is replaced in place.
 
 ### Approved GitHub Actions input
 
