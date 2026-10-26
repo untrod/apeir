@@ -23,6 +23,8 @@
 
 ## 概览
 
+APEIR Runtime 是面向异构智能与现实资源的开放运行时，本地优先，远程执行边界明确。
+
 APEIR Studio 是 APEIR Runtime 的桌面工作空间。用户可以组合项目、对话、任务、
 资源和证据面板；Runtime 负责执行，Governance 负责授权，持久记录支持恢复。
 模型、Agent 和 UI 扩展不能自行授权。

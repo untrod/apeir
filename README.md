@@ -25,6 +25,9 @@ This is a Source Developer Preview, not a Windows installation screenshot.*
 
 ## Overview
 
+APEIR Runtime is an open, local-first runtime for heterogeneous intelligence
+and real-world resources.
+
 APEIR Studio is the desktop workspace over APEIR Runtime. Arrange project,
 conversation, task, resource and evidence panels while the existing Runtime owns
 execution, Governance owns authorization, and durable records support recovery.
