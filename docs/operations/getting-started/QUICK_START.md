@@ -275,6 +275,14 @@ requires the separate [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md).
 
 ## Troubleshooting and feedback
 
+| What you see | What to do |
+| --- | --- |
+| Only a Dashboard, no Chat or editor | Use the left rail's **Chat** or **Files**, or **More → Add panel**. An older saved layout is kept; you do not need to erase it. |
+| Runtime unavailable or authentication failed | Keep the API terminal running. Check the address and service session token in **Workspace → Operations Console → Controller connection**. A model API key is a different credential. |
+| Chat unavailable in Source Preview | `--no-intelligence` deliberately disables models. Saving a Provider does not enable that process; model-enabled startup also needs an authenticated Kernel. |
+| A build or test is BLOCKED | Read its missing toolchain, permission or sandbox requirement. A saved profile is not an executed command. |
+| File contents changed outside Studio | Keep your draft, inspect the current file and resolve the conflict. Do not overwrite a changed version with an old approval. |
+
 Run `apeir doctor`, retain the command, platform and exact error, and follow
 [troubleshooting](TROUBLESHOOTING.md). Inspect diagnostics before sharing and
 remove credentials and private paths. Report reproducible issues through
