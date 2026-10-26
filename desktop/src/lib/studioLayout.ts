@@ -1,5 +1,5 @@
 import type { IJsonModel, IJsonRowNode } from "flexlayout-react";
-import { Actions, GroupAction, type Action } from "flexlayout-react";
+import { Actions, DockLocation, GroupAction, type Action, type Model } from "flexlayout-react";
 import { compactDashboard, validateDashboard } from "./studioDashboard";
 
 export function discardsProtectedPanel(action: Action, protectedIds: ReadonlySet<string>): boolean {
@@ -64,7 +64,29 @@ export function parseStudioLayout(input: string): StudioLayout {
 }
 
 export function studioModel(layout: StudioLayout): IJsonModel {
-  return { global: { tabEnablePopout: false, tabEnableFloat: false, tabSetEnableTabStrip: true, tabEnableRenderOnDemand: false }, layout: layout.layout };
+  return { global: { tabEnablePopout: false, tabEnableFloat: false, tabEnableDrag: true, tabSetEnableDrag: true, tabEnableClose: true, enableEdgeDock: true, enableEdgeDockIndicators: true, tabSetEnableTabStrip: true, tabEnableRenderOnDemand: false }, layout: layout.layout };
+}
+
+/** Reveal the existing instance, including one hidden by a maximized sibling. */
+export function focusStudioTab(model: Model, id: string): void {
+  const node = model.getNodeById(id);
+  if (node?.getType() !== "tab") return;
+  const parent = node.getParent();
+  const maximized = model.getMaximizedTabset();
+  if (maximized && maximized !== parent) model.doAction(Actions.maximizeToggle(maximized.getId()));
+  model.doAction(Actions.selectTab(id));
+  if (parent?.getType() === "tabset") model.doAction(Actions.setActiveTabset(parent.getId()));
+}
+
+export function dockStudioTab(model: Model, id: string, side: "left" | "right" | "top" | "bottom"): void {
+  if (model.getNodeById(id)?.getType() !== "tab") return;
+  const maximized = model.getMaximizedTabset();
+  if (maximized) model.doAction(Actions.maximizeToggle(maximized.getId()));
+  const root = model.getRootRow();
+  if (!root) return;
+  const locations = { left: DockLocation.LEFT, right: DockLocation.RIGHT, top: DockLocation.TOP, bottom: DockLocation.BOTTOM };
+  model.doAction(Actions.moveNode(id, root.getId(), locations[side], -1, true));
+  focusStudioTab(model, id);
 }
 
 /** Drop library-only rendering metadata, then revalidate before saving. */
@@ -80,7 +102,7 @@ export function captureStudioLayout(model: IJsonModel, previous: StudioLayout): 
 }
 
 export const STUDIO_TEMPLATES: Record<string, { en: string; zh: string; panels: string[][] }> = {
-  general: { en: "General", zh: "通用", panels: [["chat"], ["tasks", "evidence"]] },
+  general: { en: "General", zh: "通用", panels: [["chat"], ["editor", "tasks", "evidence"]] },
   software: { en: "Software Development", zh: "软件开发", panels: [["editor"], ["chat", "tasks"], ["evidence", "activity"]] },
   agents: { en: "AI Agent Development", zh: "智能体开发", panels: [["chat"], ["models", "workflow"], ["tasks", "usage"]] },
   embedded: { en: "Embedded Engineering", zh: "嵌入式工程", panels: [["editor"], ["devices", "nodes"], ["environment", "evidence"]] },
@@ -94,7 +116,7 @@ export function createStudioLayout(template = "general", locale: "en" | "zh" = "
   if (!preset) throw new Error("Unknown workspace template.");
   let sequence = 0;
   return parseStudioLayout(JSON.stringify({ schemaVersion: 1, kind: "workspace", name: preset.en, locale, layout: {
-    type: "row", id: "studio-root", children: preset.panels.map((types, i) => ({ type: "tabset", id: `group-${i}`, weight: template === "software" ? [55, 27, 18][i] : 100 / preset.panels.length,
+    type: "row", id: "studio-root", children: preset.panels.map((types, i) => ({ type: "tabset", id: `group-${i}`, weight: template === "software" ? [55, 27, 18][i] : template === "general" ? [65, 35][i] : 100 / preset.panels.length,
       children: types.map(type => ({ type: "tab", id: `panel-${++sequence}`, component: type, name: type, ...(type === "dashboard" ? { config: template === "network" ? compactDashboard(["runtime", "kernel", "nodes", "resources", "topology", "usage", "works", "evidence"]) : compactDashboard() } : {}) })) })),
   } }));
 }

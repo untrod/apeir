@@ -8,9 +8,12 @@ interface SessionBarProps {
   onNew: () => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  locale?: "en" | "zh";
+  showHeader?: boolean;
 }
 
-export function SessionBar({ activeId, onSelect, onNew, collapsed, onToggleCollapse }: SessionBarProps) {
+export function SessionBar({ activeId, onSelect, onNew, collapsed, onToggleCollapse, locale = "en", showHeader = true }: SessionBarProps) {
+  const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   const conversations = useConversations();
   const active = conversations.filter((conversation) => !conversation.archived);
   const archived = conversations.filter((conversation) => conversation.archived);
@@ -18,6 +21,7 @@ export function SessionBar({ activeId, onSelect, onNew, collapsed, onToggleColla
 
   return (
     <div
+      aria-label={t("Conversation history", "会话历史")}
       style={{
         width,
         minWidth: width,
@@ -30,7 +34,7 @@ export function SessionBar({ activeId, onSelect, onNew, collapsed, onToggleColla
         flexShrink: 0,
       }}
     >
-      <div
+      {showHeader && <div
         style={{
           display: "flex",
           alignItems: "center",
@@ -50,21 +54,21 @@ export function SessionBar({ activeId, onSelect, onNew, collapsed, onToggleColla
               flex: 1,
             }}
           >
-            Conversations
+            {t("Conversations", "会话")}
           </span>
         )}
-        <button onClick={onNew} title="New conversation" style={iconButtonStyle}>
+        <button onClick={onNew} title={t("New conversation", "新建对话")} style={iconButtonStyle}>
           +
         </button>
-        <button onClick={onToggleCollapse} title={collapsed ? "Expand" : "Collapse"} style={iconButtonStyle}>
+        <button onClick={onToggleCollapse} title={collapsed ? t("Expand", "展开") : t("Collapse", "收起")} style={iconButtonStyle}>
           {collapsed ? "›" : "‹"}
         </button>
-      </div>
+      </div>}
 
       <div style={{ flex: 1, overflowY: "auto", padding: space.xs }}>
         {active.length === 0 ? (
           <div style={{ padding: space.md, textAlign: "center", fontSize: typo.xs, color: colors.textTertiary }}>
-            {collapsed ? "" : "No conversations"}
+            {collapsed ? "" : t("No conversations", "暂无会话")}
           </div>
         ) : (
           active.map((conversation) => (
@@ -81,7 +85,7 @@ export function SessionBar({ activeId, onSelect, onNew, collapsed, onToggleColla
         {archived.length > 0 && !collapsed && (
           <>
             <div style={{ padding: `${space.sm} ${space.sm} ${space.xs}`, fontSize: typo.xs, color: colors.textTertiary, fontWeight: typo.semibold }}>
-              Archived
+              {t("Archived", "已归档")}
             </div>
             {archived.map((conversation) => (
               <SessionItem

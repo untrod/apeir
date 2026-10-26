@@ -42,6 +42,19 @@ it("refuses a valid cached envelope belonging to a different credential scope", 
   expect(entityStore.getState().nodes).toEqual({});
 });
 
+it("repairs legacy task_id-only cached projections without reviving invalid identities or known progress", async () => {
+  const state = await seed(); entityStore.clearStore();
+  state.tasks = {
+    undefined: { task_id: "original-cached-task", name: "Original task", status: "WAITING" },
+    invalid: { name: "No identity" },
+  } as unknown as typeof state.tasks;
+  const scope = createHash("sha256").update(JSON.stringify(["apeir.entity.cache.v2", a.url, a.token])).digest("hex");
+  vi.stubGlobal("indexedDB", { open: () => request({ close: () => {}, transaction: () => ({ objectStore: () => ({ get: () => request({ cache_schema: 2, scope, state }), put: () => {} }) }) }) });
+  await entityStore.hydrate();
+  expect(Object.keys(entityStore.getState().tasks)).toEqual(["original-cached-task"]);
+  expect(entityStore.getState().tasks["original-cached-task"]).toMatchObject({ status: "waiting", steps: [], steps_reported: false, progress_reported: false, recoverable: false });
+});
+
 it("rejects an in-flight hydration when the Controller changes before the database resolves", async () => {
   await seed(); entityStore.clearStore();
   let release: (() => void) | undefined;

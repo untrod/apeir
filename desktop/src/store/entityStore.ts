@@ -25,7 +25,7 @@ import type {
   WorkspaceEntry,
   RuntimeEventEnvelope,
 } from "./types";
-import { captureRuntimeConnection, getConfig, subscribeRuntimeConfig } from "../lib/api";
+import { captureRuntimeConnection, getConfig, subscribeRuntimeConfig, taskEntity } from "../lib/api";
 
 
 // IndexedDB helpers
@@ -162,6 +162,12 @@ class EntityStoreImpl {
     if (read !== this.hydrationSequence) return;
     if (cached?.cache_schema === 2 && cached.scope === scope && cached.state?.schema_version === EMPTY_STATE.schema_version) {
       this.state = { ...structuredClone(EMPTY_STATE), ...cached.state, usage_accounting: structuredClone(EMPTY_STATE.usage_accounting) };
+      const tasks: Record<string, Task> = {};
+      for (const value of Object.values(this.state.tasks || {})) {
+        try { const task = taskEntity(value); tasks[task.id] = task; }
+        catch { /* Invalid historical rows cannot become actionable tasks. Fresh REST data follows. */ }
+      }
+      this.state.tasks = tasks;
       // Offline cache is historical data, never proof of current Node readiness.
       this.state.nodes = Object.fromEntries(Object.entries(this.state.nodes).filter(([id, node]) => id !== "undefined" && node.id).map(([id, node]) => [id, {
         ...node, name: node.name || id, capabilities: node.capabilities || [], online: false,

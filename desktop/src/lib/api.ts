@@ -7,7 +7,7 @@
  * Base URL: http://localhost:8770 (configurable)
  */
 
-import type { Conversation, Message, Node, UsageAccountingSummary } from "../store/types";
+import type { Conversation, Message, Node, Task, TaskStatus, UsageAccountingSummary } from "../store/types";
 import { isUsageAccountingSummary } from "./usageAccounting";
 
 export interface RuntimeConfig {
@@ -487,11 +487,40 @@ export const testModel = (modelId: string) =>
 
 
 // Tasks
-export const fetchTasks = (state?: string, limit = 50) => {
+/** Adapt both original Runtime tasks and complete Work projections at the HTTP boundary. */
+export function taskEntity(value: unknown): Task {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new ApiError("TASK_SNAPSHOT_INVALID", "Invalid task record");
+  const row = value as Record<string, unknown>;
+  const id = row.id ?? row.task_id;
+  if (typeof id !== "string" || !id.trim() || (row.id !== undefined && row.task_id !== undefined && row.id !== row.task_id)) throw new ApiError("TASK_SNAPSHOT_INVALID", "Missing or conflicting original task identity");
+  const statuses: TaskStatus[] = ["created", "queued", "planned", "planning", "waiting", "awaiting_approval", "dispatching", "running", "waiting_for_model", "waiting_for_node", "waiting_user", "paused", "blocked", "recovering", "verifying", "completed", "completed_with_warnings", "failed", "failed_verification", "cancelled", "unknown"];
+  const status = typeof row.status === "string" ? row.status.toLowerCase() : "unknown";
+  const priority = String(row.priority ?? "normal").toLowerCase();
+  const progress = row.progress_pct;
+  const progressReported = row.progress_reported !== false && typeof progress === "number" && Number.isFinite(progress) && progress >= 0 && progress <= 100;
+  const steps = Array.isArray(row.steps) ? row.steps : [];
+  if (steps.some(step => !step || typeof step.step_id !== "string" || typeof step.name !== "string" || typeof step.status !== "string")) throw new ApiError("TASK_SNAPSHOT_INVALID", "Invalid task step projection");
+  return {
+    ...row as unknown as Task,
+    id, name: typeof row.name === "string" && row.name ? row.name : typeof row.title === "string" ? row.title : id,
+    status: statuses.includes(status as TaskStatus) ? status as TaskStatus : "unknown",
+    priority: ["low", "normal", "high", "critical"].includes(priority) ? priority as Task["priority"] : "normal",
+    steps, steps_reported: row.steps_reported !== false && Array.isArray(row.steps), progress_pct: progressReported ? progress as number : 0, progress_reported: progressReported,
+    recoverable: row.recoverable === true, cancellation_requested: row.cancellation_requested === true,
+    created_at: typeof row.created_at === "string" ? row.created_at : "",
+    updated_at: typeof row.updated_at === "string" ? row.updated_at : typeof row.created_at === "string" ? row.created_at : "",
+    schema_version: typeof row.schema_version === "string" ? row.schema_version : "1.0.0",
+  };
+}
+export const fetchTasks = async (state?: string, limit = 50) => {
   const params = new URLSearchParams();
   if (state) params.set("state", state);
   params.set("limit", String(limit));
-  return api<{ tasks: TaskView[]; total: number; running: number }>(`/api/v1/tasks?${params}`);
+  const snapshot = await api<{ tasks: unknown[]; total: number; running: number }>(`/api/v1/tasks?${params}`);
+  if (!Array.isArray(snapshot.tasks)) throw new ApiError("TASK_SNAPSHOT_INVALID", "Task list is unavailable");
+  const tasks = snapshot.tasks.map(taskEntity);
+  if (new Set(tasks.map(task => task.id)).size !== tasks.length) throw new ApiError("TASK_SNAPSHOT_INVALID", "Duplicate original task identities");
+  return { ...snapshot, tasks };
 };
 
 export const taskAction = (action: string, taskId: string) =>

@@ -91,10 +91,11 @@ def test_startup_reobserves_original_identity_without_spawning_again(
         assert result["helper_identity"] == probes[1]
         attached = ProcessSessionStore(tmp_path).attach(result["session_id"])
         assert attached["state"] == "RUNNING", {
-            "attached": attached,
-            "host_state": store._host_state(result["session_id"]),
-            "identity_reads": identity_reads,
-            "host_read_failures": host_read_failures,
+            "attached_state": attached["state"],
+            "attached_error": attached.get("error"),
+            "host_read_failure_count": len(host_read_failures),
+            "last_host_read_failure": host_read_failures[-1:] or None,
+            "last_identity_reads": identity_reads[-2:],
         }
     finally:
         # A failed assertion must not leave a verified original test process.

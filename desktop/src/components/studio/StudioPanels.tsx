@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 const StudioWorkflow = lazy(() => import("./StudioWorkflow").then(module => ({ default: module.StudioWorkflow })));
-import { ChatView } from "../ChatView";
+import { StudioChat } from "./StudioChat";
 import { DeveloperWorkbench, type WorkbenchDraft } from "../DeveloperWorkbench";
 import { DeveloperPlatform } from "../DeveloperPlatform";
 import { EnvironmentInspector } from "../EnvironmentInspector";
@@ -36,13 +36,7 @@ function Projection({ collection }: { collection: keyof OperationsSnapshot | "ru
 export const STUDIO_PANELS: readonly PanelContribution[] = [
   { type: "extensions", en: "UI Extensions", zh: "界面扩展", owner: "ExtensionRegistry / Governance", render: props => <StudioExtensions {...props} /> },
   { type: "dashboard", en: "Dashboard", zh: "仪表盘", owner: "Existing Runtime projections / read-only", render: props => <StudioDashboard {...props} /> },
-  { type: "chat", en: "Chat", zh: "对话", owner: "Conversation / Model Gateway", render: p => <ChatView onCardClick={event => {
-    const data = event.payload || {};
-    if (data.task_id) p.inspect({ kind: "task", taskId: String(data.task_id) });
-    else if (data.trace_id) p.inspect({ kind: "trace", traceId: String(data.trace_id) });
-    else if (event.event_type.startsWith("node.") && data.node_id) p.inspect({ kind: "node", nodeId: String(data.node_id) });
-    else p.open("operations");
-  }} onTraceClick={traceId => p.inspect({ kind: "trace", traceId })} /> },
+  { type: "chat", en: "Chat", zh: "对话", owner: "Conversation / Model Gateway", render: p => <StudioChat {...p} /> },
   { type: "files", en: "Project Files", zh: "项目文件", owner: "Workspace API / Governance", render: p => <DeveloperWorkbench embeddedConversation={false} onDraftChange={p.onDraftChange} onDraftSnapshot={p.onDraftSnapshot} onOpenEnvironments={() => p.open("environment")} /> },
   { type: "editor", en: "Workspace Editor", zh: "工作区编辑", owner: "Workspace API / Governance", render: p => <DeveloperWorkbench onDraftChange={p.onDraftChange} onDraftSnapshot={p.onDraftSnapshot} onOpenEnvironments={() => p.open("environment")} /> },
   { type: "tasks", en: "Tasks", zh: "任务", owner: "EntityStore / Task", render: p => <TaskCenter onTaskClick={taskId => p.inspect({ kind: "task", taskId })} onTraceClick={traceId => p.inspect({ kind: "trace", traceId })} /> },

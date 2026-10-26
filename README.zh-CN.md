@@ -1,16 +1,29 @@
-# APEIR
+# APEIR Studio
 
-面向异构智能与现实资源的开放执行、治理和验证运行时。本地优先，远程执行边界明确。
+由 APEIR Runtime 驱动的开发工作空间：编辑工程文件、运行受治理的工作流、检查执行证据。
 
 [**源码预览下载**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
 [**快速开始**](docs/operations/getting-started/QUICK_START.md) ·
-[**文档**](docs/operations/README.md) · [English](README.md)
+[**SDK 与扩展**](docs/development/DEVELOPER_PLATFORM.md#declarative-ui-extension-sdk) ·
+[**文档**](docs/README.md) · [English](README.md)
 
-![连接无模型 Runtime 的 APEIR Studio 源码界面](docs/media/studio-source-overview.png)
+![APEIR Studio 的对话、项目文件与分屏编辑器](docs/media/studio-workspace-source.png)
 
-*真实源码浏览器截图，连接独立本地 Runtime。缺失的 Kernel、节点与模型数据仍显示未配置或未知；此图不是已安装的 EXE。*
+*真实源码浏览器界面，连接本地无模型 Runtime。这是 Source Developer Preview，不是 Windows 安装截图。*
+
+## 从这里开始
+
+- **体验工作台：**下载同一提交的 Runtime 与 Studio 预览包，按
+  [快速开始](docs/operations/getting-started/QUICK_START.md)启动。
+  需要 Python 3.10+；编译后的浏览器界面不需要 Node.js 或 Rust。
+- **参与开发：**通过 [Developer Setup](docs/operations/getting-started/QUICK_START.md#developer-setup)
+  安装可编辑源码，启动界面开发服务器并运行测试。
+- **开发扩展：**从 [System Monitor 示例](examples/studio_system_monitor/README.md)
+  或 [Provider 示例](examples/hello_provider/README.md)开始。
 
 ## 概览
+
+APEIR Runtime 是面向异构智能与现实资源的开放运行时，本地优先，远程执行边界明确。
 
 APEIR Studio 是 APEIR Runtime 的桌面工作空间。用户可以组合项目、对话、任务、
 资源和证据面板；Runtime 负责执行，Governance 负责授权，持久记录支持恢复。
@@ -35,10 +48,11 @@ APEIR Studio 是 APEIR Runtime 的桌面工作空间。用户可以组合项目�
 它明确区分 **Source Preview**、**Developer Setup** 和 **Native Installation**。
 源码检查和模拟 Demo 不需要 API Key 或硬件。可下载的源码包不是 Windows 安装程序。
 
-**Windows EXE / NSIS：BLOCKED。** 旧锁要求的 Kernel 二进制缺失，经过验证的
-重建候选仍需维护者批准及 Windows10 安装生命周期验收。
-查看[原生交付证据](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#r4-trusted-candidate-evidence--2026-10-24)。
-当前不提供宣称已通过验收的安装包或正式 Release。
+**Windows 下载：**组件锁迁移已获批准并通过
+[PR #101](https://github.com/untrod/apeir/pull/101)合入；内部未签名 Portable／NSIS
+构建仍需通过完整验证。
+当前尚无通过 Windows 10 安装验收的安装包。源码预览包不是 EXE；
+进展见[原生交付记录](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md)。
 
 ## 开发者平台
 
@@ -53,8 +67,9 @@ Studio 属于同一个 Distribution；独立的 [Kernel](https://github.com/untr
 从[公开开发者平台](docs/development/DEVELOPER_PLATFORM.md)、
 [Provider 示例](examples/hello_provider/README.md)和
 [Skill 示例](examples/hello_skill/README.md)开始。
-当前不开放第三方可执行 Studio UI。可视 Workflow、声明式 UI Contribution
-及其验收状态以 ROADMAP 为准；安装包不会自动获得执行权限。
+[声明式 UI SDK](docs/development/DEVELOPER_PLATFORM.md#declarative-ui-extension-sdk)
+支持经过审查的面板和 Widget，无需向可信主窗口注入任意 JavaScript。
+第三方可执行 UI 在隔离验收前保持禁用；安装包不会自动获得执行权限。
 
 ## 当前状态
 

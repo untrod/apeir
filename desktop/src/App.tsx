@@ -380,9 +380,9 @@ function TasksPage({ onTaskClick, onTraceClick }: { onTaskClick: (taskId: string
             <TaskCard key={task.id} title={task.name || task.id} status={task.status}
               subtitle={`Priority: ${task.priority} · ${task.model_id || "auto"}`}
               detail={{ task_id: task.id, model: task.model_id || "auto", priority: task.priority,
-                progress: `${task.progress_pct}%`, steps: `${task.steps.filter((s) => s.status === "completed").length}/${task.steps.length}`,
+                progress: task.progress_reported === false ? "UNKNOWN" : `${task.progress_pct}%`, steps: task.steps_reported === false ? "UNKNOWN" : `${task.steps.filter((s) => s.status === "completed").length}/${task.steps.length}`,
                 created: new Date(task.created_at).toLocaleString() }}
-              progress={task.progress_pct} onClick={() => onTaskClick(task.id)} />
+              progress={task.progress_reported === false ? undefined : task.progress_pct} onClick={() => onTaskClick(task.id)} />
           ))}
       </div>
     </div>
@@ -709,7 +709,7 @@ function AppShell() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [connected, setConnected] = useState(false);
   const runtimeConfigVersion = useRuntimeConfigVersion();
-  const [page, setPageState] = useState<NavPage>("operations");
+  const [page, setPageState] = useState<NavPage>("studio");
   const studioProtected = useRef(false);
   const protectStudio = useCallback((value: boolean) => { studioProtected.current = value; }, []);
   const setPage = useCallback((next: NavPage) => {
@@ -778,9 +778,14 @@ function AppShell() {
   useEffect(() => {
     let active = true;
     const current = captureRuntimeConnection();
-    if (bootstrapStatus.state === "ready") {
+    const native = "__TAURI_INTERNALS__" in window;
+    if (bootstrapStatus.state === "ready" || !native) {
       // Hydrate store and load data
-      entityStore.hydrate().then(() => {
+      const ready = native ? Promise.resolve(true) : testConnection();
+      ready.then(async reachable => {
+        current();
+        if (!active || !reachable) return;
+        await entityStore.hydrate();
         current();
         if (!active) return;
         return Promise.allSettled([
@@ -983,19 +988,19 @@ function AppShell() {
     <>
       <StatusBar onSearch={() => setPaletteOpen(true)} />
       <div style={{ display: "flex", flex: 1, overflow: "hidden", height: `calc(100vh - ${page === "chat" || page === "operations" || page === "studio" ? 44 : 148}px)` }}>
-        <Sidebar currentPage={page} onNavigate={setPage} inspectorOpen={inspectorOpen}
+        {page !== "studio" && <Sidebar currentPage={page} onNavigate={setPage} inspectorOpen={inspectorOpen}
           onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
           taskCount={tasks.filter((t) => ["running", "queued", "awaiting_approval"].includes(t.status)).length}
-          collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} />
+          collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} />}
         {page === "chat" && (
           <SessionBar activeId={activeConversationId} onSelect={(id) => setActiveConversationId(id)}
             onNew={() => setActiveConversationId(undefined)} collapsed={sessionBarCollapsed}
             onToggleCollapse={() => setSessionBarCollapsed(!sessionBarCollapsed)} />
         )}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ flex: inspectorOpen ? "40%" : "1", overflow: "hidden", transition: "flex 0.3s ease" }}>
+          <div style={{ flex: inspectorOpen && page !== "studio" ? "40%" : "1", overflow: "hidden", transition: "flex 0.3s ease" }}>
             {page === "chat" && <ChatView conversationId={activeConversationId} onConversationCreated={setActiveConversationId} onCardClick={handleEventClick} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} />}
-            {page === "studio" && <React.Suspense fallback={<p role="status">Loading APEIR Studio…</p>}><StudioShell onProtectedChange={protectStudio} /></React.Suspense>}
+            {page === "studio" && <React.Suspense fallback={<p role="status">Loading APEIR Studio…</p>}><StudioShell onProtectedChange={protectStudio} onExit={() => setPage("operations")} /></React.Suspense>}
             {page === "operations" && <OperationsConsole />}
             {page === "tasks" && <TaskCenter onTaskClick={(id) => setDrawer({ kind: "task", taskId: id })} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} onConversationClick={id => { setActiveConversationId(id); setPage("chat"); }} />}
             {page === "develop" && <DeveloperPlatform />}
@@ -1007,7 +1012,7 @@ function AppShell() {
             {page === "workspace" && <WorkspacePage />}
             {page === "settings" && <SettingsPage />}
           </div>
-          <Inspector visible={inspectorOpen} onClose={() => setInspectorOpen(false)} />
+          <Inspector visible={inspectorOpen && page !== "studio"} onClose={() => setInspectorOpen(false)} />
         </div>
         <DetailDrawer view={drawer} onClose={() => setDrawer(null)} />
       </div>

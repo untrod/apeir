@@ -4,6 +4,10 @@ Choose the path matching the deliverable you have. No API key, GPU or device is
 needed for the Source Preview and simulated Demo. Current qualification and
 blockers remain in [ROADMAP](../../../ROADMAP.md).
 
+**You need:** Python 3.10+ for the Source Preview. Its prebuilt Studio interface
+does not need Node.js or Rust. Source development additionally needs Node.js
+22.19+. Windows native packaging has separate prerequisites below.
+
 | Path | What you get | Status |
 | --- | --- | --- |
 | [Source Preview](#source-preview) | Downloaded Python Runtime and built Studio browser UI | Source-qualified; no EXE |
@@ -24,12 +28,10 @@ Core/Security/Multi-Arch results. A frontend-only artifact from a PR is not a
 complete Source Preview. GitHub sign-in is required; artifacts have seven-day
 retention. These are source packages, not an EXE, native installer or signed Release.
 
-A separately installed and browser-qualified historical source snapshot is
-`62cbe6ff53a769172067740370f26fb18eb3c094` (2026-10-25):
-[Python package](https://github.com/untrod/apeir/actions/runs/40144930113/artifacts/12580500976)
-and [Studio frontend](https://github.com/untrod/apeir/actions/runs/40144930113/artifacts/12579679819).
-It predates the visual Workflow Builder and declarative UI SDK; do not treat it
-as qualification of those additions. Use a newer accepted matching build for them.
+Choose **both** packages from one accepted run. A GitHub source-code ZIP is not
+the built frontend, and a green frontend check alone does not qualify a complete
+product. If an older artifact has expired, use a newer qualified main run rather
+than mixing packages from different revisions.
 
 Extract the two ZIPs into separate directories. Compare their manifest
 `distribution_revision` values and verify the files against their `SHA256SUMS.txt`.
@@ -68,7 +70,8 @@ python -m http.server 5186 --bind 127.0.0.1 --directory app
 ```
 
 Open `http://127.0.0.1:5186`. Follow [the connection steps](#model-free-runtime-api-and-source-interface)
-to enter the protected local session token and choose **APEIR Studio / Open workspace**.
+to enter the protected local session token. Current source builds open Studio
+directly; older previews use **APEIR Studio / Open workspace**.
 The built interface needs no Node.js or Rust installation. Missing model, Kernel
 and sandbox prerequisites remain visible; this does not enable production inference
 or unrestricted commands. Stop both foreground servers when finished.
@@ -202,7 +205,9 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-Open the loopback URL printed by Vite. Expand **Controller connection**, set
+Open the loopback URL printed by Vite. In current Studio, choose
+**Workspace → Operations Console**; older previews may open that Console
+directly. Expand **Controller connection**, set
 **API URL** to `http://127.0.0.1:8770`, then enter the token from the owner-only
 local file in **Service session token** and select **Connect**. Set the address
 before entering the token: editing it clears the draft, and changing Controllers
@@ -218,6 +223,12 @@ enrolled authorized human; test execution remains BLOCKED without a qualified
 sandbox. An API health response does not establish model inference or execution
 qualification.
 
+Choose **APEIR Studio / Open workspace** in the Console to return to the
+workspace. Start with **Files**, **Workflow** or **Overview**; a model is optional
+for these supported software paths. Chat remains unconfigured until its model
+and Kernel prerequisites are met. A session token connects to the service; it
+does not approve a file change or grant device control.
+
 The existing Desktop CI also uploads `apeir-studio-source-frontend-<commit>`
 after unit/build and actual Runtime/browser integration pass. This is a static
 source-browser preview, not an EXE. Download the artifact from the exact accepted
@@ -232,7 +243,7 @@ python -m http.server 5186 --bind 127.0.0.1 --directory app
 ```
 
 Open `http://127.0.0.1:5186`, connect to the actual authenticated Runtime as above,
-then select **APEIR Studio / Open workspace**. The same Studio source and theme
+then enter Studio (older previews use **APEIR Studio / Open workspace**). The same Studio source and theme
 are used by Tauri. Use the [Studio guide](../../development/DEVELOPER_PLATFORM.md#apeir-studio)
 for panels, safe layout import/export and current feature limits. Real model,
 sandbox, native installation and physical acceptance remain separate gates.
@@ -263,6 +274,14 @@ optional dependencies and platform boundaries. Native binary release acceptance
 requires the separate [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md).
 
 ## Troubleshooting and feedback
+
+| What you see | What to do |
+| --- | --- |
+| Only a Dashboard, no Chat or editor | Use the left rail's **Chat** or **Files**. **More** and the top **Add panel** button open the full panel library. An older saved layout is kept; you do not need to erase it. |
+| Runtime unavailable or authentication failed | Keep the API terminal running. Check the address and service session token in **Workspace → Operations Console → Controller connection**. A model API key is a different credential. |
+| Chat unavailable in Source Preview | `--no-intelligence` deliberately disables models. Saving a Provider does not enable that process; model-enabled startup also needs an authenticated Kernel. |
+| A build or test is BLOCKED | Read its missing toolchain, permission or sandbox requirement. A saved profile is not an executed command. |
+| File contents changed outside Studio | Keep your draft, inspect the current file and resolve the conflict. Do not overwrite a changed version with an old approval. |
 
 Run `apeir doctor`, retain the command, platform and exact error, and follow
 [troubleshooting](TROUBLESHOOTING.md). Inspect diagnostics before sharing and
@@ -403,10 +422,11 @@ need inspection/reconciliation before any new side effect.
 
 **BLOCKED — no current Windows EXE / Portable / NSIS download is qualified.**
 Source Preview does not install the Rust Kernel or package a native Desktop.
-The two original locked Kernel Windows binaries are unavailable. Reviewed R4
-rebuilds passed scoped native-process tests but differ from the unchanged lock;
-relocking requires maintainer approval. Windows10 install/upgrade/uninstall,
-signing and release authorization remain separate.
+The original locked Kernel Windows binaries were unavailable. The maintainer
+has approved exact frozen-source replacement hashes and internal unsigned
+builds; [PR #101](https://github.com/untrod/apeir/pull/101) records the migration.
+Current packaging is under validation. Windows10 install/upgrade/uninstall,
+signing and publication remain separate gates.
 
 See the [recorded component evidence](../deployment/WINDOWS_10_X64_LAUNCHER.md#r4-trusted-candidate-evidence--2026-10-24)
 and [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md). Never rename a source

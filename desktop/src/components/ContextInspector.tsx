@@ -13,6 +13,7 @@ const hash = (value: unknown): string => typeof value === "string" && /^[a-f0-9]
 
 function Source({ value }: { value: unknown }) {
   const source = record(value);
+  if (source.kind === "conversation_summary") return <>Archived conversation excerpt · incomplete history · not authorization</>;
   if (source.kind === "tool_result") return <>
     Tool result · {String(source.tool || "unknown")} · {source.ok === true ? "read/operation returned data" : "failed; no successful read claimed"}
     {source.tool === "read_file" && source.ok === true && <div>

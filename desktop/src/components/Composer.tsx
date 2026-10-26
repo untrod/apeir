@@ -338,6 +338,7 @@ export function Composer({
       }}>
         <textarea
           ref={inputRef}
+          aria-label="Message"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -352,7 +353,7 @@ export function Composer({
             flex: 1, border: "none", background: "transparent",
             fontSize: typo.base, fontFamily: typo.font,
             color: colors.text, resize: "none", outline: "none",
-            maxHeight: 200, lineHeight: typo.relaxed,
+            minHeight: 24, maxHeight: 200, lineHeight: typo.relaxed,
             padding: `${space.xs} 0`,
           }}
           rows={1}

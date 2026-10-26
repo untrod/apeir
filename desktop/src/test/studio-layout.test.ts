@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Actions, DockLocation, Model, TabNode } from "flexlayout-react";
-import { captureStudioLayout, createStudioLayout, discardsProtectedPanel, loadStudioLayout, MAX_LAYOUT_BYTES, parseStudioLayout, STUDIO_TEMPLATES, studioModel } from "../lib/studioLayout";
+import { captureStudioLayout, createStudioLayout, discardsProtectedPanel, dockStudioTab, focusStudioTab, loadStudioLayout, MAX_LAYOUT_BYTES, parseStudioLayout, STUDIO_TEMPLATES, studioModel } from "../lib/studioLayout";
 
 describe("Studio presentation schema", () => {
   it("rejects grouped close actions that would discard a protected editor, while permitting moves", () => {
@@ -25,6 +25,26 @@ describe("Studio presentation schema", () => {
     expect(reloaded.getNodeById("panel-1")?.getType()).toBe("tab");
     expect(JSON.stringify(saved)).not.toMatch(/permissions|session|token|url|config|extraData/);
   });
+  it("reveals an existing tab behind a maximized sibling without making a new instance", () => {
+    const model = Model.fromJson(studioModel(createStudioLayout()));
+    model.doAction(Actions.maximizeToggle("group-1"));
+    focusStudioTab(model, "panel-1");
+    expect(model.getMaximizedTabset()).toBeUndefined();
+    expect(model.getActiveTabset()?.getSelectedNode()?.getId()).toBe("panel-1");
+    let count = 0; model.visitNodes(node => { if (node instanceof TabNode) count++; });
+    expect(count).toBe(4);
+  });
+  it.each(["left", "right", "top", "bottom"] as const)("snaps to the %s edge, preserving every panel and the v1 schema", side => {
+    const original = createStudioLayout(); const model = Model.fromJson(studioModel(original));
+    const tab = model.getNodeById("panel-1");
+    model.doAction(Actions.maximizeToggle("group-0"));
+    dockStudioTab(model, "panel-1", side);
+    expect(model.getMaximizedTabset()).toBeUndefined();
+    expect(model.getNodeById("panel-1")).toBe(tab);
+    const saved = captureStudioLayout(model.toJson(), original);
+    expect(parseStudioLayout(JSON.stringify(saved))).toEqual(saved);
+    expect(JSON.stringify(saved).match(/"component"/g)).toHaveLength(4);
+  });
   it.each(["token", "credential", "grant", "permissions", "url", "__proto__", "constructor"])("rejects untrusted %s rather than forwarding it to FlexLayout", key => {
     const json = JSON.stringify(createStudioLayout());
     const malicious = json.replace('"schemaVersion":1', `"${key}":"untrusted","schemaVersion":1`);
@@ -45,7 +65,7 @@ describe("Studio presentation schema", () => {
   it("rejects duplicate identities, nonfinite sizes, excess input and unsupported versions", () => {
     const source = JSON.stringify(createStudioLayout());
     expect(() => parseStudioLayout(source.replace('"panel-2"', '"panel-1"'))).toThrow(/duplicate/);
-    expect(() => parseStudioLayout(source.replace('"weight":50', '"weight":1e999'))).toThrow(/size/);
+    expect(() => parseStudioLayout(source.replace('"weight":65', '"weight":1e999'))).toThrow(/size/);
     expect(() => parseStudioLayout(" ".repeat(MAX_LAYOUT_BYTES + 1))).toThrow(/96 KiB/);
     expect(() => parseStudioLayout(source.replace('"schemaVersion":1', '"schemaVersion":900'))).toThrow(/schema/);
   });

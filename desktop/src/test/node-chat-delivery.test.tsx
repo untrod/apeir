@@ -18,7 +18,7 @@ describe("shared Runtime publication in Chat", () => {
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scroll });
     const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
     render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
-    await screen.findByText(/Select a saved workspace file/);
+    await screen.findByRole("heading", { name: "What would you like to work on?" });
     const initial = scroll.mock.calls.length;
     act(() => entityStore.upsertNodes([]));
     expect(scroll).toHaveBeenCalledTimes(initial);

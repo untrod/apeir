@@ -199,6 +199,7 @@ function RuntimeActivity({ runId, events }: { runId: string; events: RuntimeEven
 
 
 type ChatViewProps = {
+  locale?: "en" | "zh";
   conversationId?: string;
   onConversationCreated?: (conversationId: string) => void;
   onCardClick: (event: RuntimeEventEnvelope) => void;
@@ -216,8 +217,9 @@ export function ChatView(props: ChatViewProps) {
 
 function ChatSession({
   conversationId, onConversationCreated, onCardClick, onTraceClick,
-  workspaceFile, readOnly = false, onClearWorkspaceFile, onProposalCreated,
+  workspaceFile, readOnly = false, onClearWorkspaceFile, onProposalCreated, locale = "en",
 }: ChatViewProps) {
+  const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   // All state from EntityStore
   const messages = useMessages(conversationId || "");
   const activeTasks = useActiveTasks();
@@ -277,18 +279,6 @@ function ChatSession({
       cancelled = true;
     };
   }, [conversationId, currentView]);
-
-  // Seed welcome message (only if hydrated with no messages)
-  useEffect(() => {
-    if ((hydrated || readOnly) && messages.length === 0 && localMessages.length === 0) {
-      setLocalMessages([{
-        id: "welcome",
-        role: "assistant",
-        content: readOnly ? "Select a saved workspace file, then send a request to the existing Chat Runtime. This panel uses read-only mode; file references grant no authority. A configured model and its existing execution prerequisites are still required." : "Good to see you. I'm APEIR — I plan, execute, and verify tasks across your nodes.\n\nYou can ask me to:\n- **Plan** a multi-step workflow with dependencies\n- **Execute** tasks on specific models or nodes\n- **Verify** results with automated checks\n\nWhat would you like to do?",
-        timestamp: new Date().toISOString(),
-      }]);
-    }
-  }, [hydrated, readOnly, messages.length, localMessages.length]);
 
   // Merge store messages with local ephemeral messages
   const allMessages = [
@@ -431,7 +421,7 @@ function ChatSession({
         <h1 style={{ fontSize: typo.lg, fontWeight: typo.semibold, color: colors.text, margin: 0 }}>APEIR</h1>
         {readOnly && <span style={{ fontSize: typo.xs, color: colors.textSecondary }}>Read-only collaboration</span>}
         <span style={{ fontSize: typo.xs, color: colors.textTertiary }}>
-          {activeTasks.length > 0 ? `${activeTasks.length} active` : "Ready"}
+          {!hydrated && !readOnly ? t("Connecting", "连接中") : activeTasks.length > 0 ? t(`${activeTasks.length} active`, `${activeTasks.length} 项进行中`) : models.length ? t(`${models.length} models`, `${models.length} 个模型`) : t("No models configured", "尚未配置模型")}
         </span>
         {loading && <span style={{ fontSize: typo.xs, color: colors.accent, animation: "nousPulse 1.5s infinite" }}>Running</span>}
         {activeRunId && <button onClick={() => inspectContext(activeRunId)} style={btnSecondary}>Inspect active input</button>}
@@ -449,6 +439,11 @@ function ChatSession({
           <div style={{ padding: space.xl, color: colors.textTertiary, fontSize: typo.sm }}>
             Loading conversation...
           </div>
+        ) : allMessages.length === 0 ? (
+          <div style={{ display: "grid", placeContent: "center", minHeight: "45%", padding: space.xl, textAlign: "center", gap: space.sm }}>
+            <h2 style={{ fontSize: typo.xl, fontWeight: typo.medium, color: colors.text }}>{t("What would you like to work on?", "今天想完成什么？")}</h2>
+            <p style={{ fontSize: typo.sm, color: colors.textSecondary }}>{models.length ? readOnly ? t("Ask about a saved project file.", "分析已保存的项目文件。") : t("Ask a question or describe a task.", "提出问题，或描述你的任务。") : t("Connect a model to start a conversation.", "连接模型后即可开始对话。")}</p>
+          </div>
         ) : (
           allMessages.map((msg) => (
             <MessageBubble key={msg.id} msg={msg} onCardClick={onCardClick} onTraceClick={onTraceClick} onContextClick={inspectContext} />
@@ -463,8 +458,8 @@ function ChatSession({
             <div style={{ fontSize: typo.xs, fontWeight: typo.semibold, color: colors.textTertiary, textTransform: "uppercase", marginBottom: space.sm }}>Active Tasks</div>
             {activeTasks.slice(0, 5).map((t) => (
               <TaskCard key={t.id} title={t.name || t.id} status={t.status}
-                subtitle={`${t.model_id || "auto"} · ${t.steps.length} steps`}
-                progress={t.progress_pct} compact
+                subtitle={`${t.model_id || "auto"} · ${t.steps_reported === false ? "Steps UNKNOWN" : `${t.steps.length} steps`}`}
+                progress={t.progress_reported === false ? undefined : t.progress_pct} compact
               />
             ))}
           </div>

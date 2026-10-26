@@ -22,6 +22,15 @@ beforeEach(() => {
 });
 
 describe("persisted actual-input inspection", () => {
+  it("identifies archived excerpts without treating them as full history or rendering raw text", async () => {
+    const messages = [manifest.messages[0], { ...manifest.messages[1], role: "user", source: { kind: "conversation_summary", complete_history: false, raw_content: "PRIVATE_ARCHIVED_TEXT" } }];
+    vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: props.runId, events: [{ ...started, payload: { iteration: 1, input_manifest: { ...manifest, messages } } }], next_after_sequence: 1 });
+    render(<ContextInspector {...props} />);
+    expect(await screen.findByText(/Archived conversation excerpt · incomplete history · not authorization/)).toBeInTheDocument();
+    expect(screen.queryByText("PRIVATE_ARCHIVED_TEXT")).not.toBeInTheDocument();
+    expect(runPrompt).not.toHaveBeenCalled();
+  });
+
   it("distinguishes estimates, actual usage and verified effects without any model invocation", async () => {
     vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: props.runId, events: [started, { event_type: "model.invocation.completed", payload: { iteration: 1, model_id: "fixture/model", provider_id: "fixture", usage: { input_tokens: 31, cached_input_tokens: 10, counter_measurements: { input_tokens: "reported", cached_input_tokens: "reported" } }, cost_usd: 0, cost_measurement: "reported", latency_ms: 8 } }], next_after_sequence: 2 });
     render(<ContextInspector {...props} />);

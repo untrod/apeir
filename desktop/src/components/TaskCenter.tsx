@@ -35,7 +35,7 @@ function TaskCenterSession({ onTaskClick, onTraceClick, onConversationClick }: T
   const [filter, setFilter] = useState<string>("all");
 
   const statusGroups: Record<string, string[]> = {
-    running: ["running", "queued", "dispatching", "planning", "verifying", "recovering", "waiting_for_model", "waiting_for_node"],
+    running: ["running", "queued", "planned", "waiting", "dispatching", "planning", "verifying", "recovering", "waiting_for_model", "waiting_for_node"],
     needs_input: ["awaiting_approval", "waiting_user", "blocked"],
     completed: ["completed", "completed_with_warnings"],
     failed: ["failed", "failed_verification"],
@@ -165,10 +165,10 @@ function TaskRow({ task, onTaskClick, onTraceClick, onConversationClick }: {
             )}
           </div>
           <div style={{ fontSize: typo.xs, color: colors.textSecondary, marginTop: 2 }}>
-            {task.model_id || "auto"} · {task.steps.length} steps
+            {task.model_id || "auto"} · {task.steps_reported === false ? "Steps UNKNOWN" : `${task.steps.length} steps`}
             {task.plan_revision ? ` · plan v${task.plan_revision}` : ""}
             {task.artifact_refs?.length ? ` · ${task.artifact_refs.length} artifacts` : ""}
-            {` · ${new Date(task.created_at).toLocaleString()}`}
+            {` · ${task.created_at ? new Date(task.created_at).toLocaleString() : "Time UNKNOWN"}`}
             {task.conversation_id && " · from conversation"}
           </div>
         </div>
@@ -176,10 +176,10 @@ function TaskRow({ task, onTaskClick, onTraceClick, onConversationClick }: {
         {/* Progress */}
         <div style={{ width: 100 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: typo.xs, color: colors.textTertiary, marginBottom: 2 }}>
-            <span>Progress</span><span>{task.progress_pct}%</span>
+            <span>Progress</span><span>{task.progress_reported === false ? "UNKNOWN" : `${task.progress_pct}%`}</span>
           </div>
           <div style={{ height: 3, background: colors.borderLight, borderRadius: radius.full, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${task.progress_pct}%`, background: colors.accent, borderRadius: radius.full, transition: "width 0.3s" }} />
+            {task.progress_reported !== false && <div style={{ height: "100%", width: `${task.progress_pct}%`, background: colors.accent, borderRadius: radius.full, transition: "width 0.3s" }} />}
           </div>
         </div>
 
