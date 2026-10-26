@@ -277,7 +277,7 @@ requires the separate [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md).
 
 | What you see | What to do |
 | --- | --- |
-| Only a Dashboard, no Chat or editor | Use the left rail's **Chat** or **Files**, or **More → Add panel**. An older saved layout is kept; you do not need to erase it. |
+| Only a Dashboard, no Chat or editor | Use the left rail's **Chat** or **Files**. **More** and the top **Add panel** button open the full panel library. An older saved layout is kept; you do not need to erase it. |
 | Runtime unavailable or authentication failed | Keep the API terminal running. Check the address and service session token in **Workspace → Operations Console → Controller connection**. A model API key is a different credential. |
 | Chat unavailable in Source Preview | `--no-intelligence` deliberately disables models. Saving a Provider does not enable that process; model-enabled startup also needs an authenticated Kernel. |
 | A build or test is BLOCKED | Read its missing toolchain, permission or sandbox requirement. A saved profile is not an executed command. |
