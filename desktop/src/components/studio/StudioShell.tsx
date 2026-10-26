@@ -183,7 +183,7 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit }: { onEx
   };
   return <StudioPresentation.Provider value={{ editing }}><section className={`studio-session ${editing ? "studio-editing" : "studio-browsing"}`} aria-label="APEIR Studio">
     <header className="studio-toolbar">
-      <div className="studio-brand"><span className="studio-brand-mark" aria-hidden="true">A</span><strong>Studio</strong><span className="studio-workspace-name">{document.name}</span></div>
+      <div className="studio-brand"><span className="studio-brand-mark" aria-hidden="true">A</span><strong>APEIR Studio</strong><span className="studio-workspace-name">{document.name}</span></div>
       <span className="studio-controller" title={getConfig().url}>{t("Runtime", "运行时")} · {getConfig().url.replace(/^https?:\/\//, "")}</span>
       <div className="studio-toolbar-actions">
       {maximized && <button onClick={() => { model.doAction(Actions.maximizeToggle(maximized.getId())); setRevision(value => value + 1); }}><StudioIcon name="restore" />{t("Show all panels", "还原所有面板")}</button>}
