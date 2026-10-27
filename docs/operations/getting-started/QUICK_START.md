@@ -426,7 +426,7 @@ installed GUI, upgrade/uninstall, Defender and signing have **not** been qualifi
 This is not a signed Release or a completed Windows10 installation Gate.
 
 1. Sign in to GitHub, open the
-   [Windows x64 build](https://github.com/untrod/apeir/actions/runs/40498770619), and
+   [Windows x64 build](https://github.com/untrod/apeir/actions/runs/40501512297), and
    download **windows-x64-native-development-build** under **Artifacts**.
    Artifacts have 14-day retention; check the displayed expiry. If unavailable,
    check another build's own source manifest and validation report before use.
@@ -451,7 +451,7 @@ This is not a signed Release or a completed Windows10 installation Gate.
    not a claim that the installation lifecycle has been exercised.
 
 The build manifest pins the source revision; this command-discovery candidate is
-`deb50f46f50dcee8c05b7c2b459833a2e2c525bc`. Documentation updates do not relabel
+`51d7462c1225a9fd223ea25ca2e9114613bda161`. Documentation updates do not relabel
 the downloaded binaries as a build of another revision. Their Runtime/Studio
 sources, sidecar spec, build scripts and dependency locks are unchanged here.
 Frozen Kernel `87fd1b2` and the approved component hashes are unchanged.

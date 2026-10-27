@@ -170,8 +170,8 @@ does not alter the reviewed Kernel hashes or remove license/Windows10 gates.
 
 ## Current native command-qualified build
 
-The [current full-mode qualification](https://github.com/untrod/apeir/actions/runs/40498770619)
-uses `deb50f46f50dcee8c05b7c2b459833a2e2c525bc`. Only use its
+The [current full-mode qualification](https://github.com/untrod/apeir/actions/runs/40501512297)
+uses `51d7462c1225a9fd223ea25ca2e9114613bda161`. Only use its
 **windows-x64-native-development-build** artifact after successful completion.
 The maintained spec discovers the existing dynamic CLI families from their one
 canonical declaration table. The native report must include `workflow_cli`:

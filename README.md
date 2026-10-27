@@ -55,7 +55,7 @@ It separates downloadable **Source Preview**, **Developer Setup** and
 **Native Installation**. Source inspection and the simulated Demo need no API key
 or hardware. Downloadable source packages are not Windows installers.
 
-**Windows download:** open the [internal Windows x64 build](https://github.com/untrod/apeir/actions/runs/40498770619)
+**Windows download:** open the [internal Windows x64 build](https://github.com/untrod/apeir/actions/runs/40501512297)
 and download **windows-x64-native-development-build** from **Artifacts** after
 the full job succeeds. It contains Portable/NSIS packages, checksums and reports.
 Windows 10 installation, installed GUI, upgrade/uninstall and signing remain
