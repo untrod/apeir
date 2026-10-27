@@ -12,7 +12,7 @@ does not need Node.js or Rust. Source development additionally needs Node.js
 | --- | --- | --- |
 | [Source Preview](#source-preview) | Downloaded Python Runtime and built Studio browser UI | Source-qualified; no EXE |
 | [Developer Setup](#developer-setup) | Editable checkout and Studio development server | Source development |
-| [Native Installation](#native-installation) | Windows Portable / NSIS | BLOCKED; no qualified installer |
+| [Native Installation](#native-installation) | Unsigned Windows x64 Portable / NSIS test build | Build/smoke PASS; Windows10 installation PENDING |
 
 ## Source Preview
 
@@ -420,15 +420,45 @@ need inspection/reconciliation before any new side effect.
 
 ## Native Installation
 
-**BLOCKED — no current Windows EXE / Portable / NSIS download is qualified.**
-Source Preview does not install the Rust Kernel or package a native Desktop.
-The original locked Kernel Windows binaries were unavailable. The maintainer
-has approved exact frozen-source replacement hashes and internal unsigned
-builds; [PR #101](https://github.com/untrod/apeir/pull/101) records the migration.
-Current packaging is under validation. Windows10 install/upgrade/uninstall,
-signing and publication remain separate gates.
+An **unsigned internal Windows x64 test build** is now available. The full
+official build and actual Kernel/Worker/Runtime smoke passed on Windows Server
+2025. Windows10 installation, installed GUI, upgrade/uninstall, Defender and
+signing have **not** been qualified. This is not a signed Release or a completed
+Windows10 installation Gate.
 
-See the [recorded component evidence](../deployment/WINDOWS_10_X64_LAUNCHER.md#r4-trusted-candidate-evidence--2026-10-24)
-and [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md). Never rename a source
-ZIP to an installer or bypass component admission. A future approved native
-artifact will be linked here after its actual qualification.
+1. Sign in to GitHub and download
+   [windows-x64-native-development-build](https://github.com/untrod/apeir/actions/runs/40432789046/artifacts/12703824974).
+   It expires on **2026-11-10**. If unavailable, do not substitute another build
+   without checking its own source manifest and validation report.
+2. Extract the downloaded artifact. It contains both
+   `APEIR_0.1.0-rc1_x64-setup.exe` and
+   `APEIR-Portable-0.1.0-rc1-windows-x64.zip`, plus `SHA256SUMS.txt`, manifests,
+   dependency records and `native-validation-report.json`.
+3. Verify the selected file against `SHA256SUMS.txt` before using it. For example,
+   from that directory in PowerShell:
+
+   ```powershell
+   Get-FileHash .\APEIR_0.1.0-rc1_x64-setup.exe -Algorithm SHA256
+   Get-FileHash .\APEIR-Portable-0.1.0-rc1-windows-x64.zip -Algorithm SHA256
+   ```
+
+   Expected NSIS SHA-256:
+   `9CA906358893DF77F4BE9AD84F8B269AB31E2AE76AC5F8561D5B5B31E0A02A0F`.
+   Expected Portable SHA-256:
+   `8C85839E26668DF680629B4D7454A4228CC403E296A5152911C1151538CB0640`.
+4. For Portable evaluation, extract its ZIP and keep **all** files together in
+   `APEIR-Portable`; its launcher is `APEIR.exe`. Do not copy that EXE alone or
+   replace its sidecars. The NSIS EXE is the alternative current-user installer;
+   WebView2 setup can require network access. These are evaluation instructions,
+   not a claim that the installation lifecycle has been exercised.
+
+The binaries correspond to `9f43909bed331f6e25bcc3ffab4d5ac211ab4a37`, normally
+merged into main as `a8f8bd2170030e8b8c08baae6b44250156130202` with the same Git
+tree. Frozen Kernel `87fd1b2` and the approved component hashes are unchanged.
+The launcher is designed to manage its bundled Runtime and Kernel; independent
+Python/Rust installation is not part of this native package's user setup.
+Missing Provider or sandbox prerequisites must still display their actual state.
+
+See the [exact build evidence](../deployment/WINDOWS_10_X64_LAUNCHER.md#verified-internal-native-build--2026-10-27)
+and [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md) for outstanding Gates.
+Source Preview remains the separately qualified Python/browser path.

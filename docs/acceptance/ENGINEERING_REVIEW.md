@@ -4325,3 +4325,32 @@ dependency and removes no URI checks. The same focused diagnostic rechecks the
 actual EXE version and public model-free status in an empty temporary project.
 Original Native smoke/version assertions remain unchanged. Current real Windows
 frozen-CLI and full Native qualification are still required.
+
+## Full-mode native test bundle — 2026-10-27
+
+The exact9f43909 frozen-CLI diagnostic40431939721 passed its actual EXE version
+and model-free status in an empty project. Complete native run
+[40432789046/job121955136897](https://github.com/untrod/apeir/actions/runs/40432789046/job/121955136897)
+then passed the official full launcher without skip flags and produced both
+Portable and NSIS. PR102 merged normally as `a8f8bd2` with the same source tree;
+the Kernel and approved lock bytes are unchanged. Exact-head Core40431944935,
+Desktop40431945008, MultiArch40431944902 and Security40431944875 all passed before
+merge. Windows Core reports5837 passed,95 skipped,4 warnings in2506.94s; skips
+remain platform/dependency limits, not qualified behaviors. Resulting-main CI is
+independent of these accepted-head results.
+
+Independent download verified the GitHub artifact digest, all22 checksum entries,
+13 manifest files,11 nested Portable files and x64 PE application/sidecar headers.
+Its report exercises real NKI authentication, protected session creation, actual
+Runtime/Kernel/Worker health, app-local CRT loading and forced-process restart
+with query-only recovery of the same denied Work. External model calls are0;
+this is fail-closed compatibility, not real inference. Original failure logs and
+Issues4/8/82/85/88 remain open; green CI does not establish their general cause.
+
+The build host was Server2025, installation_acceptance=NOT_RUN. Windows10 installed
+GUI, graceful Desktop exit, upgrade/uninstall, Defender and signing remain PENDING
+or BLOCKED. No formal Release or tag was created. The exact downloadable files,
+digests and remaining Gates are in the existing
+[native build record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#verified-internal-native-build--2026-10-27),
+with the unique [Quick Start](../operations/getting-started/QUICK_START.md#native-installation)
+as the user installation entry.
