@@ -416,7 +416,7 @@ class GatewayChatHandler:
                     else ()
                 ),
                 routing_mode=(
-                    RoutingMode.PREFERRED
+                    RoutingMode.LOCKED
                     if constraints.get("model_id")
                     else RoutingMode.AUTO
                 ),

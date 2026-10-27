@@ -347,10 +347,40 @@ class ConversationStore:
                 cursor = connection.execute("UPDATE conversations SET deleted_at = ? WHERE conversation_id = ? AND deleted_at = ''", (utc_now(), conversation_id))
         return cursor.rowcount == 1
 
-    def _summarize_locked(self, connection: sqlite3.Connection, conversation_id: str, archived: int) -> str:
-        rows = connection.execute("SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY sequence ASC LIMIT ?", (conversation_id, archived)).fetchall()
-        text = "\n".join(f"{row['role']}: {row['content']}" for row in rows)
-        return text[-8_000:]
+    def _summarize_locked(
+        self, connection: sqlite3.Connection, conversation_id: str, archived: int
+    ) -> str:
+        if archived <= 0:
+            return ""
+        # Find the archive boundary using the covering sequence index, then
+        # materialize only enough newest archived text for the existing excerpt.
+        # Keep the exact original suffix; this is not a semantic summary.
+        boundary = connection.execute(
+            "SELECT sequence FROM messages WHERE conversation_id = ? "
+            "ORDER BY sequence ASC LIMIT 1 OFFSET ?",
+            (conversation_id, archived - 1),
+        ).fetchone()
+        if boundary is None:
+            return ""
+        cursor = connection.execute(
+            "SELECT role, content "
+            "FROM messages WHERE conversation_id = ? AND sequence <= ? "
+            "ORDER BY sequence DESC",
+            (conversation_id, boundary["sequence"]),
+        )
+        parts: list[str] = []
+        characters = 0
+        try:
+            for row in cursor:
+                # Slice in Python: SQLite text substr stops at embedded NULs.
+                excerpt = f"{row['role']}: {row['content']}"[-8_000:]
+                characters += len(excerpt) + bool(parts)
+                parts.append(excerpt)
+                if characters >= 8_000:
+                    break
+        finally:
+            cursor.close()
+        return "\n".join(reversed(parts))[-8_000:]
 
     @staticmethod
     def _conversation(row: sqlite3.Row) -> Conversation:

@@ -4354,3 +4354,42 @@ digests and remaining Gates are in the existing
 [native build record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#verified-internal-native-build--2026-10-27),
 with the unique [Quick Start](../operations/getting-started/QUICK_START.md#native-installation)
 as the user installation entry.
+
+## Developer intent and model-selection correction — 2026-10-27
+
+Against main `2f5aa58`,14 of25 new counterexamples fail: code mentioning
+approval/rejection is diverted into control intent, explicit model selection is
+only a soft routing preference, and ordinary code/test requests enter automatic
+manager/worker/reviewer collaboration. The original before-fix pytest output is
+retained in private qualification evidence. Existing approval, Governance, Kernel
+and usage-accounting boundaries are unchanged by the correction.
+
+Short complete approval commands still request the trusted control path; they
+cannot approve an operation. Engineering questions reach analysis. An explicit
+model now uses the existing LOCKED route for the primary invocation and all
+collaboration roles; an unavailable selection does not fall back. Collaboration
+requires explicit parallel intent or three distinct deliverable classes, while
+an explicit single-agent request wins. Ordinary code plus its tests is one path.
+
+The real in-process Gateway with deterministic adapters records1 invocation for
+a code/test analysis fixture,5 for its explicit parallel counterpart, and1 when
+single-agent is requested. These are software call counts, not Provider Token,
+latency, quality or billing measurements. No external model call is made and
+unknown usage/cost remains unknown. Relevant request, Chat, collaboration and
+Gateway regressions pass; exact-head and resulting-main CI are separate Gates.
+
+The same developer-efficiency correction bounds materialization of archived Chat
+message payloads without changing the last8000-character excerpt. A5000-message
+fixture previously materialized4999 rows; the corrected reader needs only the
+archive boundary and enough newest archived messages. Unicode, embedded NUL,
+newlines, owner/workspace separation and restart keep identical excerpt content.
+This remains incomplete historical data, not a semantic summary.
+
+A paired local excerpt-only measurement used Python3.12.14/Linuxx86_64, the same
+5000-message SQLite connection/content,3 warmups and31 alternating samples per
+path. Baseline/candidate p50=23.909/0.295ms, p95=26.803/0.436ms,
+p99=28.334/0.506ms, CPU p50=23.913/0.297ms;0 mismatches/failures. Separate single
+tracemalloc observations measured31969856/103207 peak Python bytes. The private
+paired report retains raw environment and measurements. These cover excerpt
+construction only, not full append, UI latency, Windows behavior or Token savings;
+the archive boundary/count still traverses an index as history grows.
