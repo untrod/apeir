@@ -93,6 +93,7 @@ class WorkflowRuntime:
         if definition is None:
             raise KeyError(f"workflow not found: {workflow_id}@{version}")
         self._validate_definition(definition)
+        self.compiler.validate_data(definition, {} if inputs is None else inputs)
         run = self.store.create_run(
             WorkflowRun(
                 workflow_id,
@@ -165,6 +166,19 @@ class WorkflowRuntime:
             run = self.store.bind_run(run.run_id, definition)
         except WorkflowBindingError as exc:
             return self._binding_failure(run, exc)
+        try:
+            self.compiler.validate_data(
+                definition,
+                {
+                    key: value
+                    for key, value in run.inputs.items()
+                    if key != "_approved_steps"
+                },
+            )
+        except WorkflowValidationError as exc:
+            # A historical run may already have an uncertain effect. Invalid
+            # legacy input cannot establish that nothing happened.
+            return self._binding_failure(run, WorkflowBindingError(str(exc)))
         checkpoints = self.store.checkpoints(run.run_id)
         for step in definition.steps:
             checkpoint = checkpoints.get(step.step_id) or {}
@@ -274,6 +288,14 @@ class WorkflowRuntime:
                     waiting[2],
                     step_id=waiting[0].step_id,
                 )
+        try:
+            self.compiler.validate_data(
+                definition, self._require(run.run_id).outputs, outputs=True
+            )
+        except WorkflowValidationError as exc:
+            # Steps may already have effects. Keep original checkpoints and do
+            # not replay or implicitly compensate for a result-schema failure.
+            return self._finish(run.run_id, WorkflowState.FAILED, str(exc))
         return self._finish(
             run.run_id,
             WorkflowState.COMPLETED,
@@ -336,12 +358,17 @@ class WorkflowRuntime:
                     "Workflow handler contract capability binding changed"
                 )
             return self.handlers[key], policy
-        if step.step_type in {
-            StepType.TRANSFORM,
-            StepType.WAIT,
-            StepType.CONDITION,
-            StepType.APPROVAL,
-        }:
+        if (
+            step.step_type
+            in {
+                StepType.TRANSFORM,
+                StepType.WAIT,
+                StepType.CONDITION,
+                StepType.APPROVAL,
+            }
+            and not step.condition
+            and step.action in {"", self.compiler._capability(step.step_type, "")}
+        ):
             contract = CapabilityContract(
                 capability_id=f"workflow.{step.step_type.value}",
                 side_effect_class="none",
@@ -441,6 +468,17 @@ class WorkflowRuntime:
                 )
         if run.cancellation_requested:
             return "cancelled", {}, ""
+        if handler is None:
+            return self._record_step(
+                run,
+                step,
+                binding,
+                attempts,
+                snapshot,
+                "failed",
+                {},
+                f"no workflow handler registered for {step.step_type.value}:{step.action}",
+            )
         if step.approval_required or step.step_type is StepType.APPROVAL:
             if step.step_id not in set(run.inputs.get("_approved_steps") or ()):
                 return self._record_step(
@@ -459,17 +497,6 @@ class WorkflowRuntime:
                 return self._record_step(
                     run, step, binding, attempts, snapshot, "skipped", {}, ""
                 )
-        if handler is None:
-            return self._record_step(
-                run,
-                step,
-                binding,
-                attempts,
-                snapshot,
-                "failed",
-                {},
-                f"no workflow handler registered for {step.step_type.value}:{step.action}",
-            )
         while True:
             previous_attempts = attempts
             attempts += 1

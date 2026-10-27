@@ -156,6 +156,18 @@ Run details expose original IDs, definition/input digests, step states, outputs
 and durable EventStream history under the `runtime-service` scope. These are
 computational records, not independent physical-effect verification.
 
+Optional `inputs_schema` and `outputs_schema` are enforced by that same Compiler
+and Runtime, including CLI callers. Inputs must be JSON objects and pass before
+a Run is created; the output schema describes the final map keyed by step ID.
+A result-schema failure retains the original step outputs/checkpoints and reports
+FAILED without replaying completed steps or automatically compensating effects.
+Empty schemas keep the existing unrestricted-object contract. Supported declared
+dialects are the installed JSON Schema drafts4/6/7/2019-09/2020-12; the default is
+2020-12. References must stay within the submitted schema. External schema/file
+fetching is disabled, and errors do not echo private input or output values.
+Named actions and expression conditions require an actual host handler; they
+cannot silently fall back to a pure built-in operation in CLI/host execution.
+
 ![Workflow Builder showing a registered pure workflow, completed steps and its original Run](../media/studio-workflow-source.png)
 
 This endpoint binds only the existing pure **TRANSFORM**, **CONDITION**, **WAIT**
@@ -535,6 +547,15 @@ own reporting contracts use a small actual child pytest suite; the full Runtime
 and security suites still run through the normal CI matrix.
 
 ## Reviewing workspace changes
+
+Select a model to keep that exact model for Chat and any requested collaboration;
+an unavailable selection reports an error instead of silently choosing another.
+Leave selection automatic to use the existing Router. Ordinary code changes and
+their tests use a single development path. Ask explicitly for parallel agents
+when useful, or say **single agent** / **单模型** to keep one path. Collaboration
+may also be selected for requests with at least three distinct deliverable types.
+These choices do not grant tools, approve changes or verify results. Mentioning
+approval or rejection in a code question opens analysis, not an approval command.
 
 Open **Operations → Workspace**, edit saved files, and choose **Review draft
 files**. The review uses the existing Workflow, Governance/Broker, Artifact CAS,

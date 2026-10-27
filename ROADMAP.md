@@ -237,6 +237,12 @@ use actual private state paths and JSONL record shapes. This scoped correction
 does not qualify cross-task context caching, measured Token/cost savings or a
 live-model comparison. Product remains PARTIAL.
 
+Developer request routing now distinguishes short approval commands from code
+questions, preserves explicitly selected models across collaboration roles, and
+avoids automatic multi-agent calls for ordinary code-and-test tasks. Regression
+fixtures count actual software Gateway invocations; they do not measure paid
+Provider Token savings or qualify a real model account.
+
 The existing Model Gateway/CostController now retain nullable usage measurements,
 original attempt reservations and receipt-bound reconciliation. Model Lab / Usage
 and the Desktop status bar read that same ledger; missing counters or billing are

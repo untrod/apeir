@@ -7,7 +7,11 @@ from pathlib import Path
 
 import typer
 
-from nous_runtime.workflow import WorkflowDefinition, WorkflowRuntime
+from nous_runtime.workflow import (
+    WorkflowDefinition,
+    WorkflowRuntime,
+    WorkflowValidationError,
+)
 
 workflow_app = typer.Typer(help="Manage durable governed workflows")
 
@@ -36,7 +40,10 @@ def _definition(data: dict) -> WorkflowDefinition:
 def validate_workflow(path: Path, as_json: bool = typer.Option(False, "--json")):
     runtime = _runtime()
     definition = _definition(json.loads(path.read_text(encoding="utf-8")))
-    runtime.compiler.validate(definition)
+    try:
+        runtime.compiler.validate(definition)
+    except WorkflowValidationError as exc:
+        raise typer.BadParameter(str(exc)) from None
     _emit(
         {
             "valid": True,
@@ -51,7 +58,10 @@ def validate_workflow(path: Path, as_json: bool = typer.Option(False, "--json"))
 def register_workflow(path: Path, as_json: bool = typer.Option(False, "--json")):
     runtime = _runtime()
     definition = _definition(json.loads(path.read_text(encoding="utf-8")))
-    runtime.register(definition)
+    try:
+        runtime.register(definition)
+    except WorkflowValidationError as exc:
+        raise typer.BadParameter(str(exc)) from None
     _emit(
         {
             "registered": True,
@@ -75,9 +85,12 @@ def run_workflow(
     idempotency_key: str = typer.Option("", "--idempotency-key"),
     as_json: bool = typer.Option(False, "--json"),
 ):
-    run = _runtime().start(
-        workflow_id, version, json.loads(inputs), idempotency_key=idempotency_key
-    )
+    try:
+        run = _runtime().start(
+            workflow_id, version, json.loads(inputs), idempotency_key=idempotency_key
+        )
+    except WorkflowValidationError as exc:
+        raise typer.BadParameter(str(exc)) from None
     _emit(
         {
             "run_id": run.run_id,

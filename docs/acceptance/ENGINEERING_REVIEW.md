@@ -3943,6 +3943,60 @@ existing EventStream widget through the real authenticated Controller switch;
 no model, physical or native qualification is inferred. Exact PR and resulting
 main CI remain separate requirements.
 
+## Workflow data-contract correction — 2026-10-27
+
+Main `2f5aa58` persists input/output schemas but does not enforce them. Ten of11
+new counterexamples fail before correction: malformed schemas are accepted,
+invalid input reaches handlers, and invalid output becomes COMPLETED. Original
+pytest failure evidence is retained privately. The correction extends only the
+existing WorkflowCompiler/Runtime: schema validation is shared by registration,
+CLI, Studio validation and execution. Invalid inputs cannot create/admit a new
+Run; final outputs are checked before COMPLETED. Result-schema failures retain
+original results and checkpoints without automatic replay or compensation.
+
+Installed JSON Schema dialects and fragment-local references are supported with
+network/file resolution disabled. Missing references, unsupported dialects,
+non-object/non-finite data and invalid public-Compiler timeout values fail closed;
+diagnostics omit instance values. Approval metadata remains separate from the
+input contract. Invalid historical inputs cannot turn an uncertain effect into
+a known failure or a new attempt. Definition serialization, version identity,
+Store/checkpoint digests, Governance, cancellation and the handler set are
+unchanged. This does not implement Model/Agent handlers, typed edge bindings,
+hard interruption of arbitrary host handlers, or real Provider qualification.
+
+Affected Workflow/Studio API, Agent collaboration and Work/proposal regressions
+pass308 cases locally. Six real public CLI process invocations in an isolated
+temporary workspace validate/register/run the same definition, reject a private
+invalid input without echo/traceback, reload original Run
+`wfr_494d71cb4df24edd9d474d981101efb5` from a fresh process and repeat its
+idempotency key without a new Run. These are pure software results, not a model,
+strict-sandbox command, installed Windows or physical-effect Gate.
+
+Five further original counterexamples expose another canonical Runtime mismatch:
+an unregistered action on a pure step silently falls back to its built-in handler,
+and an unimplemented expression can be skipped/reported as completed. The fallback
+now accepts only an empty action/condition. Missing handlers report FAILED before
+approval or conditional skipping; an explicitly registered host handler remains
+usable. Studio already rejected these unsupported definitions for execution;
+this aligns CLI/host behavior without adding handlers or execution authority.
+The initial stricter fallback incorrectly rejected the canonical PlanWorkflowBridge
+actions such as `governance.approval`; full cross-platform CI exposed the two
+existing AgentSession approval/replay regressions. Original failed jobs are
+retained. Exact canonical built-in action aliases now keep their original
+semantics, while unregistered custom actions still fail. Those original tests and
+explicit alias cases pass without changing their approval or replay assertions.
+
+The existing Native Sidecar Smoke now additionally drives the actual packaged
+Runtime through eight model-free CLI processes: schema validation, register/run,
+invalid-input refusal, original-history reload, idempotent submission and missing
+handler rejection. The driver itself passes with real source CLI child processes;
+that software result does not qualify an EXE. A successful current native report
+must contain the actual `workflow_cli` result, independently of source pytest.
+The older PR104 Windows failure in the two-denial ProcessSession attach fixture
+is retained separately; its truncated result does not establish a root cause.
+The unchanged assertion now prints only state/error for a useful bounded failure
+diagnostic. No process-reader retries, identity checks or deadlines are relaxed.
+
 ## R5 Workflow Builder software integration — 2026-10-25
 
 REUSE WorkflowDefinition, Compiler, TaskGraph, WorkflowRuntime, WorkflowStore,
@@ -4354,3 +4408,42 @@ digests and remaining Gates are in the existing
 [native build record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#verified-internal-native-build--2026-10-27),
 with the unique [Quick Start](../operations/getting-started/QUICK_START.md#native-installation)
 as the user installation entry.
+
+## Developer intent and model-selection correction — 2026-10-27
+
+Against main `2f5aa58`,14 of25 new counterexamples fail: code mentioning
+approval/rejection is diverted into control intent, explicit model selection is
+only a soft routing preference, and ordinary code/test requests enter automatic
+manager/worker/reviewer collaboration. The original before-fix pytest output is
+retained in private qualification evidence. Existing approval, Governance, Kernel
+and usage-accounting boundaries are unchanged by the correction.
+
+Short complete approval commands still request the trusted control path; they
+cannot approve an operation. Engineering questions reach analysis. An explicit
+model now uses the existing LOCKED route for the primary invocation and all
+collaboration roles; an unavailable selection does not fall back. Collaboration
+requires explicit parallel intent or three distinct deliverable classes, while
+an explicit single-agent request wins. Ordinary code plus its tests is one path.
+
+The real in-process Gateway with deterministic adapters records1 invocation for
+a code/test analysis fixture,5 for its explicit parallel counterpart, and1 when
+single-agent is requested. These are software call counts, not Provider Token,
+latency, quality or billing measurements. No external model call is made and
+unknown usage/cost remains unknown. Relevant request, Chat, collaboration and
+Gateway regressions pass; exact-head and resulting-main CI are separate Gates.
+
+The same developer-efficiency correction bounds materialization of archived Chat
+message payloads without changing the last8000-character excerpt. A5000-message
+fixture previously materialized4999 rows; the corrected reader needs only the
+archive boundary and enough newest archived messages. Unicode, embedded NUL,
+newlines, owner/workspace separation and restart keep identical excerpt content.
+This remains incomplete historical data, not a semantic summary.
+
+A paired local excerpt-only measurement used Python3.12.14/Linuxx86_64, the same
+5000-message SQLite connection/content,3 warmups and31 alternating samples per
+path. Baseline/candidate p50=23.909/0.295ms, p95=26.803/0.436ms,
+p99=28.334/0.506ms, CPU p50=23.913/0.297ms;0 mismatches/failures. Separate single
+tracemalloc observations measured31969856/103207 peak Python bytes. The private
+paired report retains raw environment and measurements. These cover excerpt
+construction only, not full append, UI latency, Windows behavior or Token savings;
+the archive boundary/count still traverses an index as history grows.

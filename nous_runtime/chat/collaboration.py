@@ -68,7 +68,25 @@ class CollaborationPreparation:
 def should_collaborate(text: str, intent: str = "") -> bool:
     """Select collaboration only when the request contains independent work."""
     value = text.casefold()
-    intent_value = intent.casefold()
+    if any(
+        marker in value
+        for marker in (
+            "single agent",
+            "single-agent",
+            "single model",
+            "single-model",
+            "do not parallelize",
+            "no parallel",
+            "without multi-agent",
+            "不要并行",
+            "无需并行",
+            "不需要并行",
+            "不要多模型",
+            "单模型",
+            "单个智能体",
+        )
+    ):
+        return False
     groups = (
         ("program", "application", "code", "程序", "代码", "软件", "系统", "应用"),
         ("report", "报告", "总结"),
@@ -92,13 +110,10 @@ def should_collaborate(text: str, intent: str = "") -> bool:
             "专业系统",
         )
     )
-    return (
-        explicit
-        or matched >= 2
-        or (
-            intent_value in {"workflow_request", "code_task", "create"} and matched >= 1
-        )
-    )
+    # Ordinary implementation plus its tests is one development task. Extra
+    # paid manager/worker/reviewer calls require explicit parallel intent or
+    # at least three distinct delivery classes, not merely a code intent label.
+    return explicit or matched >= 3
 
 
 def build_lanes(text: str) -> tuple[CollaborationLane, ...]:
@@ -463,7 +478,7 @@ class ChatCollaborationCoordinator:
                 role=role,
                 preferred_models=(preferred_model,) if preferred_model else (),
                 routing_mode=(
-                    RoutingMode.PREFERRED if preferred_model else RoutingMode.AUTO
+                    RoutingMode.LOCKED if preferred_model else RoutingMode.AUTO
                 ),
                 timeout_s=120.0,
                 trace=GatewayTraceContext(
