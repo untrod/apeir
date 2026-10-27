@@ -15,6 +15,16 @@ SBOM. Those generated files are evidence for that exact archive and are kept
 outside the source repository. Redistributors must retain all notices required
 by the dependency licenses included in their build.
 
+## Optional JSON Schema IRI grammar in the native Runtime
+
+When installed by the build dependencies, `rfc3987-syntax` supplies the non-GPL
+IRI parser used by `jsonschema`. It is MIT licensed; see its
+[upstream source and license](https://github.com/willynilly/rfc3987-syntax).
+The native Runtime retains the required `.lark` grammar and the package's
+distribution metadata, including its upstream license. Exact installed versions
+belong to the build's SBOM. This packages the existing validation dependency;
+it does not disable URI checks or introduce the alternative GPL `rfc3987` package.
+
 ## FlexLayout — bundled Studio presentation dependency
 
 `flexlayout-react` 0.11.1, https://github.com/caplin/FlexLayout, MIT.

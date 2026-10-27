@@ -4315,3 +4315,13 @@ was not printed, so the underlying startup error is not established yet. The
 existing opt-in diagnostic workflow now has a binary-gated frozen CLI path using
 the same spec and canonical version assertion. It records the actual version
 process output, publishes no installer and cannot satisfy Core or Native gates.
+
+The exactdebf8cc real Windows version diagnostic40430853854 then reproduced
+exit1 with its original traceback: jsonschema falls back from optional GPL
+rfc3987 to the installed MIT rfc3987_syntax checker, whose syntax_rfc3987.lark
+was missing from the frozen archive. The maintained spec now collects only that
+installed package's .lark data and distribution/license metadata. It adds no GPL
+dependency and removes no URI checks. The same focused diagnostic rechecks the
+actual EXE version and public model-free status in an empty temporary project.
+Original Native smoke/version assertions remain unchanged. Current real Windows
+frozen-CLI and full Native qualification are still required.

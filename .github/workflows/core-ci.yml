@@ -119,6 +119,17 @@ jobs:
           if ($exitCode -ne 0 -or $output -notmatch [regex]::Escape($expected)) {
               throw "Actual Runtime version probe failed with exit code $exitCode."
           }
+          $sidecar = (Resolve-Path .\dist\nous-runtime.exe).Path
+          $workspace = Join-Path $env:RUNNER_TEMP ('apeir-frozen-status-' + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $workspace | Out-Null
+          Push-Location $workspace
+          try {
+              & $sidecar --no-intelligence status
+              if ($LASTEXITCODE -ne 0) { throw 'Actual model-free Runtime status failed.' }
+          } finally {
+              Pop-Location
+              Remove-Item -LiteralPath $workspace -Recurse -Force
+          }
       - uses: actions/checkout@v4
         if: inputs.diagnostic == 'windows-kernel-source'
         with:
