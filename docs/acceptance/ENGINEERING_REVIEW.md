@@ -4409,6 +4409,30 @@ digests and remaining Gates are in the existing
 with the unique [Quick Start](../operations/getting-started/QUICK_START.md#native-installation)
 as the user installation entry.
 
+## Frozen public-command discovery — 2026-10-27
+
+The full real Windows run40490305023 on `fce2813` passed Runtime/Desktop and
+frozen Kernel source validation, built a genuine Runtime EXE, and then failed the
+new actual packaged Workflow probe: `No such command 'workflow'`. Its original
+job122143606311 output is retained privately. Source tests and EXE version/status
+checks could not detect this packaging gap; no new installer was qualified from
+that failed run.
+
+The canonical CLI registers ten existing command families through a static table
+and dynamic imports. PyInstaller did not discover those string imports. The
+maintained spec now reads that same table with AST/literal parsing and supplies
+its modules as hidden imports, without importing/initializing Runtime during
+discovery, maintaining a second command table or collecting all submodules.
+Malformed or nonstatic declarations fail the build. Existing optional ML
+exclusions and Kernel/lock bytes remain unchanged.
+
+The existing Native probe additionally checks actual root help for the ten public
+families, then runs its original eight pure Workflow process checks. Source
+contracts validate spec consumption and no Runtime import side effects; only the
+real candidate EXE can qualify frozen command discovery. Merely registering a
+command does not qualify its tools, credentials, strong sandbox or physical
+execution. A fresh full-mode native build remains required.
+
 ## Developer intent and model-selection correction — 2026-10-27
 
 Against main `2f5aa58`,14 of25 new counterexamples fail: code mentioning

@@ -1,14 +1,65 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller specification for the embedded Nous Runtime CLI sidecar."""
 
+import ast
 from importlib.util import find_spec
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PyInstaller.utils.hooks import collect_data_files, copy_metadata
+
+if TYPE_CHECKING:
+    from PyInstaller.building.api import EXE, PYZ
+    from PyInstaller.building.build_main import Analysis
+
 
 # PyInstaller discovers ordinary imports, including imports inside functions.
 # Keep this list narrow: collecting every submodule also pulls optional ML and
 # scientific packages from the build machine into the base desktop sidecar.
-hiddenimports = ["compat", "compat.nki_client"]
+def _command_modules(source):
+    """Read the CLI's existing static command declarations without importing it."""
+    declarations = [
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.For)
+        and isinstance(node.target, ast.Tuple)
+        and [getattr(item, "id", None) for item in node.target.elts]
+        == ["_module_name", "_register_name"]
+    ]
+    if len(declarations) != 1:
+        raise ValueError("The maintained CLI command table could not be identified")
+    entries = ast.literal_eval(declarations[0].iter)
+    modules = []
+    for entry in entries:
+        if not isinstance(entry, tuple) or len(entry) != 2:
+            raise ValueError(
+                "CLI command declarations must remain static module/function pairs"
+            )
+        module, register = entry
+        if (
+            not isinstance(module, str)
+            or not module.startswith("nous_runtime.")
+            or not all(part.isidentifier() for part in module.split("."))
+            or not isinstance(register, str)
+            or not register.isidentifier()
+            or module in modules
+        ):
+            raise ValueError("Invalid or duplicate maintained CLI command declaration")
+        modules.append(module)
+    if not modules:
+        raise ValueError("The maintained CLI command table is empty")
+    return modules
+
+
+hiddenimports = [
+    "compat",
+    "compat.nki_client",
+    *_command_modules(
+        (Path(globals()["SPECPATH"]) / "nous_runtime/cli/main.py").read_text(
+            encoding="utf-8"
+        )
+    ),
+]
 datas = collect_data_files("nous_runtime")
 # jsonschema's non-GPL IRI checker loads this grammar at import time. Keep the
 # existing validator intact and include its data (and upstream license metadata)

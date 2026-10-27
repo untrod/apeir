@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 from typing import Sequence
@@ -45,7 +46,35 @@ def qualify(command: Sequence[str], workspace: Path) -> dict:
         }
         path = root / "workflow.json"
         path.write_text(json.dumps(definition), encoding="utf-8")
-        calls = 0
+        help_result = subprocess.run(
+            [*command, "--no-intelligence", "--help"],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30,
+            check=False,
+        )
+        expected_groups = {
+            "connector",
+            "extension",
+            "plugin",
+            "library",
+            "workflow",
+            "automation",
+            "work",
+            "tools",
+            "skill",
+            "web",
+        }
+        actual_groups = set(re.findall(r"(?m)^\s+([a-z][a-z-]*)\s", help_result.stdout))
+        missing = expected_groups - actual_groups
+        if help_result.returncode or missing:
+            raise RuntimeError(
+                "Packaged Runtime command groups missing: " + ", ".join(sorted(missing))
+            )
+        calls = 1
 
         def invoke(*arguments: str, rejected: bool = False):
             nonlocal calls
@@ -135,6 +164,9 @@ def qualify(command: Sequence[str], workspace: Path) -> dict:
         return {
             "scope": "actual CLI pure Workflow; no model, command handler or physical effect",
             "cli_process_invocations": calls,
+            "workflow_cli_process_invocations": calls - 1,
+            "command_discovery": "PASS",
+            "command_groups_checked": sorted(expected_groups),
             "schema_validation": "PASS",
             "invalid_input_rejected": True,
             "private_fixture_not_echoed": True,
