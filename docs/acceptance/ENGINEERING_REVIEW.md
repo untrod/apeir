@@ -4251,3 +4251,77 @@ context and an opt-in ProcessSession path in the existing diagnostic workflow
 preserve the actual refusal reason. This diagnostic cannot satisfy Core gate.
 Issue85 remains open. No Portable/NSIS or Windows10 installation PASS follows
 from these software tests.
+
+## Frozen Kernel test-environment separation — 2026-10-27
+
+Native run40416794872 admitted the approved component bytes and passed the
+Distribution/desktop regressions and Kernel Rust tests. The original frozen
+Kernel Python E2E then failed test15: four Evidence directory entries instead
+of two. The unchanged standalone fixture is a Python namespace package; a
+regular installed Distribution Wheel takes precedence over it, even behind the
+fixture in PYTHONPATH. The production CAS correctly creates objects, index,
+lock and receipt entries. Its directory shape is not the standalone fixture's
+two content-addressed files. Neither implementation should be changed to imitate
+the other.
+
+A controlled experiment with the actual downloaded main086 Wheel reproduced
+the four entries and production module origin. A clean stdlib-only interpreter
+selected the original frozen fixture and produced exactly two matching digest
+files. The editable-install control did not reproduce the collision and is
+retained separately; it is not a substitute for the regular-Wheel experiment.
+
+The official Windows builder now invokes the unchanged Kernel scripts/test.ps1
+inside a temporary stdlib-only Python environment. The wrapper excludes inherited
+Python paths/home/user packages, verifies the Distribution is absent, preserves
+the original script's exit status, and leaves its parent environment/directory
+unchanged. It installs no alternate Kernel or Artifact implementation and changes
+no frozen source, assertion, hash, timeout or production CAS. This is dependency
+separation for trusted build tests, not a security sandbox. Real Runtime/Kernel
+sidecar smoke still uses the ordinary Distribution build environment afterward.
+Current Windows wrapper and complete Native qualification remain required.
+
+The exact805a500 Windows diagnostic40424912897 then passed the original Rust
+workspace tests, all16 NKI process E2Es (including unchanged test15), the release
+manifest test, five Python SDK tests, and compiled/executed C SDK and Micro tests.
+Its five wrapper/PowerShell contracts also passed. This establishes the dependency
+boundary correction without changing frozen source or production CAS behavior.
+
+## Windows fresh host reads and frozen CLI follow-up — 2026-10-27
+
+Exact805a500 Core40424920595 retained two independent Windows failures. The
+compact ProcessSession context identifies a PermissionError opening host.json;
+the resulting empty observation became RECOVERY_REQUIRED. Three real-process
+counterexamples reproduce the transient denial and reject a changed binding
+after the denial; all fail before the correction. The existing reader now makes
+at most three fresh opens with two10ms pauses on PermissionError only. It never
+uses a prior snapshot, starts a process or resends a control. Missing/corrupt
+records, permanent denial and changed identities still fail closed; original
+startup/control deadlines and assertions are unchanged. Local process suites
+pass40 cases. Older truncated refusal logs do not establish the same cause.
+
+The separate Skill HTTP failure occurs on initial installation before its
+publication-fault injection: request5598.9ms, nonce admission949.1ms, Governance
+admission1633.7ms, and CAS Pin durable-write still active at723.9ms. The captured
+stack is in CAS fsync; a slow Governance commit is also recorded. Neither is
+silently relabeled as a successful request, and no timeout, WAL/FULL durability
+or failure assertion is relaxed. Issue88 remains open; a successful later job
+would not establish a root-cause correction for it.
+
+Native run40425162887 independently passed Runtime/desktop and the unchanged
+Kernel suite, then built an actual Windows Runtime sidecar through the maintained
+PyInstaller spec. Rechecked Kernel/Worker bytes still match the approved lock.
+The original real version probe failed before Tauri/NSIS; its captured output
+was not printed, so the underlying startup error is not established yet. The
+existing opt-in diagnostic workflow now has a binary-gated frozen CLI path using
+the same spec and canonical version assertion. It records the actual version
+process output, publishes no installer and cannot satisfy Core or Native gates.
+
+The exactdebf8cc real Windows version diagnostic40430853854 then reproduced
+exit1 with its original traceback: jsonschema falls back from optional GPL
+rfc3987 to the installed MIT rfc3987_syntax checker, whose syntax_rfc3987.lark
+was missing from the frozen archive. The maintained spec now collects only that
+installed package's .lark data and distribution/license metadata. It adds no GPL
+dependency and removes no URI checks. The same focused diagnostic rechecks the
+actual EXE version and public model-free status in an empty temporary project.
+Original Native smoke/version assertions remain unchanged. Current real Windows
+frozen-CLI and full Native qualification are still required.

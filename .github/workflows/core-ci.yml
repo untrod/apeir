@@ -10,7 +10,7 @@ on:
         description: Optional investigation; never qualifies the Core gate
         type: choice
         default: none
-        options: [none, windows-skill-http, windows-governance, windows-process-session]
+        options: [none, windows-skill-http, windows-governance, windows-process-session, windows-kernel-source, windows-runtime-sidecar]
 permissions:
   contents: read
 concurrency:
@@ -88,7 +88,7 @@ jobs:
           RESULT: ${{ needs.python-tests.result }}
         run: test "$RESULT" = success
   windows-skill-http-diagnostic:
-    name: ${{ inputs.diagnostic == 'windows-process-session' && 'Windows ProcessSession diagnostic (not Core qualification)' || 'Windows Governance diagnostic (not Core qualification)' }}
+    name: ${{ inputs.diagnostic == 'windows-runtime-sidecar' && 'Windows Runtime version diagnostic (not native qualification)' || inputs.diagnostic == 'windows-kernel-source' && 'Windows Kernel source diagnostic (not Core qualification)' || inputs.diagnostic == 'windows-process-session' && 'Windows ProcessSession diagnostic (not Core qualification)' || 'Windows Governance diagnostic (not Core qualification)' }}
     if: github.event_name == 'workflow_dispatch' && inputs.diagnostic != 'none'
     runs-on: windows-latest
     steps:
@@ -100,10 +100,61 @@ jobs:
           cache: pip
       - name: Install matching Tier 1 dependencies
         run: python -m pip install ".[tier1,dev,a2a,mcp]"
+      - name: Reject an unapproved Runtime binary diagnostic
+        if: inputs.diagnostic == 'windows-runtime-sidecar' && vars.APEIR_BINARY_RELEASE_ENABLED != 'true'
+        run: throw 'Runtime binary diagnostic requires the enabled internal binary gate.'
+      - name: Install the existing sidecar build dependencies
+        if: inputs.diagnostic == 'windows-runtime-sidecar'
+        run: python -m pip install ".[installer-build]"
+      - name: Diagnose the actual Runtime EXE version through the maintained specification
+        if: inputs.diagnostic == 'windows-runtime-sidecar'
+        timeout-minutes: 10
+        run: |
+          python -m PyInstaller --noconfirm --clean nous-sidecar.spec
+          if ($LASTEXITCODE -ne 0) { throw 'Maintained Runtime sidecar build failed.' }
+          $expected = (& python -c 'from nous_runtime._version import __version__; print(__version__)').Trim()
+          $output = (& .\dist\nous-runtime.exe --version 2>&1 | Out-String).Trim()
+          $exitCode = $LASTEXITCODE
+          Write-Output $output
+          if ($exitCode -ne 0 -or $output -notmatch [regex]::Escape($expected)) {
+              throw "Actual Runtime version probe failed with exit code $exitCode."
+          }
+          $sidecar = (Resolve-Path .\dist\nous-runtime.exe).Path
+          $workspace = Join-Path $env:RUNNER_TEMP ('apeir-frozen-status-' + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $workspace | Out-Null
+          Push-Location $workspace
+          try {
+              & $sidecar --no-intelligence status
+              if ($LASTEXITCODE -ne 0) { throw 'Actual model-free Runtime status failed.' }
+          } finally {
+              Pop-Location
+              Remove-Item -LiteralPath $workspace -Recurse -Force
+          }
+      - uses: actions/checkout@v4
+        if: inputs.diagnostic == 'windows-kernel-source'
+        with:
+          repository: untrod/apeir-kernel
+          ref: 87fd1b2ff28ef14ab1a515a58162592b452fda2e
+          path: kernel-source-validation
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        if: inputs.diagnostic == 'windows-kernel-source'
+      - name: Validate the isolated wrapper with real PowerShell
+        if: inputs.diagnostic == 'windows-kernel-source'
+        run: python -m pytest -q tests/repository/test_kernel_test_environment.py --tb=short --timeout=60 -rA
+      - name: Run the unchanged frozen Kernel test entry with Distribution installed
+        if: inputs.diagnostic == 'windows-kernel-source'
+        timeout-minutes: 30
+        env:
+          CARGO_BUILD_JOBS: '2'
+        run: |
+          $powerShellExecutable = (Get-Process -Id $PID).Path
+          python scripts/ci/run_kernel_source_tests.py --kernel-root kernel-source-validation --powershell $powerShellExecutable
+          if ($LASTEXITCODE -ne 0) { throw 'Original frozen Kernel source qualification failed.' }
       - name: Exercise original process controls, startup and fail-closed recovery
         if: inputs.diagnostic == 'windows-process-session'
         timeout-minutes: 5
-        run: python -m pytest -q tests/tools/test_process_session.py tests/tools/test_process_session_ack.py tests/tools/test_process_session_startup.py tests/tools/test_process_session_reaping.py --tb=short --timeout=60 -rA
+        run: python -m pytest -q tests/tools/test_process_session.py tests/tools/test_process_session_ack.py tests/tools/test_process_session_host_read.py tests/tools/test_process_session_startup.py tests/tools/test_process_session_reaping.py tests/repository/test_kernel_test_environment.py --tb=short --timeout=60 -rA
       - name: Exercise original owned HTTP and TLS paths
         if: inputs.diagnostic == 'windows-skill-http'
         env:
