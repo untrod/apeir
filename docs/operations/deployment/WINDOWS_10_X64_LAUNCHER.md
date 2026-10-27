@@ -59,13 +59,12 @@ python scripts/ci/verify_kernel_components.py --repo-root . --kernel-root ..\ker
 .\scripts\stage-kernel-components.ps1 -KernelRoot ..\kernel -Target x86_64-pc-windows-msvc -SkipBuild
 ```
 
-The 2026-10-10 product audit found both files absent, no published Kernel Release
-assets and zero Kernel Actions artifacts. The original bundle's current public
-download location is unavailable: this is [issue #2](https://github.com/untrod/apeir/issues/2),
-not a hash-validation PASS. A source rebuild with a different digest requires
-separate normalization/re-lock/version review and maintainer approval. Packaging
-now verifies these inputs before full tests or Runtime sidecar generation. The
-source frontend can be developed independently while this gate is BLOCKED.
+The historical 2026-10-10 audit found the original binaries unavailable
+([issue #2](https://github.com/untrod/apeir/issues/2)). The separately reviewed
+2026-10-26 migration below now supplies approved exact inputs. That historical
+blocker is not the current component status. Packaging still verifies every
+input before full tests or Runtime sidecar generation; arbitrary rebuilds with
+different hashes require their own approval.
 
 ### R4 trusted candidate evidence — 2026-10-24
 
@@ -170,23 +169,47 @@ does not alter the reviewed Kernel hashes or remove license/Windows10 gates.
 
 ## Current native command-qualified build
 
-The [current full-mode qualification](https://github.com/untrod/apeir/actions/runs/40501512297)
-uses `51d7462c1225a9fd223ea25ca2e9114613bda161`. Only use its
-**windows-x64-native-development-build** artifact after successful completion.
-The maintained spec discovers the existing dynamic CLI families from their one
-canonical declaration table. The native report must include `workflow_cli`:
-ten public command families found in actual EXE help, followed by eight real
-pure Workflow CLI invocations, schema rejection and original Run recovery.
-This supplements the existing NKI/Worker/Runtime/authentication/cleanup checks.
+The [full-mode build](https://github.com/untrod/apeir/actions/runs/40501512297)
+passed on attempt 2 from `51d7462c1225a9fd223ea25ca2e9114613bda161`, accepted into
+main through PR106. No SkipValidation or SkipSidecarSmoke option was used.
+The earlier attempt's five-second Skill HTTP failure remains recorded in Issue #88;
+a successful fresh-host build does not establish its root cause or close it.
+
+[Download Portable and NSIS together](https://github.com/untrod/apeir/actions/runs/40501512297/artifacts/12738859677).
+The 156,727,966-byte outer artifact has SHA-256
+`40e8efcd3ca651dacf065e15df4bd036f6605d68ec9a347b7a36002cf0ac8f08`.
+GitHub sign-in is required; retention ends 2026-11-10.
+
+| File | SHA-256 |
+| --- | --- |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `CE22648EE557CC3BF8F2AF9F553F48B78910E04AA0D1273E507986D9574B81AC` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `6AC2943E35C7A7B021EAD504355DEB36CAFE18F1B542BC3CE37835DFBA543EB3` |
+
+Independent download checks passed all 22 checksum entries, 13 manifest payloads,
+11 nested Portable files and actual NSIS sidecar/CRT payloads. The four application
+and sidecar EXEs are x64 PE 0x8664. The NSIS PE 0x014c bootstrapper packages x64 payloads;
+it is not a 32-bit Runtime. Its launcher differs from Portable only by the three
+bytes of the upstream Tauri NSS bundle stamp; original files remain unchanged.
+The actual Kernel files match the existing approved component lock.
+
+Real Kernel/Worker/Runtime smoke passed NKI 1/2/3, bad/missing authentication,
+protected session DACL, app-local CRT loading and owned-process fault cleanup.
+Restart queried the same denied model Work without another submission.
+The actual frozen Runtime also ran 9 CLI processes: root help found all ten public
+command families, then 8 pure Workflow calls verified schema rejection, no private
+input echo, original Run recovery/idempotency and refusal of an unbound action.
+Original Run: `wfr_0db57258cef344ba82578b6d2ed923d8`. External model calls: 0.
+
+The report records Windows Server 2025 Datacenter 10.0.26100 and
+`installation_acceptance=NOT_RUN`. These are unsigned internal packages:
+Windows 10 installed GUI, upgrade/uninstall, graceful Desktop shutdown, Defender,
+real inference and formal release remain unqualified. Source ID `51d7462` stays on
+the binary manifest; documentation and CI-only commits do not relabel its bytes.
+Frozen Kernel `87fd1b2` and the approved hashes are unchanged.
 
 Use the [Quick Start](../getting-started/QUICK_START.md#native-installation) for
-download and checksum steps. The report/manifest identifies the exact bytes and
-source; accompanying download-guide changes do not modify application sources
-or native-build scripts. Downloaded binaries retain their manifest's source ID.
-The frozen Kernel and approved hashes are unchanged. These remain unsigned
-internal packages; Windows10 installed GUI/lifecycle and formal release are
-unqualified. The historical build below predates frozen command discovery and
-must not be substituted as evidence for that additional check.
+installation steps. The historical package below predates frozen command
+discovery and does not qualify that additional check.
 
 ## Verified internal native build — 2026-10-27
 

@@ -65,9 +65,26 @@ Future targets below are requirements, not claims of implemented integrations.
 | PRODUCT_READY | PARTIAL | Existing setup, Provider lifecycle, reviewed file proposals, evidence and restart software paths are connected. Real model/account qualification and safe test execution remain unqualified; missing strong isolation blocks execution. |
 | NATIVE_READY | PARTIAL | Approved components and the full-mode Portable/NSIS build passed; current Windows10 installed Desktop and lifecycle remain unqualified. |
 | NATIVE_COMPONENT_READY | PASS | PR101 merged as `7763cc0`; exact approved frozen-source PE files and reviewed archive pass the maintained lock locally and in the real Windows build. Producer evidence and exact bytes are retained. This is component admission, not installed Desktop acceptance. |
-| NATIVE_BUILD_READY | PASS | Full-mode [40432789046](https://github.com/untrod/apeir/actions/runs/40432789046) produced actual Portable/NSIS from accepted `9f43909`, merged by PR102 as `a8f8bd2` with identical Git tree. Runtime/desktop, unchanged Kernel suite, real NKI/Worker/Runtime smoke and process-fault recovery passed on Server2025 without skip flags. Independent download verified all22 checksum entries,13 manifest files and11 nested Portable payload files. [Evidence and exact hashes](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#verified-internal-native-build--2026-10-27). Historical failures and Issue88 remain preserved; this is not Windows10 installation or real-model acceptance. |
+| NATIVE_BUILD_READY | PASS | Full-mode [40501512297](https://github.com/untrod/apeir/actions/runs/40501512297) attempt2 produced actual Portable/NSIS from accepted `51d7462` without skip flags. Independent download verified22 checksums,13 manifest payloads,11 nested Portable files, actual NSIS payloads and approved Kernel bytes. Actual EXE tests cover all ten public command families,8 pure Workflow invocations, schema refusal and original Run recovery. Server2025 smoke covers NKI/authentication/cleanup; Windows10 installation and real inference remain separate. Original attempt1 Skill HTTP failure/Issue88 remains unresolved. [Download and exact evidence](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build). |
 | NATIVE_INSTALL_READY | PENDING | No current Windows10 x64 test host is attached. Server2025 component smoke is not installation/upgrade/uninstall, installed GUI, Defender or signing acceptance. |
 | RELEASE_READY | BLOCKED | Windows10 installed lifecycle, complete release supply-chain review, signing and release authorization remain required. The unsigned internal build, Source artifacts and checkpoint tags are not production releases. |
+
+### Current usage boundaries
+
+| Component | Status | Usable now | Remaining |
+| --- | --- | --- | --- |
+| Skills | PARTIAL | Reviewed local/HTTPS instructions; install/load/enable/disable/remove with integrity and permission checks | Unrestricted public marketplace and arbitrary executable Skill workflows are not qualified |
+| Studio extensions | PARTIAL | Reviewed declarative panels/widgets, sanitized reads, controlled lifecycle | Arbitrary third-party JavaScript remains BLOCKED pending isolation |
+| Cloud/API and local models | PENDING | Existing compatible adapters, Registry, credential references, strict Gateway/NKI and software tests | Each live account or local server/model needs actual inference/capability qualification; not all models are interchangeable |
+| Workflow | PARTIAL | Visual editor, canonical schemas, four bound pure handlers, original history/recovery | Model/Agent consumers and typed output-to-input bindings are not connected in the Studio API |
+| Developer loop | PARTIAL | Two-file review, independent approval, actual file observation and restart history | Live-model proposal qualification and execution in a qualified strong sandbox |
+| Token/cost efficiency | PARTIAL | Bounded context and excerpt reads, selective collaboration, existing accounting/budgets | No measured universal Token-saving percentage or real-model comparative task benchmark |
+| Terminal / Git Studio | PARTIAL | Existing governed command profiles and bounded Git reads where isolation is available | Full interactive PTY and full Git write workflow |
+
+These are separate software and deployment limits. A missing account does not
+explain an unbound Workflow handler; a working adapter does not certify every
+model. See the [Developer Platform](docs/development/DEVELOPER_PLATFORM.md) for the
+supported paths rather than treating a panel or catalog entry as availability.
 
 ## Execution protocol and governance
 
