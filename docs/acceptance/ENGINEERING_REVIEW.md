@@ -4279,3 +4279,39 @@ no frozen source, assertion, hash, timeout or production CAS. This is dependency
 separation for trusted build tests, not a security sandbox. Real Runtime/Kernel
 sidecar smoke still uses the ordinary Distribution build environment afterward.
 Current Windows wrapper and complete Native qualification remain required.
+
+The exact805a500 Windows diagnostic40424912897 then passed the original Rust
+workspace tests, all16 NKI process E2Es (including unchanged test15), the release
+manifest test, five Python SDK tests, and compiled/executed C SDK and Micro tests.
+Its five wrapper/PowerShell contracts also passed. This establishes the dependency
+boundary correction without changing frozen source or production CAS behavior.
+
+## Windows fresh host reads and frozen CLI follow-up — 2026-10-27
+
+Exact805a500 Core40424920595 retained two independent Windows failures. The
+compact ProcessSession context identifies a PermissionError opening host.json;
+the resulting empty observation became RECOVERY_REQUIRED. Three real-process
+counterexamples reproduce the transient denial and reject a changed binding
+after the denial; all fail before the correction. The existing reader now makes
+at most three fresh opens with two10ms pauses on PermissionError only. It never
+uses a prior snapshot, starts a process or resends a control. Missing/corrupt
+records, permanent denial and changed identities still fail closed; original
+startup/control deadlines and assertions are unchanged. Local process suites
+pass40 cases. Older truncated refusal logs do not establish the same cause.
+
+The separate Skill HTTP failure occurs on initial installation before its
+publication-fault injection: request5598.9ms, nonce admission949.1ms, Governance
+admission1633.7ms, and CAS Pin durable-write still active at723.9ms. The captured
+stack is in CAS fsync; a slow Governance commit is also recorded. Neither is
+silently relabeled as a successful request, and no timeout, WAL/FULL durability
+or failure assertion is relaxed. Issue88 remains open; a successful later job
+would not establish a root-cause correction for it.
+
+Native run40425162887 independently passed Runtime/desktop and the unchanged
+Kernel suite, then built an actual Windows Runtime sidecar through the maintained
+PyInstaller spec. Rechecked Kernel/Worker bytes still match the approved lock.
+The original real version probe failed before Tauri/NSIS; its captured output
+was not printed, so the underlying startup error is not established yet. The
+existing opt-in diagnostic workflow now has a binary-gated frozen CLI path using
+the same spec and canonical version assertion. It records the actual version
+process output, publishes no installer and cannot satisfy Core or Native gates.

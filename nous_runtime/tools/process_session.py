@@ -657,11 +657,21 @@ class ProcessSessionStore:
         path = self._directory(session_id) / "host.json"
         # Read one current publication directly. A separate pathname sample may
         # already be obsolete while the bound helper replaces its journal.
-        try:
-            value = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return {}
-        return dict(value) if isinstance(value, Mapping) else {}
+        for attempt in range(3):
+            try:
+                value = json.loads(path.read_text(encoding="utf-8"))
+            except PermissionError:
+                # A Windows publication may briefly deny opening the file.
+                # Reobserve only this path, with at most two 10ms pauses. Never
+                # authorize from a cached snapshot or replay a control.
+                if attempt == 2:
+                    return {}
+                time.sleep(0.01)
+            except (OSError, json.JSONDecodeError):
+                return {}
+            else:
+                return dict(value) if isinstance(value, Mapping) else {}
+        return {}
 
     def _directory(self, session_id: str) -> Path:
         if not session_id.startswith("ps_") or not session_id[3:].isalnum():
