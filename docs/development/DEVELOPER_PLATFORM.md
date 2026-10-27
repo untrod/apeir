@@ -156,6 +156,16 @@ Run details expose original IDs, definition/input digests, step states, outputs
 and durable EventStream history under the `runtime-service` scope. These are
 computational records, not independent physical-effect verification.
 
+Optional `inputs_schema` and `outputs_schema` are enforced by that same Compiler
+and Runtime, including CLI callers. Inputs must be JSON objects and pass before
+a Run is created; the output schema describes the final map keyed by step ID.
+A result-schema failure retains the original step outputs/checkpoints and reports
+FAILED without replaying completed steps or automatically compensating effects.
+Empty schemas keep the existing unrestricted-object contract. Supported declared
+dialects are the installed JSON Schema drafts4/6/7/2019-09/2020-12; the default is
+2020-12. References must stay within the submitted schema. External schema/file
+fetching is disabled, and errors do not echo private input or output values.
+
 ![Workflow Builder showing a registered pure workflow, completed steps and its original Run](../media/studio-workflow-source.png)
 
 This endpoint binds only the existing pure **TRANSFORM**, **CONDITION**, **WAIT**

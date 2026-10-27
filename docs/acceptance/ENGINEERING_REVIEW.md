@@ -3943,6 +3943,35 @@ existing EventStream widget through the real authenticated Controller switch;
 no model, physical or native qualification is inferred. Exact PR and resulting
 main CI remain separate requirements.
 
+## Workflow data-contract correction — 2026-10-27
+
+Main `2f5aa58` persists input/output schemas but does not enforce them. Ten of11
+new counterexamples fail before correction: malformed schemas are accepted,
+invalid input reaches handlers, and invalid output becomes COMPLETED. Original
+pytest failure evidence is retained privately. The correction extends only the
+existing WorkflowCompiler/Runtime: schema validation is shared by registration,
+CLI, Studio validation and execution. Invalid inputs cannot create/admit a new
+Run; final outputs are checked before COMPLETED. Result-schema failures retain
+original results and checkpoints without automatic replay or compensation.
+
+Installed JSON Schema dialects and fragment-local references are supported with
+network/file resolution disabled. Missing references, unsupported dialects,
+non-object/non-finite data and invalid public-Compiler timeout values fail closed;
+diagnostics omit instance values. Approval metadata remains separate from the
+input contract. Invalid historical inputs cannot turn an uncertain effect into
+a known failure or a new attempt. Definition serialization, version identity,
+Store/checkpoint digests, Governance, cancellation and the handler set are
+unchanged. This does not implement Model/Agent handlers, typed edge bindings,
+hard interruption of arbitrary host handlers, or real Provider qualification.
+
+Affected Workflow/Studio API, Agent collaboration and Work/proposal regressions
+pass308 cases locally. Six real public CLI process invocations in an isolated
+temporary workspace validate/register/run the same definition, reject a private
+invalid input without echo/traceback, reload original Run
+`wfr_494d71cb4df24edd9d474d981101efb5` from a fresh process and repeat its
+idempotency key without a new Run. These are pure software results, not a model,
+strict-sandbox command, installed Windows or physical-effect Gate.
+
 ## R5 Workflow Builder software integration — 2026-10-25
 
 REUSE WorkflowDefinition, Compiler, TaskGraph, WorkflowRuntime, WorkflowStore,
