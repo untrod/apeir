@@ -60,8 +60,8 @@ After its full validation succeeds, download **windows-x64-native-development-bu
 from **Artifacts**. A [previously verified bundle](https://github.com/untrod/apeir/actions/runs/40501512297/artifacts/12738859677)
 is also available. Both provide Portable/NSIS packages and their own checksums;
 use the manifest from the package you download. GitHub sign-in is required and
-artifacts expire after14 days. These are unsigned development builds;
-Windows10 installation, upgrade/uninstall and signing remain unqualified.
+artifacts expire after 14 days. These are unsigned development builds;
+Windows 10 installation, upgrade/uninstall and signing remain unqualified.
 Follow the [download and verification steps](docs/operations/getting-started/QUICK_START.md#native-installation).
 
 ## Developer Platform

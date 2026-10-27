@@ -4872,12 +4872,12 @@ remain available for link compatibility.
 
 ## Accepted Work response and history separation — 2026-10-27
 
-Resulting-main `f6fba18` Core40538896296 Windows job122311568400 failed
+Resulting-main `f6fba18` Core `40538896296` Windows job `122311568400` failed
 `test_submission_waits_for_real_approval_and_retries_original_only`: the admitted
 same-key request timed out waiting for HTTP headers after independent approval.
-The original log retains1 failed,5910 passed,95 skipped and4 warnings in2357.55s,
-with a Governance `close` phase of1015ms. That observation does not establish the
-whole request cause. [Issue88 evidence](https://github.com/untrod/apeir/issues/88#issuecomment-6448210081)
+The original log retains 1 failed, 5910 passed, 95 skipped and 4 warnings in 2357.55s,
+with a Governance `close` phase of 1015ms. That observation does not establish the
+whole request cause. [Issue #88 evidence](https://github.com/untrod/apeir/issues/88#issuecomment-6448210081)
 remains open; no timeout or durable SQLite setting is relaxed.
 
 Separately, code inspection found the submission response called full
@@ -4894,6 +4894,6 @@ deterministic deliberation. Explicit inspection still performs the canonical
 read and reports its failure; no evidence availability or completion is invented.
 The additive metadata reader owns no Work, permission, execution or persistent
 state. Original request fences, current admission and independent approval are
-unchanged. Local Work/MCP regression:236 passed; lint/format/compile pass.
+unchanged. Local Work/MCP regression: 236 passed; lint/format/compile pass.
 This establishes the corrected response path, not total HTTP latency, Token/cost
 savings or a general Windows close/commit root-cause repair.

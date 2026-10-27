@@ -176,11 +176,11 @@ launcher, with no validation/smoke skip switches. Only its own completed full
 validation, report and file hashes can qualify those bytes. Source CI and a
 passing frontend job cannot replace the Windows packaging/smoke job.
 
-The verified record below describes the earlier51d7462 fallback, not proof that
+The verified record below describes the earlier `51d7462` fallback, not proof that
 the new producer passed. Both build revisions are explicit; documentation-only
 commits do not change or relabel binary sources.
 
-### Verified fallback: source51d7462
+### Verified fallback: source `51d7462`
 
 The [full-mode build](https://github.com/untrod/apeir/actions/runs/40501512297)
 passed on attempt 2 from `51d7462c1225a9fd223ea25ca2e9114613bda161`, accepted into

@@ -450,7 +450,7 @@ This is not a signed Release or a completed Windows10 installation Gate.
    WebView2 setup can require network access. These are evaluation instructions,
    not a claim that the installation lifecycle has been exercised.
 
-For the **previously verified artifact12738859677**, from source51d7462 only,
+For the **previously verified artifact 12738859677**, from source `51d7462` only,
 independently verified SHA-256 values are:
 
 | File | SHA-256 |
