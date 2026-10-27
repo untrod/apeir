@@ -120,6 +120,42 @@ def test_http_lost_response_reuses_original_work_and_deliberation(
         assert len(post.approvals) == 1
 
 
+def test_submission_response_does_not_reinspect_execution_history(
+    tmp_path, monkeypatch
+):
+    calls, inspections = [], []
+    host = WorkSupervisor(tmp_path, component_factory=components(calls))
+
+    def unavailable_history(self, run_id):
+        inspections.append(run_id)
+        raise OSError("controlled execution history read failure")
+
+    monkeypatch.setattr(WorkHarness, "inspect", unavailable_history)
+    body = {
+        "objective": "Return the original admitted Work without replaying it",
+        "read_only": True,
+        "idempotency_key": "accepted-without-history-read",
+    }
+    with server_for(tmp_path, host, monkeypatch) as post:
+        accepted = post(body)
+        assert accepted["ok"], accepted
+        run_id = accepted["data"]["work"]["run_id"]
+        assert accepted["data"]["supervisor"]["worker_known"] is True
+        host.wait(run_id, timeout=5)
+        repeated = post(body)
+        assert repeated["ok"], repeated
+        assert repeated["data"]["work"]["run_id"] == run_id
+        assert repeated["data"]["supervisor"]["worker_done"] is True
+        assert calls == [run_id]
+        assert len(post.approvals) == 1
+        assert inspections == []
+        # Inspection remains an explicit canonical read, and still surfaces its
+        # failure. The submission receipt does not invent available evidence.
+        with pytest.raises(OSError, match="execution history read failure"):
+            host.inspect(run_id)
+        assert inspections == [run_id]
+
+
 def test_concurrent_supervisors_and_restart_do_not_resubmit(tmp_path):
     calls = []
     supervisors = [

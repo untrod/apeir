@@ -4869,3 +4869,31 @@ The preceding Developer SDK archive is preserved historical material, not a new
 source/native qualification. The main user guide now links to it rather than
 mixing dated failure counts into installation steps. Existing heading entrypoints
 remain available for link compatibility.
+
+## Accepted Work response and history separation — 2026-10-27
+
+Resulting-main `f6fba18` Core40538896296 Windows job122311568400 failed
+`test_submission_waits_for_real_approval_and_retries_original_only`: the admitted
+same-key request timed out waiting for HTTP headers after independent approval.
+The original log retains1 failed,5910 passed,95 skipped and4 warnings in2357.55s,
+with a Governance `close` phase of1015ms. That observation does not establish the
+whole request cause. [Issue88 evidence](https://github.com/untrod/apeir/issues/88#issuecomment-6448210081)
+remains open; no timeout or durable SQLite setting is relaxed.
+
+Separately, code inspection found the submission response called full
+`WorkSupervisor.inspect()` only to discard its checkpoint/history result and
+keep process-local worker metadata. A deterministic actual HTTP counterexample
+makes that optional history read unavailable: the original implementation
+returns WORK_SUBMIT_ERROR after accepting/dispatching the original Work. The
+before-fix failure is retained privately; it is independent of Windows timing.
+
+Submission now returns its already resolved canonical snapshot with the existing
+worker-handle projection, without an extra checkpoint/EventStream inspection.
+The same-key repeat returns the original Run, with one approval and one actual
+deterministic deliberation. Explicit inspection still performs the canonical
+read and reports its failure; no evidence availability or completion is invented.
+The additive metadata reader owns no Work, permission, execution or persistent
+state. Original request fences, current admission and independent approval are
+unchanged. Local Work/MCP regression:236 passed; lint/format/compile pass.
+This establishes the corrected response path, not total HTTP latency, Token/cost
+savings or a general Windows close/commit root-cause repair.
