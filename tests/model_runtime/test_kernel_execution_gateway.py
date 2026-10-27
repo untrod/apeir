@@ -7,7 +7,11 @@ import json
 import pytest
 
 from nous_runtime.model_runtime.factory import build_gateway_from_providers
+from nous_runtime.model_runtime.gateway import ModelGateway
 from nous_runtime.model_runtime.models import ModelRequest
+from nous_runtime.model_runtime.errors import ModelProviderResponseError
+from nous_runtime.provider.adapters.anthropic import AnthropicProvider
+from nous_runtime.provider.adapters.openai import OpenAIProvider
 
 
 @pytest.fixture(autouse=True)
@@ -140,6 +144,116 @@ class FakeHealthClient:
         return self.response
 
 
+def test_native_anthropic_is_rejected_without_misrouting_or_dispatch(
+    tmp_path, monkeypatch
+):
+    provider = AnthropicProvider(
+        model="claude-test",
+        credential_ref="env:FAKE_NATIVE_MESSAGES_REFERENCE",
+    )
+    monkeypatch.setattr(provider, "health", lambda: {"status": "ok"})
+    pricing = tmp_path / "messages-pricing.json"
+    pricing.write_text(
+        json.dumps(
+            {
+                "models": {
+                    "anthropic/claude-test": {
+                        "input_per_million_usd": 1,
+                        "output_per_million_usd": 2,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("APEIR_MODEL_PRICING_FILE", str(pricing))
+    gateway = build_gateway_from_providers([provider])
+    client = FakeKernelClient()
+
+    async def available():
+        return True
+
+    async def new_client():
+        return client
+
+    gateway._ensure_nki_available = available
+    gateway._new_nki_client = new_client
+    with pytest.raises(
+        ModelProviderResponseError, match="Anthropic Messages"
+    ) as caught:
+        asyncio.run(
+            gateway.invoke(
+                ModelRequest(
+                    task_id="unsupported-native-messages",
+                    messages=({"role": "user", "content": "hello"},),
+                )
+            )
+        )
+    assert client.operation is None
+    assert caught.value.provider_error_code == "NOUS_MODEL_PROTOCOL_UNSUPPORTED"
+    assert caught.value.retryable is False
+
+
+@pytest.mark.parametrize("provider_id", ["ollama-compatible", "anthropic"])
+def test_explicit_openai_protocol_is_not_inferred_from_name_or_port(provider_id):
+    provider = OpenAIProvider(
+        provider_id=provider_id,
+        endpoint="https://models.example.invalid:11434/v1/chat/completions",
+        model="claude-through-compatible-proxy",
+        credential_ref="env:FAKE_PROTOCOL_REFERENCE",
+    )
+    gateway = build_gateway_from_providers([RemoteProvider()])
+    assert (
+        gateway._kernel_accounting_binding(provider)["backend"] == "openai-compatible"
+    )
+
+
+@pytest.mark.parametrize(
+    "choice", ["none", "required", {"type": "function", "function": {"name": "lookup"}}]
+)
+def test_frozen_nki_rejects_tool_choice_it_cannot_honor(monkeypatch, choice):
+    gateway = build_gateway_from_providers([RemoteProvider()])
+    client = FakeKernelClient()
+
+    async def available():
+        return True
+
+    async def new_client():
+        return client
+
+    gateway._ensure_nki_available = available
+    gateway._new_nki_client = new_client
+    with pytest.raises(ModelProviderResponseError, match="tool_choice") as caught:
+        asyncio.run(
+            gateway.invoke(
+                ModelRequest(
+                    task_id="unsupported-tool-selection",
+                    messages=({"role": "user", "content": "hello"},),
+                    metadata={"tool_choice": choice},
+                )
+            )
+        )
+    assert client.operation is None
+    assert caught.value.provider_error_code == "NOUS_MODEL_PARAMETER_UNSUPPORTED"
+    assert caught.value.retryable is False
+
+
+def test_unsupported_classification_never_echoes_provider_exception_text():
+    failure = ModelGateway._classify_provider_failure(
+        ModelProviderResponseError(
+            "private-provider-diagnostic-value",
+            provider_error_code="NOUS_MODEL_PARAMETER_UNSUPPORTED",
+            retryable=False,
+        ),
+        provider_id="example",
+        model_id="example-model",
+    )
+    assert failure.category == "unsupported"
+    assert failure.retryable is False
+    assert "tool_choice" in failure.explanation
+    assert "private-provider-diagnostic-value" not in failure.explanation
+
+
 class KernelBalanceError(Exception):
     code = "PROVIDER_ERROR"
     retryable = False
@@ -188,7 +302,7 @@ def test_model_execution_uses_kernel_operation(monkeypatch) -> None:
                     "thinking": {"type": "disabled"},
                     "reasoning_effort": "none",
                     "tools": [{"type": "function", "function": {"name": "lookup"}}],
-                    "tool_choice": "required",
+                    "tool_choice": "auto",
                     "response_schema": {
                         "type": "object",
                         "properties": {"ready": {"type": "boolean"}},

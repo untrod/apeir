@@ -482,11 +482,13 @@ class ModelGateway:
                         balance_exhausted=failure.category == "budget_exceeded",
                         dispatched=dispatched,
                     )
-                self._record_provider_failure(candidate_provider_id, failure)
+                if failure.category != "unsupported":
+                    self._record_provider_failure(candidate_provider_id, failure)
                 if failure.category in {
                     "authentication",
                     "authorization",
                     "budget_exceeded",
+                    "unsupported",
                 }:
                     last_blocking_error = ModelProviderResponseError(
                         failure.explanation,
@@ -939,9 +941,17 @@ class ModelGateway:
                 "the selected adapter cannot be represented as a Runtime provider"
             )
         provider_id = str(getattr(provider, "provider_id", "") or instance.backend)
-        endpoint = self._kernel_endpoint(provider)
-        backend = self._kernel_backend(provider_id, endpoint)
-        credential_env = self._kernel_credential_reference(provider, backend)
+        binding = self._kernel_accounting_binding(provider)
+        endpoint = binding["provider_endpoint"]
+        backend = binding["backend"]
+        credential_env = binding["credential_env"]
+        choice = request.metadata.get("tool_choice")
+        if choice is not None and choice != "auto":
+            raise ModelProviderResponseError(
+                "The locked NKI Worker cannot honor tool_choice; only auto is supported",
+                provider_error_code="NOUS_MODEL_PARAMETER_UNSUPPORTED",
+                retryable=False,
+            )
         model = str(
             descriptor.metadata.get("provider_model")
             or getattr(provider, "model", "")
@@ -1163,8 +1173,12 @@ class ModelGateway:
                 "the selected adapter cannot be represented as a Runtime provider"
             )
         endpoint = self._kernel_endpoint(provider)
+        from nous_runtime.provider.adapters.openai import OpenAIProvider
+
         backend = self._kernel_backend(
-            str(getattr(provider, "provider_id", "")), endpoint
+            str(getattr(provider, "provider_id", "")),
+            endpoint,
+            openai_protocol=isinstance(provider, OpenAIProvider),
         )
         return {
             "kernel_endpoint": self._nki_endpoint
@@ -1246,6 +1260,15 @@ class ModelGateway:
 
     @staticmethod
     def _kernel_endpoint(provider: Any) -> str:
+        from nous_runtime.provider.adapters.anthropic import AnthropicProvider
+
+        if isinstance(provider, AnthropicProvider):
+            raise ModelProviderResponseError(
+                "Anthropic Messages is not supported by the locked NKI Worker; "
+                "configure an actual OpenAI-compatible Provider if available",
+                provider_error_code="NOUS_MODEL_PROTOCOL_UNSUPPORTED",
+                retryable=False,
+            )
         endpoint = str(
             getattr(provider, "endpoint", "") or os.environ.get("NOUS_LLM_API_URL", "")
         ).rstrip("/")
@@ -1263,7 +1286,9 @@ class ModelGateway:
         return endpoint
 
     @staticmethod
-    def _kernel_backend(provider_id: str, endpoint: str) -> str:
+    def _kernel_backend(
+        provider_id: str, endpoint: str, *, openai_protocol: bool = False
+    ) -> str:
         normalized = f"{provider_id} {endpoint}".lower()
         parsed = urlsplit(endpoint)
         hostname = (parsed.hostname or "").casefold()
@@ -1274,7 +1299,7 @@ class ModelGateway:
             except ValueError:
                 if hostname == "localhost":
                     return "edge-openai-compatible"
-        if "ollama" in normalized or ":11434" in normalized:
+        if not openai_protocol and ("ollama" in normalized or ":11434" in normalized):
             return "ollama"
         if hostname == "localhost":
             return "edge-openai-compatible"
@@ -1679,6 +1704,27 @@ class ModelGateway:
                 retryable=False,
                 evidence={},
                 explanation="Selected saved input admission failed",
+            )
+        # Only local, typed compatibility failures receive these fixed public
+        # messages. Never publish arbitrary Provider exception text here.
+        unsupported = {
+            "NOUS_MODEL_PROTOCOL_UNSUPPORTED": (
+                "Anthropic Messages is not supported by the locked NKI Worker; "
+                "use an actual OpenAI-compatible Provider if available"
+            ),
+            "NOUS_MODEL_PARAMETER_UNSUPPORTED": (
+                "The locked NKI Worker cannot honor non-auto tool_choice"
+            ),
+        }
+        if (
+            isinstance(error, ModelProviderResponseError)
+            and error.provider_error_code in unsupported
+        ):
+            return _ProviderFailure(
+                category="unsupported",
+                retryable=False,
+                evidence={"provider_error_code": error.provider_error_code},
+                explanation=unsupported[error.provider_error_code],
             )
         message = str(error)
         http_status = getattr(error, "http_status", None)

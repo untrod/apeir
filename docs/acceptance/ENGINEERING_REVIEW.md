@@ -4869,3 +4869,31 @@ The preceding Developer SDK archive is preserved historical material, not a new
 source/native qualification. The main user guide now links to it rather than
 mixing dated failure counts into installation steps. Existing heading entrypoints
 remain available for link compatibility.
+
+## Frozen Worker protocol admission — 2026-10-27
+
+Code review of frozen Kernel `87fd1b2` found native model backends for
+OpenAI-compatible and Ollama protocols, but no Anthropic Messages backend.
+The Python Anthropic adapter alone therefore does not qualify production NKI
+execution. A Gateway counterexample previously sent its Messages endpoint to the
+OpenAI backend. Another counterexample selected Ollama from an OpenAI adapter's
+name or port. Six pre-fix cases failed; the raw local log is retained.
+
+The existing Gateway now rejects native Messages calls with
+`NOUS_MODEL_PROTOCOL_UNSUPPORTED` before dispatch, respects a known OpenAI
+adapter's protocol and rejects non-automatic `tool_choice` with
+`NOUS_MODEL_PARAMETER_UNSUPPORTED`. The locked Worker does not forward that
+selection parameter; silently dropping it is not support. Existing reasoning,
+temperature and response-format behavior remains subject to endpoint support.
+The wizard disables the native Messages template using its existing unsupported
+protocol state. Saved configurations remain readable; a genuine compatible
+proxy is distinguished by its adapter rather than the model's name.
+
+Compatibility failures are nonretryable, do not dispatch another request or
+mark the Provider unhealthy, and publish fixed diagnostic messages rather than
+arbitrary exception contents. Nineteen Gateway cases cover refusal before NKI
+submission, exact error codes, unchanged automatic tool selection, compatible
+proxy routing and private diagnostic suppression. The model/context regression
+passes 858 cases with 5 platform skips; the eight onboarding cases pass.
+These are software contracts with fake references, not paid model calls.
+Kernel source, approved component bytes and the component lock are unchanged.
