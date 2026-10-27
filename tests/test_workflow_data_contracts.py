@@ -256,3 +256,64 @@ def test_public_cli_reports_schema_failure_without_private_input_or_traceback(
     assert "PRIVATE_CODE_EXCERPT" not in result.output
     assert "Traceback" not in result.output
     assert "inputs" in result.output
+
+
+@pytest.mark.parametrize(
+    "kind", [StepType.TRANSFORM, StepType.WAIT, StepType.CONDITION, StepType.APPROVAL]
+)
+def test_unregistered_action_is_not_silently_executed_as_a_pure_builtin(tmp_path, kind):
+    runtime = WorkflowRuntime(str(tmp_path))
+    spec = replace(
+        definition(),
+        inputs_schema={},
+        outputs_schema={},
+        steps=(WorkflowStep("custom", kind, action="missing.host.action"),),
+    )
+    runtime.register(spec)
+    run = runtime.start(spec.workflow_id, spec.version)
+    assert run.state is WorkflowState.FAILED
+    assert "no workflow handler" in run.error
+
+
+def test_unimplemented_expression_does_not_become_a_skipped_or_completed_condition(
+    tmp_path,
+):
+    runtime = WorkflowRuntime(str(tmp_path))
+    spec = replace(
+        definition(),
+        inputs_schema={},
+        outputs_schema={},
+        steps=(
+            WorkflowStep(
+                "condition",
+                StepType.CONDITION,
+                condition="requires.host.expression",
+                params={"input": "missing", "equals": True},
+            ),
+        ),
+    )
+    runtime.register(spec)
+    assert runtime.start(spec.workflow_id, spec.version).state is WorkflowState.FAILED
+
+
+def test_explicit_host_action_can_still_bind_its_real_handler(tmp_path):
+    calls = []
+    runtime = WorkflowRuntime(
+        str(tmp_path),
+        handlers={
+            "host.action": lambda step, context: (
+                calls.append(step.action) or {"actual": True}
+            )
+        },
+    )
+    spec = replace(
+        definition(),
+        inputs_schema={},
+        outputs_schema={},
+        steps=(WorkflowStep("custom", StepType.TRANSFORM, action="host.action"),),
+    )
+    runtime.register(spec)
+    run = runtime.start(spec.workflow_id, spec.version)
+    assert run.state is WorkflowState.COMPLETED
+    assert calls == ["host.action"]
+    assert run.outputs["custom"]["actual"] is True

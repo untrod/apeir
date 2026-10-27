@@ -3972,6 +3972,14 @@ invalid input without echo/traceback, reload original Run
 idempotency key without a new Run. These are pure software results, not a model,
 strict-sandbox command, installed Windows or physical-effect Gate.
 
+Five further original counterexamples expose another canonical Runtime mismatch:
+an unregistered action on a pure step silently falls back to its built-in handler,
+and an unimplemented expression can be skipped/reported as completed. The fallback
+now accepts only an empty action/condition. Missing handlers report FAILED before
+approval or conditional skipping; an explicitly registered host handler remains
+usable. Studio already rejected these unsupported definitions for execution;
+this aligns CLI/host behavior without adding handlers or execution authority.
+
 ## R5 Workflow Builder software integration — 2026-10-25
 
 REUSE WorkflowDefinition, Compiler, TaskGraph, WorkflowRuntime, WorkflowStore,

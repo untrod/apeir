@@ -358,12 +358,17 @@ class WorkflowRuntime:
                     "Workflow handler contract capability binding changed"
                 )
             return self.handlers[key], policy
-        if step.step_type in {
-            StepType.TRANSFORM,
-            StepType.WAIT,
-            StepType.CONDITION,
-            StepType.APPROVAL,
-        }:
+        if (
+            not step.action
+            and not step.condition
+            and step.step_type
+            in {
+                StepType.TRANSFORM,
+                StepType.WAIT,
+                StepType.CONDITION,
+                StepType.APPROVAL,
+            }
+        ):
             contract = CapabilityContract(
                 capability_id=f"workflow.{step.step_type.value}",
                 side_effect_class="none",
@@ -463,6 +468,17 @@ class WorkflowRuntime:
                 )
         if run.cancellation_requested:
             return "cancelled", {}, ""
+        if handler is None:
+            return self._record_step(
+                run,
+                step,
+                binding,
+                attempts,
+                snapshot,
+                "failed",
+                {},
+                f"no workflow handler registered for {step.step_type.value}:{step.action}",
+            )
         if step.approval_required or step.step_type is StepType.APPROVAL:
             if step.step_id not in set(run.inputs.get("_approved_steps") or ()):
                 return self._record_step(
@@ -481,17 +497,6 @@ class WorkflowRuntime:
                 return self._record_step(
                     run, step, binding, attempts, snapshot, "skipped", {}, ""
                 )
-        if handler is None:
-            return self._record_step(
-                run,
-                step,
-                binding,
-                attempts,
-                snapshot,
-                "failed",
-                {},
-                f"no workflow handler registered for {step.step_type.value}:{step.action}",
-            )
         while True:
             previous_attempts = attempts
             attempts += 1

@@ -165,6 +165,8 @@ Empty schemas keep the existing unrestricted-object contract. Supported declared
 dialects are the installed JSON Schema drafts4/6/7/2019-09/2020-12; the default is
 2020-12. References must stay within the submitted schema. External schema/file
 fetching is disabled, and errors do not echo private input or output values.
+Named actions and expression conditions require an actual host handler; they
+cannot silently fall back to a pure built-in operation in CLI/host execution.
 
 ![Workflow Builder showing a registered pure workflow, completed steps and its original Run](../media/studio-workflow-source.png)
 
