@@ -4487,3 +4487,385 @@ tracemalloc observations measured31969856/103207 peak Python bytes. The private
 paired report retains raw environment and measurements. These cover excerpt
 construction only, not full append, UI latency, Windows behavior or Token savings;
 the archive boundary/count still traverses an index as history grows.
+
+## Developer SDK qualification archive — 2026-10-06
+
+Moved from the Developer Platform guide without deleting the original evidence.
+These dated runs and unavailable-component statements describe their recorded
+revisions, not current product readiness. Current status remains in ROADMAP.
+
+
+Starting Distribution: `242acf84bb51aa7d1f60b49359093c7231b8af16`.
+Kernel remains `87fd1b2ff28ef14ab1a515a58162592b452fda2e`.
+
+| Existing boundary | Classification | Milestone treatment |
+| --- | --- | --- |
+| Distributed Work, signed Node protocol, Node service | REUSE | Public SDK reexports the canonical classes; no second executor |
+| Reality Device/Operation, Observation, EffectVerifier, Artifact CAS | REUSE | Same identities, evidence and fail-closed verification |
+| Capability 2.0, Governance, credentials, durable Agent/Workflow | REUSE | Admission remains at existing gates; SDK is not authority |
+| Provider/NKI Python SDK packages | EXTEND | Correct Distribution dependency and additive runtime facade |
+| Provider metadata validation and CTK | EXTEND | No implicit execution; skipped required probes cannot certify |
+| Third-party Work/Node/Reality imports | MISSING → supplied | `nous_provider.runtime` exposes canonical runtime types |
+| Runtime contract conformance | MISSING → supplied | Seven opt-in target-backed suites on the existing CTK |
+| Controller/node/CLI/desktop packaging | REUSE | Existing role entrypoints and independent desktop package |
+| Native provider/hardware qualification | MISSING | Explicitly pending; contract reports cannot substitute for it |
+
+Install `nous-provider-sdk` for `nous_provider.runtime` and
+`nous_provider.conformance`; developers do not import internal Runtime modules.
+The SDK implementation imports the authoritative Runtime contracts. It does not
+copy them. Legacy `nous_provider.Device` remains a Kernel compute resource;
+`nous_provider.runtime.ManagedDevice` is a Reality resource. Legacy
+`nous_provider.ExecutionProvider` remains the NPA inference interface.
+
+### Source SDK onboarding
+
+Use the [Source Quick Start](../operations/getting-started/QUICK_START.md#public-sdk-examples)
+for the single recommended installation path and runnable public SDK examples.
+The additive SDK facade reexports the existing ProviderRegistry, Governance
+contracts, SkillRegistry/SkillToolRuntime and Workflow step types; it implements
+none of them again. Access to a class is not authority. The example's local host
+owns explicit read-only policy and Node admission; adapter code receives input
+only. Skill installation/load records instructions and CAS provenance, not
+permission or execution. Removal/disable and error paths are tested.
+
+### CI scope and measured cost
+
+Core, Desktop and Security required contexts remain present on every PR. Feature
+branches run these on `pull_request` instead of duplicating the same work on
+`push`; main, release branches and dispatch retain their broader validation.
+Only known root/docs Markdown and listed example README files select the
+documentation path. Skill instructions, code, tests, configuration, workflows,
+unknown paths and mixed changes select full regression. Deletions and both ends
+of renames participate; invalid Git revisions fail the job. Security checks and
+the collection floor still run on documentation PRs. Main never uses the narrow
+path; Multi-Arch and Release gates are unchanged.
+
+Baseline PR #21 used 13 active source jobs and 2,555 aggregate job-seconds, with
+1,064 seconds from the first source workflow start to all source checks complete.
+Its feature push plus PR ran five full Python jobs and two frontend builds.
+The new feature-PR shape runs one full Python job and one frontend build, with
+three workflows instead of six. Actual after-change timing is attached to the
+PR acceptance evidence; different workloads and runner scheduling limit direct
+latency comparisons. No Relay, SQLite or fsync durability tuning is included:
+the existing three-round startup baseline measured CLI-ready median 1.214 seconds
+and the 1,000-record benchmark measured context-write median 0.382 ms and p95
+0.567 ms. Those synthetic local results do not justify weakening persistence.
+
+Actual full-code PR #23 source cost was five active jobs, **513 job-seconds /
+392 seconds feedback**. The initial documentation-only head of PR #25
+(`406ca499e9b4b9a22d1ffa54ee20834d3928758d`) exercised the narrow path with all
+three workflows passing: five active jobs, **122 job-seconds / 86 seconds
+feedback**. Its later Console/preflight code commit selects full regression;
+the resulting main still runs all platforms. These are observed workflow costs,
+not a controlled runtime performance comparison or a reduced main quality gate.
+
+The Product Closure main regression at `1a66e2514c222f432534b5362ae590ab789d20d7`
+recorded **1 failed, 4083 passed, 53 skipped** on Windows in
+[Core CI](https://github.com/untrod/apeir/actions/runs/38101910531): the existing
+Model Gateway timeout test expected provider cancellation within a 10 ms total
+request budget. That budget also includes routing and evidence recording; a
+request that expires before dispatch must not invoke or cancel a provider.
+The original log does not establish which deadline phase occurred. Tests now
+control only Gateway accounting to cover both phases explicitly: a real asyncio
+10 ms in-flight deadline still requires cancellation and lease cleanup, while a
+controlled pre-dispatch expiry requires zero invocations and zero leases.
+The provider's 100 ms delay, production timeouts, retry policy and runtime code
+are unchanged. This test correction does not qualify Windows network timing or
+close issues #4 and #8; their separate Relay failure evidence remains open.
+
+For an explicit Windows Skill HTTP investigation, the existing Core workflow also
+accepts `gh workflow run core-ci.yml --ref <reviewed-branch> -f diagnostic=windows-skill-http`.
+It runs the original owned HTTP/TLS cases with bounded payload-free phase traces.
+This diagnostic has separate check names and never supplies `Core gate` evidence;
+default dispatch and main/release regression keep their existing full selection.
+A passing fresh fixture cannot close the unresolved full-suite Windows timing
+issue. See the [engineering review](../acceptance/ENGINEERING_REVIEW.md#windows-skill-http-phase-investigation--2026-10-21).
+
+### Packaging and compatibility
+
+Controller, Node and CLI share the existing `apeir-distribution` wheel and its
+`apeir-controller`, `apeir-node`, and `apeir` entrypoints. Splitting their state or
+execution paths into independently implemented packages is unnecessary. The
+Provider SDK and NKI SDK are independently built wheels, depending explicitly on
+`apeir-distribution>=0.1.0rc1,<0.2`. Desktop remains the existing separate Tauri/Web
+package. Native sidecars still require the pinned component-lock verification.
+
+The Node wire protocol is `nous-node` version `1.0`; Distributed Work uses
+`apeir.compute-mesh-work/v1`; Observation uses the existing schema registry.
+Unknown Node versions and Work schemas are rejected by their canonical parsers.
+A compatible wheel version does not grant Node trust or Operation authority.
+There is no downgrade negotiation or invented compatibility shim.
+
+### Conformance evidence
+
+`register_runtime_suites(runner, target)` adds Work, Node, Device, Provider,
+Capability, Execution and Evidence suites without changing the five legacy CTK
+suites. Missing targets report SKIP and cannot certify. Results explicitly report
+`validation_level=contract` and `execution_performed=false`: these probes inspect
+records, verify signed envelopes and CAS integrity, and independently recompute
+EffectVerification from the original Operation, Receipt and Observations.
+A contract report is not hardware, throughput, or production qualification.
+
+Provider `validate()` checks metadata only. Legacy execution conformance requires
+an explicit host-supplied `execution_probe`; a `test_mode` parameter does not
+prevent an effect. The host must submit through existing governed Work admission.
+Providers and test callbacks cannot authorize themselves. The acceptance test
+uses the existing simulated Agent → Workflow → Governance → Distributed Work →
+Node → Device execution, then consumes the resulting evidence through public SDK
+imports. Wrong-operation receipts and missing observations fail conformance
+without executing the effect again.
+
+### Supported development environment
+
+On Linux, the existing detached ProcessSession host enables child-subreaper
+ownership before spawning its workload. Orphaned descendants in the original
+process group are killed and reaped before publishing the terminal result;
+unconfirmed cleanup records `RECOVERY_REQUIRED`. This covers the host's own
+workload group, not arbitrary processes that escape it or the detached host's
+own eventual adoption by PID1. Containers should still use `--init` so the
+container also reaps detached hosts. This Distribution process host is in the
+runtime-service scope and does not modify or qualify the frozen Rust Kernel.
+
+Developer Preview PR #23's source checks passed, but its initial main
+`25aed7c34cb1c4173476d660ccccc032b3fb0452` exposed two failures in untouched
+baseline files. Windows Core recorded **1 failed, 4000 passed, 53 skipped,
+4 warnings**: the existing EventStream writer's 10-second process-exit assertion.
+Windows Multi-Arch recorded **1 failed, 3711 passed, 53 skipped, 272 deselected,
+4 warnings**: WebGateway passed `30.000000000000057` seconds to transport against
+an exact 30-second bound. Original failed Actions runs
+[37972025588](https://github.com/untrod/apeir/actions/runs/37972025588) and
+[37972025503](https://github.com/untrod/apeir/actions/runs/37972025503) are retained.
+
+A controlled constant clock reproduces the timeout overflow on unchanged
+Gateway code. Transport now receives at most the original request bound;
+the total deadline, retry, network/credential and authority rules are unchanged.
+A controlled failed first writer also proves the old test leaves other started
+children unreaped. The test now cleans every child and records construction,
+writing and completion phases for future failures. Four writers, forty events,
+exact sequence assertions and the original 10-second exit check remain intact.
+EventStream, fsync and Kernel are unchanged. This fixes test cleanup and adds
+diagnostics; it does **not** prove the original Windows termination timing cause
+resolved. SDK acceptance requires a separate corrective PR and successful
+source/main platform checks; original failures are not erased or rerun into acceptance.
+
+Preview PR #25's resulting main `5ccbb6a4aec9deca9fcaec5c2c92af740932ea8c`
+passed Core/Desktop/Security, but its [Windows Multi-Arch run
+38007732190](https://github.com/untrod/apeir/actions/runs/38007732190) recorded
+**1 failed, 3725 passed, 53 skipped, 272 deselected, 4 warnings**. The untouched
+firmware response-loss/revoked-grant test stayed WAITING after its new observation
+Work timed out; it neither repeated the effect nor falsely committed success.
+This is additional evidence for [Issue #4](https://github.com/untrod/apeir/issues/4),
+not a successful main Gate or a failure hidden by rerunning.
+
+A controlled held REGISTER proves both the Demo and simulation fixture accepted
+a persisted RESOURCE_REPORT as startup readiness before the new connection was
+authenticated. Three controlled cases fail on that exact main, including a
+four-second restart delay longer than the original three-second Work wait.
+Startup now waits for an actual connection and a different signed RESOURCE_REPORT
+message ID verified by the existing relay. The original fifteen-second readiness,
+three-second Work wait, thirty-second Operation bound, heartbeat, fsync,
+authority and at-most-once assertions are unchanged. This corrects a demonstrated
+startup race; it does not prove every Windows observation/receipt deadline issue
+resolved or close Issue #4. A corrective PR must pass source/dispatch and resulting
+main matrices before the Preview checkpoint can be issued.
+
+The environment cleanup audit reuses the existing workspace configuration,
+daemon constructor, pytest fixtures and Kernel process identity semantics.
+The MCP adapter extends only trusted base-interpreter selection: CPython's
+actual base executable replaces the invalid `base_prefix/executable-name`
+layout assumption. Missing, relative or non-executable base paths fail closed;
+there is no PATH fallback. Existing strong isolation, `-I`/`-S`, explicit
+read-only package bootstrap and local permit boundaries remain intact.
+Behavioral tests launch that interpreter and reject cwd/PYTHONPATH shadowing.
+
+Persistence tests use independent temporary workspaces rather than shared HOME.
+Production defaults are unchanged. A supported local environment also needs a
+writable checkout, named user and resolvable hostname for existing state and
+identity/resource probes. A read-only checkout is not the full development
+environment: existing core bootstrap and compatibility tests write local state.
+For an offline container, supply a test user and local hostname mapping; these
+environment facts do not enroll a trusted identity or grant authority.
+
+Process lifecycle acceptance requires an init/reaper. On unchanged Runtime,
+the same two orphan-process assertions passed **2/2** with Docker `--init` and
+failed **2/2** without it. A dead orphan's retained creation identity is not
+permission to weaken the assertion or modify Kernel. Use an initialized Linux
+environment, for example `docker run --init --hostname apeir-test
+--add-host apeir-test:127.0.0.1 ...`, with a provisioned user, installed test
+dependencies and writable temporary storage. The ellipsis denotes normal image,
+mount and pytest arguments, not a separate validation framework.
+
+Local qualification on 2026-10-06: focused MCP/desktop/daemon cases **137 passed**;
+coordination, Work, Workflow, Reality, governance and extension regressions
+**679 passed, 17 skipped**; Node/control-plane/Artifact **228 passed**;
+repository checks **244 passed**, component-lock contracts **3 passed**.
+Full managed host regression (real OPA/OpenBao references enabled) recorded
+**3805 passed, 36 skipped, 2 failed, 4 warnings**. The two unchanged orphan
+identity assertions still fail under its bare PID 1; the original seven other
+failures no longer occur. No tests were skipped or weakened to hide them.
+
+Full initialized-container regression recorded **3796 passed, 47 skipped,
+4 warnings**, exit zero. It used pinned Python 3.12 image
+`python@sha256:ddb0207ae1f0356c2b724d740769b0c5f5f51cc54a0525178f721825f78fe74c`,
+UID 1000, fake local USER/LOGNAME, `apeir-test` hostname mapped to loopback,
+`--init`, no external network, dropped capabilities, no new privileges,
+read-only rootfs, writable checkout and temporary storage. Existing installed
+test dependencies and Git were mounted; no secret or Docker socket was supplied.
+The eleven real OPA/OpenBao service cases explicitly skip there, while the host
+run exercises them. These separate run counts must not be summed.
+
+An initial container with no named user/hostname was interrupted after **97
+failed, 1457 passed, 31 skipped, 32 errors, 1 warning**. After supplying those
+facts, a read-only checkout probe completed with **40 failed, 3756 passed,
+47 skipped, 4 warnings**, including read-only SQLite/state writes and resulting
+missing registration facts. Both unsuccessful configurations remain evidence;
+they are not hidden baseline regressions or qualified environments.
+
+Ruff lint, compile, 232-document links, hygiene, identity, Git metadata, version
+and security checks passed; security found zero findings in 1891 files. Source
+`55fc890` Security CI failed its existing changed-file format gate: full-file
+checks flagged `tests/conftest.py` and `tests/test_production_suite.py`, also
+reproduced on their untouched starting versions. The required formatter was then
+applied to those two already changed test files; ASTs before/after are identical.
+All five changed Python files now pass full-file formatting; no CI requirement,
+assertion or Runtime behavior was weakened. Actual native component hashes remain BLOCKED by the missing locked
+Windows sidecar. Kernel and the component lock are unchanged. Source/PR and
+resulting-main CI must pass before checkpoint publication and issue #9 closure.
+
+An additional Windows timing failure occurred on source `5ae10f4` Core CI:
+**1 failed, 3802 passed, 40 skipped, 4 warnings**. The legacy connectivity
+vertical slice slept 0.8 seconds after start and mistook TCP readiness for a
+received WELCOME/session. A controlled 1.1-second WELCOME delay reproduced the
+same assertion on unchanged Runtime (**1 failed, 2 warnings**). The test now
+awaits the current native session and actual send queue within the existing
+10-second receive budget, rejects prior session/queue state after reconnect,
+and always cleans up its Node. Hold/release cases retain zero echo invocations
+before WELCOME and require exactly one completed echo after delivery. Focused
+connectivity module: **16 passed**. Final controlled stress: **60 passed over
+20 rounds**; affected connectivity/Node/control-plane/Reality/governance
+regressions: **595 passed**. After the synchronization tests, full managed host
+regression recorded **3808 passed, 36 skipped, 2 unchanged bare-PID-1 failures,
+4 warnings**; full initialized-container regression recorded **3799 passed,
+47 skipped, 4 warnings**, exit zero. These supersede the earlier run counts
+for current qualification without erasing those historical results. Final whole
+Ruff lint, all six changed Python files' formatting, compile and standard
+docs/link/hygiene/identity/Git/version/security checks pass; the final security
+scan records zero findings in 1893 files. This is test synchronization, not a new
+authentication or execution contract.
+
+The first hold/release probes (**2 failed, 14 passed**) also exposed legacy
+Gateway assignment before send-queue readiness. Waiting for actual queue
+readiness preserves the handshake test's scope; the early-submission Runtime
+gap is not claimed repaired. Its evidence and broader latency qualification
+remain OPEN in [issue #4](https://github.com/untrod/apeir/issues/4#issuecomment-6012448219).
+The original nine Cloud failures and these additional failures are separate.
+
+### M3.6 validation record
+
+Local focused SDK/CTK: **79 passed** (14 new milestone cases). Affected M3.1–M3.5,
+workflow, recovery, artifact and architecture regressions: **646 passed, 3 skipped**.
+Full repository: **3596 passed, 35 skipped, 9 failed**; the nine failures match the
+starting-baseline reproduction (managed interpreter path, read-only HOME storage
+and orphan-process cleanup). They remain visible and unchanged.
+
+Ruff, changed-file formatting, compile, documentation/link, comment, identity,
+Git metadata, release-version and security checks pass; security reports zero
+findings. Component-lock contract tests: **3 passed**. Native component verification
+remains blocked by the already missing locked Windows sidecar binaries; no lock
+or Kernel code changed. Distribution, Provider SDK `1.0.0b2` and NKI SDK `0.1.1`
+wheels build and install in an isolated consumer; public imports and optimized
+Python fail-closed conformance pass. CI is checked after push and reported with the
+resulting Distribution SHA. Physical acceptance remains **PENDING**.
+
+### Canonical Work read correction
+
+The first SDK commit `9f829b004ec6ef68a2daa7894dab3b2242dbb755` passed Desktop CI
+(Windows **3607 passed, 28 skipped**; Linux/macOS **3600 passed, 35 skipped**).
+Its multi-architecture Windows job recorded **1 failed, 3318 passed, 28 skipped,
+272 deselected**: the existing firmware revocation test stopped before approval
+because the distributed Work store was unreadable. The failure is retained at
+[the original CI run](https://github.com/untrod/apeir/actions/runs/37282398853).
+The log does not expose the underlying Windows error number.
+
+Inspection identified a reproducible read/write exclusion defect: Work writers
+held the existing file lock while reads could concurrently replace the instance's
+working snapshot. Reads, counts, listing and restart loading now use that same
+canonical lock; mutation methods use an internal read under their already-held
+lock, avoiding recursive acquisition. This introduces neither a new lock system
+nor effect retries. Four concurrent-reader regression cases cover the correction;
+the pre-fix read path demonstrably enters during a write.
+
+Latest local validation: reader/revocation targets **6 passed**; affected
+regressions **650 passed, 3 skipped**; full repository **3600 passed, 35 skipped,
+9 unchanged baseline failures**. Ruff, changed-file formatting, compile and the
+isolated Distribution wheel build pass. The corrective SHA and its CI outcome
+are checked after push. Kernel and the component lock remain unchanged.
+
+The corrective commit `6960175c2a554d813047ea7c462f0447bc204584` passes both
+[Desktop CI](https://github.com/untrod/apeir/actions/runs/37285404969) and
+[Multi-Arch CI](https://github.com/untrod/apeir/actions/runs/37285405037), first
+attempt: Windows Python **3611 passed, 28 skipped**; Linux Python 3.10/3.12 and
+macOS Python **3604 passed, 35 skipped** each; Linux amd64/ARM64 matrix
+**3315 passed, 36 skipped, 272 deselected** each plus **13 platform tests** each;
+Windows amd64 matrix **3323 passed, 28 skipped, 272 deselected**. Frontend remains
+**47 passed**. Native bundle jobs are conditionally skipped, not qualified.
+M3.6 software acceptance passes; native/physical qualification remains PENDING.
+
+## Frozen Workflow and current native package qualification — 2026-10-27
+
+PR #106 was normally merged as `a07eb66`; PR #107 adds the shared real Workflow probe
+to the existing gated Windows Runtime diagnostic, without a second packager or
+changed Runtime/Kernel/lock. Exact PR #107 head `518ef6d` passed Core `40510751085`,
+Desktop `40510751196`, Multi-Arch `40510751153` and Security `40510751100`, with 13 required
+contexts passing and no unresolved review conversation. Its real diagnostic
+`40510693013` separately exercised an actual PyInstaller EXE. PR #107 merged as
+`f6fba189d2eea8d80a66f13daa45c7a206699f0e`. Resulting-main CI is its own Gate;
+the diagnostic is not a replacement for it.
+
+Full native run `40501512297` attempt 2 passed on source `51d7462` without validation or
+smoke skip flags. Independent download of artifact `12738859677` verified the GitHub
+archive digest, 22 checksum entries, 13 manifest files, 11 nested Portable files,
+approved Kernel bytes and real NSIS sidecar/CRT payloads. The maintained component
+verifier was used, not a parallel product validator. The actual Runtime EXE found
+ten command families and ran 8 pure Workflow calls. Original Run
+`wfr_0db57258cef344ba82578b6d2ed923d8` survived separate-process history and
+idempotency checks. Invalid schema/input, private-value echo and unbound-action
+negatives were retained. External model calls were 0.
+
+NKI 1/2/3, missing/wrong credentials, current owner DACL, Worker health and owned
+process-fault restart/query passed on Windows Server 2025. The report explicitly records
+Windows 10 installation as NOT_RUN. No installed UI, graceful Desktop shutdown,
+upgrade/uninstall, Defender, live inference, full payload provenance or signing
+acceptance is inferred. Exact download hashes are maintained in the
+[current native build record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build).
+
+Attempt 1 remains a failure: job `122185250534` retained 1 failed, 5909 passed, 95 skipped
+and 4 warnings in 2388.21s. The original reviewed HTTPS Skill revocation case
+exceeded its unchanged five-second HTTP deadline. Human nonce/admission phases
+were 2115.625/2584.322ms; the handler stack was in a test-injected human-session
+revocation commit before catalog publication. Issue #88 remains open; a successful
+fresh-host build does not identify its general cause.
+
+Separately, main `a07eb66`, Core `40509947641`, Windows job `122208897482` retained1 failed,
+5909 passed, 95 skipped and 4 warnings in 2318.52s. Original observation-response
+reconciliation failed loading `workload-state.json` with
+`NodeProtocolError: relay workload state is invalid`. The helper collapses OS,
+JSON and non-object read failures to an empty mapping, so the original log does
+not distinguish those causes. No corrupted file, sharing violation or particular
+SQLite cause is established by that trace. Recovery did not falsely commit or
+re-execute the effect. Original raw logs remain retained and this recovery fault
+remains unresolved, independently of subsequent passing runs.
+
+The current documentation example was rerun through the public Provider SDK:
+Hello Skill installed the reviewed package, verified its CAS content, loaded
+instructions, refused agent-driven install/device execution and preserved disabled
+state after reopening. `execution_performed=false`; it is not a tool execution.
+The two-file Studio screenshot comes from the actual source-browser proposal,
+independent local-owner approval, file readback and original-history recovery
+fixture. It contains no real model response. Its separate pytest attempt was
+BLOCKED by unavailable strict isolation; file MATCH does not assert test PASS.
+
+The preceding Developer SDK archive is preserved historical material, not a new
+source/native qualification. The main user guide now links to it rather than
+mixing dated failure counts into installation steps. Existing heading entrypoints
+remain available for link compatibility.

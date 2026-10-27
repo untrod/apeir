@@ -420,15 +420,15 @@ need inspection/reconciliation before any new side effect.
 
 ## Native Installation
 
-Use the **unsigned internal Windows x64 test build** below only after its full
-job succeeds. Native smoke is a build-host check. Windows10 installation,
+The **unsigned internal Windows x64 test build** below has passed its full build
+and native sidecar checks. Windows10 installation,
 installed GUI, upgrade/uninstall, Defender and signing have **not** been qualified.
 This is not a signed Release or a completed Windows10 installation Gate.
 
 1. Sign in to GitHub, open the
-   [Windows x64 build](https://github.com/untrod/apeir/actions/runs/40501512297), and
-   download **windows-x64-native-development-build** under **Artifacts**.
-   Artifacts have 14-day retention; check the displayed expiry. If unavailable,
+   [Windows x64 download](https://github.com/untrod/apeir/actions/runs/40501512297/artifacts/12738859677), and
+   download **windows-x64-native-development-build**. It expires on **2026-11-10**.
+   If unavailable,
    check another build's own source manifest and validation report before use.
 2. Extract the downloaded artifact. It contains both
    `APEIR_0.1.0-rc1_x64-setup.exe` and
@@ -449,6 +449,18 @@ This is not a signed Release or a completed Windows10 installation Gate.
    replace its sidecars. The NSIS EXE is the alternative current-user installer;
    WebView2 setup can require network access. These are evaluation instructions,
    not a claim that the installation lifecycle has been exercised.
+
+For this exact artifact, independently verified SHA-256 values are:
+
+| File | SHA-256 |
+| --- | --- |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `6AC2943E35C7A7B021EAD504355DEB36CAFE18F1B542BC3CE37835DFBA543EB3` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `CE22648EE557CC3BF8F2AF9F553F48B78910E04AA0D1273E507986D9574B81AC` |
+
+The outer GitHub artifact ZIP has SHA-256
+`40e8efcd3ca651dacf065e15df4bd036f6605d68ec9a347b7a36002cf0ac8f08`.
+A later build with the same filename can have different bytes: always use its
+own manifest and checksums.
 
 The build manifest pins the source revision; this command-discovery candidate is
 `51d7462c1225a9fd223ea25ca2e9114613bda161`. Documentation updates do not relabel
