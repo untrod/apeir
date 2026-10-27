@@ -99,6 +99,8 @@ class WorkflowCompiler:
         """Use installed JSON Schema dialects and local references only."""
         if not isinstance(schema, dict):
             raise WorkflowValidationError(f"Workflow {label} schema must be an object")
+        if not schema:
+            return None
         dialects = {}
         for validator in (
             validators.Draft4Validator,
@@ -158,7 +160,8 @@ class WorkflowCompiler:
             raise WorkflowValidationError(f"Workflow {label} must be an object")
         try:
             json.dumps(data, allow_nan=False)
-            validator.validate(data)
+            if validator is not None:
+                validator.validate(data)
         except ValidationError as exc:
             # Instance/schema text can contain private model or project data.
             # Report only the violated keyword, never the offending content.
