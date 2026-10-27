@@ -2,8 +2,10 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+import faulthandler
 import http.client
 import json
+import sys
 import threading
 
 import pytest
@@ -64,6 +66,13 @@ def server_for(root, supervisor, monkeypatch):
             )
             response = connection.getresponse()
             return json.loads(response.read())
+        except TimeoutError:
+            try:
+                faulthandler.dump_traceback(file=sys.__stderr__, all_threads=True)
+            except Exception:
+                # Diagnostics must never replace the original HTTP failure.
+                pass
+            raise
         finally:
             connection.close()
 
