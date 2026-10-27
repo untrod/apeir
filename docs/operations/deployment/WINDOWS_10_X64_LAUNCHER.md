@@ -12,6 +12,11 @@ The launcher does not replace Kernel authority. It starts `nousd` first,
 passes a private NKI session to Runtime, then connects the embedded frontend to
 the authenticated loopback Runtime API.
 
+An unsigned internal Portable/NSIS test bundle is available. Use the canonical
+[Quick Start download and verification steps](../getting-started/QUICK_START.md#native-installation).
+Build and native sidecar checks passed on Server2025; current Windows10 installed
+GUI and lifecycle acceptance remain PENDING.
+
 ## Host requirements
 
 The supported local target is `x86_64-pc-windows-msvc` on Windows 10 X64.
@@ -162,6 +167,47 @@ overlay includes those same files in NSIS; Portable carries them beside the EXEs
 The component smoke checks the actual loaded CRT path when app-local CRT is
 present. This path still requires a real qualified packaging/install run; it
 does not alter the reviewed Kernel hashes or remove license/Windows10 gates.
+
+## Verified internal native build — 2026-10-27
+
+[Full build40432789046](https://github.com/untrod/apeir/actions/runs/40432789046/job/121955136897)
+completed successfully from `9f43909bed331f6e25bcc3ffab4d5ac211ab4a37`. PR102
+normally merged it as `a8f8bd2170030e8b8c08baae6b44250156130202`; both commits
+have Git tree `ac12a69d32ac4d0912b0f69a1828db5b3861ae60`. Kernel remains frozen
+at87fd1b2, and both source worktrees were clean in the build manifest.
+
+The official launcher ran without SkipValidation or SkipSidecarSmoke. Runtime,
+desktop, original Kernel source/SDK tests, Tauri check/test/build and real native
+sidecar smoke passed. The native report confirms NKI1/2/3, wrong/missing credential
+rejection, owner-only session DACL, authenticated Runtime health, Worker health,
+actual app-local CRT loading, forced owned-process cleanup and restart/query of
+the original denied Work without resubmission. It records zero external model
+calls; this is neither real-model inference nor workload sandbox qualification.
+
+The [downloaded artifact](https://github.com/untrod/apeir/actions/runs/40432789046/artifacts/12703824974)
+is156489724 bytes. Its independently measured ZIP SHA-256 matches GitHub's digest:
+`7dafb42954dcded211ebdc394357c2651780419046ffa0df52b0ae5fd2bfa78b`.
+All22 checksum entries,13 manifest payloads and11 nested Portable files matched.
+The four application/sidecar payload EXEs are real x64 PE8664. The NSIS
+bootstrapper is PE14c while packaging x64 payloads; that wrapper is not an ARM64
+or 32-bit Runtime qualification.
+
+| Downloaded file | Bytes | SHA-256 |
+| --- | --- | --- |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | 52781517 | `8C85839E26668DF680629B4D7454A4228CC403E296A5152911C1151538CB0640` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | 50908096 | `9CA906358893DF77F4BE9AD84F8B269AB31E2AE76AC5F8561D5B5B31E0A02A0F` |
+
+The archive includes both packages, SHA256SUMS, source/release manifests, native
+dependency/signature records, Python build-environment SBOM and original
+Cargo.lock files. GitHub sign-in is required, with14-day retention ending
+2026-11-10. Exact files are retained privately; a durable formal distribution
+location still requires the release Gate. No Release or historical tag changed.
+
+Actual build OS is Windows Server2025 Datacenter10.0.26100. The report explicitly
+says installation_acceptance=NOT_RUN. Clean Windows10 installation, first native
+window, upgrade, graceful Desktop shutdown, uninstall, Defender and application
+signing remain unqualified. Do not infer NATIVE_INSTALL_READY or RELEASE_READY
+from this successful build.
 
 ## Build
 
