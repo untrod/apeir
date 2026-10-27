@@ -420,16 +420,16 @@ need inspection/reconciliation before any new side effect.
 
 ## Native Installation
 
-An **unsigned internal Windows x64 test build** is now available. The full
-official build and actual Kernel/Worker/Runtime smoke passed on Windows Server
-2025. Windows10 installation, installed GUI, upgrade/uninstall, Defender and
-signing have **not** been qualified. This is not a signed Release or a completed
-Windows10 installation Gate.
+Use the **unsigned internal Windows x64 test build** below only after its full
+job succeeds. Native smoke is a build-host check. Windows10 installation,
+installed GUI, upgrade/uninstall, Defender and signing have **not** been qualified.
+This is not a signed Release or a completed Windows10 installation Gate.
 
-1. Sign in to GitHub and download
-   [windows-x64-native-development-build](https://github.com/untrod/apeir/actions/runs/40432789046/artifacts/12703824974).
-   It expires on **2026-11-10**. If unavailable, do not substitute another build
-   without checking its own source manifest and validation report.
+1. Sign in to GitHub, open the
+   [Windows x64 build](https://github.com/untrod/apeir/actions/runs/40501512297), and
+   download **windows-x64-native-development-build** under **Artifacts**.
+   Artifacts have 14-day retention; check the displayed expiry. If unavailable,
+   check another build's own source manifest and validation report before use.
 2. Extract the downloaded artifact. It contains both
    `APEIR_0.1.0-rc1_x64-setup.exe` and
    `APEIR-Portable-0.1.0-rc1-windows-x64.zip`, plus `SHA256SUMS.txt`, manifests,
@@ -442,23 +442,23 @@ Windows10 installation Gate.
    Get-FileHash .\APEIR-Portable-0.1.0-rc1-windows-x64.zip -Algorithm SHA256
    ```
 
-   Expected NSIS SHA-256:
-   `9CA906358893DF77F4BE9AD84F8B269AB31E2AE76AC5F8561D5B5B31E0A02A0F`.
-   Expected Portable SHA-256:
-   `8C85839E26668DF680629B4D7454A4228CC403E296A5152911C1151538CB0640`.
+   Compare with the entries in that same artifact's `SHA256SUMS.txt`; hashes
+   from a different build do not verify these files.
 4. For Portable evaluation, extract its ZIP and keep **all** files together in
    `APEIR-Portable`; its launcher is `APEIR.exe`. Do not copy that EXE alone or
    replace its sidecars. The NSIS EXE is the alternative current-user installer;
    WebView2 setup can require network access. These are evaluation instructions,
    not a claim that the installation lifecycle has been exercised.
 
-The binaries correspond to `9f43909bed331f6e25bcc3ffab4d5ac211ab4a37`, normally
-merged into main as `a8f8bd2170030e8b8c08baae6b44250156130202` with the same Git
-tree. Frozen Kernel `87fd1b2` and the approved component hashes are unchanged.
+The build manifest pins the source revision; this command-discovery candidate is
+`51d7462c1225a9fd223ea25ca2e9114613bda161`. Documentation updates do not relabel
+the downloaded binaries as a build of another revision. Their Runtime/Studio
+sources, sidecar spec, build scripts and dependency locks are unchanged here.
+Frozen Kernel `87fd1b2` and the approved component hashes are unchanged.
 The launcher is designed to manage its bundled Runtime and Kernel; independent
 Python/Rust installation is not part of this native package's user setup.
 Missing Provider or sandbox prerequisites must still display their actual state.
 
-See the [exact build evidence](../deployment/WINDOWS_10_X64_LAUNCHER.md#verified-internal-native-build--2026-10-27)
+See the [current build record](../deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)
 and [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md) for outstanding Gates.
 Source Preview remains the separately qualified Python/browser path.

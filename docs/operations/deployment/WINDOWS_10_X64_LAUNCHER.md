@@ -168,6 +168,26 @@ The component smoke checks the actual loaded CRT path when app-local CRT is
 present. This path still requires a real qualified packaging/install run; it
 does not alter the reviewed Kernel hashes or remove license/Windows10 gates.
 
+## Current native command-qualified build
+
+The [current full-mode qualification](https://github.com/untrod/apeir/actions/runs/40501512297)
+uses `51d7462c1225a9fd223ea25ca2e9114613bda161`. Only use its
+**windows-x64-native-development-build** artifact after successful completion.
+The maintained spec discovers the existing dynamic CLI families from their one
+canonical declaration table. The native report must include `workflow_cli`:
+ten public command families found in actual EXE help, followed by eight real
+pure Workflow CLI invocations, schema rejection and original Run recovery.
+This supplements the existing NKI/Worker/Runtime/authentication/cleanup checks.
+
+Use the [Quick Start](../getting-started/QUICK_START.md#native-installation) for
+download and checksum steps. The report/manifest identifies the exact bytes and
+source; accompanying download-guide changes do not modify application sources
+or native-build scripts. Downloaded binaries retain their manifest's source ID.
+The frozen Kernel and approved hashes are unchanged. These remain unsigned
+internal packages; Windows10 installed GUI/lifecycle and formal release are
+unqualified. The historical build below predates frozen command discovery and
+must not be substituted as evidence for that additional check.
+
 ## Verified internal native build — 2026-10-27
 
 [Full build40432789046](https://github.com/untrod/apeir/actions/runs/40432789046/job/121955136897)

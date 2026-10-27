@@ -55,11 +55,11 @@ It separates downloadable **Source Preview**, **Developer Setup** and
 **Native Installation**. Source inspection and the simulated Demo need no API key
 or hardware. Downloadable source packages are not Windows installers.
 
-**Windows download:** the [unsigned test bundle](https://github.com/untrod/apeir/actions/runs/40432789046/artifacts/12703824974)
-contains a Portable ZIP, NSIS installer, checksums and native validation reports.
-Full build and real sidecar smoke passed on Windows Server 2025. Windows 10
-installation, installed GUI, upgrade/uninstall and signing remain unqualified.
-GitHub sign-in is required; this artifact expires on 2026-11-10. Follow the
+**Windows download:** open the [internal Windows x64 build](https://github.com/untrod/apeir/actions/runs/40501512297)
+and download **windows-x64-native-development-build** from **Artifacts** after
+the full job succeeds. It contains Portable/NSIS packages, checksums and reports.
+Windows 10 installation, installed GUI, upgrade/uninstall and signing remain
+unqualified. GitHub sign-in is required; artifacts have 14-day retention. Follow the
 [download and verification steps](docs/operations/getting-started/QUICK_START.md#native-installation).
 This is an internal test build, not a signed or formally released product.
 
