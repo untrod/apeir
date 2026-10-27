@@ -167,6 +167,33 @@ The component smoke checks the actual loaded CRT path when app-local CRT is
 present. This path still requires a real qualified packaging/install run; it
 does not alter the reviewed Kernel hashes or remove license/Windows10 gates.
 
+## New Work-response candidate — awaiting integration
+
+The [full-mode candidate build](https://github.com/untrod/apeir/actions/runs/40547630660)
+passed from `4ea86aef3fb6cd05bbe84c3e314df2182e662206`, the Runtime change in
+[PR110](https://github.com/untrod/apeir/pull/110). It includes the accepted CLI
+discovery checks and removes the submission response's unnecessary history read.
+PR110's separate Core Windows timeout remains unresolved; this successful build
+does not qualify that failure as repaired or make this source accepted main.
+
+[Download candidate Portable and NSIS](https://github.com/untrod/apeir/actions/runs/40547630660/artifacts/12758561232).
+GitHub sign-in is required; retention ends 2026-11-10. The outer archive SHA-256 is
+`6E7D6CBE48F40676CD44AB8B300A30BECE35083D8124BEB0C74E4CC1AB5B7A36`.
+
+| File | SHA-256 |
+| --- | --- |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `8C98248A22C4CA2481CBAA79DFA0EBBC5FDF6EDDD0661B2CBBB7C808FFABA51A` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `9E31971E76582C1A4026786F5E77672CCF2592305ED7DEFC322E0CA6F4DFB7EA` |
+
+Independent download verified all 22 checksums, 13 manifest entries, 11 nested
+Portable files, actual NSIS payloads and the unchanged approved Kernel components.
+The full Windows source regression passed 5911 cases with 95 skips and 4 warnings;
+real sidecar smoke and pure Workflow CLI recovery passed on Server2025. Original
+Run: `wfr_fadf2835e2f54ef38508eac6fb8c8898`. External model calls: 0.
+No validation/smoke skip flags were used. The package is unsigned and does not
+include subsequent model-protocol changes in PR111. Windows10 installation,
+upgrades, uninstall, installed GUI and signing remain unqualified.
+
 ## Current native command-qualified build
 
 The [current full-mode producer](https://github.com/untrod/apeir/actions/runs/40547630660)

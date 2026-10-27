@@ -4897,3 +4897,29 @@ state. Original request fences, current admission and independent approval are
 unchanged. Local Work/MCP regression: 236 passed; lint/format/compile pass.
 This establishes the corrected response path, not total HTTP latency, Token/cost
 savings or a general Windows close/commit root-cause repair.
+
+The PR110 candidate's full native run `40547630660` passed from Runtime source
+`4ea86ae`: 5911 source tests passed, 95 skipped, 4 warnings in 2896.80s; official
+full-mode Portable/NSIS, real Kernel/Worker/Runtime smoke and frozen pure Workflow
+recovery passed. Independent download verifies artifact `12758561232`, 22 hashes,
+13 manifest payloads, 11 nested Portable files and the actual NSIS payload.
+Exact hashes and the pending-integration scope are in the existing
+[native download guide](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#new-work-response-candidate--awaiting-integration).
+The component lock and frozen Kernel are unchanged. This is not Windows10
+installed lifecycle or real-model qualification.
+
+Separately, exact head `ec6d5f1`, Core `40551862938`, original Windows job
+`122358226597` failed the unchanged five-second HTTP deadline in
+`test_scope_revoked_during_original_work_admission_blocks_dispatch`:
+1 failed, 5911 passed, 95 skipped, 4 warnings in 2097.45s. Failure-only thread
+capture places the request handler in GovernanceStore `_db_connect` close,
+called by `consume_lease` during the test's admission-time scope revocation.
+Recorded commit/close phases were 1187/1922/1328ms. The raw log is retained;
+this identifies the observed blocking phase, not the full underlying storage
+cause. No timeout, synchronous durability, WAL policy or assertions were relaxed.
+The native passing run does not replace this exact failing CI evidence.
+
+That Core run's original macOS job `122358227283` never acquired a runner;
+annotations report hosted macOS ARM64 capacity constraints. Only that unexecuted
+job was requested again after completion; the original Windows failure remains.
+Main integration is gated independently on all required checks.
