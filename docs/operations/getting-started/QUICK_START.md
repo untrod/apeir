@@ -420,16 +420,16 @@ need inspection/reconciliation before any new side effect.
 
 ## Native Installation
 
-The **unsigned internal Windows x64 test build** below has passed its full build
-and native sidecar checks. Windows10 installation,
+Use an **unsigned internal Windows x64 test build** only after its full build
+and native sidecar checks succeed. A previously verified bundle is linked below. Windows10 installation,
 installed GUI, upgrade/uninstall, Defender and signing have **not** been qualified.
 This is not a signed Release or a completed Windows10 installation Gate.
 
 1. Sign in to GitHub, open the
-   [Windows x64 download](https://github.com/untrod/apeir/actions/runs/40501512297/artifacts/12738859677), and
-   download **windows-x64-native-development-build**. It expires on **2026-11-10**.
-   If unavailable,
-   check another build's own source manifest and validation report before use.
+   [Windows x64 build](https://github.com/untrod/apeir/actions/runs/40547630660). After full validation succeeds,
+   download **windows-x64-native-development-build** from **Artifacts**.
+   If that build is not qualified, the [previously verified package](https://github.com/untrod/apeir/actions/runs/40501512297/artifacts/12738859677)
+   remains available until **2026-11-10**. Check each build's manifest and expiry.
 2. Extract the downloaded artifact. It contains both
    `APEIR_0.1.0-rc1_x64-setup.exe` and
    `APEIR-Portable-0.1.0-rc1-windows-x64.zip`, plus `SHA256SUMS.txt`, manifests,
@@ -450,22 +450,25 @@ This is not a signed Release or a completed Windows10 installation Gate.
    WebView2 setup can require network access. These are evaluation instructions,
    not a claim that the installation lifecycle has been exercised.
 
-For this exact artifact, independently verified SHA-256 values are:
+For the **previously verified artifact12738859677**, from source51d7462 only,
+independently verified SHA-256 values are:
 
 | File | SHA-256 |
 | --- | --- |
 | `APEIR_0.1.0-rc1_x64-setup.exe` | `6AC2943E35C7A7B021EAD504355DEB36CAFE18F1B542BC3CE37835DFBA543EB3` |
 | `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `CE22648EE557CC3BF8F2AF9F553F48B78910E04AA0D1273E507986D9574B81AC` |
 
-The outer GitHub artifact ZIP has SHA-256
+That previous outer GitHub artifact ZIP has SHA-256
 `40e8efcd3ca651dacf065e15df4bd036f6605d68ec9a347b7a36002cf0ac8f08`.
 A later build with the same filename can have different bytes: always use its
 own manifest and checksums.
 
-The build manifest pins the source revision; this command-discovery candidate is
-`51d7462c1225a9fd223ea25ca2e9114613bda161`. Documentation updates do not relabel
-the downloaded binaries as a build of another revision. Their Runtime/Studio
-sources, sidecar spec, build scripts and dependency locks are unchanged here.
+The current producer uses `4ea86aef3fb6cd05bbe84c3e314df2182e662206`, including
+the Work submission response correction. Its success and exact hashes must come
+from its own report and checksums; the table above does not verify that build.
+The fallback retains source `51d7462c1225a9fd223ea25ca2e9114613bda161`.
+The manifest identifies the actual binary revision, even when later changes only
+update documentation. Do not relabel downloaded binaries as another commit.
 Frozen Kernel `87fd1b2` and the approved component hashes are unchanged.
 The launcher is designed to manage its bundled Runtime and Kernel; independent
 Python/Rust installation is not part of this native package's user setup.

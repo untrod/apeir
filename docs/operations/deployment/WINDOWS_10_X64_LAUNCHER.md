@@ -169,6 +169,19 @@ does not alter the reviewed Kernel hashes or remove license/Windows10 gates.
 
 ## Current native command-qualified build
 
+The [current full-mode producer](https://github.com/untrod/apeir/actions/runs/40547630660)
+uses `4ea86aef3fb6cd05bbe84c3e314df2182e662206`, including the API Work-response
+correction. It uses the same approved immutable Kernel archive and official
+launcher, with no validation/smoke skip switches. Only its own completed full
+validation, report and file hashes can qualify those bytes. Source CI and a
+passing frontend job cannot replace the Windows packaging/smoke job.
+
+The verified record below describes the earlier51d7462 fallback, not proof that
+the new producer passed. Both build revisions are explicit; documentation-only
+commits do not change or relabel binary sources.
+
+### Verified fallback: source51d7462
+
 The [full-mode build](https://github.com/untrod/apeir/actions/runs/40501512297)
 passed on attempt 2 from `51d7462c1225a9fd223ea25ca2e9114613bda161`, accepted into
 main through PR106. No SkipValidation or SkipSidecarSmoke option was used.
