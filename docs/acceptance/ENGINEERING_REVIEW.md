@@ -3979,6 +3979,23 @@ now accepts only an empty action/condition. Missing handlers report FAILED befor
 approval or conditional skipping; an explicitly registered host handler remains
 usable. Studio already rejected these unsupported definitions for execution;
 this aligns CLI/host behavior without adding handlers or execution authority.
+The initial stricter fallback incorrectly rejected the canonical PlanWorkflowBridge
+actions such as `governance.approval`; full cross-platform CI exposed the two
+existing AgentSession approval/replay regressions. Original failed jobs are
+retained. Exact canonical built-in action aliases now keep their original
+semantics, while unregistered custom actions still fail. Those original tests and
+explicit alias cases pass without changing their approval or replay assertions.
+
+The existing Native Sidecar Smoke now additionally drives the actual packaged
+Runtime through eight model-free CLI processes: schema validation, register/run,
+invalid-input refusal, original-history reload, idempotent submission and missing
+handler rejection. The driver itself passes with real source CLI child processes;
+that software result does not qualify an EXE. A successful current native report
+must contain the actual `workflow_cli` result, independently of source pytest.
+The older PR104 Windows failure in the two-denial ProcessSession attach fixture
+is retained separately; its truncated result does not establish a root cause.
+The unchanged assertion now prints only state/error for a useful bounded failure
+diagnostic. No process-reader retries, identity checks or deadlines are relaxed.
 
 ## R5 Workflow Builder software integration — 2026-10-25
 

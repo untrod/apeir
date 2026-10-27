@@ -317,3 +317,30 @@ def test_explicit_host_action_can_still_bind_its_real_handler(tmp_path):
     assert run.state is WorkflowState.COMPLETED
     assert calls == ["host.action"]
     assert run.outputs["custom"]["actual"] is True
+
+
+@pytest.mark.parametrize(
+    ("kind", "action"),
+    [
+        (StepType.TRANSFORM, "workflow.transform"),
+        (StepType.WAIT, "workflow.wait"),
+        (StepType.CONDITION, "workflow.condition"),
+        (StepType.APPROVAL, "governance.approval"),
+    ],
+)
+def test_canonical_plan_builtin_actions_retain_their_original_semantics(
+    tmp_path, kind, action
+):
+    runtime = WorkflowRuntime(str(tmp_path))
+    spec = replace(
+        definition(),
+        inputs_schema={},
+        outputs_schema={},
+        steps=(WorkflowStep("builtin", kind, action=action),),
+    )
+    runtime.register(spec)
+    run = runtime.start(spec.workflow_id, spec.version)
+    if kind is StepType.APPROVAL:
+        assert run.state is WorkflowState.WAITING_APPROVAL
+        run = runtime.resume(run.run_id, approved_steps=("builtin",))
+    assert run.state is WorkflowState.COMPLETED

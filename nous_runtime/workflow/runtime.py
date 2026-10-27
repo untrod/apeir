@@ -359,15 +359,15 @@ class WorkflowRuntime:
                 )
             return self.handlers[key], policy
         if (
-            not step.action
-            and not step.condition
-            and step.step_type
+            step.step_type
             in {
                 StepType.TRANSFORM,
                 StepType.WAIT,
                 StepType.CONDITION,
                 StepType.APPROVAL,
             }
+            and not step.condition
+            and step.action in {"", self.compiler._capability(step.step_type, "")}
         ):
             contract = CapabilityContract(
                 capability_id=f"workflow.{step.step_type.value}",

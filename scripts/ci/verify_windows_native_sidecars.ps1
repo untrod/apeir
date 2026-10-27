@@ -226,6 +226,11 @@ try {
     & $probePython -I $nkiProbe --endpoint $env:NOUS_KERNEL_ENDPOINT --report $nkiReport | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Actual Kernel NKI qualification failed." }
 
+    $workflowReport = Join-Path $tempRoot "workflow-cli-qualification.json"
+    & $probePython -I (Join-Path $PSScriptRoot "probe_native_workflow.py") `
+        --sidecar $sidecar --workspace $tempRoot --report $workflowReport
+    if ($LASTEXITCODE -ne 0) { throw "Actual packaged Workflow qualification failed." }
+
     $runtimeStart = @{
         FilePath = $sidecar
         ArgumentList = @("runtime-api", "start", "--host", "127.0.0.1", "--port", [string]$port)
@@ -304,6 +309,7 @@ try {
         parent_pid = $parent.Id
         runtime_pid = [int]$live.data.pid
         nki = (Get-Content -LiteralPath $nkiReport -Raw | ConvertFrom-Json)
+        workflow_cli = (Get-Content -LiteralPath $workflowReport -Raw | ConvertFrom-Json)
         invalid_nki_runtime_start_rejected = $true
         invalid_http_sessions_rejected = $true
         shutdown_mode = "forced owned-process fault/restart test; not graceful Desktop exit"

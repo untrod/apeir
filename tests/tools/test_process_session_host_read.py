@@ -32,7 +32,9 @@ def test_attach_reobserves_fresh_host_after_transient_permission_denial(
         with monkeypatch.context() as fault:
             fault.setattr(process_session.Path, "read_text", read)
             attached = ProcessSessionStore(tmp_path).attach(session_id)
-        assert attached["state"] == "RUNNING", attached
+        assert attached["state"] == "RUNNING", (
+            f"Fresh attach returned {attached.get('state')}: {attached.get('error')}"
+        )
         assert len(failed) == misses
         assert attached["process_identity"] == started["process_identity"]
         assert attached["helper_identity"] == started["helper_identity"]
