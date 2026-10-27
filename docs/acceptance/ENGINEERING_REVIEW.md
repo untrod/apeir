@@ -4433,6 +4433,22 @@ real candidate EXE can qualify frozen command discovery. Merely registering a
 command does not qualify its tools, credentials, strong sandbox or physical
 execution. A fresh full-mode native build remains required.
 
+PR106 source `a71cec8` also exposed an existing RC contract requiring the original
+two compatibility imports to remain a separate declaration. Ubuntu3.10 Core
+run40499619349 retained that failure (5923 passed,82 skipped); the spec now extends
+that declaration with the discovered modules. The original assertion is unchanged.
+Full native run40498770619 on the superseded declaration was cancelled once this
+deterministic source failure was established; it is not a qualified build.
+
+The same Core run's Windows job122173719574 timed out in
+`test_selected_source_derived_review_reuses_live_admission_and_accounting`.
+The Gateway worker stack is in Governance `conn.commit()` while the main thread
+waits for that invocation. This establishes the observed phase, not a deadlock or
+root cause. The original log is retained and Issue88 remains open. No timeout,
+assertion, WAL, durable commit or permission check is relaxed. Targeted local
+Selected Input/Governance regression passes307 cases with12 platform skips; that
+Linux result cannot replace Windows qualification or establish a general repair.
+
 ## Developer intent and model-selection correction — 2026-10-27
 
 Against main `2f5aa58`,14 of25 new counterexamples fail: code mentioning

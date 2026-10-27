@@ -51,15 +51,14 @@ def _command_modules(source):
     return modules
 
 
-hiddenimports = [
-    "compat",
-    "compat.nki_client",
-    *_command_modules(
+hiddenimports = ["compat", "compat.nki_client"]
+hiddenimports.extend(
+    _command_modules(
         (Path(globals()["SPECPATH"]) / "nous_runtime/cli/main.py").read_text(
             encoding="utf-8"
         )
     ),
-]
+)
 datas = collect_data_files("nous_runtime")
 # jsonschema's non-GPL IRI checker loads this grammar at import time. Keep the
 # existing validator intact and include its data (and upstream license metadata)
