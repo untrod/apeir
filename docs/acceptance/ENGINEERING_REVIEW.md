@@ -4251,3 +4251,31 @@ context and an opt-in ProcessSession path in the existing diagnostic workflow
 preserve the actual refusal reason. This diagnostic cannot satisfy Core gate.
 Issue85 remains open. No Portable/NSIS or Windows10 installation PASS follows
 from these software tests.
+
+## Frozen Kernel test-environment separation — 2026-10-27
+
+Native run40416794872 admitted the approved component bytes and passed the
+Distribution/desktop regressions and Kernel Rust tests. The original frozen
+Kernel Python E2E then failed test15: four Evidence directory entries instead
+of two. The unchanged standalone fixture is a Python namespace package; a
+regular installed Distribution Wheel takes precedence over it, even behind the
+fixture in PYTHONPATH. The production CAS correctly creates objects, index,
+lock and receipt entries. Its directory shape is not the standalone fixture's
+two content-addressed files. Neither implementation should be changed to imitate
+the other.
+
+A controlled experiment with the actual downloaded main086 Wheel reproduced
+the four entries and production module origin. A clean stdlib-only interpreter
+selected the original frozen fixture and produced exactly two matching digest
+files. The editable-install control did not reproduce the collision and is
+retained separately; it is not a substitute for the regular-Wheel experiment.
+
+The official Windows builder now invokes the unchanged Kernel scripts/test.ps1
+inside a temporary stdlib-only Python environment. The wrapper excludes inherited
+Python paths/home/user packages, verifies the Distribution is absent, preserves
+the original script's exit status, and leaves its parent environment/directory
+unchanged. It installs no alternate Kernel or Artifact implementation and changes
+no frozen source, assertion, hash, timeout or production CAS. This is dependency
+separation for trusted build tests, not a security sandbox. Real Runtime/Kernel
+sidecar smoke still uses the ordinary Distribution build environment afterward.
+Current Windows wrapper and complete Native qualification remain required.

@@ -147,9 +147,11 @@ gated; default `native_target=none` never opts them in.
 gh workflow run desktop-build.yml --ref <approved-source-revision> -f native_target=windows-x64 -f approved_kernel_run_id=<reviewed-run-id> -f approved_kernel_artifact_id=<reviewed-artifact-id> -f approved_kernel_zip_sha256=<reviewed-zip-sha256>
 ```
 
-The current integration cannot read repository Actions variables (HTTP403);
-it has not enabled the binary switch or inferred its configured value. Native
-packaging and current Windows10 installation remain BLOCKED/PENDING, respectively.
+The integration still cannot read repository Actions variables (HTTP403).
+The maintainer configured the switch, and actual opt-in native runs now pass
+the variable gate and admit the approved component bytes. This observed execution
+does not imply direct settings access or installation acceptance. Current native
+packaging is blocked by qualification failures; Windows10 installation is PENDING.
 
 The actual Kernel import tables include `VCRUNTIME140.dll`. Build-host success
 does not prove that a clean Windows10 host has the VC++ runtime. The x64 builder
@@ -169,6 +171,13 @@ From the Runtime repository root:
 .\scripts\build-windows-x64-launcher.ps1
 ```
 
+Full mode runs the frozen Kernel's unchanged test script in a temporary
+stdlib-only Python environment. This prevents an installed Distribution Wheel
+from shadowing the Kernel's own namespace fixture. The parent build environment
+and production Artifact implementation stay unchanged; real Sidecar smoke later
+uses the actual Distribution. This dependency separation is not a workload
+security sandbox. See the [reproduced import collision](../../acceptance/ENGINEERING_REVIEW.md#frozen-kernel-test-environment-separation--2026-10-27).
+
 To reuse an already built and independently validated lean Runtime sidecar:
 
 ```powershell
@@ -181,7 +190,8 @@ For an already validated working tree:
 .\scripts\build-windows-x64-launcher.ps1 -SkipValidation
 ```
 
-Do not use `-SkipSidecarSmoke` for a deliverable build.
+`-SkipValidation` and `-SkipSidecarSmoke` are development shortcuts, not qualified
+delivery modes. A deliverable build must run full validation and real Sidecar smoke.
 
 ## Outputs
 

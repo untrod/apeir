@@ -103,7 +103,7 @@ jobs:
       - name: Exercise original process controls, startup and fail-closed recovery
         if: inputs.diagnostic == 'windows-process-session'
         timeout-minutes: 5
-        run: python -m pytest -q tests/tools/test_process_session.py tests/tools/test_process_session_ack.py tests/tools/test_process_session_startup.py tests/tools/test_process_session_reaping.py --tb=short --timeout=60 -rA
+        run: python -m pytest -q tests/tools/test_process_session.py tests/tools/test_process_session_ack.py tests/tools/test_process_session_startup.py tests/tools/test_process_session_reaping.py tests/repository/test_kernel_test_environment.py --tb=short --timeout=60 -rA
       - name: Exercise original owned HTTP and TLS paths
         if: inputs.diagnostic == 'windows-skill-http'
         env:

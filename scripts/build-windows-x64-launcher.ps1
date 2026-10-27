@@ -73,7 +73,12 @@ if (-not $SkipValidation) {
         Pop-Location
     }
 
-    & (Join-Path $kernel "scripts\test.ps1")
+    # The frozen standalone suite supplies its own Artifact namespace fixture.
+    # Keep the installed Distribution out of that interpreter, then use the
+    # ordinary build environment again for real Runtime/Kernel sidecar smoke.
+    $powerShellExecutable = (Get-Process -Id $PID).Path
+    & python (Join-Path $repo "scripts\ci\run_kernel_source_tests.py") `
+        --kernel-root $kernel --powershell $powerShellExecutable
     if ($LASTEXITCODE -ne 0) { throw "Kernel validation failed." }
 }
 
