@@ -11,7 +11,12 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from nous_runtime.conversation.models import Citation, Conversation, ConversationMessage, utc_now
+from nous_runtime.conversation.models import (
+    Citation,
+    Conversation,
+    ConversationMessage,
+    utc_now,
+)
 
 
 EXPORT_SCHEMA = "nous.conversation.export"
@@ -19,7 +24,13 @@ EXPORT_VERSION = "2.0"
 
 
 class ConversationStore:
-    def __init__(self, root: str | Path = ".", *, active_window: int = 100, context_budget_chars: int = 32_000):
+    def __init__(
+        self,
+        root: str | Path = ".",
+        *,
+        active_window: int = 100,
+        context_budget_chars: int = 32_000,
+    ):
         self.root = Path(root).resolve()
         self.path = self.root / ".nous" / "conversations.db"
         self.active_window = max(1, active_window)
@@ -38,6 +49,7 @@ class ConversationStore:
             raise
         finally:
             connection.close()
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=30)
         connection.row_factory = sqlite3.Row
@@ -84,18 +96,47 @@ class ConversationStore:
                 """
             )
 
-    def create(self, workspace_id: str, owner_id: str, *, title: str = "", conversation_id: str = "") -> Conversation:
-        conversation = Conversation(workspace_id=workspace_id, owner_id=owner_id, title=title, **({"conversation_id": conversation_id} if conversation_id else {}))
+    def create(
+        self,
+        workspace_id: str,
+        owner_id: str,
+        *,
+        title: str = "",
+        conversation_id: str = "",
+    ) -> Conversation:
+        conversation = Conversation(
+            workspace_id=workspace_id,
+            owner_id=owner_id,
+            title=title,
+            **({"conversation_id": conversation_id} if conversation_id else {}),
+        )
         if not workspace_id or not owner_id:
             raise ValueError("workspace_id and owner_id are required")
         with self._db() as connection:
             connection.execute(
                 "INSERT INTO conversations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (conversation.conversation_id, workspace_id, owner_id, title, conversation.created_at, conversation.updated_at, "", 0, ""),
+                (
+                    conversation.conversation_id,
+                    workspace_id,
+                    owner_id,
+                    title,
+                    conversation.created_at,
+                    conversation.updated_at,
+                    "",
+                    0,
+                    "",
+                ),
             )
         return conversation
 
-    def get(self, conversation_id: str, *, workspace_id: str = "", owner_id: str = "", include_deleted: bool = False) -> Conversation | None:
+    def get(
+        self,
+        conversation_id: str,
+        *,
+        workspace_id: str = "",
+        owner_id: str = "",
+        include_deleted: bool = False,
+    ) -> Conversation | None:
         clauses = ["conversation_id = ?"]
         values: list[Any] = [conversation_id]
         if workspace_id:
@@ -107,10 +148,19 @@ class ConversationStore:
         if not include_deleted:
             clauses.append("deleted_at = ''")
         with self._db() as connection:
-            row = connection.execute("SELECT * FROM conversations WHERE " + " AND ".join(clauses), values).fetchone()
+            row = connection.execute(
+                "SELECT * FROM conversations WHERE " + " AND ".join(clauses), values
+            ).fetchone()
         return self._conversation(row) if row else None
 
-    def list(self, *, workspace_id: str = "", owner_id: str = "", limit: int = 50, offset: int = 0) -> list[Conversation]:
+    def list(
+        self,
+        *,
+        workspace_id: str = "",
+        owner_id: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Conversation]:
         clauses = ["deleted_at = ''"]
         values: list[Any] = []
         if workspace_id:
@@ -122,7 +172,9 @@ class ConversationStore:
         values.extend([max(1, min(limit, 500)), max(0, offset)])
         with self._db() as connection:
             rows = connection.execute(
-                "SELECT * FROM conversations WHERE " + " AND ".join(clauses) + " ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                "SELECT * FROM conversations WHERE "
+                + " AND ".join(clauses)
+                + " ORDER BY updated_at DESC LIMIT ? OFFSET ?",
                 values,
             ).fetchall()
         return [self._conversation(row) for row in rows]
@@ -131,10 +183,13 @@ class ConversationStore:
         with self._db() as connection:
             connection.execute("BEGIN IMMEDIATE")
             conversation = connection.execute(
-                "SELECT deleted_at FROM conversations WHERE conversation_id = ?", (message.conversation_id,)
+                "SELECT deleted_at FROM conversations WHERE conversation_id = ?",
+                (message.conversation_id,),
             ).fetchone()
             if conversation is None or conversation["deleted_at"]:
-                raise KeyError(f"conversation is unavailable: {message.conversation_id}")
+                raise KeyError(
+                    f"conversation is unavailable: {message.conversation_id}"
+                )
             if message.event_id:
                 existing = connection.execute(
                     "SELECT * FROM messages WHERE conversation_id = ? AND event_id = ?",
@@ -148,26 +203,52 @@ class ConversationStore:
                     run_id, task_id, attachment_ids_json, citations_json, metadata_json
                 ) VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)""",
                 (
-                    message.message_id, message.conversation_id, message.role, message.content,
-                    message.created_at, message.event_id, message.run_id, message.task_id,
+                    message.message_id,
+                    message.conversation_id,
+                    message.role,
+                    message.content,
+                    message.created_at,
+                    message.event_id,
+                    message.run_id,
+                    message.task_id,
                     json.dumps(message.attachment_ids),
-                    json.dumps([item.to_dict() for item in message.citations], ensure_ascii=False),
+                    json.dumps(
+                        [item.to_dict() for item in message.citations],
+                        ensure_ascii=False,
+                    ),
                     json.dumps(message.metadata, ensure_ascii=False),
                 ),
             )
             now = utc_now()
-            connection.execute("UPDATE conversations SET updated_at = ? WHERE conversation_id = ?", (now, message.conversation_id))
-            count = int(connection.execute("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", (message.conversation_id,)).fetchone()[0])
+            connection.execute(
+                "UPDATE conversations SET updated_at = ? WHERE conversation_id = ?",
+                (now, message.conversation_id),
+            )
+            count = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM messages WHERE conversation_id = ?",
+                    (message.conversation_id,),
+                ).fetchone()[0]
+            )
             archived = max(0, count - self.active_window)
             if archived:
-                summary = self._summarize_locked(connection, message.conversation_id, archived)
+                summary = self._summarize_locked(
+                    connection, message.conversation_id, archived
+                )
                 connection.execute(
                     "UPDATE conversations SET summary = ?, archived_count = ? WHERE conversation_id = ?",
                     (summary, archived, message.conversation_id),
                 )
         return message
 
-    def history(self, conversation_id: str, *, limit: int = 50, offset: int = 0, newest_first: bool = False) -> list[ConversationMessage]:
+    def history(
+        self,
+        conversation_id: str,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        newest_first: bool = False,
+    ) -> list[ConversationMessage]:
         direction = "DESC" if newest_first else "ASC"
         with self._db() as connection:
             rows = connection.execute(
@@ -206,7 +287,13 @@ class ConversationStore:
         conversation = self.get(conversation_id)
         if conversation is None:
             raise KeyError(conversation_id)
-        messages = list(reversed(self.history(conversation_id, limit=self.active_window, newest_first=True)))
+        messages = list(
+            reversed(
+                self.history(
+                    conversation_id, limit=self.active_window, newest_first=True
+                )
+            )
+        )
         selected: list[ConversationMessage] = []
         used = len(conversation.summary)
         for message in reversed(messages):
@@ -215,7 +302,12 @@ class ConversationStore:
             selected.append(message)
             used += len(message.content)
         selected.reverse()
-        return {"summary": conversation.summary, "messages": [item.to_dict() for item in selected], "used_chars": used, "budget_chars": self.context_budget_chars}
+        return {
+            "summary": conversation.summary,
+            "messages": [item.to_dict() for item in selected],
+            "used_chars": used,
+            "budget_chars": self.context_budget_chars,
+        }
 
     def iter_messages(
         self,
@@ -246,7 +338,9 @@ class ConversationStore:
                 cursor = int(row["sequence"])
                 yield self._message(row)
 
-    def iter_export(self, conversation_id: str, *, page_size: int = 500, cancel: Any = None) -> Iterator[dict[str, Any]]:
+    def iter_export(
+        self, conversation_id: str, *, page_size: int = 500, cancel: Any = None
+    ) -> Iterator[dict[str, Any]]:
         """Yield a versioned export envelope, messages, and integrity summary."""
         conversation = self.get(conversation_id, include_deleted=True)
         if conversation is None:
@@ -258,15 +352,25 @@ class ConversationStore:
             "version": EXPORT_VERSION,
             "generated_at": utc_now(),
             "conversation": conversation.to_dict(),
-            "snapshot": {"message_count": expected_count, "last_sequence": last_sequence},
+            "snapshot": {
+                "message_count": expected_count,
+                "last_sequence": last_sequence,
+            },
         }
         digest = hashlib.sha256()
         exported_count = 0
         first_message_id = ""
         last_message_id = ""
-        for message in self.iter_messages(conversation_id, page_size=page_size, last_sequence=last_sequence, cancel=cancel):
+        for message in self.iter_messages(
+            conversation_id,
+            page_size=page_size,
+            last_sequence=last_sequence,
+            cancel=cancel,
+        ):
             payload = message.to_dict()
-            canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            canonical = json.dumps(
+                payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
             digest.update(canonical)
             digest.update(b"\n")
             exported_count += 1
@@ -285,12 +389,23 @@ class ConversationStore:
             "cancelled": cancelled,
         }
 
-    def stream_export(self, conversation_id: str, *, page_size: int = 500, cancel: Any = None) -> Iterator[str]:
+    def stream_export(
+        self, conversation_id: str, *, page_size: int = 500, cancel: Any = None
+    ) -> Iterator[str]:
         """Stream a bounded-memory JSON Lines export."""
-        for record in self.iter_export(conversation_id, page_size=page_size, cancel=cancel):
-            yield json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+        for record in self.iter_export(
+            conversation_id, page_size=page_size, cancel=cancel
+        ):
+            yield (
+                json.dumps(
+                    record, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                )
+                + "\n"
+            )
 
-    def export(self, conversation_id: str, *, page_size: int = 500, cancel: Any = None) -> dict[str, Any]:
+    def export(
+        self, conversation_id: str, *, page_size: int = 500, cancel: Any = None
+    ) -> dict[str, Any]:
         """Compatibility dictionary export without silent message truncation.
 
         Large callers should use ``stream_export`` to keep memory bounded.
@@ -298,7 +413,9 @@ class ConversationStore:
         metadata: dict[str, Any] | None = None
         summary: dict[str, Any] | None = None
         messages: list[dict[str, Any]] = []
-        for record in self.iter_export(conversation_id, page_size=page_size, cancel=cancel):
+        for record in self.iter_export(
+            conversation_id, page_size=page_size, cancel=cancel
+        ):
             record_type = record["type"]
             if record_type == "metadata":
                 metadata = record
@@ -307,13 +424,21 @@ class ConversationStore:
             else:
                 summary = record
         if metadata is None or summary is None:
-            raise RuntimeError("conversation export did not produce a complete envelope")
+            raise RuntimeError(
+                "conversation export did not produce a complete envelope"
+            )
         return {
             "schema_version": EXPORT_VERSION,
-            "export": {key: value for key, value in metadata.items() if key not in {"type", "conversation"}},
+            "export": {
+                key: value
+                for key, value in metadata.items()
+                if key not in {"type", "conversation"}
+            },
             "conversation": metadata["conversation"],
             "messages": messages,
-            "integrity": {key: value for key, value in summary.items() if key != "type"},
+            "integrity": {
+                key: value for key, value in summary.items() if key != "type"
+            },
         }
 
     def _export_bounds(self, conversation_id: str) -> tuple[int, int]:
@@ -329,28 +454,88 @@ class ConversationStore:
         if cancel is None:
             return False
         is_set = getattr(cancel, "is_set", None)
-        return bool(is_set()) if callable(is_set) else bool(cancel()) if callable(cancel) else bool(cancel)
+        return (
+            bool(is_set())
+            if callable(is_set)
+            else bool(cancel())
+            if callable(cancel)
+            else bool(cancel)
+        )
 
-    def import_data(self, data: dict[str, Any], *, workspace_id: str, owner_id: str) -> Conversation:
+    def import_data(
+        self, data: dict[str, Any], *, workspace_id: str, owner_id: str
+    ) -> Conversation:
         source = dict(data.get("conversation") or {})
-        conversation = self.create(workspace_id, owner_id, title=str(source.get("title") or ""))
+        conversation = self.create(
+            workspace_id, owner_id, title=str(source.get("title") or "")
+        )
         for item in data.get("messages") or []:
-            citations = tuple(Citation(**entry) for entry in item.get("citations") or [])
-            self.append(ConversationMessage(conversation.conversation_id, str(item["role"]), str(item["content"]), event_id=str(item.get("event_id") or ""), run_id=str(item.get("run_id") or ""), task_id=str(item.get("task_id") or ""), attachment_ids=tuple(item.get("attachment_ids") or ()), citations=citations, metadata=dict(item.get("metadata") or {})))
+            citations = tuple(
+                Citation(**entry) for entry in item.get("citations") or []
+            )
+            self.append(
+                ConversationMessage(
+                    conversation.conversation_id,
+                    str(item["role"]),
+                    str(item["content"]),
+                    event_id=str(item.get("event_id") or ""),
+                    run_id=str(item.get("run_id") or ""),
+                    task_id=str(item.get("task_id") or ""),
+                    attachment_ids=tuple(item.get("attachment_ids") or ()),
+                    citations=citations,
+                    metadata=dict(item.get("metadata") or {}),
+                )
+            )
         return conversation
 
     def delete(self, conversation_id: str, *, hard: bool = False) -> bool:
         with self._db() as connection:
             if hard:
-                cursor = connection.execute("DELETE FROM conversations WHERE conversation_id = ?", (conversation_id,))
+                cursor = connection.execute(
+                    "DELETE FROM conversations WHERE conversation_id = ?",
+                    (conversation_id,),
+                )
             else:
-                cursor = connection.execute("UPDATE conversations SET deleted_at = ? WHERE conversation_id = ? AND deleted_at = ''", (utc_now(), conversation_id))
+                cursor = connection.execute(
+                    "UPDATE conversations SET deleted_at = ? WHERE conversation_id = ? AND deleted_at = ''",
+                    (utc_now(), conversation_id),
+                )
         return cursor.rowcount == 1
 
-    def _summarize_locked(self, connection: sqlite3.Connection, conversation_id: str, archived: int) -> str:
-        rows = connection.execute("SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY sequence ASC LIMIT ?", (conversation_id, archived)).fetchall()
-        text = "\n".join(f"{row['role']}: {row['content']}" for row in rows)
-        return text[-8_000:]
+    def _summarize_locked(
+        self, connection: sqlite3.Connection, conversation_id: str, archived: int
+    ) -> str:
+        if archived <= 0:
+            return ""
+        # Find the archive boundary using the covering sequence index, then
+        # materialize only enough newest archived text for the existing excerpt.
+        # Keep the exact original suffix; this is not a semantic summary.
+        boundary = connection.execute(
+            "SELECT sequence FROM messages WHERE conversation_id = ? "
+            "ORDER BY sequence ASC LIMIT 1 OFFSET ?",
+            (conversation_id, archived - 1),
+        ).fetchone()
+        if boundary is None:
+            return ""
+        cursor = connection.execute(
+            "SELECT role, content "
+            "FROM messages WHERE conversation_id = ? AND sequence <= ? "
+            "ORDER BY sequence DESC",
+            (conversation_id, boundary["sequence"]),
+        )
+        parts: list[str] = []
+        characters = 0
+        try:
+            for row in cursor:
+                # Slice in Python: SQLite text substr stops at embedded NULs.
+                excerpt = f"{row['role']}: {row['content']}"[-8_000:]
+                characters += len(excerpt) + bool(parts)
+                parts.append(excerpt)
+                if characters >= 8_000:
+                    break
+        finally:
+            cursor.close()
+        return "\n".join(reversed(parts))[-8_000:]
 
     @staticmethod
     def _conversation(row: sqlite3.Row) -> Conversation:
@@ -359,10 +544,17 @@ class ConversationStore:
     @staticmethod
     def _message(row: sqlite3.Row) -> ConversationMessage:
         return ConversationMessage(
-            conversation_id=row["conversation_id"], role=row["role"], content=row["content"],
-            message_id=row["message_id"], created_at=row["created_at"], event_id=row["event_id"] or "",
-            run_id=row["run_id"], task_id=row["task_id"],
+            conversation_id=row["conversation_id"],
+            role=row["role"],
+            content=row["content"],
+            message_id=row["message_id"],
+            created_at=row["created_at"],
+            event_id=row["event_id"] or "",
+            run_id=row["run_id"],
+            task_id=row["task_id"],
             attachment_ids=tuple(json.loads(row["attachment_ids_json"])),
-            citations=tuple(Citation(**item) for item in json.loads(row["citations_json"])),
+            citations=tuple(
+                Citation(**item) for item in json.loads(row["citations_json"])
+            ),
             metadata=dict(json.loads(row["metadata_json"])),
         )

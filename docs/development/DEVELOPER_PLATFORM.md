@@ -546,6 +546,15 @@ and security suites still run through the normal CI matrix.
 
 ## Reviewing workspace changes
 
+Select a model to keep that exact model for Chat and any requested collaboration;
+an unavailable selection reports an error instead of silently choosing another.
+Leave selection automatic to use the existing Router. Ordinary code changes and
+their tests use a single development path. Ask explicitly for parallel agents
+when useful, or say **single agent** / **单模型** to keep one path. Collaboration
+may also be selected for requests with at least three distinct deliverable types.
+These choices do not grant tools, approve changes or verify results. Mentioning
+approval or rejection in a code question opens analysis, not an approval command.
+
 Open **Operations → Workspace**, edit saved files, and choose **Review draft
 files**. The review uses the existing Workflow, Governance/Broker, Artifact CAS,
 Workbench and deterministic verifier. Inspect exact paths, original/replacement
