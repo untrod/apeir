@@ -43,6 +43,16 @@ def test_approval_explanation_is_a_conversation(text):
     assert classify_chat(text) is ChatIntent.CONVERSATION
 
 
+@pytest.mark.parametrize("text", ["Write a poem.", "Create a birthday greeting."])
+def test_general_creative_requests_do_not_become_engineering_tasks(text):
+    assert classify_chat(text) is ChatIntent.CONVERSATION
+
+
+@pytest.mark.parametrize("text", ["Fix my phone device.", "请修复手机设备。"])
+def test_device_request_without_code_does_not_become_a_code_task(text):
+    assert classify_chat(text) is ChatIntent.DEVICE_ACTION
+
+
 @pytest.mark.parametrize(
     "text",
     [

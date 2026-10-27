@@ -26,9 +26,10 @@ _WORKFLOW_COMMAND = re.compile(
     r"|(?:创建|运行|启动|编辑|保存)(?:一个|这个|已有的)?工作流)"
 )
 _ENGINEERING = re.compile(
-    r"\b(?:code|repository|patch|fix|implement|refactor|debug|build|test|write|create)\b"
-    r"|代码|仓库|修复|修改|创建|实现|重构|调试|编译|测试|函数|脚本"
+    r"\b(?:code|repository|patch|refactor|debug|build|test|python|javascript|typescript|function|script|compiler)\b"
+    r"|代码|仓库|重构|调试|编译|测试|函数|脚本"
 )
+_ENGINEERING_ACTION = re.compile(r"\b(?:fix|implement)\b|修复|修改|创建|实现")
 
 
 def classify_chat(text: str) -> ChatIntent:
@@ -48,6 +49,8 @@ def classify_chat(text: str) -> ChatIntent:
         for token in ("device", "phone", "watch", "设备", "手机", "手表", "电脑")
     ):
         return ChatIntent.DEVICE_ACTION
+    if _ENGINEERING_ACTION.search(value):
+        return ChatIntent.CODE_TASK
     if any(
         token in value
         for token in ("knowledge", "document", "library", "知识", "文档", "资料库")
