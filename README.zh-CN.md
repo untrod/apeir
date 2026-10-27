@@ -49,10 +49,10 @@ APEIR Studio 是 APEIR Runtime 的桌面工作空间。用户可以组合项目�
 它明确区分 **Source Preview**、**Developer Setup** 和 **Native Installation**。
 源码检查和模拟 Demo 不需要 API Key 或硬件。可下载的源码包不是 Windows 安装程序。
 
-**Windows 下载：**[未签名测试包](https://github.com/untrod/apeir/actions/runs/40432789046/artifacts/12703824974)
-已包含 Portable ZIP、NSIS 安装程序、校验文件及原生验证报告。
-完整构建和真实 Sidecar 联动已在 Windows Server 2025 通过；Windows 10 安装、
-原生窗口、升级卸载及签名尚未验收。下载需要登录 GitHub，工件于 2026-11-10 到期。
+**Windows 下载：**打开[内部 Windows x64 构建](https://github.com/untrod/apeir/actions/runs/40498770619)，
+待完整任务成功后，在 **Artifacts** 下载 **windows-x64-native-development-build**。
+其中包含 Portable ZIP、NSIS 安装程序、校验文件及验证报告。Windows 10 安装、
+原生窗口、升级卸载及签名尚未验收。需登录 GitHub，工件保留 14 天。
 请按[下载与校验步骤](docs/operations/getting-started/QUICK_START.md#native-installation)使用。
 这是内部测试构建，尚非签名或正式发布的产品。
 
