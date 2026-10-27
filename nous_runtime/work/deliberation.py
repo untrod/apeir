@@ -217,7 +217,7 @@ class ModelWorkDeliberator:
                 "work_run_id": context.run_id,
                 "temperature": 0.1,
                 "work_phase": phase,
-                "tool_choice": "required" if native_tools else "auto",
+                "tool_choice": "auto",
             },
         )
         response = self.facade.try_invoke_sync(request)
@@ -236,6 +236,10 @@ class ModelWorkDeliberator:
                 phase=phase,
                 allowed_tools=native_tools,
             )
+        if native_tools:
+            # The frozen Worker supports automatic selection only. Enforce the
+            # required action at the original Work boundary, never through prose.
+            raise RuntimeError("work phase requires exactly one native tool call")
         value = response.structured_output
         if not isinstance(value, Mapping):
             if response.finish_reason == "length":

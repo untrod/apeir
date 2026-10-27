@@ -4897,3 +4897,11 @@ proxy routing and private diagnostic suppression. The model/context regression
 passes 858 cases with 5 platform skips; the eight onboarding cases pass.
 These are software contracts with fake references, not paid model calls.
 Kernel source, approved component bytes and the component lock are unchanged.
+
+The internal Chat and Work callers also used to request `required` tool choice.
+They now explicitly request the supported automatic selection. Chat retains its
+existing bounded prose-refusal, original approval and actual file-result checks;
+Work rejects a missing native action in ACT/VERIFY rather than accepting a model's
+completion claim. Additional negatives cover both a claimed file change and
+claimed tests without a tool call. This changes transport controls, not the
+requirement for governed execution evidence.
