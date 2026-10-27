@@ -126,6 +126,13 @@ jobs:
           try {
               & $sidecar --no-intelligence status
               if ($LASTEXITCODE -ne 0) { throw 'Actual model-free Runtime status failed.' }
+              # Reuse the full Native probe to expose missing frozen commands
+              # before an installer build. This remains diagnostic-only.
+              $probe = Join-Path $env:GITHUB_WORKSPACE 'scripts/ci/probe_native_workflow.py'
+              $report = Join-Path $workspace 'workflow-cli-diagnostic.json'
+              & python -I $probe --sidecar $sidecar --workspace $workspace --report $report
+              if ($LASTEXITCODE -ne 0) { throw 'Actual packaged Workflow diagnostic failed.' }
+              Get-Content -LiteralPath $report
           } finally {
               Pop-Location
               Remove-Item -LiteralPath $workspace -Recurse -Force
