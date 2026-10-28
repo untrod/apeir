@@ -512,9 +512,15 @@ class NodeRelayServer:
         if self.state_dir is None:
             return
         path = self.state_dir / "workload-state.json"
-        if not path.exists():
+        try:
+            present = path.exists()
+        except OSError:
+            # An inaccessible metadata probe does not establish missing state.
+            # Require the actual strict read and its original error instead.
+            present = True
+        if not present:
             return
-        value = _read_json(path)
+        value = _read_json(path, strict=True)
         if value.get("schema") != "nous.relay-workloads/v1":
             raise NodeProtocolError("relay workload state is invalid")
         pending = value.get("pending")
@@ -2630,14 +2636,37 @@ async def _run_relay_io(
     return result
 
 
-def _read_json(path: Path) -> dict[str, Any]:
-    if not path.is_file():
+def _read_json(path: Path, *, strict: bool = False) -> dict[str, Any]:
+    if not strict and not path.is_file():
         return {}
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return value if isinstance(value, dict) else {}
+    for attempt in range(6):
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except OSError as exc:
+            # A bounded reread cannot replay an effect. Only Windows sharing or
+            # lock conflicts qualify; denial, missing state and corruption do not.
+            if strict and getattr(exc, "winerror", None) in {32, 33} and attempt < 5:
+                time.sleep(0.01 * (attempt + 1))
+                continue
+            if strict:
+                codes = {
+                    name: code if type(code) is int else None
+                    for name in ("errno", "winerror")
+                    for code in (getattr(exc, name, None),)
+                }
+                raise NodeProtocolError(
+                    "relay persisted state read failed "
+                    f"(errno={codes['errno']}, winerror={codes['winerror']})"
+                ) from exc
+            return {}
+        except (json.JSONDecodeError, UnicodeError) as exc:
+            if strict:
+                raise NodeProtocolError("relay persisted state decode failed") from exc
+            if isinstance(exc, UnicodeError):
+                raise
+            return {}
+        return value if isinstance(value, dict) else {}
+    raise AssertionError("unreachable relay state read")
 
 
 def _utc_now() -> str:

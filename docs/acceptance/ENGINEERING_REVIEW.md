@@ -4959,3 +4959,32 @@ Work rejects a missing native action in ACT/VERIFY rather than accepting a model
 completion claim. Additional negatives cover both a claimed file change and
 claimed tests without a tool call. This changes transport controls, not the
 requirement for governed execution evidence.
+
+## Relay workload snapshot admission — 2026-10-28
+
+PR110 head `1dbbbd5` passed Core, Desktop and Security but failed Multi-Arch
+`40560647990`, Windows job `122388412659`: 1 failed, 5576 passed, 77 skipped,
+335 deselected, 4 warnings in 2409.54s. The original Automation read-loss recovery
+case failed loading `workload-state.json`. Its helper swallowed the underlying
+read/decode exception into an empty mapping, so the log cannot establish a
+sharing violation, corrupt JSON or a particular storage cause. The raw failure
+is retained; no test, deadline or success condition is changed.
+
+The existing reader now admits a workload snapshot strictly. Windows sharing/
+lock errors 32/33 receive at most six reads, with at most 150ms total backoff.
+Other I/O errors and damaged JSON fail closed immediately, with a chained cause
+and content-free OS codes. This only reads the existing journal; it does not
+resubmit an operation, rewrite the snapshot or relax signatures/schema checks.
+Other reader defaults and invalid sequence-encoding refusal remain compatible.
+
+Four injected pre-fix cases failed. The focused suite now passes 41 cases with
+one Windows-only skip on Linux, including original signed-result preservation,
+bounded persistent-failure refusal and corrupt-byte preservation. A separate
+Windows case uses a real exclusive CreateFileW handle and releases it at the
+first bounded read backoff; its actual Windows result is still pending CI.
+Fixing this demonstrated read-conflict case does not establish the lost
+underlying error in the historical failure or close all Windows timing issues.
+
+The Node/Automation regression passes 399 cases; the Work/MCP HTTP regression
+passes 46. Kernel, component lock, approval boundaries and effect verification
+remain unchanged. The final candidate still requires its own cross-platform CI.

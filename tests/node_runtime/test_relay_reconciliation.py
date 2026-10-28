@@ -7,6 +7,7 @@ from copy import deepcopy
 import json
 import logging
 import socket
+import sys
 from pathlib import Path
 
 import pytest
@@ -798,3 +799,169 @@ def test_reconciliation_preserves_uncertain_original_execution(tmp_path):
     assert result["request_digest"] == recorded["request_digest"]
     assert service._workloads[workload_id] == recorded
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("winerror", [32, 33])
+@pytest.mark.parametrize("probe_conflict", [False, True])
+def test_original_signed_result_survives_transient_windows_read_conflict(
+    tmp_path, monkeypatch, winerror, probe_conflict
+):
+    async def scenario():
+        server, node, first, _, _ = await _record_verified_result(tmp_path, monkeypatch)
+        path = server.state_dir / "workload-state.json"
+        original_bytes = path.read_bytes()
+        read_text = Path.read_text
+        reads = []
+
+        def temporarily_locked(target, *args, **kwargs):
+            if target == path:
+                reads.append(target)
+                if len(reads) <= 2:
+                    error = PermissionError(13, "private-unpublished-diagnostic")
+                    error.winerror = winerror
+                    raise error
+            return read_text(target, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", temporarily_locked)
+        if probe_conflict:
+            exists = Path.exists
+
+            def inaccessible_probe(target):
+                if target == path:
+                    error = PermissionError(13, "private-unpublished-diagnostic")
+                    error.winerror = winerror
+                    raise error
+                return exists(target)
+
+            monkeypatch.setattr(Path, "exists", inaccessible_probe)
+        monkeypatch.setattr(
+            node, "execute_workload", lambda *_a, **_k: pytest.fail("replayed effect")
+        )
+        reopened = NodeRelayServer(
+            state_dir=server.state_dir, artifact_store=server.artifact_store
+        )
+        assert len(reads) == 3
+        assert reopened.results[first.idempotency_key] == first.payload
+        assert reopened.result_envelopes[first.idempotency_key] == first.to_dict()
+        assert (
+            reopened.reconcile_work(first.idempotency_key)["work"]["state"]
+            == "VERIFIED"
+        )
+        assert path.read_bytes() == original_bytes
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("winerror,expected_reads", [(5, 1), (32, 6)])
+def test_unavailable_original_relay_state_retains_read_cause_and_fails_closed(
+    tmp_path, monkeypatch, winerror, expected_reads
+):
+    server = NodeRelayServer(state_dir=tmp_path)
+    server._save_workload_state()
+    path = tmp_path / "workload-state.json"
+    original_bytes = path.read_bytes()
+    read_text = Path.read_text
+    reads = []
+    error = PermissionError(13, "private-unpublished-diagnostic")
+    error.winerror = winerror
+
+    def unavailable(target, *args, **kwargs):
+        if target == path:
+            reads.append(target)
+            raise error
+        return read_text(target, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", unavailable)
+    with pytest.raises(NodeProtocolError, match="read failed") as caught:
+        NodeRelayServer(state_dir=tmp_path)
+    assert caught.value.__cause__ is error
+    assert len(reads) == expected_reads
+    assert f"winerror={winerror}" in str(caught.value)
+    assert "private-unpublished-diagnostic" not in str(caught.value)
+    assert path.read_bytes() == original_bytes
+
+
+@pytest.mark.parametrize("content", [b"{", b"[]", b"\xff"])
+def test_corrupt_relay_snapshot_is_not_retried_or_replaced(
+    tmp_path, monkeypatch, content
+):
+    server = NodeRelayServer(state_dir=tmp_path)
+    server._save_workload_state()
+    path = tmp_path / "workload-state.json"
+    path.write_bytes(content)
+    read_text = Path.read_text
+    reads = []
+
+    def counted(target, *args, **kwargs):
+        if target == path:
+            reads.append(target)
+        return read_text(target, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", counted)
+    with pytest.raises(NodeProtocolError):
+        NodeRelayServer(state_dir=tmp_path)
+    assert len(reads) == 1
+    assert path.read_bytes() == content
+
+
+def test_invalid_sequence_encoding_still_blocks_relay_restart(tmp_path):
+    NodeRelayServer(state_dir=tmp_path)
+    path = tmp_path / "relay-sequence.json"
+    path.write_bytes(b"\xff")
+    with pytest.raises(UnicodeError):
+        NodeRelayServer(state_dir=tmp_path)
+    assert path.read_bytes() == b"\xff"
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32", reason="requires an actual Windows file handle"
+)
+def test_original_signed_result_recovers_from_native_windows_sharing_lock(
+    tmp_path, monkeypatch
+):
+    import ctypes
+    from ctypes import wintypes
+
+    import nous_runtime.node_runtime.relay as relay
+
+    server, _, first, _, _ = asyncio.run(_record_verified_result(tmp_path, monkeypatch))
+    path = server.state_dir / "workload-state.json"
+    original_bytes = path.read_bytes()
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create = kernel32.CreateFileW
+    create.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create.restype = wintypes.HANDLE
+    close = kernel32.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+    handle = create(str(path), 0x80000000, 0, None, 3, 0x80, None)
+    assert handle != ctypes.c_void_p(-1).value, ctypes.WinError(ctypes.get_last_error())
+    pauses = []
+    sleep = relay.time.sleep
+
+    def release_original_read_lock(seconds):
+        nonlocal handle
+        assert handle is not None
+        assert close(handle)
+        handle = None
+        pauses.append(seconds)
+        sleep(seconds)
+
+    monkeypatch.setattr(relay.time, "sleep", release_original_read_lock)
+    try:
+        reopened = NodeRelayServer(state_dir=server.state_dir)
+        assert pauses == [0.01]
+        assert reopened.results[first.idempotency_key] == first.payload
+        assert reopened.result_envelopes[first.idempotency_key] == first.to_dict()
+        assert path.read_bytes() == original_bytes
+    finally:
+        if handle is not None:
+            assert close(handle)
