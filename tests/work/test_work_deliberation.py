@@ -175,7 +175,10 @@ def test_model_input_character_bound_is_inclusive_without_partial_dispatch(
     assert len(facade.requests) == 2
 
 
-def test_model_deliberator_maps_native_patch_call_to_action_envelope(tmp_path):
+@pytest.mark.parametrize("missing_tool", [False, True])
+def test_model_deliberator_maps_native_patch_call_to_action_envelope(
+    tmp_path, missing_tool
+):
     harness = WorkHarness(tmp_path)
     snapshot = harness.create("Fix the code in this repository")
     snapshot.loaded_tools["patch_file"] = {
@@ -228,6 +231,18 @@ def test_model_deliberator_maps_native_patch_call_to_action_envelope(tmp_path):
         ),
     )
 
+    if missing_tool:
+        facade.tool_calls = ()
+        facade.decision = {
+            "status": "complete",
+            "summary": "Claimed done without a tool",
+            "confidence": "high",
+        }
+        with pytest.raises(RuntimeError, match="requires exactly one native tool call"):
+            ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+        assert len(facade.requests) == 1
+        assert not (tmp_path / "src/example.py").exists()
+        return
     decision = ModelWorkDeliberator(facade)(harness.context_for(snapshot))
 
     assert decision.phase == "ACT"
@@ -237,7 +252,7 @@ def test_model_deliberator_maps_native_patch_call_to_action_envelope(tmp_path):
     assert decision.step_id == "execute_1"
     request = facade.requests[0]
     assert request.metadata["work_phase"] == "ACT"
-    assert request.metadata["tool_choice"] == "required"
+    assert request.metadata["tool_choice"] == "auto"
     assert [item["function"]["name"] for item in request.tools] == ["patch_file"]
     payload = json.loads(request.messages[1]["content"])
     assert payload["execution_progress"] == {
@@ -251,7 +266,10 @@ def test_model_deliberator_maps_native_patch_call_to_action_envelope(tmp_path):
     }
 
 
-def test_model_deliberator_requires_shell_start_after_workspace_change(tmp_path):
+@pytest.mark.parametrize("missing_tool", [False, True])
+def test_model_deliberator_requires_shell_start_after_workspace_change(
+    tmp_path, missing_tool
+):
     harness = WorkHarness(tmp_path)
     snapshot = harness.create("Fix the code in this repository")
     snapshot.loaded_tools["shell_start"] = {
@@ -302,11 +320,23 @@ def test_model_deliberator_requires_shell_start_after_workspace_change(tmp_path)
         ),
     )
 
+    if missing_tool:
+        facade.tool_calls = ()
+        facade.decision = {
+            "status": "complete",
+            "summary": "Claimed tests passed without execution",
+            "confidence": "high",
+        }
+        with pytest.raises(RuntimeError, match="requires exactly one native tool call"):
+            ModelWorkDeliberator(facade)(harness.context_for(snapshot))
+        assert len(facade.requests) == 1
+        assert all(row.get("tool") != "shell_start" for row in snapshot.observations)
+        return
     decision = ModelWorkDeliberator(facade)(harness.context_for(snapshot))
 
     assert decision.phase == "VERIFY"
     assert decision.tool_name == "shell_start"
-    assert facade.requests[0].metadata["tool_choice"] == "required"
+    assert facade.requests[0].metadata["tool_choice"] == "auto"
 
 
 def test_model_deliberator_does_not_advance_after_noop_patch(tmp_path):

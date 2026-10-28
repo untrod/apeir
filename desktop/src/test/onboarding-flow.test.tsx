@@ -59,7 +59,8 @@ describe("first-use setup uses Runtime records", () => {
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));
     fireEvent.click(await screen.findByRole("button", { name: /^Ollama/ }));
     expect(screen.getByRole("button", { name: /^Google Gemini/ })).toBeDisabled();
-    expect(screen.getByText(/Native protocol unavailable/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Anthropic/ })).toBeDisabled();
+    expect(screen.getAllByText(/Native protocol unavailable/)).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));
     await waitFor(() => expect(document.querySelector('#models-chat option[value="org/vendor-model"]')).not.toBeNull());

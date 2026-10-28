@@ -438,7 +438,9 @@ class GatewayChatHandler:
                     "workspace_path": workspace_path,
                     "agent_mode": agent_mode,
                     "tool_protocol": "nous.workspace.v1" if tools else "",
-                    "tool_choice": "required" if tool_required else "auto",
+                    # Required effects are checked against actual tool results
+                    # below; the frozen NKI Worker cannot force tool selection.
+                    "tool_choice": "auto",
                     "workload_profile": dict(constraints.get("workload_profile") or {}),
                 },
             )

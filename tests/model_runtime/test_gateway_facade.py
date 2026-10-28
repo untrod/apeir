@@ -682,6 +682,7 @@ def test_chat_handler_retries_prose_when_governed_effect_is_required(tmp_path) -
     assert result["agent_steps"][0]["tool"] == "write_file"
     assert len(facade.requests) == 2
     assert len(facade.responses) == 1
+    assert all(request.metadata["tool_choice"] == "auto" for request in facade.requests)
     assert (
         "rejected the prose-only response" in facade.requests[1].messages[-1]["content"]
     )

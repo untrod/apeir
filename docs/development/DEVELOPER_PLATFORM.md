@@ -179,7 +179,7 @@ record before retrying. Other running processes are not silently synchronized.
 | Configuration | Existing adapter path | What still needs verification |
 | --- | --- | --- |
 | OpenAI / compatible APIs, including compatible DeepSeek endpoints | Existing OpenAI-compatible client | Actual endpoint, model ID, authentication, parameters and supported calls |
-| Anthropic / Claude | Existing Anthropic messages adapter; the UI `anthropic` identity maps to it | Live account and selected model capabilities |
+| Anthropic Messages | Python adapter exists, but the frozen NKI Worker has no Messages backend; production calls are BLOCKED and the wizard disables this protocol | A governed protocol bridge and its qualification; adding a key alone will not enable it |
 | Ollama / llama.cpp / vLLM server | Existing server adapters, including OpenAI-compatible endpoints | Running service, hardware, exact API and model capabilities |
 | Native Gemini protocol | Not implemented in this configuration | Use only a genuinely compatible endpoint or keep unavailable |
 
@@ -187,6 +187,13 @@ These are adapter paths, **not an all-model compatibility list**. The presence o
 an imported model file or a catalog entry does not start a local inference server.
 Tool calling, vision, streaming, reasoning options and limits require actual
 support; a model name cannot establish it.
+
+The selected adapter's protocol takes precedence over its display name or port.
+A genuine OpenAI-compatible proxy can serve Claude models; renaming an Anthropic
+Messages endpoint cannot make it compatible. The locked Worker accepts automatic
+tool selection; explicit `none`, `required` or a named `tool_choice` is rejected
+before dispatch because that Worker cannot honor it. Existing reasoning and
+structured-output parameters still depend on the selected endpoint's support.
 
 | Result | Meaning |
 | --- | --- |
@@ -205,8 +212,9 @@ Native local credentials use **Settings → Credentials** and the existing syste
 store; configuration keeps reference names. Browser Studio cannot save Provider
 keys. Never put a key in layout JSON, ordinary configuration, logs or screenshots.
 Provider URLs reject embedded credentials, queries and fragments. Root, `/v1`
-and messages URLs normalize through the existing Anthropic adapter; old saved
-records need explicit review/resave rather than silent rewriting.
+and messages URLs normalize through the existing Anthropic configuration adapter;
+normalization does not enable production Messages execution. Old saved records
+need explicit review/resave rather than silent rewriting.
 
 Select a model to lock that exact choice, including collaboration roles. An
 unavailable selection reports an error instead of falling back. Leave selection

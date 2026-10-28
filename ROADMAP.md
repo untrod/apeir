@@ -75,7 +75,7 @@ Future targets below are requirements, not claims of implemented integrations.
 | --- | --- | --- | --- |
 | Skills | PARTIAL | Reviewed local/HTTPS instructions; install/load/enable/disable/remove with integrity and permission checks | Unrestricted public marketplace and arbitrary executable Skill workflows are not qualified |
 | Studio extensions | PARTIAL | Reviewed declarative panels/widgets, sanitized reads, controlled lifecycle | Arbitrary third-party JavaScript remains BLOCKED pending isolation |
-| Cloud/API and local models | PENDING | Existing compatible adapters, Registry, credential references, strict Gateway/NKI and software tests | Each live account or local server/model needs actual inference/capability qualification; not all models are interchangeable |
+| Cloud/API and local models | PARTIAL | Existing compatible adapters, Registry, credential references, strict Gateway/NKI and software tests | Frozen Worker does not implement Anthropic Messages; unsupported protocols/parameters fail before dispatch. Supported cloud accounts and local servers still need actual inference/capability qualification |
 | Workflow | PARTIAL | Visual editor, canonical schemas, four bound pure handlers, original history/recovery | Model/Agent consumers and typed output-to-input bindings are not connected in the Studio API |
 | Developer loop | PARTIAL | Two-file review, independent approval, actual file observation and restart history | Live-model proposal qualification and execution in a qualified strong sandbox |
 | Token/cost efficiency | PARTIAL | Bounded context and excerpt reads, selective collaboration, existing accounting/budgets | No measured universal Token-saving percentage or real-model comparative task benchmark |
