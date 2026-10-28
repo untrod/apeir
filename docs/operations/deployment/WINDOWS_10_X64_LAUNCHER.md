@@ -154,8 +154,10 @@ gh workflow run desktop-build.yml --ref <approved-source-revision> -f native_tar
 The integration still cannot read repository Actions variables (HTTP403).
 The maintainer configured the switch, and actual opt-in native runs now pass
 the variable gate and admit the approved component bytes. This observed execution
-does not imply direct settings access or installation acceptance. Current native
-packaging is blocked by qualification failures; Windows10 installation is PENDING.
+does not imply direct settings access or installation acceptance. The full-mode
+package below passed its own build and smoke; Windows 10 installation remains
+PENDING. Required main/PR
+CI is a separate gate and can still be blocked by Issue #88.
 
 The actual Kernel import tables include `VCRUNTIME140.dll`. Build-host success
 does not prove that a clean Windows10 host has the VC++ runtime. The x64 builder
@@ -164,93 +166,50 @@ redistributable directory, requires valid Microsoft signatures and records their
 versions/source/hashes in `native-dependencies.json`. A generated Tauri resource
 overlay includes those same files in NSIS; Portable carries them beside the EXEs.
 The component smoke checks the actual loaded CRT path when app-local CRT is
-present. This path still requires a real qualified packaging/install run; it
-does not alter the reviewed Kernel hashes or remove license/Windows10 gates.
+present. Clean Windows 10 installation still needs qualification; the packaging
+checks do not alter the reviewed Kernel hashes or remove licensing/install gates.
 
 ## Current native command-qualified build
 
-The [full-mode build](https://github.com/untrod/apeir/actions/runs/40501512297)
-passed on attempt 2 from `51d7462c1225a9fd223ea25ca2e9114613bda161`, accepted into
-main through PR106. No SkipValidation or SkipSidecarSmoke option was used.
-The earlier attempt's five-second Skill HTTP failure remains recorded in Issue #88;
-a successful fresh-host build does not establish its root cause or close it.
+The [verified Portable/NSIS candidate](https://github.com/untrod/apeir/actions/runs/40659887576/artifacts/12806308503)
+was built from `69c7e44114a5e6e7690f7cfa865eefcbe62aecd5` in
+[full-mode run 40659887576](https://github.com/untrod/apeir/actions/runs/40659887576).
+It contains PR #110's Work-submission and Relay corrections, plus the reviewed
+model-protocol guards from PR #111. This source is not yet accepted main. The
+original five-second HTTP failure in Issue #88 remains
+unresolved; one successful native build does not override a failed required CI.
 
-[Download Portable and NSIS together](https://github.com/untrod/apeir/actions/runs/40501512297/artifacts/12738859677).
-The 156,727,966-byte outer artifact has SHA-256
-`40e8efcd3ca651dacf065e15df4bd036f6605d68ec9a347b7a36002cf0ac8f08`.
-GitHub sign-in is required; retention ends 2026-11-10.
+GitHub sign-in is required; this artifact expires on **2026-11-11**.
+The outer archive SHA-256 is
+`5a50e5f015405d0f3f4076a99fabb726dbaab9970d11df234942a4ac2f20c412`.
 
 | File | SHA-256 |
 | --- | --- |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `CE22648EE557CC3BF8F2AF9F553F48B78910E04AA0D1273E507986D9574B81AC` |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | `6AC2943E35C7A7B021EAD504355DEB36CAFE18F1B542BC3CE37835DFBA543EB3` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `18AB74C44DB156A1571F63B494337EE9419A221E4FEC5FFEE6049C17397C7347` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `66469F2AEDEDF1F931BE2FAD2D0435AE739919B31AD3F16605336FB1E79A0AB0` |
 
-Independent download checks passed all 22 checksum entries, 13 manifest payloads,
-11 nested Portable files and actual NSIS sidecar/CRT payloads. The four application
-and sidecar EXEs are x64 PE 0x8664. The NSIS PE 0x014c bootstrapper packages x64 payloads;
-it is not a 32-bit Runtime. Its launcher differs from Portable only by the three
-bytes of the upstream Tauri NSS bundle stamp; original files remain unchanged.
-The actual Kernel files match the existing approved component lock.
+Independent download checked all 22 checksums, 13 manifest entries, 11 nested
+Portable files, actual NSIS payloads and the unchanged approved Kernel bytes.
+Full source validation passed 5,933 cases with 95 skips and four warnings. Real
+sidecar/authentication/cleanup smoke and the pure Workflow CLI recovery passed
+on **Windows Server 2025**; original Run:
+`wfr_1eb74c6decf94b0fbaf007e3ee81cee1`. No validation or smoke skip flags were used.
 
-Real Kernel/Worker/Runtime smoke passed NKI 1/2/3, bad/missing authentication,
-protected session DACL, app-local CRT loading and owned-process fault cleanup.
-Restart queried the same denied model Work without another submission.
-The actual frozen Runtime also ran 9 CLI processes: root help found all ten public
-command families, then 8 pure Workflow calls verified schema rejection, no private
-input echo, original Run recovery/idempotency and refusal of an unbound action.
-Original Run: `wfr_0db57258cef344ba82578b6d2ed923d8`. External model calls: 0.
+These are unsigned internal test packages. **Windows 10 installation, native GUI,
+upgrade/uninstall, Defender, real model inference and signing remain unqualified.**
+The manifest's source ID is the build identity; a documentation commit does not
+change those bytes. Follow [Quick Start](../getting-started/QUICK_START.md#native-installation)
+for download, checksum and first-run instructions.
 
-The report records Windows Server 2025 Datacenter 10.0.26100 and
-`installation_acceptance=NOT_RUN`. These are unsigned internal packages:
-Windows 10 installed GUI, upgrade/uninstall, graceful Desktop shutdown, Defender,
-real inference and formal release remain unqualified. Source ID `51d7462` stays on
-the binary manifest; documentation and CI-only commits do not relabel its bytes.
-Frozen Kernel `87fd1b2` and the approved hashes are unchanged.
-
-Use the [Quick Start](../getting-started/QUICK_START.md#native-installation) for
-installation steps. The historical package below predates frozen command
-discovery and does not qualify that additional check.
+The earlier accepted-main package `51d7462` and its exact hashes remain in the
+[historical verification record](../../acceptance/ENGINEERING_REVIEW.md#historical-native-package-verification--2026-10-27).
 
 ## Verified internal native build — 2026-10-27
 
-[Full build40432789046](https://github.com/untrod/apeir/actions/runs/40432789046/job/121955136897)
-completed successfully from `9f43909bed331f6e25bcc3ffab4d5ac211ab4a37`. PR102
-normally merged it as `a8f8bd2170030e8b8c08baae6b44250156130202`; both commits
-have Git tree `ac12a69d32ac4d0912b0f69a1828db5b3861ae60`. Kernel remains frozen
-at87fd1b2, and both source worktrees were clean in the build manifest.
-
-The official launcher ran without SkipValidation or SkipSidecarSmoke. Runtime,
-desktop, original Kernel source/SDK tests, Tauri check/test/build and real native
-sidecar smoke passed. The native report confirms NKI1/2/3, wrong/missing credential
-rejection, owner-only session DACL, authenticated Runtime health, Worker health,
-actual app-local CRT loading, forced owned-process cleanup and restart/query of
-the original denied Work without resubmission. It records zero external model
-calls; this is neither real-model inference nor workload sandbox qualification.
-
-The [downloaded artifact](https://github.com/untrod/apeir/actions/runs/40432789046/artifacts/12703824974)
-is156489724 bytes. Its independently measured ZIP SHA-256 matches GitHub's digest:
-`7dafb42954dcded211ebdc394357c2651780419046ffa0df52b0ae5fd2bfa78b`.
-All22 checksum entries,13 manifest payloads and11 nested Portable files matched.
-The four application/sidecar payload EXEs are real x64 PE8664. The NSIS
-bootstrapper is PE14c while packaging x64 payloads; that wrapper is not an ARM64
-or 32-bit Runtime qualification.
-
-| Downloaded file | Bytes | SHA-256 |
-| --- | --- | --- |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | 52781517 | `8C85839E26668DF680629B4D7454A4228CC403E296A5152911C1151538CB0640` |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | 50908096 | `9CA906358893DF77F4BE9AD84F8B269AB31E2AE76AC5F8561D5B5B31E0A02A0F` |
-
-The archive includes both packages, SHA256SUMS, source/release manifests, native
-dependency/signature records, Python build-environment SBOM and original
-Cargo.lock files. GitHub sign-in is required, with14-day retention ending
-2026-11-10. Exact files are retained privately; a durable formal distribution
-location still requires the release Gate. No Release or historical tag changed.
-
-Actual build OS is Windows Server2025 Datacenter10.0.26100. The report explicitly
-says installation_acceptance=NOT_RUN. Clean Windows10 installation, first native
-window, upgrade, graceful Desktop shutdown, uninstall, Defender and application
-signing remain unqualified. Do not infer NATIVE_INSTALL_READY or RELEASE_READY
-from this successful build.
+The original `9f43909` package record is retained in
+[Engineering Review](../../acceptance/ENGINEERING_REVIEW.md#earlier-internal-package--source-9f43909).
+It predates frozen CLI discovery qualification; use the current build's own
+manifest and checksums rather than substituting historical results.
 
 ## Build
 
