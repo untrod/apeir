@@ -6,6 +6,7 @@ import asyncio
 import base64
 import contextlib
 import contextvars
+import errno
 from copy import deepcopy
 from functools import partial
 import hashlib
@@ -2636,6 +2637,40 @@ async def _run_relay_io(
     return result
 
 
+def _read_failure_winerror(path: Path, error: OSError) -> int | None:
+    code = getattr(error, "winerror", None)
+    if type(code) is int:
+        return code
+    if os.name != "nt" or error.errno != errno.EACCES:
+        return None
+    # The Windows CRT can reduce a sharing violation to errno13, discarding
+    # GetLastError. Probe current read access without creating or writing a file.
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create = kernel32.CreateFileW
+    create.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create.restype = wintypes.HANDLE
+    handle = create(str(path), 0x80000000, 7, None, 3, 0x80, None)
+    if handle == ctypes.c_void_p(-1).value:
+        return ctypes.get_last_error()
+    close = kernel32.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+    if not close(handle):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return None
+
+
 def _read_json(path: Path, *, strict: bool = False) -> dict[str, Any]:
     if not strict and not path.is_file():
         return {}
@@ -2645,7 +2680,8 @@ def _read_json(path: Path, *, strict: bool = False) -> dict[str, Any]:
         except OSError as exc:
             # A bounded reread cannot replay an effect. Only Windows sharing or
             # lock conflicts qualify; denial, missing state and corruption do not.
-            if strict and getattr(exc, "winerror", None) in {32, 33} and attempt < 5:
+            winerror = _read_failure_winerror(path, exc) if strict else None
+            if strict and winerror in {32, 33} and attempt < 5:
                 time.sleep(0.01 * (attempt + 1))
                 continue
             if strict:
@@ -2656,7 +2692,8 @@ def _read_json(path: Path, *, strict: bool = False) -> dict[str, Any]:
                 }
                 raise NodeProtocolError(
                     "relay persisted state read failed "
-                    f"(errno={codes['errno']}, winerror={codes['winerror']})"
+                    f"(errno={codes['errno']}, winerror={codes['winerror']}, "
+                    f"observed_winerror={winerror})"
                 ) from exc
             return {}
         except (json.JSONDecodeError, UnicodeError) as exc:

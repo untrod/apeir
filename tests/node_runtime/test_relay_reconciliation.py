@@ -852,7 +852,7 @@ def test_original_signed_result_survives_transient_windows_read_conflict(
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("winerror,expected_reads", [(5, 1), (32, 6)])
+@pytest.mark.parametrize("winerror,expected_reads", [(5, 1), (32, 6), (None, 1)])
 def test_unavailable_original_relay_state_retains_read_cause_and_fails_closed(
     tmp_path, monkeypatch, winerror, expected_reads
 ):
@@ -965,3 +965,24 @@ def test_original_signed_result_recovers_from_native_windows_sharing_lock(
     finally:
         if handle is not None:
             assert close(handle)
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32", reason="requires actual Windows access checks"
+)
+def test_native_access_denied_is_not_retried_as_an_unknown_crt_conflict(
+    tmp_path, monkeypatch
+):
+    import nous_runtime.node_runtime.relay as relay
+
+    NodeRelayServer(state_dir=tmp_path)
+    path = tmp_path / "workload-state.json"
+    path.mkdir()
+
+    def no_retry(_seconds):
+        pytest.fail("non-sharing access denial was retried")
+
+    monkeypatch.setattr(relay.time, "sleep", no_retry)
+    with pytest.raises(NodeProtocolError, match="observed_winerror=5"):
+        NodeRelayServer(state_dir=tmp_path)
+    assert path.is_dir()

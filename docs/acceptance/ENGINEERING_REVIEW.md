@@ -4988,3 +4988,20 @@ underlying error in the historical failure or close all Windows timing issues.
 The Node/Automation regression passes 399 cases; the Work/MCP HTTP regression
 passes 46. Kernel, component lock, approval boundaries and effect verification
 remain unchanged. The final candidate still requires its own cross-platform CI.
+
+The actual Windows case on `2a0d330` exposed a real compatibility gap: CPython
+3.11/3.12's CRT file read reported errno13 without a `winerror` for an exclusive
+CreateFileW sharing lock. Injected errors alone did not establish that behavior.
+Core `40653463511` and Multi-Arch `40653463351` retain that failure, independently
+of the separate Core Work HTTP timeout. The failed candidate is not qualified.
+
+For strict snapshot reads only, an unknown Windows CRT access error now receives
+a read-only CreateFileW probe (OPEN_EXISTING, never create/write). Only an observed
+sharing/lock code32/33 permits the existing bounded reread. Denial/code5 and
+unclassified failures still stop immediately; the original exception remains
+chained. Probe handles are closed. Linux and the original reader defaults remain
+unchanged. A second real Windows negative case rejects non-sharing access denial;
+the Linux focused result is 42 passed,2 Windows-only skips. The existing opt-in
+Core diagnostic now selects these same maintained Relay tests without satisfying
+the separate required Core/platform contexts. Actual Windows and full native
+qualification must be repeated on the corrective source.
