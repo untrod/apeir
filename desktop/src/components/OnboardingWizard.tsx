@@ -59,6 +59,7 @@ const PROVIDER_TEMPLATES: ProviderTemplate[] = [
   {
     providerId: "anthropic",
     displayName: "Anthropic",
+    unsupportedProtocol: true,
     serviceType: "cloud",
     defaultBaseUrl: "https://api.anthropic.com/v1",
     credentialType: "api_key",

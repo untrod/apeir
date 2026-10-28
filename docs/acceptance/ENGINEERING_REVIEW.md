@@ -4923,3 +4923,39 @@ That Core run's original macOS job `122358227283` never acquired a runner;
 annotations report hosted macOS ARM64 capacity constraints. Only that unexecuted
 job was requested again after completion; the original Windows failure remains.
 Main integration is gated independently on all required checks.
+
+## Frozen Worker protocol admission — 2026-10-27
+
+Code review of frozen Kernel `87fd1b2` found native model backends for
+OpenAI-compatible and Ollama protocols, but no Anthropic Messages backend.
+The Python Anthropic adapter alone therefore does not qualify production NKI
+execution. A Gateway counterexample previously sent its Messages endpoint to the
+OpenAI backend. Another counterexample selected Ollama from an OpenAI adapter's
+name or port. Six pre-fix cases failed; the raw local log is retained.
+
+The existing Gateway now rejects native Messages calls with
+`NOUS_MODEL_PROTOCOL_UNSUPPORTED` before dispatch, respects a known OpenAI
+adapter's protocol and rejects non-automatic `tool_choice` with
+`NOUS_MODEL_PARAMETER_UNSUPPORTED`. The locked Worker does not forward that
+selection parameter; silently dropping it is not support. Existing reasoning,
+temperature and response-format behavior remains subject to endpoint support.
+The wizard disables the native Messages template using its existing unsupported
+protocol state. Saved configurations remain readable; a genuine compatible
+proxy is distinguished by its adapter rather than the model's name.
+
+Compatibility failures are nonretryable, do not dispatch another request or
+mark the Provider unhealthy, and publish fixed diagnostic messages rather than
+arbitrary exception contents. Nineteen Gateway cases cover refusal before NKI
+submission, exact error codes, unchanged automatic tool selection, compatible
+proxy routing and private diagnostic suppression. The model/context regression
+passes 858 cases with 5 platform skips; the eight onboarding cases pass.
+These are software contracts with fake references, not paid model calls.
+Kernel source, approved component bytes and the component lock are unchanged.
+
+The internal Chat and Work callers also used to request `required` tool choice.
+They now explicitly request the supported automatic selection. Chat retains its
+existing bounded prose-refusal, original approval and actual file-result checks;
+Work rejects a missing native action in ACT/VERIFY rather than accepting a model's
+completion claim. Additional negatives cover both a claimed file change and
+claimed tests without a tool call. This changes transport controls, not the
+requirement for governed execution evidence.
