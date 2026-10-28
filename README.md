@@ -55,14 +55,15 @@ It separates downloadable **Source Preview**, **Developer Setup** and
 **Native Installation**. Source inspection and the simulated Demo need no API key
 or hardware. Downloadable source packages are not Windows installers.
 
-**Windows download:** open the [Windows x64 build and packages](https://github.com/untrod/apeir/actions/runs/40547630660).
-After its full validation succeeds, download **windows-x64-native-development-build**
-from **Artifacts**. A [previously verified bundle](https://github.com/untrod/apeir/actions/runs/40501512297/artifacts/12738859677)
-is also available. Both provide Portable/NSIS packages and their own checksums;
-use the manifest from the package you download. GitHub sign-in is required and
-artifacts expire after 14 days. These are unsigned development builds;
-Windows 10 installation, upgrade/uninstall and signing remain unqualified.
-Follow the [download and verification steps](docs/operations/getting-started/QUICK_START.md#native-installation).
+**Windows download:** [Portable ZIP + NSIS installer](https://github.com/untrod/apeir/actions/runs/40659887576/artifacts/12806308503)
+are available together in **windows-x64-native-development-build**. Sign in to
+GitHub, download the artifact ZIP and verify the included checksums before use.
+The unsigned candidate build expires on **2026-11-11**. Its exact source and
+qualification limits are in the [build record](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build);
+this candidate is not accepted main. Windows 10 installation,
+upgrade/uninstall and signing remain unqualified. Follow the
+[download and verification steps](docs/operations/getting-started/QUICK_START.md#native-installation).
+This is a development build, not a stable Release.
 
 ## Developer Platform
 

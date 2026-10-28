@@ -49,12 +49,12 @@ APEIR Studio 是 APEIR Runtime 的桌面工作空间。用户可以组合项目�
 它明确区分 **Source Preview**、**Developer Setup** 和 **Native Installation**。
 源码检查和模拟 Demo 不需要 API Key 或硬件。可下载的源码包不是 Windows 安装程序。
 
-**Windows 下载：**打开 [Windows x64 构建与下载](https://github.com/untrod/apeir/actions/runs/40547630660)，
-完整验证成功后，在 **Artifacts** 下载 **windows-x64-native-development-build**。
-也可以使用[上一份已校验的测试包](https://github.com/untrod/apeir/actions/runs/40501512297/artifacts/12738859677)。
-外层 ZIP 包含 Portable 便携包、NSIS 安装程序和各自的校验文件，请勿混用不同构建的哈希。
-需要登录 GitHub，工件保留 14 天，以页面显示的到期时间为准。
-这些是未签名的开发预览；Windows 10 安装、升级、卸载及签名尚未验收，不能当作稳定版。
+**Windows 下载：**[Portable 便携包 + NSIS 安装程序](https://github.com/untrod/apeir/actions/runs/40659887576/artifacts/12806308503)
+已打包在 **windows-x64-native-development-build** 中。登录 GitHub 后下载工件 ZIP，
+解压并校验哈希，再选择便携包或安装程序。工件保留至 **2026-11-11**。
+这是未签名的候选预览，所含变更尚未全部合入 main；准确版本和验收范围见
+[构建记录](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)。
+Windows 10 安装、升级、卸载及签名尚未验收，不能当作稳定版。
 具体步骤见[下载与校验](docs/operations/getting-started/QUICK_START.md#native-installation)。
 
 第一次体验可以先打开工程或运行无模型 Demo，不必一次配置完全部组件。

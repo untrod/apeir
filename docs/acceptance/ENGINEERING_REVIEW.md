@@ -8,6 +8,162 @@ This record distinguishes reproduced defects, inspected risks and unqualified
 external dependencies. It is not an exhaustive proof that the repository is
 bug-free, a physical acceptance, or production certification.
 
+## Windows qualification and deferred CAS optimization — 2026-10-28
+
+Main `aaa0965adc57106c2b5468478eb80d4bde2f93d6` includes the reviewed model
+protocol guards from PR #111. Its Core, Desktop and Security runs passed, but
+[Multi-Arch Windows](https://github.com/untrod/apeir/actions/runs/40652264701/job/122694873644)
+still exceeded the unchanged five-second Skill HTTP deadline. The handler had
+completed installation and was committing the completion audit. Losing that
+response does not prove that installation did not occur.
+
+The corrective Relay source `69c7e44114a5e6e7690f7cfa865eefcbe62aecd5` in
+[PR #110](https://github.com/untrod/apeir/pull/110) passes full Multi-Arch, Desktop
+and Security, plus a real Windows Relay diagnostic: 44 passed, including an actual
+exclusive native handle and a non-sharing access denial. Its
+[Core Windows failure](https://github.com/untrod/apeir/actions/runs/40659171006/job/122717566661)
+is separate: the initial Skill install exceeded five seconds before its injected
+CAS fault or download. Nonce admission took 3,372 ms and control admission 2,383 ms;
+the handler was in SQLite commit. Neither record proves a connection leak or an
+antivirus/filesystem cause. Existing atomic authorization publication and
+connection cleanup are already integrated. Issue #88 remains OPEN; failed required
+checks must not be bypassed to merge PR #110.
+
+The same exact source passed the official full-mode
+[native build 40659887576](https://github.com/untrod/apeir/actions/runs/40659887576/job/122721318018):
+5,933 source cases passed, with 95 skips and four warnings, followed by actual
+Kernel/Worker/Runtime smoke and frozen Workflow CLI recovery. Independent
+download of artifact `12806308503` verified all 22 checksum entries, 13 manifest
+files, 11 nested Portable payloads, actual NSIS contents and the approved
+component lock. The archive SHA-256 is
+`5a50e5f015405d0f3f4076a99fabb726dbaab9970d11df234942a4ac2f20c412`.
+Original Workflow Run: `wfr_1eb74c6decf94b0fbaf007e3ee81cee1`. External model
+calls: 0. The host was Windows Server 2025; installation was NOT_RUN and the
+package is unsigned. This successful producer does not override the separate
+Core failure, prove its root cause repaired or qualify Windows 10 installation.
+The current package hashes and instructions remain in the
+[native build guide](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build).
+
+A candidate optimization transferred the Skill preparation pin to its installed
+owner under the existing CAS writer fence, preserving other owners and failure
+recovery. 190 targeted CAS/Skill/HTTP tests passed. It was **not accepted** because
+paired measurements did not meet the tail-latency requirement:
+
+| Environment / pairs | Existing p50 / p95 / p99, ms | Candidate p50 / p95 / p99, ms |
+| --- | --- | --- |
+| Linux / 31 | 0.622 / 0.866 / 37.777 | 0.365 / 2.013 / 4.664 |
+| Linux / 101 | 1.110 / 1.459 / 1.974 | 0.599 / 0.934 / 1.795 |
+| Windows Server 2025 / 31 | 13.140 / 16.581 / 18.669 | 7.032 / 9.373 / 43.826 |
+| Windows Server 2025 / 101 | 17.932 / 36.155 / 44.864 | 9.336 / 25.010 / 50.610 |
+
+Each run alternated paired operations on real CAS files, with 16 KB input and
+three warm-up pairs. The 31- and 101-pair runs have different accumulated owner
+counts and are not pooled. Nearest-rank p99 is the largest of 31 samples and the
+second-largest of 101; these small samples do not establish a population tail.
+Windows CPU measurements have 15.625 ms quantization;
+both variants report p50=0 and p95/p99=15.625 ms, which is not zero CPU cost.
+Separate Python allocation peaks were approximately 1.10 MB for both; no memory
+benefit is established. The original
+[31-pair](https://github.com/untrod/apeir/actions/runs/40661591072) and
+[bounded 101-pair follow-up](https://github.com/untrod/apeir/actions/runs/40662876033)
+also passed the 51 maintained Governance/Skill HTTP diagnostic cases. These
+diagnostics do not replace full Core or qualify Windows 10 installation.
+
+Windows p99 worsened in both measured samples, so the candidate was deferred;
+there is no overall Runtime, HTTP or Token-saving claim. Source, raw samples and
+the decision are retained in a verified Git bundle at commit
+`692c0d1863a1e539cee122c59dacccea941c1014`, bundle SHA-256
+`86f6fc456ef7af7d758a07b80c295109cec9260a105d8c105019c55acf76d81b`.
+The experimental branch was retired after preservation; no second CAS API or
+benchmark dependency was introduced into main.
+
+## Historical native package verification — 2026-10-27
+
+### Prior command-qualified package — source 51d7462
+
+The [full-mode build](https://github.com/untrod/apeir/actions/runs/40501512297)
+passed on attempt 2 from `51d7462c1225a9fd223ea25ca2e9114613bda161`, accepted into
+main through PR106. No SkipValidation or SkipSidecarSmoke option was used.
+The earlier attempt's five-second Skill HTTP failure remains recorded in Issue #88;
+a successful fresh-host build does not establish its root cause or close it.
+
+[Download Portable and NSIS together](https://github.com/untrod/apeir/actions/runs/40501512297/artifacts/12738859677).
+The 156,727,966-byte outer artifact has SHA-256
+`40e8efcd3ca651dacf065e15df4bd036f6605d68ec9a347b7a36002cf0ac8f08`.
+GitHub sign-in is required; retention ends 2026-11-10.
+
+| File | SHA-256 |
+| --- | --- |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `CE22648EE557CC3BF8F2AF9F553F48B78910E04AA0D1273E507986D9574B81AC` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `6AC2943E35C7A7B021EAD504355DEB36CAFE18F1B542BC3CE37835DFBA543EB3` |
+
+Independent download checks passed all 22 checksum entries, 13 manifest payloads,
+11 nested Portable files and actual NSIS sidecar/CRT payloads. The four application
+and sidecar EXEs are x64 PE 0x8664. The NSIS PE 0x014c bootstrapper packages x64 payloads;
+it is not a 32-bit Runtime. Its launcher differs from Portable only by the three
+bytes of the upstream Tauri NSS bundle stamp; original files remain unchanged.
+The actual Kernel files match the existing approved component lock.
+
+Real Kernel/Worker/Runtime smoke passed NKI 1/2/3, bad/missing authentication,
+protected session DACL, app-local CRT loading and owned-process fault cleanup.
+Restart queried the same denied model Work without another submission.
+The actual frozen Runtime also ran 9 CLI processes: root help found all ten public
+command families, then 8 pure Workflow calls verified schema rejection, no private
+input echo, original Run recovery/idempotency and refusal of an unbound action.
+Original Run: `wfr_0db57258cef344ba82578b6d2ed923d8`. External model calls: 0.
+
+The report records Windows Server 2025 Datacenter 10.0.26100 and
+`installation_acceptance=NOT_RUN`. These are unsigned internal packages:
+Windows 10 installed GUI, upgrade/uninstall, graceful Desktop shutdown, Defender,
+real inference and formal release remain unqualified. Source ID `51d7462` stays on
+the binary manifest; documentation and CI-only commits do not relabel its bytes.
+Frozen Kernel `87fd1b2` and the approved hashes are unchanged.
+
+Use the [Quick Start](../operations/getting-started/QUICK_START.md#native-installation) for
+installation steps. The historical package below predates frozen command
+discovery and does not qualify that additional check.
+
+### Earlier internal package — source 9f43909
+
+[Full build40432789046](https://github.com/untrod/apeir/actions/runs/40432789046/job/121955136897)
+completed successfully from `9f43909bed331f6e25bcc3ffab4d5ac211ab4a37`. PR102
+normally merged it as `a8f8bd2170030e8b8c08baae6b44250156130202`; both commits
+have Git tree `ac12a69d32ac4d0912b0f69a1828db5b3861ae60`. Kernel remains frozen
+at87fd1b2, and both source worktrees were clean in the build manifest.
+
+The official launcher ran without SkipValidation or SkipSidecarSmoke. Runtime,
+desktop, original Kernel source/SDK tests, Tauri check/test/build and real native
+sidecar smoke passed. The native report confirms NKI1/2/3, wrong/missing credential
+rejection, owner-only session DACL, authenticated Runtime health, Worker health,
+actual app-local CRT loading, forced owned-process cleanup and restart/query of
+the original denied Work without resubmission. It records zero external model
+calls; this is neither real-model inference nor workload sandbox qualification.
+
+The [downloaded artifact](https://github.com/untrod/apeir/actions/runs/40432789046/artifacts/12703824974)
+is156489724 bytes. Its independently measured ZIP SHA-256 matches GitHub's digest:
+`7dafb42954dcded211ebdc394357c2651780419046ffa0df52b0ae5fd2bfa78b`.
+All22 checksum entries,13 manifest payloads and11 nested Portable files matched.
+The four application/sidecar payload EXEs are real x64 PE8664. The NSIS
+bootstrapper is PE14c while packaging x64 payloads; that wrapper is not an ARM64
+or 32-bit Runtime qualification.
+
+| Downloaded file | Bytes | SHA-256 |
+| --- | --- | --- |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | 52781517 | `8C85839E26668DF680629B4D7454A4228CC403E296A5152911C1151538CB0640` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | 50908096 | `9CA906358893DF77F4BE9AD84F8B269AB31E2AE76AC5F8561D5B5B31E0A02A0F` |
+
+The archive includes both packages, SHA256SUMS, source/release manifests, native
+dependency/signature records, Python build-environment SBOM and original
+Cargo.lock files. GitHub sign-in is required, with14-day retention ending
+2026-11-10. Exact files are retained privately; a durable formal distribution
+location still requires the release Gate. No Release or historical tag changed.
+
+Actual build OS is Windows Server2025 Datacenter10.0.26100. The report explicitly
+says installation_acceptance=NOT_RUN. Clean Windows10 installation, first native
+window, upgrade, graceful Desktop shutdown, uninstall, Defender and application
+signing remain unqualified. Do not infer NATIVE_INSTALL_READY or RELEASE_READY
+from this successful build.
+
 ## R5 completion code audit and public entry review — 2026-10-25
 
 Audit base:Distribution62cbe6ff53a769172067740370f26fb18eb3c094;
