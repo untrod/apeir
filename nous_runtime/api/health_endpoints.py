@@ -40,19 +40,16 @@ def handle_health_detailed() -> dict[str, Any]:
         except Exception:
             pass
 
-        # Provider status
+        # Provider status. This is an execution-health metric: saved Provider
+        # metadata may be inspected by Studio while intelligence is disabled,
+        # but it is not an active adapter and must not make Runtime health claim
+        # that model execution is configured.
         provider_configured = False
         provider_count = 0
         try:
-            from nous_runtime.services.providers import list_provider_summaries
-            providers = list_provider_summaries()
-            if isinstance(providers, dict):
-                provider_list = providers.get("providers", providers.get("data", []))
-            elif isinstance(providers, list):
-                provider_list = providers
-            else:
-                provider_list = []
-            provider_count = len(provider_list) if isinstance(provider_list, list) else 0
+            from nous_runtime.provider.registry import registry
+
+            provider_count = len(registry.adapters())
             provider_configured = provider_count > 0
         except Exception:
             pass

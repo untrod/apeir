@@ -294,6 +294,17 @@ def test_authenticated_http_patch_uses_persistence_and_current_model_catalog(
         assert get_provider("example").model == "original-model"
         with urlopen(
             Request(
+                endpoint + "/api/v1/providers",
+                headers={"Authorization": "Bearer " + token},
+            ),
+            timeout=5,
+        ) as response:
+            metadata = json.load(response)["data"]
+        assert metadata[0]["configuration"]["model"] == "original-model"
+        assert metadata[0]["configuration"]["has_reference"] is True
+        assert "FAKE_PROVIDER_KEY" not in json.dumps(metadata)
+        with urlopen(
+            Request(
                 endpoint + "/api/v1/providers/example",
                 method="PATCH",
                 data=b'{"model":"http-model"}',

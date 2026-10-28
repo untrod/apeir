@@ -75,6 +75,42 @@ async function dashboardMenu(page: Page) {
   if (!(await summary.evaluate(node => (node.parentElement as HTMLDetailsElement).open))) await summary.click();
 }
 
+test("Studio configures and inspects saved Providers through the real model-disabled Runtime", async ({ page }, info) => {
+  await open(page);
+  await page.getByRole("button", { name: /Add panel/ }).click();
+  await page.getByRole("textbox", { name: "Search panels" }).fill("Models");
+  await page.getByRole("button", { name: "Models", exact: true }).click();
+  const settings = page.getByRole("region", { name: "Provider settings", exact: true });
+  await expect(settings).toBeVisible();
+  await settings.getByRole("button", { name: "Add Provider", exact: true }).click();
+  await settings.getByLabel("Protocol template", { exact: true }).selectOption("openai_compatible");
+  await settings.getByLabel("Provider ID", { exact: true }).fill("studio-example");
+  await settings.getByLabel("Name", { exact: true }).fill("Studio reference");
+  await settings.getByLabel("Endpoint", { exact: true }).fill("http://127.0.0.1:9/v1");
+  await settings.getByLabel("Vendor model ID", { exact: true }).fill("original-example");
+  await settings.getByRole("button", { name: "Save Provider", exact: true }).click();
+  await expect(settings.getByRole("button", { name: "Edit studio-example" })).toBeVisible();
+  const before = JSON.parse(await readFile(join(runtimes[0].directory, ".nous", "providers.json"), "utf8"));
+  expect(before["studio-example"].model).toBe("original-example");
+  await settings.getByRole("button", { name: "Edit studio-example" }).click();
+  await settings.getByLabel("Vendor model ID", { exact: true }).fill("reviewed-example");
+  await settings.getByRole("button", { name: "Save Provider", exact: true }).click();
+  await expect(settings.getByText("reviewed-example · http://127.0.0.1:9/v1")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Provider settings", exact: true }).getByText("reviewed-example · http://127.0.0.1:9/v1")).toBeVisible();
+  const settingsAfter = page.getByRole("region", { name: "Provider settings", exact: true });
+  await expect(settingsAfter.getByRole("button", { name: "Run inference test" })).toBeDisabled();
+  await settingsAfter.screenshot({ path: info.outputPath("studio-model-settings-source.png") });
+  await settingsAfter.getByRole("button", { name: "Remove studio-example" }).click();
+  await settingsAfter.getByRole("button", { name: "Confirm remove studio-example" }).click();
+  await expect(settingsAfter.getByRole("alert")).toBeVisible();
+  await expect(settingsAfter.getByRole("button", { name: "Edit studio-example" })).toBeVisible();
+  const after = JSON.parse(await readFile(join(runtimes[0].directory, ".nous", "providers.json"), "utf8"));
+  expect(after["studio-example"].model).toBe("reviewed-example");
+  await page.screenshot({ path: info.outputPath("studio-model-settings-approval-denied.png"), fullPage: true });
+  await info.attach("model-disabled-provider-acceptance", { body: JSON.stringify({ configuration_saved: true, updated: true, reload_same_configuration: true, denied_removal_preserved_original: true, model_inference: "NOT_RUN", external_model_calls: 0 }), contentType: "application/json" });
+});
+
 test("Studio restores safe layouts, preserves drafts while docking and isolates Controller changes", async ({ page }, info) => {
   const errors: string[] = []; const mutations: string[] = []; let fileReads = 0;
   page.on("pageerror", error => errors.push(error.message));
