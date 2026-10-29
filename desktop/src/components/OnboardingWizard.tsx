@@ -43,7 +43,7 @@ interface ProviderTemplate {
   unsupportedProtocol?: boolean;
 }
 
-const PROVIDER_TEMPLATES: ProviderTemplate[] = [
+export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
   {
     providerId: "openai",
     displayName: "OpenAI",
