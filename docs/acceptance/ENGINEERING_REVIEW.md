@@ -5135,3 +5135,21 @@ vendor IDs, locked selection and fake adapter calls to both original Providers,
 PRIVATE routing without cloud fallback, exact IPv4/IPv6/localhost handling and
 refusal of name/path/lookalike-host inference. These are software routing tests;
 no live account, running model service or external model request is exercised.
+
+## Recorded Chat activity presentation — 2026-10-29
+
+The existing Chat activity summary called successful tools "verified", marked
+past activity rows with success ticks regardless of their meaning and omitted
+model-invocation failures. It now says "completed" for a successful tool return,
+distinguishes failed and missing outcomes, shows recorded model identities and
+failure/approval events, and uses neutral history markers. The most recent
+activity stays visible after the response; it is presentation state cleared by
+the next request or view change. Existing EventStream and Run identity remain
+the source of records; no new event store or execution path is introduced.
+
+The targeted summary/Chat regressions pass 23 cases, including response-time
+activity retention. All 62 Desktop test files pass (449 cases); TypeScript,
+ESLint and production build pass. This source qualification does not establish
+native GUI timing, token streaming, a complete Skill/extension call ledger or a
+Chat web-search tool. The existing Research search remains a separate governed
+entry; Chat currently exposes specified-URL fetching.

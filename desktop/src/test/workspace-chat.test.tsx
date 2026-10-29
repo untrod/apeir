@@ -32,6 +32,19 @@ beforeEach(() => {
 afterEach(() => { delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView; vi.unstubAllGlobals(); });
 
 describe("workspace collaboration through the existing Chat Runtime", () => {
+  it("retains recorded tool activity after the response without claiming verification", async () => {
+    vi.mocked(fetchRunEvents).mockResolvedValue({
+      run_id: "original-run", next_after_sequence: 1,
+      events: [{ event_id: "read-one", event_type: "tool.completed", sequence: 1, payload: { tool: "read_file", ok: true } }],
+    } as unknown as Awaited<ReturnType<typeof fetchRunEvents>>);
+    render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    await screen.findByText("Reference received");
+    expect(screen.getByText("read_file completed")).toBeInTheDocument();
+    expect(screen.getByText("1 tools completed")).toBeInTheDocument();
+    expect(screen.queryByText(/tools verified/)).not.toBeInTheDocument();
+  });
+
   it("rejects unsupported attachments before any model or event subscription", async () => {
     render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Send crafted attachment" }));

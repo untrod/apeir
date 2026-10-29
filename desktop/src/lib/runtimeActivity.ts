@@ -9,6 +9,7 @@ export interface RuntimeActivitySummary {
   iteration: number;
   completedTools: number;
   failedTools: number;
+  unknownTools: number;
   artifacts: number;
   tokens: number;
 }
@@ -23,14 +24,18 @@ export function runtimeActivityLabel(event: ActivityEvent): string {
     case "model.lane.started": return `${String(payload.lane_id || "Worker")} started`;
     case "model.lane.completed": return `${String(payload.lane_id || "Worker")} completed`;
     case "model.invocation.started": return `Model iteration ${Number(payload.iteration || 0)} running`;
-    case "model.invocation.completed": return `Model iteration ${Number(payload.iteration || 0)} completed`;
+    case "model.invocation.completed": return `${String(payload.model_id || "Model")} · iteration ${Number(payload.iteration || 0)} completed`;
+    case "model.invocation.failed": return `${String(payload.model_id || "Model")} · iteration ${Number(payload.iteration || 0)} failed`;
     case "execution.budget.configured": return `Execution budget: ${Number(payload.max_model_iterations || 0)} iterations`;
     case "tool.started": return `Using ${String(payload.tool || "workspace tool")}`;
-    case "tool.completed": return `${String(payload.tool || "Tool")} ${payload.ok ? "verified" : "failed"}`;
+    case "tool.completed": return `${String(payload.tool || "Tool")} ${payload.ok === true ? "completed" : payload.ok === false ? "failed" : "UNKNOWN"}`;
     case "artifact.created": return `Created ${String(payload.path || payload.artifact_id || "artifact")}`;
     case "review.started": return "Reviewer checking the result";
     case "review.completed": return payload.approved === false ? "Review found gaps" : "Review completed";
-    case "verification.completed": return payload.accepted ? "Verification passed" : "Verification needs attention";
+    case "verification.completed": return payload.accepted === true ? "Verification passed" : payload.accepted === false ? "Verification needs attention" : "Verification UNKNOWN";
+    case "approval.requested": return "Waiting for approval";
+    case "run.failed": return "Run failed";
+    case "run.cancelled": return "Run cancelled";
     default: return String(event.event_type || "Working");
   }
 }
@@ -39,22 +44,25 @@ export function summarizeRuntimeActivity(events: ActivityEvent[]): RuntimeActivi
   const visibleTypes = new Set([
     "intent.resolved", "plan.created", "collaboration.started", "manager.completed",
     "model.lane.started", "model.lane.completed", "model.invocation.started",
-    "model.invocation.completed", "execution.budget.configured", "tool.started", "tool.completed", "artifact.created",
+    "model.invocation.completed", "model.invocation.failed", "execution.budget.configured", "tool.started", "tool.completed", "artifact.created",
     "review.started", "review.completed", "verification.completed",
+    "approval.requested", "run.failed", "run.cancelled",
   ]);
   const visible = events.filter((event) => visibleTypes.has(String(event.event_type || "")));
   const recent = visible.slice(-6).map(runtimeActivityLabel);
   let iteration = 0;
   let completedTools = 0;
   let failedTools = 0;
+  let unknownTools = 0;
   let artifacts = 0;
   let tokens = 0;
   for (const event of events) {
     const payload = event.payload || {};
     iteration = Math.max(iteration, Number(payload.iteration || 0));
     if (event.event_type === "tool.completed") {
-      if (payload.ok) completedTools += 1;
-      else failedTools += 1;
+      if (payload.ok === true) completedTools += 1;
+      else if (payload.ok === false) failedTools += 1;
+      else unknownTools += 1;
     }
     if (event.event_type === "artifact.created") artifacts += 1;
     const usage = payload.usage;
@@ -69,6 +77,7 @@ export function summarizeRuntimeActivity(events: ActivityEvent[]): RuntimeActivi
     iteration,
     completedTools,
     failedTools,
+    unknownTools,
     artifacts,
     tokens,
   };

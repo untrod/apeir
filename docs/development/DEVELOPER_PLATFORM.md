@@ -83,6 +83,23 @@ current trusted report; logical CPU capacity is not CPU utilization. Topology
 uses exact reported Device-to-Node bindings. Missing data stays UNKNOWN, and
 unsupported GPU/network/sensor metrics stay UNSUPPORTED.
 
+### Watching a request
+
+Chat reads recorded Run events while a request is active (500 ms polling plus
+request latency). Its activity card shows model iterations, tool names,
+approval waits, artifacts and recorded failures. The latest activity remains
+visible after the response until the next request or view change. Tasks,
+Inspector and Evidence provide the underlying records. Tool completion is
+distinct from independent verification; missing outcomes stay UNKNOWN.
+
+This is execution progress, not token-by-token response streaming or a complete
+extension-call ledger. The current card does not expose raw tool arguments or
+private payloads. An installed Skill is not evidence that the model used it.
+The **Research** tab provides governed web search, results, sources and snapshots;
+the Chat workspace tool currently fetches specified URLs and does not expose
+the Research search API as a general model tool. Network permissions and source
+availability still apply.
+
 ![Dark Dashboard with actual Runtime data; absent resources remain UNKNOWN](../media/studio-source-overview.png)
 
 These screenshots are real [source-browser evidence](https://github.com/untrod/apeir/actions/runs/40351274217)

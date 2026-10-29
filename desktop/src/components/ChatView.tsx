@@ -158,7 +158,7 @@ function ApprovalActions({ requestId }: { requestId: string }) {
 }
 
 
-function RuntimeActivity({ runId, events }: { runId: string; events: RuntimeEventEnvelope[] }) {
+function RuntimeActivity({ runId, events, running }: { runId: string; events: RuntimeEventEnvelope[]; running: boolean }) {
   const summary = summarizeRuntimeActivity(events);
 
   return (
@@ -171,7 +171,7 @@ function RuntimeActivity({ runId, events }: { runId: string; events: RuntimeEven
       fontSize: typo.xs,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: space.sm }}>
-        <span style={{ width: 7, height: 7, borderRadius: "50%", background: colors.accent, animation: "nousPulse 1.5s infinite", flexShrink: 0 }} />
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: colors.accent, animation: running ? "nousPulse 1.5s infinite" : undefined, flexShrink: 0 }} />
         <strong style={{ color: colors.text }}>{summary.current}</strong>
         <span style={{ flex: 1 }} />
         <span style={{ color: colors.textTertiary, fontFamily: "monospace" }}>{runId.slice(0, 8)}</span>
@@ -179,14 +179,15 @@ function RuntimeActivity({ runId, events }: { runId: string; events: RuntimeEven
       {summary.recent.length > 1 && (
         <div style={{ marginTop: space.sm, display: "grid", gap: 4, color: colors.textSecondary }}>
           {summary.recent.slice(0, -1).map((label, index) => (
-            <div key={`${index}-${label}`}>✓ {label}</div>
+            <div key={`${index}-${label}`}>· {label}</div>
           ))}
         </div>
       )}
       <div style={{ marginTop: space.sm, display: "flex", gap: space.lg, color: colors.textTertiary }}>
         {summary.iteration > 0 && <span>Iteration {summary.iteration}</span>}
-        {summary.completedTools > 0 && <span>{summary.completedTools} tools verified</span>}
+        {summary.completedTools > 0 && <span>{summary.completedTools} tools completed</span>}
         {summary.failedTools > 0 && <span style={{ color: colors.danger }}>{summary.failedTools} failed</span>}
+        {summary.unknownTools > 0 && <span>{summary.unknownTools} UNKNOWN</span>}
         {summary.artifacts > 0 && <span>{summary.artifacts} artifacts</span>}
         {summary.tokens > 0 && <span>{summary.tokens.toLocaleString()} tokens</span>}
       </div>
@@ -398,7 +399,6 @@ function ChatSession({
         if (currentView()) {
           setLoading(false);
           setStreaming(false);
-          setActiveRunId("");
         }
       }
     }
@@ -450,7 +450,7 @@ function ChatSession({
           ))
         )}
 
-        {loading && <RuntimeActivity runId={activeRunId} events={liveEvents} />}
+        {(loading || liveEvents.length > 0) && <RuntimeActivity runId={activeRunId} events={liveEvents} running={loading} />}
 
         {/* Active task cards */}
         {activeTasks.length > 0 && (
