@@ -1409,7 +1409,7 @@ export function subscribeRuntimeEvents(
 export function subscribeRunEvents(
   runId: string,
   onEvent: (event: unknown) => void,
-  options: { intervalMs?: number; afterSequence?: number } = {},
+  options: { intervalMs?: number; afterSequence?: number; onStatus?: (status: "live" | "reconnecting") => void } = {},
 ) {
   let active = true;
   let timer: number | undefined;
@@ -1433,8 +1433,9 @@ export function subscribeRunEvents(
       }
       if (!current()) return;
       afterSequence = page.next_after_sequence;
+      options.onStatus?.("live");
     } catch {
-      // Retry on transient failures
+      if (current()) options.onStatus?.("reconnecting");
     } finally {
       if (current()) timer = window.setTimeout(poll, intervalMs);
     }

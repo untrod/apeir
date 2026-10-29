@@ -35,14 +35,29 @@ describe("workspace collaboration through the existing Chat Runtime", () => {
   it("retains recorded tool activity after the response without claiming verification", async () => {
     vi.mocked(fetchRunEvents).mockResolvedValue({
       run_id: "original-run", next_after_sequence: 1,
-      events: [{ event_id: "read-one", event_type: "tool.completed", sequence: 1, payload: { tool: "read_file", ok: true } }],
+      events: [{ event_id: "read-one", event_type: "tool.completed", sequence: 1, payload: { tool: "read_file", ok: true, receipt_id: "receipt-original", arguments: "PRIVATE_ARGUMENTS_NOT_FOR_ACTIVITY" } }],
     } as unknown as Awaited<ReturnType<typeof fetchRunEvents>>);
     render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
     await screen.findByText("Reference received");
-    expect(screen.getByText("read_file completed")).toBeInTheDocument();
+    expect(screen.getByText("read_file completed", { selector: "strong" })).toBeInTheDocument();
     expect(screen.getByText("1 tools completed")).toBeInTheDocument();
     expect(screen.queryByText(/tools verified/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText(/Activity details/));
+    expect(screen.getByText("receipt_id: receipt-original")).toBeInTheDocument();
+    expect(screen.queryByText(/PRIVATE_ARGUMENTS_NOT_FOR_ACTIVITY/)).not.toBeInTheDocument();
+  });
+
+  it("loads historical activity by the original Run without submitting another model request", async () => {
+    vi.mocked(runPrompt).mockResolvedValue({ conversation_id: "", message: "Saved reply", status: "completed", run_id: "original-run" });
+    render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    await screen.findByText("Saved reply");
+    vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: "original-run", events: [], next_after_sequence: 0 });
+    fireEvent.click(screen.getByRole("button", { name: "Execution activity" }));
+    expect(await screen.findByText("No recorded events returned.")).toBeInTheDocument();
+    expect(fetchRunEvents).toHaveBeenLastCalledWith("original-run", 0);
+    expect(runPrompt).toHaveBeenCalledTimes(1);
   });
 
   it("rejects unsupported attachments before any model or event subscription", async () => {

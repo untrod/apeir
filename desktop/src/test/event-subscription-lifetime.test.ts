@@ -67,3 +67,31 @@ describe("global event history integrity", () => {
     expect(vi.getTimerCount()).toBe(0); sub.close();
   });
 });
+
+describe("run event connection feedback", () => {
+  it("reports a failed read and recovery without submitting any task", async () => {
+    const fetcher = vi.fn().mockRejectedValueOnce(new Error("private transport detail")).mockResolvedValue(response());
+    vi.stubGlobal("fetch", fetcher);
+    const onStatus = vi.fn(), receive = vi.fn();
+    const sub = subscribeRunEvents("original-run", receive, { intervalMs: 500, onStatus });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onStatus.mock.calls).toEqual([["reconnecting"]]);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(onStatus.mock.calls).toEqual([["reconnecting"], ["live"]]);
+    expect(receive).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls.every(([url]) => String(url).includes("/original-run/events?"))).toBe(true);
+    sub.close();
+  });
+  it("never reports a late failure for a retired Controller", async () => {
+    let reject!: (reason: unknown) => void;
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise((_resolve, fail) => { reject = fail; })));
+    const onStatus = vi.fn();
+    const sub = subscribeRunEvents("original-run", vi.fn(), { intervalMs: 500, onStatus });
+    setConfig({ url: "https://other.example.test", token: "events.fake.other" });
+    reject(new Error("old Controller"));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onStatus).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    sub.close();
+  });
+});

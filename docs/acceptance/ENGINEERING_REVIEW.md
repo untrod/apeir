@@ -5153,3 +5153,30 @@ ESLint and production build pass. This source qualification does not establish
 native GUI timing, token streaming, a complete Skill/extension call ledger or a
 Chat web-search tool. The existing Research search remains a separate governed
 entry; Chat currently exposes specified-URL fetching.
+
+## Chat search and observable execution — 2026-10-29
+
+The workspace tool surface now exposes bounded `search_web` through the existing
+`network.fetch` Capability, Research service, Governance and WebGateway. Read-only
+Chat omits/refuses the tool. Unknown fields, transport overrides, forged authority
+inputs and invalid query/result limits fail before dispatch. The real Gate
+negative prevents network I/O; existing Research API approval/source/citation
+tests remain in the regression. Transport fixtures are software evidence, not a
+live external search or live-model qualification.
+
+The existing Run event reader reports interruption and recovery on its original
+Controller without submitting Work. Chat provides allowlisted model/tool/
+Capability/scope/approval/receipt details and reads the original Run when a user
+opens a saved reply's activity. Raw arguments and private transport errors are
+excluded. Missing or explicitly unknown Token usage stays UNKNOWN; unrelated
+lane usage is not counted again. The visible summaries are bounded projections,
+not replacements for CostController accounting or persisted EventStream.
+
+Backend affected regression: 73 passed, 1 platform-related skip. Desktop: all 62
+files/453 cases passed; TypeScript, ESLint and production build passed. Sandboxed
+Chromium passed all 12 real HTTP/Runtime Studio scenarios against two owned
+model-disabled Runtime processes. No live model, external search or Windows10
+installation is claimed. The frozen NKI Gateway stream implementation currently
+awaits the original complete operation response; incremental token streaming
+cannot be qualified through that contract. Complete extension/Skill use
+attribution remains pending rather than inferred from installation state.

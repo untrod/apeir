@@ -11,7 +11,7 @@ export interface RuntimeActivitySummary {
   failedTools: number;
   unknownTools: number;
   artifacts: number;
-  tokens: number;
+  tokens: number | null;
 }
 
 export function runtimeActivityLabel(event: ActivityEvent): string {
@@ -56,6 +56,8 @@ export function summarizeRuntimeActivity(events: ActivityEvent[]): RuntimeActivi
   let unknownTools = 0;
   let artifacts = 0;
   let tokens = 0;
+  let measuredInvocations = 0;
+  let unknownUsage = false;
   for (const event of events) {
     const payload = event.payload || {};
     iteration = Math.max(iteration, Number(payload.iteration || 0));
@@ -66,9 +68,13 @@ export function summarizeRuntimeActivity(events: ActivityEvent[]): RuntimeActivi
     }
     if (event.event_type === "artifact.created") artifacts += 1;
     const usage = payload.usage;
-    if (usage && typeof usage === "object") {
-      const values = usage as Record<string, unknown>;
-      tokens += Number(values.total_tokens || values.total || 0);
+    if (["model.invocation.completed", "model.invocation.failed"].includes(String(event.event_type))) {
+      measuredInvocations += 1;
+      const values = usage && typeof usage === "object" ? usage as Record<string, unknown> : {};
+      const value = values.total_tokens ?? values.total;
+      const measurements = values.counter_measurements as Record<string, unknown> | undefined;
+      if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || measurements?.total_tokens === "unknown") unknownUsage = true;
+      else tokens += value;
     }
   }
   return {
@@ -79,6 +85,6 @@ export function summarizeRuntimeActivity(events: ActivityEvent[]): RuntimeActivi
     failedTools,
     unknownTools,
     artifacts,
-    tokens,
+    tokens: measuredInvocations > 0 && !unknownUsage ? tokens : null,
   };
 }

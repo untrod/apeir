@@ -92,13 +92,27 @@ visible after the response until the next request or view change. Tasks,
 Inspector and Evidence provide the underlying records. Tool completion is
 distinct from independent verification; missing outcomes stay UNKNOWN.
 
-This is execution progress, not token-by-token response streaming or a complete
-extension-call ledger. The current card does not expose raw tool arguments or
-private payloads. An installed Skill is not evidence that the model used it.
-The **Research** tab provides governed web search, results, sources and snapshots;
-the Chat workspace tool currently fetches specified URLs and does not expose
-the Research search API as a general model tool. Network permissions and source
-availability still apply.
+Expand **Activity details** for recorded Provider/model identities, tool names,
+Capability, scope and original invocation/approval/receipt references. Only
+allowlisted metadata is displayed; raw tool arguments and private payloads stay
+out of the card. **Execution activity** on a saved reply reads its original Run
+without replaying execution. Live activity is bounded to 80 recent events;
+historical inspection initially reads up to 200. A disconnected event reader
+shows a reconnecting state: that does not establish that the backend task stopped.
+Missing usage remains UNKNOWN; receipt-backed Usage remains the accounting view.
+
+When an Agent request explicitly allows networking, `search_web` calls the same
+governed `network.fetch`/Research service used by the **Research** tab. It accepts
+a query and a bounded result count; it cannot change authorization or choose an
+arbitrary transport. Research retains results, citations and snapshots under the
+existing approval rules. Read-only Chat does not offer network tools. The existing
+specified-URL fetch remains separate. Search HTML parsing and site availability
+still depend on the actual source; a search result is not a verified claim.
+
+The frozen NKI operation returns a complete response, so production Chat does
+not offer token-by-token model output. Event progress remains available during
+the wait. A complete extension-use ledger also remains pending: an installed or
+loaded Skill does not establish that a model used it in a particular request.
 
 ![Dark Dashboard with actual Runtime data; absent resources remain UNKNOWN](../media/studio-source-overview.png)
 

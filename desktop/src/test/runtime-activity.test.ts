@@ -37,4 +37,13 @@ describe("runtime activity summary", () => {
     expect(summarizeRuntimeActivity(events).current).toBe("cloud/vendor/model · iteration 2 failed");
     expect(summarizeRuntimeActivity([...events, { event_type: "approval.requested", payload: {} }]).current).toBe("Waiting for approval");
   });
+  it("keeps absent or explicitly unknown usage unknown and does not double count lane events", () => {
+    expect(summarizeRuntimeActivity([]).tokens).toBeNull();
+    expect(summarizeRuntimeActivity([{ event_type: "model.invocation.completed", payload: {} }]).tokens).toBeNull();
+    expect(summarizeRuntimeActivity([{ event_type: "model.invocation.completed", payload: { usage: { total_tokens: 0, counter_measurements: { total_tokens: "unknown" } } } }]).tokens).toBeNull();
+    expect(summarizeRuntimeActivity([
+      { event_type: "model.lane.completed", payload: { usage: { total_tokens: 20 } } },
+      { event_type: "model.invocation.completed", payload: { usage: { total_tokens: 20 } } },
+    ]).tokens).toBe(20);
+  });
 });
