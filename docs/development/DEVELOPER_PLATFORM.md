@@ -83,6 +83,37 @@ current trusted report; logical CPU capacity is not CPU utilization. Topology
 uses exact reported Device-to-Node bindings. Missing data stays UNKNOWN, and
 unsupported GPU/network/sensor metrics stay UNSUPPORTED.
 
+### Watching a request
+
+Chat reads recorded Run events while a request is active (500 ms polling plus
+request latency). Its activity card shows model iterations, tool names,
+approval waits, artifacts and recorded failures. The latest activity remains
+visible after the response until the next request or view change. Tasks,
+Inspector and Evidence provide the underlying records. Tool completion is
+distinct from independent verification; missing outcomes stay UNKNOWN.
+
+Expand **Activity details** for recorded Provider/model identities, tool names,
+Capability, scope and original invocation/approval/receipt references. Only
+allowlisted metadata is displayed; raw tool arguments and private payloads stay
+out of the card. **Execution activity** on a saved reply reads its original Run
+without replaying execution. Live activity is bounded to 80 recent events;
+historical inspection initially reads up to 200. A disconnected event reader
+shows a reconnecting state: that does not establish that the backend task stopped.
+Missing usage remains UNKNOWN; receipt-backed Usage remains the accounting view.
+
+When an Agent request explicitly allows networking, `search_web` calls the same
+governed `network.fetch`/Research service used by the **Research** tab. It accepts
+a query and a bounded result count; it cannot change authorization or choose an
+arbitrary transport. Research retains results, citations and snapshots under the
+existing approval rules. Read-only Chat does not offer network tools. The existing
+specified-URL fetch remains separate. Search HTML parsing and site availability
+still depend on the actual source; a search result is not a verified claim.
+
+The frozen NKI operation returns a complete response, so production Chat does
+not offer token-by-token model output. Event progress remains available during
+the wait. A complete extension-use ledger also remains pending: an installed or
+loaded Skill does not establish that a model used it in a particular request.
+
 ![Dark Dashboard with actual Runtime data; absent resources remain UNKNOWN](../media/studio-source-overview.png)
 
 These screenshots are real [source-browser evidence](https://github.com/untrod/apeir/actions/runs/40351274217)
@@ -175,6 +206,16 @@ current Gateway; it does not erase its separate credential or cancel an already
 admitted call. Persistence failure preserves the preceding registration. If a
 saved update cannot refresh the Gateway, execution is fenced: inspect the saved
 record before retrying. Other running processes are not silently synchronized.
+
+Cloud and local Providers can coexist. Each model is selected by its Gateway
+identity, scoped to its Provider (for example, `cloud/vendor/model` and
+`workstation/vendor/model`), while the backend receives the original vendor
+model ID. After upgrading an older configuration that used an unscoped vendor
+ID containing `/`, select the model again from the current catalog; old ambiguous
+IDs are not silently redirected. PRIVATE/OFFLINE routing excludes cloud
+fallbacks. Automatic local detection uses exact loopback hosts; a display name,
+URL path or similar-looking hostname does not establish locality. Qualified
+remote inference nodes still need an explicit trusted host locality declaration.
 
 ![Models panel showing saved configuration, UNKNOWN health and a Governance denial](../media/studio-models-source.png)
 

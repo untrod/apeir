@@ -35,6 +35,7 @@ _RUNTIME_TOOL_CAPABILITIES = {
     "stop_environment": "environment.stop",
     "destroy_environment": "environment.destroy",
     "fetch_public_url": "network.fetch",
+    "search_web": "network.fetch",
     "create_simulation": "simulation.create",
     "run_simulation": "simulation.run",
     "replay_simulation": "simulation.replay",
@@ -174,6 +175,15 @@ def _runtime_tool_specifications() -> list[dict[str, Any]]:
                 "body_ref": {"type": "string"},
             },
             required=("url",),
+        ),
+        _tool(
+            "search_web",
+            "Search public sources through the governed Research service; approval may be required. Results include source evidence, not verified claims.",
+            {
+                "query": {"type": "string", "minLength": 1, "maxLength": 1000},
+                "max_results": {"type": "integer", "minimum": 1, "maximum": 20},
+            },
+            required=("query",),
         ),
         _tool(
             "create_simulation",
@@ -443,6 +453,19 @@ class WorkspaceToolRuntime:
                     "ok": False,
                     "error": "Runtime effects require an explicit user request.",
                 }
+            if name == "search_web":
+                query = arguments.get("query")
+                limit = arguments.get("max_results", 10)
+                if (
+                    set(arguments) - {"query", "max_results"}
+                    or not isinstance(query, str)
+                    or not query.strip()
+                    or len(query) > 1000
+                    or type(limit) is not int
+                    or not 1 <= limit <= 20
+                ):
+                    return {"ok": False, "error": "Invalid governed search request."}
+                arguments = {"query": query.strip(), "max_results": limit}
             return self._execute_runtime_capability(str(name), dict(arguments))
         handler = handlers.get(str(name))
         if handler is None:

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import os
 import threading
 from collections.abc import Iterable
 from typing import Any
+from urllib.parse import urlsplit
 
 from nous_runtime.artifact import ArtifactRegistry
 from nous_runtime.model_runtime.adapters import (
@@ -111,7 +113,9 @@ def build_gateway_from_providers(
         provider_name = str(getattr(provider, "provider_name", "") or provider_id)
         for routed_model, routed_capabilities in model_capabilities.items():
             model_id = (
-                routed_model if "/" in routed_model else f"{provider_id}/{routed_model}"
+                routed_model
+                if routed_model.startswith(provider_id + "/")
+                else f"{provider_id}/{routed_model}"
             )
             modalities = {ModelModality.TEXT}
             if "vision" in routed_capabilities:
@@ -189,18 +193,17 @@ def _provider_is_local(provider: Any) -> bool:
     locality = str(getattr(provider, "locality", "") or "").lower()
     if locality:
         return locality in {"local", "embedded", "on_device"}
-    provider_id = str(getattr(provider, "provider_id", "") or "").lower()
-    endpoint = str(getattr(provider, "endpoint", "") or "").lower()
-    return any(
-        marker in provider_id or marker in endpoint
-        for marker in (
-            "ollama",
-            "llama.cpp",
-            "localhost",
-            "127.0.0.1",
-            "local",
-        )
-    )
+    # Display names and URL substrings cannot establish execution locality.
+    try:
+        endpoint = urlsplit(str(getattr(provider, "endpoint", "") or ""))
+        host = (endpoint.hostname or "").rstrip(".").lower()
+        if endpoint.scheme not in {"http", "https"}:
+            return False
+        if host == "localhost":
+            return True
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 class ModelGatewayService:

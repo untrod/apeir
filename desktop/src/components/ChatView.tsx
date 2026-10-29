@@ -31,7 +31,8 @@ import {
 import { Markdown } from "./Markdown";
 import { Composer, CHAT_ATTACHMENTS_UNAVAILABLE, CHAT_CONSTRAINTS_UNAVAILABLE, type ComposerAttachment, type ComposerConstraints } from "./Composer";
 import { toast } from "./Toast";
-import { summarizeRuntimeActivity } from "../lib/runtimeActivity";
+import { runtimeActivityLabel, summarizeRuntimeActivity } from "../lib/runtimeActivity";
+import { measuredUsage } from "../lib/usageAccounting";
 import { ContextInspector } from "./ContextInspector";
 
 
@@ -39,12 +40,13 @@ import { ContextInspector } from "./ContextInspector";
 
 
 function MessageBubble({
-  msg, onCardClick, onTraceClick, onContextClick,
+  msg, onCardClick, onTraceClick, onContextClick, onActivityClick,
 }: {
   msg: { id: string; role: string; content: string; timestamp: string; traceId?: string; runId?: string; modelId?: string; cards?: RuntimeEventEnvelope[] };
   onCardClick: (event: RuntimeEventEnvelope) => void;
   onTraceClick: (traceId: string) => void;
   onContextClick: (runId: string) => void;
+  onActivityClick: (runId: string) => void;
 }) {
   const isUser = msg.role === "user";
   const isSystem = msg.role === "system";
@@ -93,6 +95,7 @@ function MessageBubble({
         </div>
       )}
       {msg.runId && !isUser && <button onClick={() => onContextClick(msg.runId!)} style={{ ...btnSecondary, marginTop: space.sm }}>Inspect model input</button>}
+      {msg.runId && !isUser && <button onClick={() => onActivityClick(msg.runId!)} style={{ ...btnSecondary, marginTop: space.sm }}>Execution activity</button>}
     </div>
   );
 }
@@ -158,8 +161,10 @@ function ApprovalActions({ requestId }: { requestId: string }) {
 }
 
 
-function RuntimeActivity({ runId, events }: { runId: string; events: RuntimeEventEnvelope[] }) {
+function RuntimeActivity({ runId, events, running, connection, locale = "en", inspect }: { runId: string; events: RuntimeEventEnvelope[]; running: boolean; connection: "connecting" | "live" | "reconnecting"; locale?: "en" | "zh"; inspect: () => void }) {
   const summary = summarizeRuntimeActivity(events);
+  const t = (en: string, zh: string) => locale === "zh" ? zh : en;
+  const fields = ["provider_id", "model_id", "tool", "tool_call_id", "capability_id", "execution_scope", "agent_invocation_id", "usage_request_id", "receipt_id", "proposal_id", "approval_request_id"];
 
   return (
     <div style={{
@@ -171,25 +176,46 @@ function RuntimeActivity({ runId, events }: { runId: string; events: RuntimeEven
       fontSize: typo.xs,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: space.sm }}>
-        <span style={{ width: 7, height: 7, borderRadius: "50%", background: colors.accent, animation: "nousPulse 1.5s infinite", flexShrink: 0 }} />
-        <strong style={{ color: colors.text }}>{summary.current}</strong>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: colors.accent, animation: running ? "nousPulse 1.5s infinite" : undefined, flexShrink: 0 }} />
+        <strong style={{ color: colors.text }}>{!running && events.length === 0 ? t("No recorded activity", "暂无执行记录") : summary.current}</strong>
         <span style={{ flex: 1 }} />
         <span style={{ color: colors.textTertiary, fontFamily: "monospace" }}>{runId.slice(0, 8)}</span>
       </div>
       {summary.recent.length > 1 && (
         <div style={{ marginTop: space.sm, display: "grid", gap: 4, color: colors.textSecondary }}>
           {summary.recent.slice(0, -1).map((label, index) => (
-            <div key={`${index}-${label}`}>✓ {label}</div>
+            <div key={`${index}-${label}`}>· {label}</div>
           ))}
         </div>
       )}
       <div style={{ marginTop: space.sm, display: "flex", gap: space.lg, color: colors.textTertiary }}>
         {summary.iteration > 0 && <span>Iteration {summary.iteration}</span>}
-        {summary.completedTools > 0 && <span>{summary.completedTools} tools verified</span>}
+        {summary.completedTools > 0 && <span>{summary.completedTools} tools completed</span>}
         {summary.failedTools > 0 && <span style={{ color: colors.danger }}>{summary.failedTools} failed</span>}
+        {summary.unknownTools > 0 && <span>{summary.unknownTools} UNKNOWN</span>}
         {summary.artifacts > 0 && <span>{summary.artifacts} artifacts</span>}
-        {summary.tokens > 0 && <span>{summary.tokens.toLocaleString()} tokens</span>}
+        <span>{summary.tokens === null ? "Token UNKNOWN" : `${summary.tokens.toLocaleString()} tokens`}</span>
       </div>
+      {running && <div role="status" style={{ marginTop: space.sm, color: connection === "reconnecting" ? colors.warning : colors.textTertiary }}>
+        {connection === "reconnecting" ? t("Event connection interrupted; reconnecting. The task may still be running.", "事件连接中断，正在重连；任务可能仍在运行。") : connection === "connecting" ? t("Waiting for recorded activity…", "等待执行记录…") : t("Receiving recorded activity", "正在接收执行记录")}
+      </div>}
+      {events.length > 0 && <details style={{ marginTop: space.sm }}>
+        <summary style={{ cursor: "pointer", color: colors.textSecondary }}>{t("Activity details", "处理详情")} · {events.length}</summary>
+        <ol style={{ maxHeight: 240, overflowY: "auto", paddingLeft: space.lg }}>
+          {events.map(event => <li key={event.event_id} style={{ marginTop: space.sm }}>
+            <div>{runtimeActivityLabel(event)}</div>
+            {fields.map(field => {
+              const value = event.payload?.[field];
+              return typeof value === "string" && value ? <div key={field} style={{ color: colors.textTertiary, overflowWrap: "anywhere" }}>{field}: {value.slice(0, 240)}</div> : null;
+            })}
+            {event.event_type.startsWith("model.invocation.") && event.event_type !== "model.invocation.started" && <div style={{ color: colors.textTertiary }}>
+              {t("Cost", "费用")}: {measuredUsage(event.payload?.cost_usd, event.payload?.cost_measurement, true)}
+              {typeof event.payload?.latency_ms === "number" && Number.isFinite(event.payload.latency_ms) && event.payload.latency_ms >= 0 && <> · {event.payload.latency_ms} ms</>}
+            </div>}
+          </li>)}
+        </ol>
+        <button style={btnSecondary} onClick={inspect}>{t("Inspect model input", "检查模型输入")}</button>
+      </details>}
     </div>
   );
 }
@@ -234,6 +260,9 @@ function ChatSession({
   const [streaming, setStreaming] = useState(false);
   const [liveEvents, setLiveEvents] = useState<RuntimeEventEnvelope[]>([]);
   const [activeRunId, setActiveRunId] = useState("");
+  const [eventConnection, setEventConnection] = useState<"connecting" | "live" | "reconnecting">("connecting");
+  const [activityHistory, setActivityHistory] = useState<{ runId: string; events: RuntimeEventEnvelope[]; loading: boolean; error: boolean } | null>(null);
+  const historyRequest = useRef(0);
   const [contextView, setContextView] = useState<{ runId: string; controller: string } | null>(null);
   const inspectContext = (runId: string) => setContextView({ runId, controller: getConfig().url });
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -244,6 +273,18 @@ function ChatSession({
   const currentView = useCallback(() => {
     try { connection(); return active.current; } catch { return false; }
   }, [connection]);
+  const inspectActivity = async (runId: string) => {
+    if (!currentView()) return;
+    const request = ++historyRequest.current;
+    setActivityHistory({ runId, events: [], loading: true, error: false });
+    try {
+      const page = await fetchRunEvents(runId, 0);
+      if (!currentView() || request !== historyRequest.current) return;
+      setActivityHistory({ runId, events: page.events as RuntimeEventEnvelope[], loading: false, error: false });
+    } catch {
+      if (currentView() && request === historyRequest.current) setActivityHistory({ runId, events: [], loading: false, error: true });
+    }
+  };
   useEffect(() => {
     active.current = true;
     return () => {
@@ -318,6 +359,7 @@ function ChatSession({
     setLoading(true);
     setStreaming(true);
     setLiveEvents([]);
+    setEventConnection("connecting");
     const requestId = crypto.randomUUID();
     setActiveRunId(requestId);
 
@@ -336,7 +378,7 @@ function ChatSession({
     const subscription = subscribeRunEvents(
       requestId,
       (event) => appendEvent(event as RuntimeEventEnvelope),
-      { intervalMs: 500 },
+      { intervalMs: 500, onStatus: status => { if (isCurrent()) setEventConnection(status); } },
     );
     subscriptionRef.current = subscription;
 
@@ -398,7 +440,6 @@ function ChatSession({
         if (currentView()) {
           setLoading(false);
           setStreaming(false);
-          setActiveRunId("");
         }
       }
     }
@@ -446,11 +487,19 @@ function ChatSession({
           </div>
         ) : (
           allMessages.map((msg) => (
-            <MessageBubble key={msg.id} msg={msg} onCardClick={onCardClick} onTraceClick={onTraceClick} onContextClick={inspectContext} />
+            <MessageBubble key={msg.id} msg={msg} onCardClick={onCardClick} onTraceClick={onTraceClick} onContextClick={inspectContext} onActivityClick={inspectActivity} />
           ))
         )}
 
-        {loading && <RuntimeActivity runId={activeRunId} events={liveEvents} />}
+        {(loading || liveEvents.length > 0) && <RuntimeActivity runId={activeRunId} events={liveEvents} running={loading} connection={eventConnection} locale={locale} inspect={() => inspectContext(activeRunId)} />}
+        {activityHistory && <section aria-label={t("Recorded execution activity", "原始执行记录")}>
+          <button style={btnSecondary} onClick={() => { historyRequest.current += 1; setActivityHistory(null); }}>{t("Close activity", "关闭记录")}</button>
+          {activityHistory.loading ? <p role="status">{t("Loading recorded events…", "正在读取执行记录…")}</p> : activityHistory.error ? <p role="alert">{t("Recorded activity unavailable. The task has not been resubmitted.", "执行记录暂不可读取；未重新提交任务。")}</p> : <>
+            <RuntimeActivity runId={activityHistory.runId} events={activityHistory.events} running={false} connection="live" locale={locale} inspect={() => inspectContext(activityHistory.runId)} />
+            {!activityHistory.events.length && <p>{t("No recorded events returned.", "未返回执行记录。")}</p>}
+            {activityHistory.events.length >= 200 && <p>{t("Showing the first 200 recorded events; use the original Run inspector for further evidence.", "显示前 200 条记录；更多证据请查看原始运行。")}</p>}
+          </>}
+        </section>}
 
         {/* Active task cards */}
         {activeTasks.length > 0 && (

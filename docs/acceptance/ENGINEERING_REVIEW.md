@@ -5211,3 +5211,95 @@ p50/p95/p99 1.790/2.417/4.373 ms and 190.596 ms total CPU; reusing one instance
 had 0.018/0.080/0.180 ms and 4.234 ms CPU (including its first preparation).
 This measures schema preparation for this small input on this host only; it
 does not establish Windows HTTP latency or resolution of all Issue #88 failures.
+
+## Human session reads and Windows Skill timing — 2026-10-29
+
+The standalone `is_human_session_context` check previously used
+`operation_transaction()`, acquiring `BEGIN IMMEDIATE` for a SELECT. It now
+opens the existing Governance database read-only. Callers that supply their
+admission transaction still check the current session through that exact
+connection, preserving atomic revocation checks before authority publication.
+There is no identity cache, new connection pool or change to write durability.
+
+A regression holds an independent WAL writer with an uncommitted revocation:
+the standalone reader observes committed state without requesting the writer,
+the transaction-bound check observes its own revocation, and a subsequent read
+observes the committed revocation. A second regression rejects an attempted
+write through the read-only connection. Human identity, Operations and actual
+TLS/HTTP remote Skill tests pass locally: 103 passed. Windows qualification
+remains subject to the candidate's CI.
+
+PR #110 head `a67bc9e` passed Core but failed Multi-Arch Windows run
+[40694759599](https://github.com/untrod/apeir/actions/runs/40694759599/job/122838451669).
+The unchanged five-second request in
+`test_http_original_nonce_binds_every_reviewed_remote_locator[digest]` timed out
+at 5105 ms during the subsequent valid install. Admission took 1221 ms; the
+thread snapshot was in CycloneDX validator registry construction while
+verifying the installed SBOM. This differs from earlier SQLite commit stacks
+and does not establish a single cause for Issue #88. Keep the issue open;
+neither this read-lock correction nor a successful CI retry proves all historic
+timeouts repaired. Raw logs remain retained, with original assertions and
+deadlines unchanged.
+
+## Provider coexistence and model identity — 2026-10-29
+
+An offline counterexample registered a cloud and loopback Provider with the
+same vendor ID `vendor/model`. Factory construction raised `ModelRegistryError`
+because the slash bypassed Provider scoping. The factory now keeps the original
+vendor ID in descriptor metadata while qualifying catalog identity with its
+Provider. Already Provider-qualified IDs remain unchanged. Old unscoped vendor
+IDs containing a slash must be reselected from the catalog; no ambiguous alias
+is redirected to a different Provider. Saved Provider files are unchanged.
+
+Automatic locality detection now parses exact loopback hosts instead of using
+Provider names or URL substrings. Trusted host declarations for embedded or
+remote local inference remain explicit. Regression coverage checks shared
+vendor IDs, locked selection and fake adapter calls to both original Providers,
+PRIVATE routing without cloud fallback, exact IPv4/IPv6/localhost handling and
+refusal of name/path/lookalike-host inference. These are software routing tests;
+no live account, running model service or external model request is exercised.
+
+## Recorded Chat activity presentation — 2026-10-29
+
+The existing Chat activity summary called successful tools "verified", marked
+past activity rows with success ticks regardless of their meaning and omitted
+model-invocation failures. It now says "completed" for a successful tool return,
+distinguishes failed and missing outcomes, shows recorded model identities and
+failure/approval events, and uses neutral history markers. The most recent
+activity stays visible after the response; it is presentation state cleared by
+the next request or view change. Existing EventStream and Run identity remain
+the source of records; no new event store or execution path is introduced.
+
+The targeted summary/Chat regressions pass 23 cases, including response-time
+activity retention. All 62 Desktop test files pass (449 cases); TypeScript,
+ESLint and production build pass. This source qualification does not establish
+native GUI timing, token streaming, a complete Skill/extension call ledger or a
+Chat web-search tool. The existing Research search remains a separate governed
+entry; Chat currently exposes specified-URL fetching.
+
+## Chat search and observable execution — 2026-10-29
+
+The workspace tool surface now exposes bounded `search_web` through the existing
+`network.fetch` Capability, Research service, Governance and WebGateway. Read-only
+Chat omits/refuses the tool. Unknown fields, transport overrides, forged authority
+inputs and invalid query/result limits fail before dispatch. The real Gate
+negative prevents network I/O; existing Research API approval/source/citation
+tests remain in the regression. Transport fixtures are software evidence, not a
+live external search or live-model qualification.
+
+The existing Run event reader reports interruption and recovery on its original
+Controller without submitting Work. Chat provides allowlisted model/tool/
+Capability/scope/approval/receipt details and reads the original Run when a user
+opens a saved reply's activity. Raw arguments and private transport errors are
+excluded. Missing or explicitly unknown Token usage stays UNKNOWN; unrelated
+lane usage is not counted again. The visible summaries are bounded projections,
+not replacements for CostController accounting or persisted EventStream.
+
+Backend affected regression: 73 passed, 1 platform-related skip. Desktop: all 62
+files/453 cases passed; TypeScript, ESLint and production build passed. Sandboxed
+Chromium passed all 12 real HTTP/Runtime Studio scenarios against two owned
+model-disabled Runtime processes. No live model, external search or Windows10
+installation is claimed. The frozen NKI Gateway stream implementation currently
+awaits the original complete operation response; incremental token streaming
+cannot be qualified through that contract. Complete extension/Skill use
+attribution remains pending rather than inferred from installation state.
