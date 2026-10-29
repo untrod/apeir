@@ -8,6 +8,23 @@ This record distinguishes reproduced defects, inspected risks and unqualified
 external dependencies. It is not an exhaustive proof that the repository is
 bug-free, a physical acceptance, or production certification.
 
+## Public documentation consolidation — 2026-10-29
+
+The user-facing index now routes installation to Quick Start, usage to Developer
+Platform and Provider Guide, and status to the single ROADMAP. Quick Start no
+longer duplicates the full editor/Context/Environment reference; existing
+section anchors remain. ROADMAP retains current scoped status, open failures and
+next work instead of repeating each integration round. Historical target text
+remains in Git history; dated acceptance records and checkpoint tags are intact.
+
+Known Limitations now distinguishes approved native component integrity and
+existing unsigned builds from pending Windows10 installation. The ARM64 host
+guide retains its historical environment while removing an obsolete RC3
+installer procedure and its implied current native qualification. No package,
+component lock, authority, execution handler or qualification Gate is changed by
+this documentation cleanup. The accepted source is main `05e061e4` (PR114);
+current-head regression and native packaging remain separate evidence.
+
 ## Windows qualification and deferred CAS optimization — 2026-10-28
 
 Main `aaa0965adc57106c2b5468478eb80d4bde2f93d6` includes the reviewed model

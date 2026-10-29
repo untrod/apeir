@@ -1,540 +1,128 @@
-# APEIR roadmap and milestone status
+# APEIR roadmap and status
 
-This is the authoritative current status source. **PASS** means the named Gate
-was exercised within its stated scope; **PARTIAL** means implemented portions
-remain short of the complete Gate; **PENDING** means acceptance/implementation
-has not been performed; **BLOCKED** identifies a concrete unavailable prerequisite.
-Dated acceptance records describe historical evidence, not current blanket claims.
+Current status for APEIR Runtime and APEIR Studio. This is the only roadmap.
+Use [Quick Start](docs/operations/getting-started/QUICK_START.md) to run the
+software; use [Engineering Review](docs/acceptance/ENGINEERING_REVIEW.md) for
+dated tests, failures and build records.
 
-Master execution baseline: `d95589908f7686210126b75f8033e6bf494f9fb7` on `main`.
-The implementation closure audit began at `ff4d7b4f47b5821f05b3c1a6ef2429847a64cf6d`;
-the consolidation merge preserved that accepted history. Its 15 published
-`milestone/*` checkpoints remain historical evidence, never moving pointers.
-Kernel: `87fd1b2ff28ef14ab1a515a58162592b452fda2e` (frozen).
+**状态说明 / Status:** PASS applies only to the stated scope. PARTIAL means a
+usable subset exists. PENDING means not yet accepted. BLOCKED names a missing
+prerequisite. A successful software test does not qualify hardware or installation.
 
-APEIR is an open execution, governance and verification runtime for heterogeneous
-intelligence and real-world resources. APEIR 是面向异构智能与现实资源的开放执行、治理与验证运行时。
-Codex, Claude, OpenHands, local models, algorithms and humans can supply
-intelligence. APEIR owns authority, execution, recovery, observation, verification
-and evidence; it does not compete with those agent harnesses. Read the canonical
-[constitution and invariants](docs/architecture/DISTRIBUTION.md) before this plan.
-Future targets below are requirements, not claims of implemented integrations.
-
-## Closure matrix
-
-| Milestone / acceptance item | Status | Actual evidence and limits |
-| --- | --- | --- |
-| M3.1 autonomous coordination | PASS | `1e26d5e`: durable AgentSession, TaskPlan→existing Workflow, event wake/resume and Distributed Work; regression suites `tests/agent_collaboration`, `tests/agent_execution`, `tests/node_runtime`. |
-| M3.2 reliability | PASS | `c95029d`: durable delivery/journals, restart/disconnect reconciliation, at-most-once effects; `tests/node_runtime` and recovery/reliability suites. Local durable ownership, not HA. |
-| M3.3-A Reality foundation | PASS | `701d053`: stable managed Device identity, registry/graph projection, existing Capability/Observation/EffectVerifier; `tests/reality`. |
-| M3.3-B simulated Reality | PASS | `935dcb7`: stateful simulated mutation through Work/Node, independent MATCH, deterministic faults/lost response; [Reality evidence](docs/acceptance/REALITY_ARCHITECTURE_AUDIT.md). |
-| M3.3-C real hardware acceptance | PENDING | No complete Jetson→ESP32 physical-effect/observation/commit and physical fault evidence. Historical ARM64 host qualification is not this Gate. |
-| M3.4-A Governance Core | PASS | `2fdea90`: four deterministic decisions, durable approval of original Work/Operation, scoped grants, revoke/expire/revalidate/audit; `tests/governance`. |
-| M3.4-B Credential Governance | PASS | `26256dd`: execution-bound leases and redaction/leakage negatives; existing approval backend; fake Cloud secrets, not a production secret-store qualification. |
-| M3.5 Control Plane software | PASS | `242acf8`: canonical-state API, nonce/session/identity-bound governance, realtime transitions, real-data responsive Operations Console; `tests/control_plane` and Desktop tests. [Contract](docs/architecture/CONTROL_CENTER_SPEC.md). |
-| Controlled remote Skills API/UI | PARTIAL | Existing OperationsPlane/SkillRegistry/Extension/CAS/WebGateway path supports explicit human catalog add/refresh/remove and exact reviewed HTTPS package install. 28 owned HTTP/TLS integration cases cover canonical permissions, nonce replay, post-acquisition revocation, stale review, rollback and owner reload; passive reads do not fetch. No grants are seeded. Real publisher/signature trust, deployed IdP, native Desktop, executable Skills, models and hardware remain unqualified. [Contract](docs/architecture/SECURITY_CONTRACT.md#skillextension-acquisition-before-publication). |
-| M3.5 real IdP / deployed remote-human qualification | PENDING | Signed fake identity proofs exercise the contract. No live production IdP or Windows enrollment ACL qualification is claimed. |
-| M3.5-Q remote-human qualification preparation | PARTIAL | Current enrollment/method/permission revalidation, browser Origin admission, cookie session restore/logout and verified fake local TLS protocol tests extend the existing boundary. Real IdP + actual human browser/mobile approval/audit remains PENDING; see [qualification audit](docs/architecture/CONTROL_CENTER_SPEC.md#m35-q-qualification-preparation-audit). |
-| M3.6 Developer Platform software | PASS | `6960175`: public canonical SDK, seven conformance suites, protocol/version checks and isolated installed-wheel consumer; [SDK evidence](docs/development/DEVELOPER_PLATFORM.md), `tests/developer_platform`. SDK remains beta, not a production stability promise. |
-| Architecture Consolidation Gate | PASS | `070640b`: five canonical documents cover constitution, authority, execution, ownership/failure and Provider model. This consolidation reduces redundant navigation and stale status. |
-| M4 Interoperability (complete target) | PARTIAL | Six Provider seams and exercised generic external-agent reference exist; industrial/reference integrations below remain unimplemented/unqualified. |
-| M4 generic external-agent / restrictive policy reference | PASS | `05cfbc8`: actual isolated OCI subprocess plus canonical approval/Work/evidence/recovery and simulated downstream Reality; `tests/interoperability`. An external proposal never grants authority. |
-| M4.3 OPA Data API software reference | PASS | Real OPA 1.21.1 evaluation through existing restrictive PolicyProvider/Governance, exact-request binding, ambient credential denial, health/errors, approval/credential/Work/Node/evidence and paused-service/lost-response recovery; [reference scope](docs/architecture/PROVIDER_CONTRACT.md#m43-opa-data-api-software-reference). Fake credentials and simulated device effects; authenticated production remote-policy deployment remains PENDING. |
-| M4.4 OpenBao KV-v2 software reference | PASS | Real OpenBao 2.7.1 read-only scoped resolution through existing CredentialBroker, expiration/revocation, original firmware approval/denial and response-loss/restart without another credential fetch or effect; [scoped evidence](docs/architecture/PROVIDER_CONTRACT.md#m44-openbao-kv-v2-software-reference). Source/PR and repaired main CI passed; `milestone/m4.4-openbao-kv2-reference` freezes main `c3eeeaca`. Production deployment, rotation and dynamic server leases remain PENDING. |
-| M4.6 bounded Ray diagnostic / Workflow qualification | PARTIAL | Actual Ray2.49.2 now participates in one durable AgentSession/Plan through Distributed Work/Node, separate Ray/device Approve Once, CAS, fake execution-time credentials and independent simulated MATCH; Deny/MISMATCH/UNKNOWN, post-start expiry/policy/profile denial, journal reload and prior response-loss/cancellation cases are exercised. Normal OCI PID64 is unchanged. [Qualification scope](docs/architecture/PROVIDER_CONTRACT.md#workflow-and-post-start-admission-qualification); fixed diagnostic task is not a production Ray adapter/resource profile, remote cluster/GPU/platform or physical acceptance. |
-| Provider dispatch-admission boundary | PARTIAL | Existing supervisor/SDK post-setup admission is now exercised after real Ray startup in the bounded Workflow qualification, as well as negative fake-runner contracts; [contract and limits](docs/architecture/PROVIDER_CONTRACT.md#dispatch-admission-after-provider-setup). Production adapters must independently exercise this contract and their complete execution/recovery/cleanup gates. |
-| Environment numeric resource admission | PASS | Existing Environment limits reject non-finite CPU, ambiguous/fractional integer bounds and zero timeout/output before persistence or execution; constructed Provider inputs and restart records are revalidated. [Contract](docs/architecture/PROVIDER_CONTRACT.md#environment-resource-admission). This scoped software hardening does not qualify a production Ray profile or change PID64. |
-| M4 authenticated Codex / remaining industrial Providers | PENDING | Official Codex0.163.0 account/model metadata is available; direct App Server→APEIR MCP reads and approval-required submission have software evidence, with no model Turn. Complete authenticated Harness, native tool/filesystem/credential isolation, usage and recovery remain unqualified. Production Ray/Kubernetes, SPIFFE/SPIRE and Viam/ROS/KubeEdge remain unqualified. OPA reference does not complete M4 or authenticate remote human approval. |
-| M5 Reality & Hardware (complete target) | PARTIAL | Read-only signed SerialTransport/ESP32 host contracts exist. Physical mutation, firmware persistence and a second device family remain missing. |
-| M5 serial/ESP32 host-contract preparation | PASS | `ff4d7b4`: 28 focused tests, bounded signed frames/fresh nonce/stable identity/trust preservation; `tests/reality/test_serial_contract.py`. No firmware-write capability advertised. |
-| M5 physical ESP32 write / power-loss acceptance | PENDING | Requires real Jetson/ESP32, firmware/NVS behavior and physical fault-injection evidence. |
-| M5 second real hardware family | PENDING | No materially different real device family accepted. |
-| M6 Scale & Federation | PENDING | Local locking and federation drafts are not Controller HA, multi-site authority, fleet lifecycle, rolling upgrades, quotas or tenant isolation. Implementation must wait for stable M3–M5 contracts. |
-| M7 Open Specification & Verified Reality Benchmark | PENDING | Existing RFCs/CTK and generic evaluation machinery are reusable foundations; no evidence-backed Verified Reality Execution Benchmark or complete open-spec Gate exists. |
-| M8 Governed Evolution | PENDING | Long-term reserved target; no autonomous maintenance/deployment acceptance is claimed. |
-| Component-lock contract validation | PASS | Existing `tests/repository/test_kernel_component_lock.py`: 14 tests, including matching-digest 32-bit PE rejection for locked Windows x64/ARM64 targets. This checks admission contracts, not native bytes or installed Windows. |
-| Native component-lock binary hash validation | PASS | Maintainer approved the exact frozen-source `/Brepro` candidate hashes on2026-10-26 for reviewed migration and internal unsigned builds. The existing verifier admitted the actual x64 PE files and full reviewed archive against the migrated lock; two recorded Windows builds and their real NKI/Worker/Runtime smoke are retained. Normal PR integration and current packaging remain separate; this does not qualify installed Windows10. [Migration and exact inputs](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#approved-component-lock-migration--2026-10-26). |
-| APEIR Studio visual platform | PARTIAL | Existing Desktop now has a lazy FlexLayout shell, stable portal-based panel instances, bounded presentation import/export, eight composition presets and original Runtime views. Source Chromium exercised layout reload, draft-preserving drag and two-Controller isolation with explicit private-draft export and zero mutation requests. Dashboard now adds bounded read-only widgets, real Runtime/Kernel and Operations data, shared Usage/EventStream subscriptions, drag/resize, settings and persistence in that same schema. The last-active-layout fallback remains global. Named Global/Workspace/Template/Dashboard libraries now reuse that schema, with actual Controller/directory namespaces, revision-checked browser writer locks and protected-editor load admission. The compact toolbar, denser new cards and existing-theme status views refine the same shell. Studio now opens directly with discoverable panel navigation and original conversation history. Ordinary tab dragging, splitter resizing, guarded closing, edge snapping and maximize/restore no longer require widget edit mode; presentation changes save automatically while legacy geometry and protected drafts are preserved. The Workflow panel now edits canonical definitions, validates and registers through the existing Compiler/Store, runs only its bound pure handlers through Governance, and inspects original Run/EventStream history after restart. Host-specific handlers remain UNSUPPORTED in that API. Draft files and canvas coordinates are separate from execution and layout authority. Declarative Panel/Widget contributions now reuse ExtensionRegistry/CAS/Governance with review, immutable versions, default-disabled updates, current-policy read admission and retained missing-component slots. Executable third-party UI isolation and real media remain PENDING. Native installation is not qualified by these browser checks. |
-| Runtime product delivery | PARTIAL | Existing Desktop workbench extended with persistent tabs/layout, searchable canonical records, resizable Evidence and bilingual navigation; browser/mobile real-data checks are not installed APEIR.exe acceptance. Node identity/trust durability repaired through [PR #28](https://github.com/untrod/apeir/pull/28). [PR #29](https://github.com/untrod/apeir/pull/29) covers superseded sockets and local timing; [PR #30](https://github.com/untrod/apeir/pull/30) covers package acquisition integrity; [PR #31](https://github.com/untrod/apeir/pull/31) restricts Node temporary key files before writing material. Signed once-code pairing, explicit human exact-key decisions, trust revocation and Desktop onboarding now extend the existing Relay/Governance stores; Cloud process/HTTP qualification does not certify real IdP or native Windows UI. The existing Skill Registry/CAS now support exact-version/digest local Catalog installation, human-governed Console review/install/instruction-load/disable/enable/remove and source-browser checks. Reviewed HTTPS Skill acquisition has owned HTTP/TLS software evidence; publisher/signature trust and general executable Skill workflows remain unqualified. Instruction loading is not execution. The existing workspace editor is now reachable in Operations with protected in-memory drafts, bounded layout preferences, persisted activity and exact saved-file path/hash input to Chat through current read and independent Provider-transfer admission, with per-attempt source freshness and input provenance; unsupported safe-reader hosts deny delivery. This enables no model writes or OS-wide monitoring and does not qualify a real model account. The existing Environment view is now available in Operations; API approval reuses verified human identity and the original service request. Cloud HTTP/browser contract creation and fail-closed start are exercised; default OCI engine control is BLOCKED without its required strict sandbox, and Python/OCI execution, persistent PTY and installed Desktop remain unqualified. Cross-network Windows/Jetson and native installation remain unqualified or unimplemented. Twelve distinct local simulated Work runs each COMMITTED/MATCH/effect_count=1 are performance baselines, not physical/NAT qualification; see [Mesh operations](docs/operations/compute-mesh/OPERATIONS.md) for transport responsiveness and cancellation boundaries. Original Windows Core failures 38069080761 and 38071947425 remain unexplained and Issues #4/#8 stay open. |
+Kernel remains frozen at `87fd1b2ff28ef14ab1a515a58162592b452fda2e`.
+Distribution is `0.1.0-rc1`; Provider SDK is `1.0.0b2`, NKI wrapper `0.1.1`.
+See the [architecture contracts](docs/architecture/README.md) before changing
+authority or execution.
 
 ## Product delivery qualification
 
-| Delivery level | Status | Exercised scope and remaining requirement |
+| Level | Status | Qualified scope / remaining work |
 | --- | --- | --- |
-| SOURCE_READY | PASS | Independently installed base-only Python3.10 wheel on Linux; public model-free API, authentication denial, owner-only session cleanup and simulated original-result recovery. Download includes the canonical Quick Start, hashes, manifest and validation report. Source browser displays actual project files; native IPC and live models are not implied. |
-| PRODUCT_READY | PARTIAL | Existing setup, Provider lifecycle, reviewed file proposals, evidence and restart software paths are connected. Real model/account qualification and safe test execution remain unqualified; missing strong isolation blocks execution. |
-| NATIVE_READY | PARTIAL | Approved components and the full-mode Portable/NSIS build passed; current Windows10 installed Desktop and lifecycle remain unqualified. |
-| NATIVE_COMPONENT_READY | PASS | PR101 merged as `7763cc0`; exact approved frozen-source PE files and reviewed archive pass the maintained lock locally and in the real Windows build. Producer evidence and exact bytes are retained. This is component admission, not installed Desktop acceptance. |
-| NATIVE_BUILD_READY | PASS | Full-mode [40659887576](https://github.com/untrod/apeir/actions/runs/40659887576) produced verified Portable/NSIS from candidate `69c7e44`, including model-protocol and Relay guards. All 22 checksums, 13 manifest entries, 11 Portable files, actual NSIS payloads and approved Kernel bytes match. Real Server2025 sidecar/authentication/cleanup and pure Workflow CLI recovery passed, with no skip flags or external model calls. This PR110 source is not yet main: its separate Core Windows HTTP failure remains unresolved in Issue88. Windows10 installation is PENDING. [Download and scoped evidence](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build). |
-| NATIVE_INSTALL_READY | PENDING | No current Windows10 x64 test host is attached. Server2025 component smoke is not installation/upgrade/uninstall, installed GUI, Defender or signing acceptance. |
-| RELEASE_READY | BLOCKED | Windows10 installed lifecycle, complete release supply-chain review, signing and release authorization remain required. The unsigned internal build, Source artifacts and checkpoint tags are not production releases. |
+| SOURCE_READY | PASS | Independent wheel installation, authenticated model-free API, browser Studio and simulated original-result recovery. Download matching source bundles from a qualified main run. |
+| PRODUCT_READY | PARTIAL | Setup, saved Provider management, reviewed file proposals, evidence and restart paths work in software. Live-model development and safely executed tests still need their separate prerequisites. |
+| NATIVE_READY | PARTIAL | Approved components and unsigned Portable/NSIS builds exist. Current Windows 10 installed lifecycle is not qualified. |
+| NATIVE_COMPONENT_READY | PASS | PR101 admitted the approved frozen-source x64 PE files through the existing component lock. [Exact inputs](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#approved-component-lock-migration--2026-10-26). |
+| NATIVE_BUILD_READY | PASS | Full-mode run 40659887576 produced checked Portable/NSIS from candidate 69c7e44, not current main. Its Server 2025 smoke does not qualify installed Windows 10. [Build identity and hashes](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build). |
+| NATIVE_INSTALL_READY | PENDING | Requires current-version Windows 10 x64 GUI, install, upgrade, restart, uninstall and Defender checks. No such host is attached. |
+| RELEASE_READY | BLOCKED | Installed lifecycle, signing, supply-chain review and explicit publication authorization remain required. No stable Release is claimed. |
 
-### Current usage boundaries
+## Current usage boundaries
 
-| Component | Status | Usable now | Remaining |
+| Component | Status | Implemented | Remaining / evidence |
 | --- | --- | --- | --- |
-| Skills | PARTIAL | Reviewed local/HTTPS instructions; install/load/enable/disable/remove with integrity and permission checks | Unrestricted public marketplace and arbitrary executable Skill workflows are not qualified |
-| Studio extensions | PARTIAL | Reviewed declarative panels/widgets, sanitized reads, controlled lifecycle | Arbitrary third-party JavaScript remains BLOCKED pending isolation |
-| Cloud/API and local models | PARTIAL | Existing compatible adapters, Registry, credential references, strict Gateway/NKI and software tests; Studio Models now reads saved non-secret configuration, performs governed create/update/delete, and requires an explicit registered-model inference test | Frozen Worker does not implement Anthropic Messages; unsupported protocols/parameters fail before dispatch. Supported cloud accounts and local servers still need actual inference/capability qualification |
-| Workflow | PARTIAL | Visual editor, canonical schemas, four bound pure handlers, original history/recovery | Model/Agent consumers and typed output-to-input bindings are not connected in the Studio API |
-| Developer loop | PARTIAL | Two-file review, independent approval, actual file observation and restart history | Live-model proposal qualification and execution in a qualified strong sandbox |
-| Token/cost efficiency | PARTIAL | Bounded context and excerpt reads, selective collaboration, existing accounting/budgets | No measured universal Token-saving percentage or real-model comparative task benchmark |
-| Terminal / Git Studio | PARTIAL | Existing governed command profiles and bounded Git reads where isolation is available | Full interactive PTY and full Git write workflow |
+| Studio | PARTIAL | Docking, eight presets, named layouts, Dashboard, themes, bilingual navigation and Controller isolation | Executable third-party UI and live media are not qualified. [Studio guide](docs/development/DEVELOPER_PLATFORM.md#apeir-studio). |
+| Direct development | PARTIAL | Project reads, drafts, two-file Proposal review, independent approval, file readback and original history | Live-model Proposal qualification and tests in a qualified strict sandbox. File MATCH is not test PASS. |
+| Models | PARTIAL | Saved Provider lifecycle, credential references, qualified catalog IDs, explicit selection and cloud/local coexistence in software tests | Actual accounts/local services and endpoint capabilities need qualification. Frozen Worker has no Anthropic Messages backend. |
+| Chat activity | PARTIAL | Recorded model/tool events, governed search, approval/receipt references, history inspection and reconnect state | NKI returns complete responses; incremental model text is not available. Full Skill-use attribution is pending. |
+| Workflow | PARTIAL | Visual editor, Compiler, canonical definitions, pure handlers, approvals, original Runs and restart history | Model/Agent hosts and typed output-to-input bindings are not connected in the Studio API. [Builder limits](docs/development/DEVELOPER_PLATFORM.md#visual-workflow-builder). |
+| Context / cost | PARTIAL | Bounded selected context, source/version manifests, budgets and nullable usage accounting | No general Token-saving percentage, live twenty-task comparison or complete incremental project-cache qualification. |
+| Skills | PARTIAL | Reviewed local/HTTPS instruction catalogs, integrity, install/load/enable/disable/remove | Public publisher trust and arbitrary executable Skill workflows are not qualified. |
+| UI extensions | PARTIAL | Reviewed declarative Panel/Widget contributions, sanitized reads and governed lifecycle | Arbitrary third-party JavaScript remains BLOCKED pending verified isolation. |
+| Terminal / Git | PARTIAL | Governed fixed command profiles, ProcessSession records and bounded Git reads where isolation is available | Complete interactive PTY and Git write experience. No unrestricted host fallback. |
+| Nodes / Devices | PARTIAL | Signed identity, pairing, trust, resource freshness, distributed Work, evidence and reconciliation | Current connected status is required; historical registration is not online readiness. Physical writes need separate acceptance. |
+| Automation | PARTIAL | Structured simulated Workflow consumer, manual keys, one-shot due polling, history and original-trigger recovery | Recurring/background Cron, Event, Webhook and Recorder are not implemented. Free-text enabled configuration is not executable qualification. |
+| Environment / scientific | PARTIAL | Persistent contracts, governed lifecycle and numerical reference tasks | Default local execution remains BLOCKED without its required strict sandbox; libraries or a created contract do not prove execution. |
 
-These are separate software and deployment limits. A missing account does not
-explain an unbound Workflow handler; a working adapter does not certify every
-model. See the [Developer Platform](docs/development/DEVELOPER_PLATFORM.md) for the
-supported paths rather than treating a panel or catalog entry as availability.
+The [Developer Platform](docs/development/DEVELOPER_PLATFORM.md) explains these
+paths. A catalog entry, installed package or healthy endpoint is not proof that
+a particular model or tool has run.
 
-## Execution protocol and governance
+## Closure matrix
 
-The bounded Automation consumer is **PARTIAL** product delivery. Explicit CLI
-and authenticated HTTP management consume a fixed structured simulated Reality
-template through existing Workflow/Work/Governance/Node, with separate original
-human approval, independent observation, evidence and history. Manual keys and
-one-shot due polling are supported; recurring/background Cron, event/webhook,
-Recorder and general executable Skill workflows remain unimplemented.
-The existing Operations Console also consumes that same HTTP path for structured
-creation, original history, approval, cancellation and reconciliation; ambiguous
-responses query the original trigger and never create a replacement intent.
-Legacy free-text enabled configuration is UNQUALIFIED. This software slice does not
-upgrade any physical, real-IdP, production-provider or Kernel/binary Gate; its
-contracts are in [Execution Path](docs/architecture/EXECUTION_PATH.md#bounded-automation-consumer).
+Accepted historical software milestones retain their original evidence. Later
+changes require current-head regression; these rows do not transfer an old CI
+result to a new commit.
 
-The native Desktop session adapter now binds local start/credential/recovery
-responses to the existing manager's loopback endpoint and original connection,
-and preserves selected remote Controllers during startup. Software tests use
-fake native IPC plus actual loopback HTTP; they do not qualify an installed EXE,
-real Provider or native binary hashes. See the existing
-[session audit](docs/acceptance/ENGINEERING_REVIEW.md#native-session-destination-audit--2026-10-23).
-Overall product delivery remains PARTIAL pending integration and external Gates.
-
-Product R2 reuses those same owners. Candidate software now supports explicit
-production/model-free API startup and manual source-browser service-session
-entry, with wrong-session denial, connection-change fences and reload recovery.
-Independent Python3.10/3.12 base-wheel checks exercise public startup and the
-simulated lost-response Demo. The two-file browser review/apply/restart slice
-retains original Work/approval/CAS evidence and file MATCH, while test execution
-correctly remains BLOCKED without a qualified sandbox. No live-model or native
-installation qualification is implied. The [dated evidence](docs/acceptance/ENGINEERING_REVIEW.md#model-free-public-startup-and-product-recovery--2026-10-23)
-and unique [Quick Start](docs/operations/getting-started/QUICK_START.md) retain the
-actual scope. Complete product/native/release readiness remains PARTIAL/BLOCKED.
-
-The first-use wizard now reads Runtime health, activates/confirms the selected
-local workspace and allows model configuration to be skipped. Setup validation
-does not infer; explicit Provider tests reuse the configured strict NKI Gateway
-and preserve original request/unknown usage. These are scoped software fixes,
-not native, real-model or production release qualification; see the existing
-[setup contract](docs/development/DEVELOPER_PLATFORM.md#first-use-configuration-and-model-tests).
-Provider update/removal now reaches the existing saved configuration and current
-Gateway instead of changing only an in-memory registration. Setup distinguishes
-recorded vendor model IDs from Gateway identities and other Providers' models.
-This software correction preserves original Governance and separate credential
-ownership; it does not complete live-model, native or overall product acceptance.
-
-The existing global activity stream now distinguishes opaque Bus event IDs from
-per-Run numeric sequences, chronological retained replay from a cold recent
-window, and missing history from success. EventClient stops invalid replay and
-surfaces diagnostics; this software correction does not complete native release,
-physical acceptance or indefinite event retention. Protected integration and
-current-source CI remain separate; see the [cursor qualification record](docs/acceptance/ENGINEERING_REVIEW.md#global-event-bus-cursor-and-persistence-alignment--2026-10-23).
-
-`main` is the only permanent development branch. Keep one or two active branches
-at most; each branch completes one coherent Gate. Start from clean current main:
-
-```text
-main → short-lived branch → audit → implementation → tests → semantic commit
-     → push → PR → CI → merge commit → scoped checkpoint → delete branch → clean main
-```
-
-Every Gate begins with REUSE / EXTEND / MISSING classification of existing
-implementation, contracts and evidence. Define invariants, implement the smallest
-vertical slice, exercise positive/negative tests and fault injection, then run
-affected regressions and full regression where practical. Use existing lint,
-format, compile, documentation/link, security, hygiene and component-lock checks.
-Report exact results, skips, baseline failures and unavailable prerequisites.
-Preserve historical SHAs, verify local/remote HEAD equality and clean worktree.
-Only exercised acceptance can be PASS; incomplete work is PARTIAL, PENDING or
-BLOCKED. Preparation must never silently upgrade a milestone.
-
-On 2026-10-18 the actual main required checks still included the nonexistent
-`Test 32-bit Rejection`, `Tier 1 — Windows ARM64` and `Aggregate SBOM` names.
-PR #81 then had successful exact-source Core/Desktop/Security/Multi-Arch evidence
-but remained blocked. Verify coverage/replacement of the absent 32-bit context
-before changing it; replace the
-other two with `Windows ARM64 metadata (not native acceptance)` and
-`Collect architecture SBOMs`. Preserve the existing four Python/platform checks,
-frontend, hygiene and exercised Tier 1 checks; also require `Core gate` and
-`Repository checks`. Metadata is not native ARM64 qualification. An administrator
-exemption, synthetic status or disabled protection is not an integration path.
-
-On2026-10-23 PR #81's ordinary REST merge request was accepted as
-`ad77389045ea04270913a6513d4cdcc5232a1b3d`. No administrator override was requested,
-but the earlier blocked state and continuing protection-read403 left actual
-administrator enforcement unverified at that time. Main merges were paused for
-maintainer protection/audit review; no further merge request was used to test
-protection. Preserve the normal merge/history, require protection for
-administrators, and validate resulting-main CI separately.
-The [integration observation](docs/acceptance/REPOSITORY_CONSOLIDATION.md#product-r2-integration-observation--2026-10-23)
-records the actual action and precise limits of that historical observation.
-
-On2026-10-24 the maintainer reported saving corrected main protection and supplied
-screenshots: PR and current-base CI, all four Python jobs, frontend/hygiene,
-Repository/Core gates, exercised Tier1 jobs, explicit Windows ARM64 metadata and
-SBOM collection, conversation resolution and administrator enforcement are enabled;
-required approvals, linear history, force pushes and deletion are disabled.
-The obsolete constant-based 32-bit context is replaced by the existing real
-component admission contracts. REST/GraphQL administration reads still return403:
-this is maintainer-attested visual evidence, not an automated settings change.
-The composed PR must directly target main, contain every reviewed source head,
-pass the actual exact-head checks and be mergeable before a normal merge. No
-administrator override is allowed. Resulting-main CI and reachability remain
-prerequisites for branch retirement. Tag protection is not established by these
-main-only screenshots.
-
-The lightweight branch summary independently confirms the13 selected contexts,
-GitHub Actions App15368 and required-status enforcement for everyone. Detailed
-administration reads remain forbidden; unreturned settings are not inferred.
-
-Ordinary PR workflows now produce the selected required contexts themselves:
-Core retains all four Python/platform jobs on PRs, and Multi-Arch also responds
-to PRs targeting main. Existing test commands, aggregate dependencies, read-only
-permissions and failure assertions are unchanged. The conservative Core docs
-scope remains available; code PRs incur the full selected platform cost. Manual
-success is not copied into fabricated PR statuses. Resulting-main runs remain
-independent acceptance evidence.
-
-The consolidation environment received administration API 403 responses.
-Existing main protection is present; the integration applied no administration
-settings itself. The main-only confirmation above does not establish every
-repository/tag setting. Retain or verify the remaining settings through GitHub:
-
-- Require PRs, required CI and resolved conversations on main; block force push
-  and branch deletion. Require zero reviewer approvals for the single maintainer.
-- Retain normal merge commits; disable squash/rebase for acceptance history.
-  Do not require signed commits until automation signing is proven reliable.
-- Protect `milestone/*` and `v*` against update/deletion while permitting creation.
-- Require `Core gate`, `Repository checks` and `Frontend Build Validation` with
-  current-base validation; change existing contexts only after verifying the
-  replacement checks run. See the [settings audit](docs/acceptance/REPOSITORY_CONSOLIDATION.md).
-
-Do not report unobserved administration settings complete. Do not use
-personal-token workarounds for missing permissions.
-
-The [dated engineering review](docs/acceptance/ENGINEERING_REVIEW.md) records
-reproduced remote admission defects, configuration gaps, performance measurement
-priorities and external research. It does not replace this status table or
-qualify hardware, production Providers or release integrity.
-Reviewed workspace proposals extend the existing Workflow/Governance/CAS/Work
-owners, with exact human review and fresh file evidence. This scoped software
-slice does not qualify installed Desktop, live-model engineering, persistent PTY,
-strong-sandbox scientific execution, physical hardware or overall product PASS.
-Main `d19a22e` subsequently failed Windows Core/Multi-Arch checks. Byte-fixture
-corrections and execution-scope/admission hardening merged through
-[PR #52](https://github.com/untrod/apeir/pull/52), after all required source checks
-and an additional four-platform Core run passed. The response-loss deadline
-evidence remains unresolved; Issues #4/#8 stay open. See the existing engineering
-review for the retained failures. Resulting main checks remain required;
-passing source/Linux checks alone does not make a main Gate PASS.
-
-Its October 11 product-wiring audit also distinguishes connected Runtime paths,
-corrected evidence views, configuration-only Automation endpoints and unfinished
-Workspace/Terminal/context experiences. These corrections do not promote overall
-product delivery beyond PARTIAL or qualify an installed native Desktop.
-The [actual-input inspector](docs/development/DEVELOPER_PLATFORM.md#inspecting-actual-model-input)
-now connects admitted Chat Gateway iterations to persisted message/tool manifests,
-file-read provenance and recorded usage. It does not qualify live-model multi-file
-proposals, persistent Terminal, Workflow Recorder, native release or real hardware
-qualification; those product limits remain unchanged.
-Source delivery now extends that same path with live identity, canonical
-pre-collection admission, whole selected items, source/version/permission
-digests and revalidation before another Chat model call. Normal initialization
-declares the existing reader without issuing permission; default source readers
-use actual private state paths and JSONL record shapes. This scoped correction
-does not qualify cross-task context caching, measured Token/cost savings or a
-live-model comparison. Product remains PARTIAL.
-
-Developer request routing now distinguishes short approval commands from code
-questions, preserves explicitly selected models across collaboration roles, and
-avoids automatic multi-agent calls for ordinary code-and-test tasks. Regression
-fixtures count actual software Gateway invocations; they do not measure paid
-Provider Token savings or qualify a real model account.
-
-The existing Model Gateway/CostController now retain nullable usage measurements,
-original attempt reservations and receipt-bound reconciliation. Model Lab / Usage
-and the Desktop status bar read that same ledger; missing counters or billing are
-UNKNOWN rather than free execution. Installed-source/browser and fake-provider
-contracts do not qualify vendor invoices, measured Token/cost savings, native
-Kernel bytes or the live-model benchmark. See the existing
-[usage view](docs/development/DEVELOPER_PLATFORM.md#model-usage-and-cost).
-
-## Ordered software qualification and interoperability Gates
-
-Proceed in the order below. External credentials or deployed infrastructure may
-block one qualification; retain its explicit status and continue independent
-software work where architecture permits. Never substitute fake Cloud tests for
-the real acceptance item. All adapters extend the existing
-[Provider model](docs/architecture/PROVIDER_CONTRACT.md) and Governance paths.
-
-### M3.5-Q — Remote Human Trust
-
-Branch: `feature/m3.5-remote-human-trust`. Extend the accepted Control Plane,
-not a second approval system or password database. Prefer OIDC for the first
-real IdentityProvider. Stabilize HumanIdentity, authenticated sessions, session
-lifecycle and approval/audit identity binding through existing contracts.
-
-The chain is remote human → authentication → identity → authenticated session →
-approval API → Governance → AuthorizationContext → execution. Test unauthenticated,
-expired/revoked sessions, wrong user, identity mismatch, replay/CSRF, duplicate or
-stale approval and approval after Operation expiry; each must fail closed.
-Gate PASS requires a real deployed browser/mobile flow, a genuinely authenticated
-human approving the original Operation once, and audit evidence identifying that
-human correctly. Fake signed identity proofs validate software only. Qualify
-deployment ACLs where relevant; never place production credentials in evidence.
-
-### M4.1 — Authenticated Codex Provider
-
-Branch: `feature/m4-codex-provider`. Map an existing Goal/Work to a supported,
-authenticated task interface supplied by Codex. First audit available public APIs and account
-capabilities; do not invent a Codex Cloud endpoint or infer integration from CLI
-help. Missing credentials or an unavailable task API block that acceptance item.
-
-The Provider returns task ID, status, repository, branch, commit SHA, changed
-files, test results, artifacts and execution metadata, bound to canonical Work,
-Artifact CAS, evidence and independent verification. Codex may reason, edit,
-test and produce artifacts; it cannot approve itself, issue grants or establish
-verification authority. Exercise discovery, health/error mapping, provenance,
-cancel/recovery and lost-response semantics. PASS requires an actual authenticated
-task and verified result through existing Governance; an external success claim
-alone cannot commit Work.
-
-### M4.2–M4.7 — Stable Provider roles and exercised reference services
-
-Prefer coherent modules with narrow contracts over one subsystem per adapter.
-Keep IntelligenceProvider, ExecutionProvider, PolicyProvider, SecretProvider,
-IdentityProvider and DeviceProvider replaceable. Each exercised integration needs
-capability discovery, health, error mapping, evidence binding, recovery and public
-conformance tests. Provider discovery is not trust or permission.
-
-| Gate | First target and retained APEIR ownership | Acceptance requirement |
+| Milestone | Status | Implemented / remaining |
 | --- | --- | --- |
-| M4.2 Provider framework | Extend six existing seams and public SDK; third-party developers should not import internal Runtime modules. | Compatibility and conformance across exercised adapters; contract declarations alone do not qualify services. |
-| M4.3 Policy | OPA supplies evaluation input; native Governance retains decisions, approvals, grants and execution admission. | Real service evaluation, unavailable/unknown/malformed fail-closed results and immediate pre-execution revalidation; no policy-to-execution bypass. |
-| M4.4 Secret | OpenBao/Vault-compatible backend extends SecretHandle, Broker and Lease semantics. | Real backend storage/resolution/revoke/expiry at the authorized execution boundary; no plaintext in ordinary context, artifacts, receipts or audit, and no replay after an uncertain effect. |
-| M4.5 Identity | SPIFFE/SPIRE supplies short-lived workload identity, not Operation authorization. | Real identity issuance/rotation/revocation and reconnect tests while preserving Node identity, trust and Governance semantics. |
-| M4.6 Execution | Choose Ray **or** Kubernetes first; reuse Native/OCI and canonical Work. | Real dispatch, evidence, cancellation and fault/recovery flow; external placement cannot grant authority or blindly repeat effects. |
-| M4.7 Device ecosystem | Choose one Viam, ROS or KubeEdge reference adapter. | Real ecosystem interaction through existing Device/Operation/Observation contracts, stable identity and revoke-preserving rediscovery; simulated interaction remains simulation. |
+| M3.1 Coordination | PASS | Durable AgentSession, TaskPlan, canonical Workflow and event wake/resume; tests/agent_collaboration and tests/agent_execution. |
+| M3.2 Reliability | PASS | Durable delivery, journals and original-effect reconciliation; broader Windows timing issues remain open below. |
+| M3.3-A/B Reality | PASS | Stable Device identity and independently observed simulated effects; [Reality audit](docs/acceptance/REALITY_ARCHITECTURE_AUDIT.md). |
+| M3.3-C Physical Reality | PENDING | Jetson→ESP32 physical effect, observation and physical fault evidence. |
+| M3.4 Governance / credentials | PASS | Scoped approvals, grants, revocation, execution-bound credential leases and redaction; production secret-store deployment remains separate. |
+| M3.5 Control Plane software | PASS | Canonical-state API, trusted human/session admission, Operations Console and recovery; deployed real-human qualification remains pending. |
+| M3.6 Developer Platform | PASS | Public canonical SDK, conformance suites and independent installed-wheel consumers; SDK remains beta. |
+| Architecture consolidation | PASS | One authoritative constitution, execution path, state owner, security contract and Provider model. |
+| M4 Interoperability | PARTIAL | OPA and OpenBao software references, generic external-agent reference and bounded Ray qualification. Complete authenticated Harness and industrial Providers remain unqualified. |
+| M5 Hardware | PARTIAL | Signed read-only Serial/ESP32 host contracts. Physical mutation, power-loss recovery and a second hardware family remain pending. |
+| M6 Scale / Federation | PENDING | Local locking and protocol drafts are not Controller HA or multi-site authority. |
+| M7 Open specification / benchmark | PENDING | Existing RFC/CTK foundations; no complete Verified Reality Benchmark acceptance. |
+| M8 Governed evolution | PENDING | Reserved future work; no autonomous deployment or self-approval. |
 
-Use separate coherent Gates even when related work uses
-`feature/m4-policy-secret-identity`; do not merge unrelated adapters as one
-uncontrolled diff. `feature/m4-execution-provider` covers one execution backend.
+## Next engineering work
+
+1. Connect Workflow model execution and typed step bindings to existing
+   Gateway/AgentSession owners, with original-request accounting and recovery.
+2. Qualify one cloud Provider and one local service with explicit account and
+   cost authorization. Keep unsupported protocols unavailable.
+3. Run the direct developer loop's test step in a qualified strict sandbox.
+4. Qualify the current native package on Windows 10 x64.
+5. Complete physical device acceptance only when hardware and authorized fault
+   testing are available.
+
+External blockers do not justify rebuilding existing Runtime, Workflow,
+Registry, Governance or Credential systems.
 
 ## Engineering blockers before scale and verified releases
 
-Use `fix/baseline-environment-cleanup` (the current branch validator supports
-`fix/`, not `chore/`) for supported-development-environment qualification. Address
-the nine recorded managed-Cloud failures: MCP interpreter path, read-only HOME,
-API/daemon persistence and container orphan cleanup. Reproduce and distinguish
-environment requirements from product defects; avoid incidental Runtime refactors.
-Gate: zero unexplained failures in documented supported environments, with
-unsupported conditions stated explicitly. Existing baseline failures remain
-visible until resolved, not permanently accepted or skipped away.
-Local qualification now passes the complete initialized-container regression
-with **3799 passed, 47 skipped, 4 warnings**; the managed host records **3808
-passed, 36 skipped, 2 failed, 4 warnings**. Seven original failures are repaired;
-the two orphan assertions require a supported init/reaper, which is independently
-verified without Kernel or assertion changes. See the
-[configuration and preserved failed probes](docs/development/DEVELOPER_PLATFORM.md#supported-development-environment).
-Source/PR and resulting-main Core, Desktop, Multi-Arch and Security all passed;
-`milestone/development-environment-qualification` freezes normal merge
-`9fe47490dd2bb7c670d7762bdf5de54b4e3f9a1b`. Issue #9 is closed for that scoped
-qualification. A bare managed PID 1 is not a qualified process lifecycle environment.
+| Issue | Current limitation |
+| --- | --- |
+| [#88 Windows Skill HTTP](https://github.com/untrod/apeir/issues/88) | Original five-second failures include separate admission, write and commit phases. Read-lock/schema preparation fixes do not prove one cause for every historical timeout. |
+| [#4 signed response loss](https://github.com/untrod/apeir/issues/4) / [#8 Relay shutdown](https://github.com/untrod/apeir/issues/8) | Deterministic ordering/stop defects have fixes; retained Windows timing failures still need qualification. |
+| [#82 Automation recovery](https://github.com/untrod/apeir/issues/82) | Historical Windows resume lacked an effect-verification verdict; later green runs do not establish its cause. |
+| [#85 ProcessSession recovery](https://github.com/untrod/apeir/issues/85) | Original Windows control refusal remains recorded separately from supported-host cleanup fixes. |
+| [#2 native components](https://github.com/untrod/apeir/issues/2) | Approved lock migration supplies exact binary inputs; current installation and release acceptance remain separate. |
+| [#1 physical hardware](https://github.com/untrod/apeir/issues/1) | Jetson/ESP32 writes, independent physical observations and physical faults need real equipment. |
 
-[Recovery timing issue #4](https://github.com/untrod/apeir/issues/4) remains open
-for continued cross-platform timing qualification after [PR #7](https://github.com/untrod/apeir/pull/7)
-repaired two deterministically reproduced ordering faults. Baseline timing traces and deterministic ACK
-interleaving reproduced a real ASSIGNED-snapshot/RUNNING-admission race in both
-response-loss cases. The focused repair validates an existing dispatch without
-republishing started Work and persists initial dispatch evidence before spool
-publication; see [execution recovery](docs/operations/compute-mesh/EXECUTION_RECOVERY.md).
-A subsequent main Multi-Arch Windows run exposed a revoked firmware test
-expecting terminal projection before signed delivery. Controlled hold/release
-coverage distinguishes persisted Node denial, bounded Workflow waiting and
-canonical Controller reconciliation; [evidence](https://github.com/untrod/apeir/issues/4#issuecomment-6011144748)
-remains open for latency qualification. Reruns passing cannot establish absence
-of other races. Preserve original
-persisted evidence and no-blind-replay behavior.
-Further Windows/controlled legacy-connectivity evidence distinguishes TCP,
-WELCOME, cached reconnect session and actual send-queue readiness. Test
-synchronization does not repair the legacy early-assignment gap; it remains
-[actionable OPEN evidence](https://github.com/untrod/apeir/issues/4#issuecomment-6012448219)
-outside the nine original environment failures. The subsequent routing repair
-binds a route to actual accepted WELCOME, revalidates before assignment and
-preserves successor routes on old-connection EOF; [state semantics](docs/architecture/STATE_OWNERSHIP.md)
-remain transport-only. Its source/PR/main CI passed and immutable checkpoint
-`milestone/m3.2-delivery-and-stop-recovery` freezes main `583387ea`; #4 remains open
-for broader timing qualification.
+Failure logs and dated qualification live in
+[Engineering Review](docs/acceptance/ENGINEERING_REVIEW.md),
+[Known Limitations](docs/acceptance/KNOWN_LIMITATIONS.md) and
+[Compute Mesh recovery](docs/operations/compute-mesh/EXECUTION_RECOVERY.md).
+Do not close an unexplained timing issue because a retry passed.
 
-The separate [Windows relay shutdown timeout #8](https://github.com/untrod/apeir/issues/8)
-remains OPEN. Source Core `37552829192` preserved another Windows keepalive-close /
-stop timeout (**1 failed, 3818 passed, 40 skipped**). A deterministic reconnect
-backoff stop defect is now isolated and narrowly repaired without increasing the
-existing stop timeout; [evidence](docs/architecture/STATE_OWNERSHIP.md) and required
-final CI (all source/PR and merged-main workflows passed) remain separate from
-proving the keepalive timing origin.
-[Environment cleanup #9](https://github.com/untrod/apeir/issues/9)
-tracks the qualification above and closes only after its checkpoint prerequisites.
-The original nine unconfigured Cloud failures remain historical evidence; current configured qualification and its remaining unsupported host
-conditions are recorded above, rather than retaining nine failures as permanent
-current status.
+## Execution protocol and governance
 
-[Native component-lock issue #2](https://github.com/untrod/apeir/issues/2) requires
-the actual pinned binaries, a documented build/download origin and comparison
-of their bytes with locked hashes. Contract tests cannot supply this evidence.
-Do not change the lock merely to make unavailable binaries pass. A verified
-release is false whenever required native hash verification is absent or fails.
+`main` is the only permanent development branch. Keep at most two short-lived
+branches. Use normal PR merges, current required checks and resolved discussions;
+preserve accepted SHAs and delete a completed branch only after reachability and
+evidence checks. Never force-push main or change historical tags.
 
-## M5 — Physical Reality acceptance
-
-Branch: `hardware/m5-real-acceptance`, only when Jetson Orin Nano and ESP32-S3
-are available. Do not expand simulation to imply physical completion. Exercise:
-
-```text
-Cloud Controller → Agent → Governance → Credential → Distributed Work → Jetson
-                 → ESP32 → physical effect → fresh Observation → MATCH → COMMIT
-```
-
-Record real faults: Controller restart, WAN loss, Jetson restart/hard kill,
-ESP32 unplug/reboot, USB locator changes, serial response/flash ACK loss, partial
-operation, power loss, stale observation, tampered receipt and tampered artifact.
-An effect followed by lost ACK must reconcile persisted evidence, observe and
-verify; it must never blindly repeat firmware flashing. Receipt alone is not
-physical-effect proof. Stable Device identity survives locator changes and
-rediscovery never revives revoked resources.
-
-After ESP32 acceptance choose one materially different family, such as a camera,
-actuator, PLC or scientific instrument. Gate requires the same canonical
-Device/Capability/Operation/Observation/Verification chain and physical fault
-evidence. Extensive core changes for that second family indicate the abstraction
-still needs stabilization. Hardware blockers are tracked in
-[issue #1](https://github.com/untrod/apeir/issues/1); both physical Gates remain PENDING.
-
-## M6 — Scale and Federation
-
-Branch: `feature/m6-federation`, split further if needed for coherent Gates.
-Begin implementation only after stable M4 Provider boundaries and accepted M5
-real-effect/recovery semantics. Specify consistency requirements before choosing
-consensus infrastructure; do not introduce Raft without a concrete requirement.
-
-- **M6.1 Controller HA:** identify single-writer state, immutable evidence and
-  eventually consistent projections; prove durable ownership, failover and
-  idempotent reconciliation under Controller loss.
-- **M6.2 Federation:** preserve local authority, operation, recovery and evidence
-  during partition; reconcile state/evidence across sites on reconnect without
-  granting authority through synchronization.
-- **M6.3 Fleet:** enroll, provision, activate, drain, upgrade, rollback, revoke
-  and retire Nodes/Devices with durable lifecycle and safe rolling upgrades.
-- **M6.4 Protocol:** negotiate protocol/capability versions and publish a tested
-  Controller/Node/Provider compatibility matrix, including mixed-version recovery.
-- **M6.5 Isolation:** add justified tenant/resource ownership, policy boundaries,
-  quotas and backpressure. Defer speculative enterprise IAM.
-
-## M7 — Specification, conformance and research
-
-Branch: `research/m7-spec-benchmark`. Extend the existing RFC process under
-[`docs/rfc`](docs/rfc/README.md), rather than creating another governance hierarchy.
-Major contracts require problem, motivation, invariants, proposed contract,
-alternatives, failure semantics, security, compatibility, migration and acceptance.
-Formalize Work, Operation, Capability, Node, Device, Governance, Authorization,
-Evidence, Provider and Recovery specifications from exercised implementations.
-
-Build public provider/node/device conformance entry points with machine-readable
-PASS/FAIL/Unsupported reports and reference implementations. A command sketch is
-a target, not an available CLI. APEIR-compatible must mean tested contracts.
-
-The Verified Reality Execution Benchmark measures runtime safety and truthful
-outcomes under variable intelligence, not model cleverness. Each reproducible
-scenario records fault injection, expected invariant, actual evidence and result:
-wrong resource, revoked authorization before dispatch, effect with lost ACK,
-receipt without effect, stale/tampered observation, Node loss, Controller restart,
-expired credentials, duplicate delivery, rediscovery after revocation and a model
-claiming success without evidence. Separate simulated and physical results.
-Generic evaluation scaffolding alone cannot qualify this Gate.
-
-## M8 — Governed Evolution (reserved)
-
-Do not implement now. The eventual chain is incident → engineering Work →
-CodexProvider → patch/tests → Governance → human approval → canary → independent
-observation/verification → commit or rollback. Maintenance agents never authorize
-their own changes, deployment or success. This is a future Gate, not self-approval.
-
-## Product and developer direction
-
-The real-data Operations Console remains an execution control surface: health,
-Agents, Work, Nodes, Devices, Providers, approvals, credentials, artifacts,
-evidence, incidents, activity and eventually federation. Show the Work chain
-from Goal/Plan through Governance, authorization, placement, execution, receipt,
-independent observation, verification and COMMITTED. Mobile focuses on Observe,
-Approve Once/Deny, Interrupt and Acknowledge with target, risk, expected effect
-and required evidence visible. Do not turn it into a coding IDE or chat clone.
-
-Continue public Work/Node/Device/Provider/conformance SDKs without exposing
-internal Runtime dependencies. Providers identify/discover resources, declare
-capabilities, execute admitted operations, observe and report health; the Runtime
-retains governance, scheduling, recovery, verification and evidence. Keep the five
-stable documentation domains and one authoritative status source; historical
-tags and Git history replace archive directories and permanent feature branches.
-
-The source Developer Preview closes existing public entry points through the
-[canonical Quick Start](docs/operations/getting-started/QUICK_START.md),
-[Verified Demo and recording script](examples/hello_runtime/README.md),
-[public SDK examples](examples/README.md) and existing Operations Console.
-Its simulated MATCH/denial/MISMATCH/UNKNOWN/restart/reconciliation evidence does
-not upgrade any physical, real-IdP, production-provider or binary-release Gate.
-The current Cloud scientific report run is BLOCKED by the existing strong sandbox
-prerequisite; numerical libraries alone do not qualify execution. No new DOCX/PDF
-report is claimed here. Productization ends after this scoped delivery; further
-onboarding, UI and compatibility changes should follow real developer feedback.
+The maintainer confirmed corrected main protection on 2026-10-24. Detailed
+administration reads remained forbidden to the integration; unobserved settings
+are not inferred. The [consolidation record](docs/acceptance/REPOSITORY_CONSOLIDATION.md)
+retains the old required-check mismatch, merge observation and screenshots.
 
 ## Release discipline
 
-Distribution remains `0.1.0-rc1`; SDK remains `1.0.0b2` and NKI wrapper `0.1.1`.
-There are no published GitHub releases at the audit baseline. Checkpoint tags
-preserve evidence and do not create production versions. Do not invent v1.0.
-Formal SemVer releases require a sufficiently stable SDK/packaging/compatibility
-boundary and [release acceptance](docs/acceptance/RELEASE_RUNBOOK.md), including
-actual component hashes, reproducible build metadata, checksums, SBOM and
-provenance/attestation where supported. No signing capability is assumed.
+Follow the [Release Runbook](docs/acceptance/RELEASE_RUNBOOK.md). Component
+integrity, build, installation and release authorization are independent Gates.
+A new document or a successful source test does not change a binary's identity.
 
-Before a formal v0.x release, stabilize exercised M4 Provider/public SDK
-compatibility, packaging and physically validated Reality contracts. Future
-release Gates include full tests, multi-arch and native Desktop builds, security,
-SBOM, checksums, actual native hashes, reproducible provenance, release notes and
-a compatibility matrix. Simulated software and hardware evidence remain separate.
+The master execution baseline `d955899`, closure audit `ff4d7b4` and immutable
+milestone tags remain historical records. Detailed M4–M8 targets are preserved
+in Git history and their architecture/RFC documents; this page tracks current
+work rather than repeating each development round.
 
-**APEIR 1.0 readiness** requires exercised core coordination/reliability,
-Governance and Credential Governance; Control Plane and real remote-human trust;
-public Developer Platform; authenticated Codex/agent and Policy/Secret/Identity
-Providers; real Execution Provider; physical Reality and a second hardware family;
-fault recovery, federation, public conformance/specifications, reproducible
-Verified Reality Benchmark and verified release/supply chain. Stable upgrade and
-security boundaries must be documented. Until those Gates pass, do not claim 1.0
-readiness. This roadmap reserves no production version and claims no new Gate PASS.
-
-
-Current reliability follow-up: [Issue82](https://github.com/untrod/apeir/issues/82)
-records a Windows Automation resume response without an effect-verification
-verdict (run38939446275). No root cause or effect outcome is established; passing
-Linux or descendant CI does not resolve it. Runtime product delivery remains
-PARTIAL, and Issues4/8 remain open. The [consolidation record](docs/acceptance/REPOSITORY_CONSOLIDATION.md#unified-main-integration--2026-10-16)
-records exact accepted sources, retained failures and ref retirement. Current
-milestone status remains the closure matrix above; this adds no milestone.
-
-The separate [ProcessSession follow-up85](https://github.com/untrod/apeir/issues/85)
-retains a Windows control refusal after original-host recovery; safe diagnostics
-and explicit test-process lifetime do not establish its historical cause. Saved
-file input now explicitly reuses the native Windows reader and existing Context/
-Gateway admission, pending exact-source Windows qualification. Default Windows
-owner-file permission bootstrap still denies until its ACL controls are qualified;
-host-configured SDK/API software coverage is not default installation acceptance.
-Runtime product delivery remains PARTIAL; no hardware or release Gate is upgraded.
+APEIR 1.0 requires exercised remote-human trust, Provider compatibility, physical
+effects, fault recovery, public conformance, scale and verified release Gates.
+There is no 1.0 readiness claim or production version reservation.

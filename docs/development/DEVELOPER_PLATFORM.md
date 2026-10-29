@@ -1,15 +1,20 @@
-# Developer Platform
+# Developer Platform / 开发者指南
 
 Use APEIR Studio to work on a project, run a supported workflow, or build an
 extension. The interface uses the same Runtime services as the CLI and public
 API. Start with the task you want to do; the architecture can wait until you
 need to extend it.
 
+从实际任务开始：连接模型、打开工程、审查修改，或编排已有能力。
+本页保留界面中的英文名称，方便对照中英文版本；完整安装命令在 Quick Start。
+
 | Your goal | Start here |
 | --- | --- |
 | Download and launch | [Quick Start](../operations/getting-started/QUICK_START.md) |
 | Arrange panels and dashboards | [Studio](#apeir-studio) |
 | Connect an API or local model | [Models and Providers](#first-use-configuration-and-model-tests) |
+| Watch model and tool activity | [Watching a request](#watching-a-request) |
+| Check Tokens and cost | [Usage](#model-usage-and-cost) |
 | Review a code change | [Workspace changes](#reviewing-workspace-changes) |
 | Build a workflow | [Workflow Builder](#visual-workflow-builder) |
 | Install a Skill | [Skills](#skills-and-tools) |
@@ -84,6 +89,16 @@ uses exact reported Device-to-Node bindings. Missing data stays UNKNOWN, and
 unsupported GPU/network/sensor metrics stay UNSUPPORTED.
 
 ### Watching a request
+
+| Data / 数据 | Current behavior |
+| --- | --- |
+| Chat model/tool progress | Reads recorded Run events every 500 ms while active, plus request latency |
+| Dashboard health and resource records | Shared five-second refresh while the corresponding data is in use |
+| Model response text | Complete NKI response; no token-by-token production stream |
+| Device effect | Requires the original receipt, independent observation and verification; a status card is not proof |
+
+“正在处理”表示请求状态，不是对模型内部推理过程的转录。
+事件断线不代表执行已停止；模型回复成功也不代表设备效果已验证。
 
 Chat reads recorded Run events while a request is active (500 ms polling plus
 request latency). Its activity card shows model iterations, tool names,

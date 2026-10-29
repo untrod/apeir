@@ -34,12 +34,16 @@ APEIR Studio 是 APEIR Runtime 的桌面工作空间。用户可以组合项目�
 
 - 浏览工程、审查文件 Diff，提交绑定原始版本的修改并请求审批。
 - 在 Models 中配置 Provider 引用；只有模型已经注册时，才由用户显式发起推理测试。
+- 跟踪已记录的模型与工具活动，检查原始请求；事件重连不会重新提交任务。
 - 组合 Docking 面板与只读 Dashboard，保存、导入及复用布局。
 - 查看真实 Runtime/Kernel 状态、已登记 Node、Device、Work 与证据。
 - 可视化编辑 Workflow，验证、注册原始定义，通过 Governance 运行已绑定的纯节点，并查看原始运行历史。
 - 安装经过审查的 Skill 指令与声明式 Studio 界面扩展，使用公开 Provider SDK。
 - 运行离线 [Verified Execution Demo](examples/hello_runtime/README.md)，
   包含拒绝、UNKNOWN、响应丢失对账和重启恢复。
+
+本地模型与云端 Provider 可以并存，实际兼容性取决于协议和模型能力。
+当前 NKI 返回完整响应：可以查看执行进度，暂不支持逐 Token 的模型文本输出。
 
 模型调用需要已配置的 Provider 与通过认证的 Kernel；命令执行需要现有权限和合格沙箱。
 安装指令不等于获得工具权限，执行成功不等于独立效果验证通过。

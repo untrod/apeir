@@ -38,12 +38,17 @@ Models, Agents and UI extensions cannot authorize themselves.
 
 - Browse projects, review file diffs and submit version-bound changes for approval.
 - Configure saved Provider references in Models and run an explicit inference test only when a registered model is available.
+- Follow recorded model/tool activity, inspect original requests and reconnect without resubmitting the task.
 - Arrange docked panels and read-only Dashboards; save, import and reuse layouts.
 - Inspect real Runtime/Kernel status, registered Nodes, Devices, Work and evidence.
 - Create Workflow graphs, validate/register canonical definitions and run the bound pure steps through Governance; inspect original Run history in Studio.
 - Install reviewed Skill instructions and data-only Studio UI extensions; use the public Provider SDK.
 - Run the offline [Verified Execution Demo](examples/hello_runtime/README.md),
   including rejection, UNKNOWN, response-loss reconciliation and restart.
+
+Cloud and local Providers can coexist; compatibility depends on their actual
+protocol and model capabilities. Current NKI responses are buffered, so recorded
+execution progress is available but token-by-token model output is not.
 
 Model calls require their configured Provider and authenticated Kernel. Commands
 require their existing permissions and qualified sandbox. Instruction installation
