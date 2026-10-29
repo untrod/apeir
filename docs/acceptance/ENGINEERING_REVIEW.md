@@ -25,6 +25,30 @@ component lock, authority, execution handler or qualification Gate is changed by
 this documentation cleanup. The accepted source is main `05e061e4` (PR114);
 current-head regression and native packaging remain separate evidence.
 
+## Accepted-main native refresh — 2026-10-29
+
+Source main `284c1cea37fd96e07cf029c3cc35a70be5c4818c` passed Core 40860982691,
+Desktop 40860982800, Multi-Arch 40860982742 and Security 40860982687.
+The separate full-mode native run 40862247626 produced artifact 12894812901.
+Independent archive SHA-256:
+`6e0f34a15460ebfb37603d2011119850363c776ee37a954b2a866c89cda4bbaa`.
+All 22 checksum entries, 13 manifest records and 11 nested Portable files match;
+the existing component verifier admits both actual Kernel PE files against the
+unchanged approved lock. Four application/sidecar EXEs are unsigned x64;
+the NSIS bootstrapper is x86. NSIS extraction and installation were not performed.
+
+The producer records actual NKI 1/2/3, authentication rejection, Worker/Runtime
+health, owned-process cleanup and original-result recovery on Server 2025.
+Pure frozen Workflow CLI checks retained original Run
+`wfr_115c4264cee94d169a0f051c199d195a`, with zero model calls.
+No SkipValidation or SkipSidecarSmoke flag was used. Windows 10 installed GUI,
+upgrade/uninstall, Defender, live inference and signing remain unqualified.
+The exact download and inner-file hashes are in the
+[Windows guide](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build).
+This supersedes the download recommendation below, without changing that older
+package or resolving its historical Context timeout. Later Workflow data-binding
+and ordering changes are not part of these binaries.
+
 ## Native package integrity and Context HTTP timing — 2026-10-29
 
 The full-mode [native run 40835150844](https://github.com/untrod/apeir/actions/runs/40835150844)
