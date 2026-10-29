@@ -5088,3 +5088,32 @@ record, reloaded it from Runtime, observed a real critical-operation denial and
 confirmed the original record remained. External model calls were 0. This is a
 source-browser software qualification, not live-model or installed-Windows
 acceptance.
+
+## Human session reads and Windows Skill timing — 2026-10-29
+
+The standalone `is_human_session_context` check previously used
+`operation_transaction()`, acquiring `BEGIN IMMEDIATE` for a SELECT. It now
+opens the existing Governance database read-only. Callers that supply their
+admission transaction still check the current session through that exact
+connection, preserving atomic revocation checks before authority publication.
+There is no identity cache, new connection pool or change to write durability.
+
+A regression holds an independent WAL writer with an uncommitted revocation:
+the standalone reader observes committed state without requesting the writer,
+the transaction-bound check observes its own revocation, and a subsequent read
+observes the committed revocation. A second regression rejects an attempted
+write through the read-only connection. Human identity, Operations and actual
+TLS/HTTP remote Skill tests pass locally: 103 passed. Windows qualification
+remains subject to the candidate's CI.
+
+PR #110 head `a67bc9e` passed Core but failed Multi-Arch Windows run
+[40694759599](https://github.com/untrod/apeir/actions/runs/40694759599/job/122838451669).
+The unchanged five-second request in
+`test_http_original_nonce_binds_every_reviewed_remote_locator[digest]` timed out
+at 5105 ms during the subsequent valid install. Admission took 1221 ms; the
+thread snapshot was in CycloneDX validator registry construction while
+verifying the installed SBOM. This differs from earlier SQLite commit stacks
+and does not establish a single cause for Issue #88. Keep the issue open;
+neither this read-lock correction nor a successful CI retry proves all historic
+timeouts repaired. Raw logs remain retained, with original assertions and
+deadlines unchanged.

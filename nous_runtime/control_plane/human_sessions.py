@@ -26,6 +26,7 @@ from nous_runtime.governance.permission import (
     PermissionRequest,
     PermissionRule,
 )
+from nous_runtime.governance.store import _db_connect
 
 
 def _digest(value: str) -> str:
@@ -216,7 +217,10 @@ def is_human_session_context(context, store, *, db=None) -> bool:
 
     if db is not None:
         return check(db)
-    with store.operation_transaction() as connection:
+    # A current-identity read must not reserve the SQLite writer. Admission
+    # callers pass their transaction above so revocation and an actual write
+    # still share the same atomic boundary.
+    with _db_connect(store.db_path, readonly=True) as connection:
         return check(connection)
 
 
