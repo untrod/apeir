@@ -1,114 +1,64 @@
-# Windows 10 ARM64 Local Deployment
+# Windows 10 ARM64 local development
 
-This guide documents the Xiaomi Snapdragon device used for Nous 2.0.0-rc3 validation.
+Use the [Quick Start](../getting-started/QUICK_START.md) for current source
+installation. This page records the ARM64 host boundary; it is not an ARM64
+installer download.
 
-## Supported workflow on this device
+## Historical host evidence
 
-| Item | Current status |
+An earlier Nous 2.0.0-rc3 qualification used a Xiaomi Snapdragon device:
+
+| Item | Reported environment |
 | --- | --- |
 | Windows | Windows 10 ARM64, build 19045 |
 | Python | 3.12.10 ARM64 |
 | Node.js | 24.16.0 ARM64 |
-| Rust | 1.97.1 ARM64 MSVC target installed |
+| Rust | 1.97.1, ARM64 MSVC target |
 | WebView2 | Installed |
-| Frontend validation | Supported locally |
-| Runtime and CLI | Supported locally |
-| Native Tauri linking | Not supported on this operating system |
+| Exercised scope | Runtime/CLI and frontend validation |
 
-Microsoft supports the native ARM64 Visual Studio 2022 C++ toolchain on Windows 11 on Arm, not Windows 10 ARM64. The Runtime and frontend can be developed and tested on this device, but the signed/native Tauri installer must be produced by the repository's `windows-11-arm` GitHub Actions job or another supported Windows 11 ARM64 build machine.
+These are the original host facts, not a current-version retest or native
+installation qualification. Existing `nous` names remain compatible; current
+user commands use `apeir`.
 
-## Run Nous from the checkout
+## Current source workflow
 
-```powershell
-Set-Location <repository>
-.\.venv\Scripts\Activate.ps1
-python --version
-where.exe nous
-nous doctor
-nous status
-nous models doctor
-nous demo
-```
-
-Refresh the editable installation after pulling changes:
+Install the matching Distribution checkout in an ARM64 Python environment using
+[Developer Setup](../getting-started/QUICK_START.md#developer-setup).
+From a selected project, model-free startup uses:
 
 ```powershell
-python -m pip install --upgrade pip
-pip install -e ".[dev]"
+apeir --no-intelligence runtime-api start
 ```
 
-## Configure a Provider safely
+Keep that terminal open. In a second activated shell from the same project:
 
 ```powershell
-nous provider add
-nous provider status
-nous provider doctor deepseek
+apeir runtime-api status --json
 ```
 
-When the wizard asks for an environment variable name, enter a name such as `DEEPSEEK_API_KEY`, not the secret value. Set the value outside Nous and open a new terminal:
+Connect Studio using the [session instructions](../getting-started/QUICK_START.md#model-free-runtime-api-and-source-interface).
+Source UI is a browser surface; it is not an installed Tauri application.
 
-```powershell
-[Environment]::SetEnvironmentVariable(
-  "DEEPSEEK_API_KEY",
-  "replace-with-a-new-key",
-  "User"
-)
-```
+Provider configuration and actual inference have separate requirements.
+Follow the [Provider guide](../guides/PROVIDER_GUIDE.md). Store a credential
+reference rather than a raw key in configuration. A model-disabled process
+cannot infer, and a profile does not replace its required authenticated Kernel.
 
-Revoke any key that has appeared in a screenshot, terminal transcript, issue, or chat. Nous stores only credential references.
+## Native ARM64 boundary
 
-## Run the Runtime API
+The native ARM64 Visual Studio 2022 C++ toolchain requires Windows 11 on Arm.
+The Windows 10 ARM64 host above did not qualify native Tauri linking.
 
-```powershell
-nous runtime-api start
-```
+The repository's **Windows ARM64 metadata (not native acceptance)** check does
+not produce or qualify an installed ARM64 application. A native build needs a
+supported builder, exact approved target-native components, current full-mode
+pipeline and installation evidence. No current ARM64 installer is promised here.
 
-In a second terminal:
+The available unsigned **x64** test bundle has its own
+[build record](WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build).
+It is not evidence of ARM64 compatibility; x64 emulation is not native ARM64
+acceptance. Do not follow the old RC3 branch-upload/download procedure.
 
-```powershell
-nous runtime-api status
-```
-
-The Runtime binds to loopback by default, creates an ephemeral desktop session token, and removes it on normal shutdown. Repeated starts bind before rotating the token, so a port conflict cannot invalidate an existing session.
-
-## Validate the desktop frontend locally
-
-```powershell
-Set-Location <repository>\desktop
-npm ci
-npm run lint
-npm test
-npm run build
-```
-
-This validates the React Hook rules, startup state machine, UI-state migration, TypeScript, and production Vite bundle. `npm run dev` opens a development web surface; it is not the installed desktop product.
-
-## Obtain the native ARM64 desktop application
-
-1. Push the RC3 branch to GitHub.
-2. Open the `Desktop Build` workflow.
-3. Wait for the `Build Windows ARM64` job on `windows-11-arm`.
-4. Download the `windows-arm64-nsis` artifact.
-5. Verify its SHA-256 value against `SHA256SUMS-arm64.txt`.
-6. Run the NSIS installer and launch Nous from the Start menu.
-
-The installer contains the React production bundle, the Tauri native shell, and the packaged APEIR Runtime sidecar. It is an application backed by WebView2, not a separately hosted website. The desktop shell starts or reconnects to the local Runtime and stores Runtime logs under `%LOCALAPPDATA%\Nous\logs`.
-
-## Development-only desktop configuration
-
-When running an unpackaged checkout, configure path references once:
-
-```powershell
-[Environment]::SetEnvironmentVariable(
-  "NOUS_CLI_PATH",
-  "<repository>\.venv\Scripts\nous.exe",
-  "User"
-)
-[Environment]::SetEnvironmentVariable(
-  "NOUS_WORKSPACE_ROOT",
-  "<repository>",
-  "User"
-)
-```
-
-Do not set `NOUS_API_TOKEN` permanently. Do not expose the Runtime listener to the LAN without explicit authentication and transport security.
+See the [platform support policy](../platform/PLATFORM_SUPPORT_POLICY.md)
+and [compatibility matrix](../../development/COMPATIBILITY_MATRIX.md) for scope.

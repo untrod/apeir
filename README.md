@@ -38,12 +38,17 @@ Models, Agents and UI extensions cannot authorize themselves.
 
 - Browse projects, review file diffs and submit version-bound changes for approval.
 - Configure saved Provider references in Models and run an explicit inference test only when a registered model is available.
+- Follow recorded model/tool activity, inspect original requests and reconnect without resubmitting the task.
 - Arrange docked panels and read-only Dashboards; save, import and reuse layouts.
 - Inspect real Runtime/Kernel status, registered Nodes, Devices, Work and evidence.
 - Create Workflow graphs, validate/register canonical definitions and run the bound pure steps through Governance; inspect original Run history in Studio.
 - Install reviewed Skill instructions and data-only Studio UI extensions; use the public Provider SDK.
 - Run the offline [Verified Execution Demo](examples/hello_runtime/README.md),
   including rejection, UNKNOWN, response-loss reconciliation and restart.
+
+Cloud and local Providers can coexist; compatibility depends on their actual
+protocol and model capabilities. Current NKI responses are buffered, so recorded
+execution progress is available but token-by-token model output is not.
 
 Model calls require their configured Provider and authenticated Kernel. Commands
 require their existing permissions and qualified sandbox. Instruction installation
@@ -56,12 +61,13 @@ It separates downloadable **Source Preview**, **Developer Setup** and
 **Native Installation**. Source inspection and the simulated Demo need no API key
 or hardware. Downloadable source packages are not Windows installers.
 
-**Windows download:** [Portable ZIP + NSIS installer](https://github.com/untrod/apeir/actions/runs/40659887576/artifacts/12806308503)
+**Windows download:** [Portable ZIP + NSIS installer](https://github.com/untrod/apeir/actions/runs/40835150844/artifacts/12883321870)
 are available together in **windows-x64-native-development-build**. Sign in to
 GitHub, download the artifact ZIP and verify the included checksums before use.
-The unsigned candidate build expires on **2026-11-11**. Its exact source and
+The unsigned candidate build expires on **2026-11-12**. Its exact source and
 qualification limits are in the [build record](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build);
-this candidate is not accepted main. Windows 10 installation,
+the package is source `05e061e4`, an older accepted main with a separate Windows
+Context timeout still under investigation. Windows 10 installation,
 upgrade/uninstall and signing remain unqualified. Follow the
 [download and verification steps](docs/operations/getting-started/QUICK_START.md#native-installation).
 This is a development build, not a stable Release.

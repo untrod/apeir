@@ -8,13 +8,16 @@ Version: `0.1.0-rc1`
   M3.3-C, physical ESP32 writes/power-loss and a second real hardware family
   remain PENDING. Signed serial host contracts and simulated mutation do not
   qualify physical effects. M6/M7 are not accepted.
-- Native locked Kernel binaries are missing in source-only Cloud validation.
-  Component-lock contract tests do not verify their SHA-256 bytes. A verified
-  binary release is blocked until the actual hash verifier succeeds.
+- Approved frozen-source Windows x64 Kernel binaries now pass the maintained
+  component lock, and unsigned Portable/NSIS builds have native smoke evidence.
+  This does not qualify Windows10 installation, upgrade, uninstall or signing.
+  Source-only contract tests still do not verify actual binary bytes. Use the
+  [native build record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)
+  for the exact package identity and limits.
 - Control Plane identity and credential contracts use fake Cloud credentials.
   Production IdP/secret-store enrollment and industrial Providers need separate
   qualification; generic external-agent OCI evidence is a bounded reference.
-- The R6 baseline is frozen. Desktop reconnect, forced Runtime restart,
+- The historical R6 baseline retains its own acceptance scope. Desktop reconnect, forced Runtime restart,
   Scientific Work, the deterministic Code Work control path, model usage
   normalization, and release-class regression have passed. The final paid
   Research Work was not repeated after the Model Decision Boundary fix. The
@@ -22,7 +25,7 @@ Version: `0.1.0-rc1`
   governed Web operations, but exhausted its structured-decision output budget
   before producing and verifying the report. A successful live-model Research
   completion and its successful Token baseline therefore remain unverified and
-  are not release claims. See `R6_BASELINE.md`.
+  are not current-version release claims. See [R6 baseline](R6_BASELINE.md).
 - The legacy loopback Reality Adapter supports only an administrator-bound loopback HTTP
   service target. It is not an arbitrary remote endpoint or device runtime.
 - Model-backed tasks require a configured Provider account or a local model.
@@ -46,8 +49,10 @@ Version: `0.1.0-rc1`
 - The current Kernel stream uses the existing complete-response NKI operation
   and yields one content chunk. Direct compatibility streams carry no terminal
   usage contract and retain uncertain accounting after exhaustion or close.
-- Untrusted code requires an available Windows Sandbox backend. Trusted in-process
-  extension handlers are not an isolation boundary.
+- Untrusted code requires the configured, qualified strict ProcessSandbox
+  backend for its platform. Missing isolation blocks execution; an ordinary
+  host subprocess is not a fallback. Trusted in-process extension handlers
+  are not an isolation boundary.
 - Local file, document, environment, network, simulation, and scientific services
   are Runtime-governed in this candidate and do not yet traverse the Rust Kernel.
   Their receipts must not be interpreted as Kernel execution proofs.
