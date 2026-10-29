@@ -5383,3 +5383,17 @@ installation is claimed. The frozen NKI Gateway stream implementation currently
 awaits the original complete operation response; incremental token streaming
 cannot be qualified through that contract. Complete extension/Skill use
 attribution remains pending rather than inferred from installation state.
+
+## Model discovery dependency failure — 2026-10-29
+
+The protected Models HTTP regression reproduced an incorrect success response:
+when the canonical Model Registry import failed, a healthy Provider record was
+presented as a model with invented limits and tool support. The route now returns
+NOUS_DEPENDENCY_MISSING without reading the alternate Provider list or exposing
+the private import exception. Removing the injected failure restores the actual
+Gateway model identities through the same authenticated server. Original
+unauthenticated refusal, lifecycle and cleanup assertions remain unchanged.
+The original HTTP failure and corrected regression are retained. No Provider
+inference or credential access was performed.
+Model Center, protected HTTP, Control Plane and Provider configuration/coexistence
+regressions: 101 passed. Real inference remains separately unqualified.

@@ -221,6 +221,8 @@ current Gateway; it does not erase its separate credential or cancel an already
 admitted call. Persistence failure preserves the preceding registration. If a
 saved update cannot refresh the Gateway, execution is fenced: inspect the saved
 record before retrying. Other running processes are not silently synchronized.
+If the Model Registry is unavailable, model discovery reports an error. A healthy
+Provider is not a substitute for a registered model or evidence of tool support.
 
 Cloud and local Providers can coexist. Each model is selected by its Gateway
 identity, scoped to its Provider (for example, `cloud/vendor/model` and
