@@ -10,7 +10,7 @@ on:
         description: Optional investigation; never qualifies the Core gate
         type: choice
         default: none
-        options: [none, windows-skill-http, windows-governance, windows-process-session, windows-kernel-source, windows-runtime-sidecar]
+        options: [none, windows-skill-http, windows-governance, windows-process-session, windows-relay-recovery, windows-kernel-source, windows-runtime-sidecar]
 permissions:
   contents: read
 concurrency:
@@ -88,7 +88,7 @@ jobs:
           RESULT: ${{ needs.python-tests.result }}
         run: test "$RESULT" = success
   windows-skill-http-diagnostic:
-    name: ${{ inputs.diagnostic == 'windows-runtime-sidecar' && 'Windows Runtime version diagnostic (not native qualification)' || inputs.diagnostic == 'windows-kernel-source' && 'Windows Kernel source diagnostic (not Core qualification)' || inputs.diagnostic == 'windows-process-session' && 'Windows ProcessSession diagnostic (not Core qualification)' || 'Windows Governance diagnostic (not Core qualification)' }}
+    name: ${{ inputs.diagnostic == 'windows-runtime-sidecar' && 'Windows Runtime version diagnostic (not native qualification)' || inputs.diagnostic == 'windows-kernel-source' && 'Windows Kernel source diagnostic (not Core qualification)' || inputs.diagnostic == 'windows-process-session' && 'Windows ProcessSession diagnostic (not Core qualification)' || inputs.diagnostic == 'windows-relay-recovery' && 'Windows Relay recovery diagnostic (not Core qualification)' || 'Windows Governance diagnostic (not Core qualification)' }}
     if: github.event_name == 'workflow_dispatch' && inputs.diagnostic != 'none'
     runs-on: windows-latest
     steps:
@@ -167,6 +167,10 @@ jobs:
         env:
           APEIR_SKILL_HTTP_DIAGNOSTIC: '1'
         run: python -m pytest -q tests/governance/test_sqlite_connection_lifecycle.py tests/control_plane/test_remote_skill_center.py --tb=short --timeout=60 -rA
+      - name: Exercise original Relay journals and actual Windows read conflicts
+        if: inputs.diagnostic == 'windows-relay-recovery'
+        timeout-minutes: 5
+        run: python -m pytest -q tests/node_runtime/test_relay_reconciliation.py --tb=short --timeout=60 -rA
       - name: Exercise original Governance initialization and identity failures
         if: inputs.diagnostic == 'windows-governance'
         run: python -m pytest -q tests/governance/test_sqlite_connection_lifecycle.py tests/control_plane/test_human_sessions.py tests/context/test_guard_admission.py --tb=short --timeout=60 -rA

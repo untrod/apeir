@@ -1,6 +1,7 @@
 """Official MCP wire -> authenticated HTTP -> existing Runtime and Governance."""
 
 import asyncio
+import faulthandler
 import http.client
 import json
 import os
@@ -71,6 +72,13 @@ def runtime(tmp_path, monkeypatch):
             )
             response = connection.getresponse()
             return json.loads(response.read())
+        except TimeoutError:
+            try:
+                faulthandler.dump_traceback(file=sys.__stderr__, all_threads=True)
+            except Exception:
+                # Diagnostics must never replace the original HTTP failure.
+                pass
+            raise
         finally:
             connection.close()
 
