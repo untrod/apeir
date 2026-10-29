@@ -408,7 +408,9 @@ def probe_provider_config(
 
         gateway = gateway_service.get(required=False)
         model = str(config.get("model") or "")
-        model_id = model if "/" in model else f"{provider_id}/{model}"
+        model_id = (
+            model if model.startswith(provider_id + "/") else f"{provider_id}/{model}"
+        )
         if (
             operation == "test"
             and isinstance(gateway, NKIEnabledModelGateway)

@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import json
+import sqlite3
 import time
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
@@ -136,6 +137,43 @@ def test_verified_remote_human_approves_exact_operation_through_existing_authori
     for path in __import__("pathlib").Path(gate.store.db_path).parent.rglob("*"):
         if path.is_file():
             assert issued.session_cookie.encode() not in path.read_bytes()
+
+
+def test_current_identity_read_does_not_contend_with_existing_wal_writer(human_env):
+    gate, auth, client, _ = human_env
+    _, context = login(auth, client)
+    with gate.store.operation_transaction() as writer:
+        # A separate reader sees committed identity; transaction-bound admission
+        # sees revocation in that same transaction before publishing authority.
+        writer.execute("UPDATE governance_human_sessions SET status='REVOKED'")
+        assert is_human_session_context(context, gate.store)
+        assert not is_human_session_context(context, gate.store, db=writer)
+    assert not is_human_session_context(context, gate.store)
+
+
+def test_current_identity_read_opens_existing_store_readonly(human_env, monkeypatch):
+    from contextlib import contextmanager
+
+    from nous_runtime.control_plane import human_sessions
+
+    gate, auth, client, _ = human_env
+    _, context = login(auth, client)
+    original = human_sessions._db_connect
+    modes = []
+
+    @contextmanager
+    def observed(path, *, readonly=False):
+        modes.append(readonly)
+        with original(path, readonly=readonly) as connection:
+            with pytest.raises(sqlite3.OperationalError):
+                connection.execute(
+                    "UPDATE governance_human_sessions SET status='REVOKED'"
+                )
+            yield connection
+
+    monkeypatch.setattr(human_sessions, "_db_connect", observed)
+    assert is_human_session_context(context, gate.store)
+    assert modes == [True]
 
 
 @pytest.mark.parametrize(

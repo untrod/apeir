@@ -591,6 +591,8 @@ class GatewayChatHandler:
                         "tool_call_id": call_id,
                         "tool": name,
                         "ok": bool(result.get("ok")),
+                        "capability_id": str(result.get("capability_id") or ""),
+                        "execution_scope": str(result.get("execution_scope") or ""),
                         "receipt_id": str(result.get("receipt_id") or ""),
                         "proposal_id": str(result.get("proposal_id") or ""),
                         "approval_request_id": str(

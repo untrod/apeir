@@ -90,7 +90,7 @@ def test_direct_provider_test_cannot_send_inference_or_resolve_credentials(monke
 
 
 @pytest.fixture
-def registered_kernel_gateway(monkeypatch):
+def registered_kernel_gateway(monkeypatch, request):
     from nous_runtime.model_runtime.factory import build_gateway_from_providers
     from nous_runtime.provider.adapters.openai import OpenAIProvider
 
@@ -98,7 +98,7 @@ def registered_kernel_gateway(monkeypatch):
         provider_id="example",
         provider_name="Example",
         endpoint="https://provider.example.test/v1/chat/completions",
-        model="example-model",
+        model=getattr(request, "param", "example-model"),
         credential_ref="env:FAKE_PROVIDER_KEY",
         capabilities=("model.reason",),
     )
@@ -117,19 +117,23 @@ def registered_kernel_gateway(monkeypatch):
     }
 
 
+@pytest.mark.parametrize(
+    "registered_kernel_gateway", ["example-model", "vendor/model"], indirect=True
+)
 def test_saved_provider_probe_reuses_original_kernel_gateway_and_accounting(
     registered_kernel_gateway, monkeypatch
 ):
     from nous_runtime.model_runtime.models import ModelResponse
 
     gateway, config = registered_kernel_gateway
+    model_id = "example/" + config["model"]
     requests = []
 
     def invoke(request):
         requests.append(request)
         return ModelResponse(
             request_id=request.request_id,
-            model_id="example/example-model",
+            model_id=model_id,
             instance_id="example-default",
             content="OK",
             metadata={"execution_path": "kernel"},
@@ -143,7 +147,7 @@ def test_saved_provider_probe_reuses_original_kernel_gateway_and_accounting(
     assert result["execution"]["path"] == "kernel"
     assert result["tokens_used"] is None and result["cost_usd"] is None
     assert len(requests) == 1
-    assert requests[0].preferred_models == ("example/example-model",)
+    assert requests[0].preferred_models == (model_id,)
     assert requests[0].routing_mode.value == "locked"
 
 
