@@ -224,7 +224,17 @@ export function StudioWorkflow({
   }
   function edit(
     change: (definition: WorkflowDefinition) => WorkflowDefinition,
+    applyPendingParameters = false,
   ) {
+    if (paramsPending && !applyPendingParameters) {
+      setError(
+        t(
+          "Apply or discard parameter changes before editing the Workflow.",
+          "编辑工作流前请应用或放弃参数修改。",
+        ),
+      );
+      return false;
+    }
     return safely(() => {
       const current = currentDraft.current;
       const definition = workflowDefinition(
@@ -599,6 +609,7 @@ export function StudioWorkflow({
             ))}
           </select>
           <button
+            disabled={paramsPending}
             onClick={() =>
               edit((d) => ({
                 ...d,
@@ -700,23 +711,26 @@ export function StudioWorkflow({
               <button
                 disabled={!paramsPending}
                 onClick={() => {
-                  const applied = edit((d) => ({
-                    ...d,
-                    steps: d.steps.map((item) =>
-                      item.step_id === step.step_id
-                        ? (() => {
-                            const updated = {
-                              ...item,
-                              params: JSON.parse(paramsText),
-                            };
-                            if (bindingsText.trim())
-                              updated.data_bindings = JSON.parse(bindingsText);
-                            else delete updated.data_bindings;
-                            return updated;
-                          })()
-                        : item,
-                    ),
-                  }));
+                  const applied = edit(
+                    (d) => ({
+                      ...d,
+                      steps: d.steps.map((item) =>
+                        item.step_id === step.step_id
+                          ? (() => {
+                              const updated = {
+                                ...item,
+                                params: JSON.parse(paramsText),
+                              };
+                              if (bindingsText.trim())
+                                updated.data_bindings = JSON.parse(bindingsText);
+                              else delete updated.data_bindings;
+                              return updated;
+                            })()
+                          : item,
+                      ),
+                    }),
+                    true,
+                  );
                   if (applied)
                     setParamsText(
                       JSON.stringify(
@@ -965,6 +979,7 @@ export function StudioWorkflow({
               })
             }
             onConnect={connect}
+            onBeforeDelete={async () => !paramsPending}
             onDelete={({ nodes: deletedNodes, edges: deletedEdges }) =>
               edit((d) => ({
                 ...d,

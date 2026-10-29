@@ -485,6 +485,11 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   const typedContract = { schema_version: 1, inputs: { value: { source: "step", step_id: "transform", pointer: "/value" } }, inputs_schema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] }, outputs_schema: { properties: { value: { type: "string" } }, required: ["value"] } };
   await builder.getByLabel("Step data bindings", { exact: true }).fill(JSON.stringify(typedContract));
   await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
+  await expect(builder.getByRole("button", { name: "Add step", exact: true })).toBeDisabled();
+  await builder.locator(".react-flow__pane").click({ position: { x: 400, y: 70 } });
+  await page.keyboard.press("Delete");
+  await expect(builder.locator(".react-flow__node")).toHaveCount(2);
+  await expect(builder.getByLabel("Step data bindings", { exact: true })).toHaveValue(JSON.stringify(typedContract));
   await builder.getByRole("button", { name: "Apply parameters", exact: true }).click();
   await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
   await builder.locator("summary").filter({ hasText: /^Draft/ }).click();

@@ -5379,6 +5379,12 @@ dispatch. API reads expose binding metadata through the original workspace
 permission boundary; the Studio uses that metadata and its existing Controller
 fences. Graph coordinates remain separate from execution.
 
+The browser regression first reproduced a missing draft guard: Add step remained
+available with unapplied binding parameters. Structural edits now reject pending
+parameter/schema drafts; keyboard deletion is blocked until Apply or Discard.
+The same real Runtime/Chromium scenario passes after the fix. Original failure
+and corrected-run logs are retained, without relaxing the assertion.
+
 An owned software counterexample at main 414b376 reproduced incorrect TaskGraph
 layering when shared paths had different lengths. A later short traversal could
 overwrite a descendant's level. The existing graph now computes longest-path
@@ -5392,6 +5398,7 @@ qualification, and independent Work Governance remains required.
 Affected Planner/Workflow/API regressions: 160 passed. Agent execution,
 collaboration, Automation and external-workflow regressions: 190 passed, 1 skip
 (the explicit real OCI acceptance image was not configured).
+Existing Workspace Proposal/API/Workbench and Work-proposal consumers: 67 passed.
 Desktop: 462 passed across 62 files; TypeScript/ESLint/build passed. All 12 sandboxed
 Chromium scenarios passed against two owned model-disabled HTTP Runtimes. The
 Workflow scenario covers binding/schema editing, CLI-compatible export,
