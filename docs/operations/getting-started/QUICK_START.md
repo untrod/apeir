@@ -279,8 +279,8 @@ smoke on Windows Server 2025. Windows 10 GUI, installation, upgrade, uninstall,
 Defender and signing remain unqualified.
 
 1. Sign in to GitHub and download
-   [windows-x64-native-development-build](https://github.com/untrod/apeir/actions/runs/40659887576/artifacts/12806308503).
-   Retention ends **2026-11-11**. The installer is inside the downloaded artifact ZIP.
+   [windows-x64-native-development-build](https://github.com/untrod/apeir/actions/runs/40835150844/artifacts/12883321870).
+   Retention ends **2026-11-12**. The installer is inside the downloaded artifact ZIP.
 2. Extract it. Check its source manifest and `native-validation-report.json`.
    It contains Portable, NSIS, `SHA256SUMS.txt` and dependency/build records.
 3. Verify the files in PowerShell:
@@ -297,16 +297,18 @@ Defender and signing remain unqualified.
 
 | File | SHA-256 for this exact build |
 | --- | --- |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | `66469F2AEDEDF1F931BE2FAD2D0435AE739919B31AD3F16605336FB1E79A0AB0` |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `18AB74C44DB156A1571F63B494337EE9419A221E4FEC5FFEE6049C17397C7347` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `606D62761A849B2FD41F7552679DA70739D33041858D016568DF1ECB2C64951E` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `3D5F16AB0E4288D8F4B4B231C9366FB43488CFC2572E3A14727B321B440A5158` |
 
 Outer artifact ZIP SHA-256:
-`5a50e5f015405d0f3f4076a99fabb726dbaab9970d11df234942a4ac2f20c412`.
+`7f4238baa917d9c7a6a22a7f787f9941f8ba5ccb86b93aa2497487cffd2b6015`.
 
-This candidate is source `69c7e44114a5e6e7690f7cfa865eefcbe62aecd5`, **not
-current main**. It includes PR110's Work/Relay changes and PR111's model-protocol
-guards. A documentation change cannot update its binaries. Use each later
-build's own hashes even if its filenames match.
+This candidate is source `05e061e40096d43e551dfd5bb291f8ceae6fb7a1`, **not
+current main**. It includes Provider settings and recorded Chat activity but
+predates PR110's later Work/Relay/SBOM integration. A separate Windows Context
+HTTP timeout is tracked in [Issue116](https://github.com/untrod/apeir/issues/116).
+A documentation change cannot update its binaries. Use each later build's own
+hashes even if its filenames match.
 
 See the [native build record](../deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)
 for exact inputs and [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md) for

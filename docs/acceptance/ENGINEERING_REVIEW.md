@@ -25,6 +25,45 @@ component lock, authority, execution handler or qualification Gate is changed by
 this documentation cleanup. The accepted source is main `05e061e4` (PR114);
 current-head regression and native packaging remain separate evidence.
 
+## Native package integrity and Context HTTP timing — 2026-10-29
+
+The full-mode [native run 40835150844](https://github.com/untrod/apeir/actions/runs/40835150844)
+produced artifact 12883321870 from main
+`05e061e40096d43e551dfd5bb291f8ceae6fb7a1`. Independent download SHA-256 is
+`7f4238baa917d9c7a6a22a7f787f9941f8ba5ccb86b93aa2497487cffd2b6015`;
+all 22 checksum entries, 13 manifest records and 11 nested Portable files match.
+The existing component verifier independently admits both downloaded Kernel PE
+files against the unchanged approved lock. Application/sidecar PEs are x64 and
+have no Authenticode certificate directory; NSIS is the expected x86 bootstrapper.
+No claim is made here of independently extracted NSIS contents or installation.
+
+The producer report records actual NKI 1/2/3 health, wrong/missing credential
+rejection, Worker/Runtime health, original denied-Work query after restart and
+owned-process cleanup. Frozen CLI Workflow checks also passed, original Run
+`wfr_343f4eccd8c94b9c8ff4d50a3deb3c8f`. The host is Windows Server 2025;
+`installation_acceptance=NOT_RUN`, external model calls 0. Neither validation nor
+sidecar smoke was skipped. These are component/build checks, not Windows 10 GUI,
+upgrade/uninstall, Defender, signing or workload-isolation qualification.
+Current download hashes live in the
+[Windows guide](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build).
+
+That same source separately failed [Core 40835037725](https://github.com/untrod/apeir/actions/runs/40835037725/job/123317726940):
+1 failed, 5955 passed, 95 skipped and 4 warnings. Original case:
+`test_explicit_host_policy_bootstraps_real_api_without_engine_injection[True]`
+in `tests/context/test_selected_input_integration.py`. Its HTTP request timed out
+at the unchanged ten-second client deadline. Writable SQLite close warnings were
+1157 ms during setup and 1094 ms during the call; no original live server stack
+establishes the complete cause. [Issue #116](https://github.com/untrod/apeir/issues/116)
+retains this distinct failure instead of assuming the same cause as five-second
+Skill timeouts in Issue #88. Full run logs and exact Windows log are retained.
+
+PR #110 source 2c40375 subsequently passed Core/Desktop/Multi-Arch/Security and
+normally merged as main 284c1ce. It retains Work response, strict Relay read and
+thread-local strict SBOM-schema preparation changes. This is not proof that all
+historical timing failures are repaired; the original issues stay open and
+resulting-main qualification remains separate. The downloadable 05e061e4 package
+does not contain those later changes.
+
 ## Windows qualification and deferred CAS optimization — 2026-10-28
 
 Main `aaa0965adc57106c2b5468478eb80d4bde2f93d6` includes the reviewed model

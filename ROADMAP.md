@@ -22,7 +22,7 @@ authority or execution.
 | PRODUCT_READY | PARTIAL | Setup, saved Provider management, reviewed file proposals, evidence and restart paths work in software. Live-model development and safely executed tests still need their separate prerequisites. |
 | NATIVE_READY | PARTIAL | Approved components and unsigned Portable/NSIS builds exist. Current Windows 10 installed lifecycle is not qualified. |
 | NATIVE_COMPONENT_READY | PASS | PR101 admitted the approved frozen-source x64 PE files through the existing component lock. [Exact inputs](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#approved-component-lock-migration--2026-10-26). |
-| NATIVE_BUILD_READY | PASS | Full-mode run 40659887576 produced checked Portable/NSIS from candidate 69c7e44, not current main. Its Server 2025 smoke does not qualify installed Windows 10. [Build identity and hashes](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build). |
+| NATIVE_BUILD_READY | PASS | Full-mode run 40835150844 produced checked Portable/NSIS from older main 05e061e4, before PR110 integration. That source has a separately recorded Windows Context timeout; build/smoke success does not resolve it or qualify installed Windows 10. [Build identity and hashes](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build). |
 | NATIVE_INSTALL_READY | PENDING | Requires current-version Windows 10 x64 GUI, install, upgrade, restart, uninstall and Defender checks. No such host is attached. |
 | RELEASE_READY | BLOCKED | Installed lifecycle, signing, supply-chain review and explicit publication authorization remain required. No stable Release is claimed. |
 
@@ -88,6 +88,7 @@ Registry, Governance or Credential systems.
 | Issue | Current limitation |
 | --- | --- |
 | [#88 Windows Skill HTTP](https://github.com/untrod/apeir/issues/88) | Original five-second failures include separate admission, write and commit phases. Read-lock/schema preparation fixes do not prove one cause for every historical timeout. |
+| [#116 Windows Context HTTP](https://github.com/untrod/apeir/issues/116) | Main 05e061e4 exceeded the original ten-second deadline during the transfer-revocation case. Slow SQLite close was observed; the full server-side cause is not established. |
 | [#4 signed response loss](https://github.com/untrod/apeir/issues/4) / [#8 Relay shutdown](https://github.com/untrod/apeir/issues/8) | Deterministic ordering/stop defects have fixes; retained Windows timing failures still need qualification. |
 | [#82 Automation recovery](https://github.com/untrod/apeir/issues/82) | Historical Windows resume lacked an effect-verification verdict; later green runs do not establish its cause. |
 | [#85 ProcessSession recovery](https://github.com/untrod/apeir/issues/85) | Original Windows control refusal remains recorded separately from supported-host cleanup fixes. |

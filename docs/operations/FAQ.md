@@ -61,6 +61,14 @@ unsigned x64 test bundle and checksums. It contains Portable and NSIS packages;
 Windows10 installed lifecycle and signing remain separate, unqualified Gates.
 Source Preview is not an EXE.
 
+## Is SHA-256 verification the same as Windows signing or installation testing?
+
+No. SHA-256 checks whether the downloaded file matches the build record.
+Authenticode identifies a signing publisher; the current preview is unsigned.
+Installation acceptance requires actually installing and running the package on
+Windows 10. One result cannot replace either of the others. Do not disable
+Defender or treat a matching hash as a security certification.
+
 ## Are clients authoritative?
 
 No. Studio, CLI and external clients read and request actions through existing
