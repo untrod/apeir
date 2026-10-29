@@ -48,6 +48,7 @@ type Run = {
   verification: string;
 };
 type Catalog = {
+  data_bindings_versions?: number[];
   definitions: { workflow_id: string; version: string }[];
   runs: Pick<Run, "run_id" | "workflow_id" | "workflow_version" | "state">[];
 };
@@ -86,9 +87,14 @@ export function StudioWorkflow({
     [busy, setBusy] = useState(false),
     [run, setRun] = useState<Run | null>(null),
     [events, setEvents] = useState<unknown[]>([]);
+  const [stepBindings, setStepBindings] = useState<Record<string, unknown>>({});
   const [kind, setKind] = useState<WorkflowStepType>("transform"),
     [inputs, setInputs] = useState("{}"),
     [paramsText, setParamsText] = useState("{}");
+  const [bindingsText, setBindingsText] = useState("");
+  const [bindingTarget, setBindingTarget] = useState("value"),
+    [bindingSource, setBindingSource] = useState("inputs"),
+    [bindingPointer, setBindingPointer] = useState("/value");
   const [attempt, setAttempt] = useState<{
       fingerprint: string;
       key: string;
@@ -143,6 +149,11 @@ export function StudioWorkflow({
               originalSha256: "",
               content: paramsText,
             },
+            {
+              path: "workflow-data-bindings-draft.json",
+              originalSha256: "",
+              content: bindingsText,
+            },
             ...(attempt
               ? [
                   {
@@ -155,14 +166,34 @@ export function StudioWorkflow({
           ]
         : [],
     );
-  }, [dirty, busy, draft, paramsText, attempt, onDraftChange, onDraftSnapshot]);
+  }, [
+    dirty,
+    busy,
+    draft,
+    paramsText,
+    bindingsText,
+    attempt,
+    onDraftChange,
+    onDraftSnapshot,
+  ]);
   const step = draft.definition.steps.find(
     (item) => item.step_id === selected[0],
   );
   const paramsPending =
-    !!step && paramsText !== JSON.stringify(step.params || {}, null, 2);
+    !!step &&
+    (paramsText !== JSON.stringify(step.params || {}, null, 2) ||
+      bindingsText !==
+        (step.data_bindings
+          ? JSON.stringify(step.data_bindings, null, 2)
+          : ""));
   useEffect(() => {
     setParamsText(JSON.stringify(step?.params || {}, null, 2));
+    setBindingsText(
+      step?.data_bindings ? JSON.stringify(step.data_bindings, null, 2) : "",
+    );
+    setBindingSource(
+      step?.depends_on?.length ? `step:${step.depends_on[0]}` : "inputs",
+    );
   }, [step]);
   function commit(next: WorkflowDraft, previous = currentDraft.current) {
     if (JSON.stringify(next) === JSON.stringify(previous)) return;
@@ -178,6 +209,7 @@ export function StudioWorkflow({
       setRun(null);
       setRunGraph(null);
       setEvents([]);
+      setStepBindings({});
     }
   }
   function safely(change: () => void) {
@@ -218,13 +250,18 @@ export function StudioWorkflow({
     }
   }
   async function inspect(id: string, graph: WorkflowDefinition | null = null) {
-    const detail = await api<{ run: Run; events: unknown[] }>(
-      `/api/v1/workflow/runs/${encodeURIComponent(id)}`,
-    );
+    const check = captureRuntimeConnection();
+    const detail = await api<{
+      run: Run;
+      events: unknown[];
+      step_bindings?: Record<string, unknown>;
+    }>(`/api/v1/workflow/runs/${encodeURIComponent(id)}`);
+    check();
     if (active.current) {
       setRun(detail.run);
       setRunGraph(graph);
       setEvents(detail.events);
+      setStepBindings(detail.step_bindings ?? {});
     }
   }
   const graphMatchesRun =
@@ -257,6 +294,13 @@ export function StudioWorkflow({
       target: item.step_id,
       selected: edgeSelection.includes(`${source}:${item.step_id}`),
       ariaLabel: `${source} → ${item.step_id}`,
+      label:
+        Object.entries(item.data_bindings?.inputs ?? {})
+          .filter(([, ref]) => ref.source === "step" && ref.step_id === source)
+          .map(([target]) => target)
+          .join(", ") || undefined,
+      labelStyle: { fill: "var(--nous-text)" },
+      labelBgStyle: { fill: "var(--nous-bg)" },
     })),
   );
   function nodeChanges(changes: NodeChange[]) {
@@ -446,6 +490,8 @@ export function StudioWorkflow({
           disabled={
             busy ||
             paramsPending ||
+            (draft.definition.steps.some((item) => item.data_bindings) &&
+              !catalog?.data_bindings_versions?.includes(1)) ||
             draft.definition.steps.some((item) => !runnableStep(item))
           }
           onClick={() =>
@@ -607,6 +653,27 @@ export function StudioWorkflow({
                         ...item,
                         step_id: map[item.step_id],
                         depends_on: item.depends_on?.map((id) => map[id] || id),
+                        ...(item.data_bindings
+                          ? {
+                              data_bindings: {
+                                ...item.data_bindings,
+                                inputs: Object.fromEntries(
+                                  Object.entries(
+                                    item.data_bindings.inputs ?? {},
+                                  ).map(([target, ref]) => [
+                                    target,
+                                    ref.source === "step"
+                                      ? {
+                                          ...ref,
+                                          step_id:
+                                            map[ref.step_id] || ref.step_id,
+                                        }
+                                      : ref,
+                                  ]),
+                                ),
+                              },
+                            }
+                          : {}),
                       })),
                   ],
                 };
@@ -637,7 +704,16 @@ export function StudioWorkflow({
                     ...d,
                     steps: d.steps.map((item) =>
                       item.step_id === step.step_id
-                        ? { ...item, params: JSON.parse(paramsText) }
+                        ? (() => {
+                            const updated = {
+                              ...item,
+                              params: JSON.parse(paramsText),
+                            };
+                            if (bindingsText.trim())
+                              updated.data_bindings = JSON.parse(bindingsText);
+                            else delete updated.data_bindings;
+                            return updated;
+                          })()
                         : item,
                     ),
                   }));
@@ -657,12 +733,146 @@ export function StudioWorkflow({
               </button>
               <button
                 disabled={!paramsPending}
-                onClick={() =>
-                  setParamsText(JSON.stringify(step.params || {}, null, 2))
-                }
+                onClick={() => {
+                  setParamsText(JSON.stringify(step.params || {}, null, 2));
+                  setBindingsText(
+                    step.data_bindings
+                      ? JSON.stringify(step.data_bindings, null, 2)
+                      : "",
+                  );
+                }}
               >
                 {t("Discard parameters", "放弃参数")}
               </button>
+              <details>
+                <summary>
+                  {t("Data bindings", "数据绑定")} ·{" "}
+                  {Object.keys(step.data_bindings?.inputs ?? {}).length}
+                </summary>
+                <label>
+                  {t("Target parameter", "目标参数")}
+                  <input
+                    aria-label="Binding target"
+                    value={bindingTarget}
+                    onChange={(event) => setBindingTarget(event.target.value)}
+                  />
+                </label>
+                <label>
+                  {t("Source", "来源")}
+                  <select
+                    aria-label="Binding source"
+                    value={bindingSource}
+                    onChange={(event) => setBindingSource(event.target.value)}
+                  >
+                    <option value="inputs">
+                      {t("Run inputs", "运行输入")}
+                    </option>
+                    {(step.depends_on ?? []).map((id) => (
+                      <option key={id} value={`step:${id}`}>
+                        {id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t("JSON pointer", "JSON 路径")}
+                  <input
+                    aria-label="Binding pointer"
+                    value={bindingPointer}
+                    onChange={(event) => setBindingPointer(event.target.value)}
+                  />
+                </label>
+                <button
+                  disabled={paramsPending}
+                  onClick={() =>
+                    edit((d) => ({
+                      ...d,
+                      steps: d.steps.map((item) => {
+                        if (item.step_id !== step.step_id) return item;
+                        const params = { ...item.params };
+                        delete params[bindingTarget];
+                        const reference =
+                          bindingSource === "inputs"
+                            ? {
+                                source: "inputs" as const,
+                                pointer: bindingPointer,
+                              }
+                            : {
+                                source: "step" as const,
+                                step_id: bindingSource.slice(5),
+                                pointer: bindingPointer,
+                              };
+                        return {
+                          ...item,
+                          params,
+                          data_bindings: {
+                            schema_version: 1,
+                            ...item.data_bindings,
+                            inputs: {
+                              ...item.data_bindings?.inputs,
+                              [bindingTarget]: reference,
+                            },
+                          },
+                        };
+                      }),
+                    }))
+                  }
+                >
+                  {t("Bind input", "绑定输入")}
+                </button>
+                {Object.entries(step.data_bindings?.inputs ?? {}).map(
+                  ([target, reference]) => (
+                    <div key={target}>
+                      <span>
+                        {target} ←{" "}
+                        {reference.source === "step"
+                          ? reference.step_id
+                          : "inputs"}
+                        {reference.pointer}
+                      </span>
+                      <button
+                        disabled={paramsPending}
+                        aria-label={`Remove binding ${target}`}
+                        onClick={() =>
+                          edit((d) => ({
+                            ...d,
+                            steps: d.steps.map((item) => {
+                              if (
+                                item.step_id !== step.step_id ||
+                                !item.data_bindings
+                              )
+                                return item;
+                              const inputs = { ...item.data_bindings.inputs };
+                              delete inputs[target];
+                              return {
+                                ...item,
+                                data_bindings: {
+                                  ...item.data_bindings,
+                                  inputs,
+                                },
+                              };
+                            }),
+                          }))
+                        }
+                      >
+                        {t("Remove", "移除")}
+                      </button>
+                    </div>
+                  ),
+                )}
+                <label>
+                  {t("Data contract / schemas", "数据契约 / Schema")}
+                  <textarea
+                    aria-label="Step data bindings"
+                    value={bindingsText}
+                    maxLength={32768}
+                    onChange={(event) => {
+                      setBindingsText(event.target.value);
+                      setDirty(true);
+                    }}
+                  />
+                </label>
+              </details>
               <p>
                 {step.step_type === "wait"
                   ? t(
@@ -870,7 +1080,13 @@ export function StudioWorkflow({
             </ul>
             <details>
               <summary>{t("Raw record / events", "原始记录 / 事件")}</summary>
-              <pre>{JSON.stringify({ run, events }, null, 2)}</pre>
+              <pre>
+                {JSON.stringify(
+                  { run, events, step_bindings: stepBindings },
+                  null,
+                  2,
+                )}
+              </pre>
             </details>
           </>
         )}

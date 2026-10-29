@@ -91,4 +91,76 @@ describe("canonical workflow graph and portable drafts", () => {
       });
     expect(Object.keys(arrangeWorkflow(def))).toHaveLength(31);
   });
+  it("keeps versioned data references and schemas outside canvas state", () => {
+    const definition = initialWorkflow().definition;
+    definition.steps.push({
+      step_id: "consumer",
+      step_type: "transform",
+      depends_on: ["transform"],
+      params: {},
+      data_bindings: {
+        schema_version: 1,
+        inputs: {
+          value: { source: "step", step_id: "transform", pointer: "/value" },
+        },
+        inputs_schema: { properties: { value: { type: "string" } } },
+      },
+    });
+    const restored = workflowDraft(
+      JSON.parse(
+        JSON.stringify({
+          schemaVersion: 1,
+          definition,
+          positions: arrangeWorkflow(definition),
+        }),
+      ),
+    );
+    expect(restored.definition).toEqual(definition);
+    expect(runnableStep(restored.definition.steps[1])).toBe(true);
+    expect(workflowDefinition(restored.definition)).not.toHaveProperty(
+      "positions",
+    );
+    expect(() =>
+      workflowDefinition({
+        ...definition,
+        steps: [
+          definition.steps[0],
+          { ...definition.steps[1], depends_on: [] },
+        ],
+      }),
+    ).toThrow(/declared dependency/);
+  });
+  it.each([
+    { schema_version: 2 },
+    { schema_version: true },
+    { schema_version: 1, javascript: "run()" },
+    { schema_version: 1, inputs: null },
+    {
+      schema_version: 1,
+      inputs: { value: { source: "inputs", pointer: null } },
+    },
+    {
+      schema_version: 1,
+      inputs: { value: { source: "inputs", pointer: "/bad~2" } },
+    },
+    {
+      schema_version: 1,
+      inputs: { value: { source: "inputs", pointer: "/_approved_steps" } },
+    },
+    {
+      schema_version: 1,
+      inputs: { value: { source: "inputs", approval: true } },
+    },
+  ])(
+    "rejects unsupported or authority-shaped data contracts",
+    (data_bindings) => {
+      const definition = initialWorkflow().definition;
+      expect(() =>
+        workflowDefinition({
+          ...definition,
+          steps: [{ ...definition.steps[0], params: {}, data_bindings }],
+        }),
+      ).toThrow();
+    },
+  );
 });

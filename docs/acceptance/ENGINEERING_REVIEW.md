@@ -5359,3 +5359,48 @@ installation is claimed. The frozen NKI Gateway stream implementation currently
 awaits the original complete operation response; incremental token streaming
 cannot be qualified through that contract. Complete extension/Skill use
 attribution remains pending rather than inferred from installation state.
+
+## Typed Workflow results and dependency ordering — 2026-10-29
+
+The existing WorkflowStep now has an optional version 1 `data_bindings` contract.
+Absent contracts retain the previous canonical JSON and definition digest;
+no Workflow database or execution owner is added. The Compiler validates local
+schemas, bounded JSON pointers, explicit dependency references and target/literal
+conflicts. Runtime reads original checkpoint outputs, verifies their digests and
+persists source/resolved-parameter digests before dispatch. Empty results remain
+usable without changing the legacy Run projection or strict result schemas.
+
+Missing/type-invalid inputs fail before downstream invocation. A bad output
+retains its original serializable result and a durable no-retry marker; invalid
+JSON records output-unavailable instead of invented evidence. Started-effect
+uncertainty remains UNKNOWN. Contract failures do not implicitly compensate
+upstream effects. Cancellation between input resolution and admission prevents
+dispatch. API reads expose binding metadata through the original workspace
+permission boundary; the Studio uses that metadata and its existing Controller
+fences. Graph coordinates remain separate from execution.
+
+An owned software counterexample at main 414b376 reproduced incorrect TaskGraph
+layering when shared paths had different lengths. A later short traversal could
+overwrite a descendant's level. The existing graph now computes longest-path
+levels in dependency order, rejecting invalid graphs; it does not add a Scheduler
+or authorization authority. A waiting approval leaves the observer uncalled in
+the corrected probe. Inconsistent historical completed dependencies remain
+UNKNOWN on recovery, without another handler call. Raw baseline/candidate probes
+are retained with their source scope; this is not a Kernel or physical bypass
+qualification, and independent Work Governance remains required.
+
+Affected Planner/Workflow/API regressions: 160 passed. Agent execution,
+collaboration, Automation and external-workflow regressions: 190 passed, 1 skip
+(the explicit real OCI acceptance image was not configured).
+Desktop: 462 passed across 62 files; TypeScript/ESLint/build passed. All 12 sandboxed
+Chromium scenarios passed against two owned model-disabled HTTP Runtimes. The
+Workflow scenario covers binding/schema editing, CLI-compatible export,
+independent approval, execution, source digests and original Run/binding recovery
+after a real Runtime restart. Standalone CLI register/run/repeated-key processes
+retain Run `wfr_b2ea07ec3168474d84922ca6575b26b9` and its actual consumer output.
+
+No model, paid Provider, host command or physical operation ran. Model/Agent
+hosts remain unbound; this completes typed step data flow, not their execution
+or Token-saving qualification. Current exact-source required CI and normal
+integration remain prerequisites. The existing Native download is older code
+and does not acquire this feature from a documentation change.

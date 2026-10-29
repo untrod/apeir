@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import math
+import re
+from copy import deepcopy
 from typing import Any
 
 from jsonschema import validators
@@ -13,7 +15,7 @@ from referencing.exceptions import Unresolvable
 
 from nous_runtime.planner.graph import TaskGraph
 from nous_runtime.planner.plan import Task
-from nous_runtime.workflow.models import StepType, WorkflowDefinition
+from nous_runtime.workflow.models import StepType, WorkflowDefinition, WorkflowStep
 
 
 class WorkflowValidationError(ValueError):
@@ -64,6 +66,7 @@ class WorkflowCompiler:
                 )
             if step.step_id in step.depends_on:
                 raise WorkflowValidationError(f"self dependency: {step.step_id}")
+            self.validate_step_bindings(step)
             if type(step.retries) is not int or not 0 <= step.retries <= 10:
                 raise WorkflowValidationError(
                     "workflow retries must be between 0 and 10"
@@ -93,6 +96,132 @@ class WorkflowCompiler:
 
         for step_id in ids:
             visit(step_id)
+
+    @staticmethod
+    def _pointer_parts(pointer: Any) -> list[str]:
+        if (
+            not isinstance(pointer, str)
+            or len(pointer) > 1024
+            or pointer
+            and not pointer.startswith("/")
+            or re.search(r"~(?![01])", pointer)
+        ):
+            raise WorkflowValidationError("Invalid Workflow data pointer")
+        parts = (
+            [
+                part.replace("~1", "/").replace("~0", "~")
+                for part in pointer[1:].split("/")
+            ]
+            if pointer
+            else []
+        )
+        if len(parts) > 32 or any(part.startswith("_") for part in parts):
+            raise WorkflowValidationError("Reserved or excessive Workflow data path")
+        return parts
+
+    def validate_step_bindings(self, step: WorkflowStep) -> None:
+        contract = step.data_bindings
+        if contract is None:
+            return
+        if (
+            not isinstance(contract, dict)
+            or set(contract)
+            - {"schema_version", "inputs", "inputs_schema", "outputs_schema"}
+            or type(contract.get("schema_version")) is not int
+            or contract["schema_version"] != 1
+        ):
+            raise WorkflowValidationError("Unsupported Workflow data binding contract")
+        bindings = contract.get("inputs", {})
+        if not isinstance(bindings, dict) or len(bindings) > 64:
+            raise WorkflowValidationError(
+                "Workflow data bindings require at most 64 targets"
+            )
+        for target, source in bindings.items():
+            if (
+                not isinstance(target, str)
+                or re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,127}", target) is None
+                or target in step.params
+                or not isinstance(source, dict)
+                or not isinstance(source.get("source"), str)
+                or source.get("source") not in {"inputs", "step"}
+            ):
+                raise WorkflowValidationError(
+                    "Invalid or conflicting Workflow data target"
+                )
+            allowed = {"source", "pointer"}
+            if source["source"] == "step":
+                allowed.add("step_id")
+                if (
+                    not isinstance(source.get("step_id"), str)
+                    or source["step_id"] not in step.depends_on
+                ):
+                    raise WorkflowValidationError(
+                        "Workflow data source must be a declared dependency"
+                    )
+            if set(source) - allowed:
+                raise WorkflowValidationError("Unknown Workflow data source field")
+            self._pointer_parts(source.get("pointer", ""))
+        for key in ("inputs_schema", "outputs_schema"):
+            self._schema_validator(contract.get(key, {}), f"step {key}")
+
+    def validate_step_data(
+        self, step: WorkflowStep, value: Any, *, outputs: bool = False
+    ) -> None:
+        if step.data_bindings is None:
+            return
+        label = "step outputs" if outputs else "step inputs"
+        schema = step.data_bindings.get(
+            "outputs_schema" if outputs else "inputs_schema", {}
+        )
+        validator = self._schema_validator(schema, label)
+        try:
+            encoded = json.dumps(value, allow_nan=False).encode("utf-8")
+            if len(encoded) > 96 * 1024:
+                raise WorkflowValidationError(f"Workflow {label} exceed 96 KiB")
+            if validator is not None:
+                validator.validate(value)
+        except ValidationError as exc:
+            raise WorkflowValidationError(
+                f"Workflow {label} violate schema ({exc.validator})"
+            ) from None
+        except (Unresolvable, TypeError, ValueError, RecursionError) as exc:
+            if isinstance(exc, WorkflowValidationError):
+                raise
+            raise WorkflowValidationError(
+                f"Workflow {label} could not be validated"
+            ) from None
+
+    def resolve_step_bindings(
+        self, step: WorkflowStep, inputs: dict[str, Any], outputs: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Resolve data only; no expressions, acquisition, permissions or dispatch."""
+        self.validate_step_bindings(step)
+        params = deepcopy(step.params)
+        if step.data_bindings is None:
+            return params
+        for target, reference in step.data_bindings.get("inputs", {}).items():
+            value = (
+                inputs
+                if reference["source"] == "inputs"
+                else outputs[reference["step_id"]]
+            )
+            for part in self._pointer_parts(reference.get("pointer", "")):
+                if isinstance(value, dict) and part in value:
+                    value = value[part]
+                elif (
+                    isinstance(value, list)
+                    and re.fullmatch(r"0|[1-9][0-9]*", part)
+                    and len(part) < 10
+                    and int(part) < len(value)
+                ):
+                    value = value[int(part)]
+                else:
+                    raise WorkflowValidationError(
+                        "Workflow data source path is unavailable"
+                    )
+            params[target] = deepcopy(value)
+        self.validate_step_data(step, params)
+        return params
 
     @staticmethod
     def _schema_validator(schema: dict[str, Any], label: str):

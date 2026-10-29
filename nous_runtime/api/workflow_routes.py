@@ -84,6 +84,7 @@ def validate_definition(data: Any):
             "approval_required",
             "compensation",
             "params",
+            "data_bindings",
         }:
             raise ValueError("Unknown workflow step field")
         if not isinstance(step.get("step_id"), str) or not _IDENTIFIER.fullmatch(
@@ -113,6 +114,8 @@ def validate_definition(data: Any):
             step.get("params", {}), dict
         ):
             raise ValueError("Invalid approval_required or params")
+        if "data_bindings" in step and not isinstance(step["data_bindings"], dict):
+            raise ValueError("Invalid data_bindings")
     for key in ("inputs_schema", "outputs_schema", "audit_metadata"):
         if not isinstance(data.get(key, {}), dict):
             raise ValueError(f"Invalid {key}")
@@ -180,6 +183,7 @@ def handle_workflow_catalog(*, authorization_context=None):
             "definitions": runtime.store.list_definition_summaries(),
             "runs": runtime.store.list_run_summaries(),
             "limit": 100,
+            "data_bindings_versions": [1],
             "step_types": [
                 {"type": item.value, "available": item in _BUILTINS}
                 for item in StepType
@@ -215,6 +219,7 @@ def handle_workflow_validate(body: dict, *, authorization_context=None):
         return ok_response(
             {
                 "valid": True,
+                "data_bindings_versions": [1],
                 "runnable": not unsupported,
                 "unsupported_steps": unsupported,
                 "definition": definition_to_dict(definition),
@@ -301,9 +306,82 @@ def handle_workflow_run_detail(run_id: str, *, authorization_context=None):
     run = runtime.store.get_run(run_id)
     if run is None:
         return err_response("NOUS_NOT_FOUND", "Workflow run not found")
+    definition = runtime.store.get_definition(run.workflow_id, run.workflow_version)
+    checkpoints = runtime.store.checkpoints(run_id)
+    binding_views = {}
+
+    def digest(value):
+        return (
+            value
+            if isinstance(value, str) and re.fullmatch(r"[a-f0-9]{64}", value)
+            else None
+        )
+
+    for step in definition.steps if definition else ():
+        if not isinstance(step.data_bindings, dict):
+            continue
+        checkpoint = checkpoints.get(step.step_id) or {}
+        recorded = checkpoint.get("data_binding")
+        if not isinstance(recorded, dict):
+            continue
+        sources = recorded.get("sources")
+        sources = sources if isinstance(sources, dict) else {}
+        binding_views[step.step_id] = {
+            "data_binding": {
+                "schema_version": 1
+                if type(recorded.get("schema_version")) is int
+                and recorded["schema_version"] == 1
+                else None,
+                "params_digest": digest(recorded.get("params_digest")),
+                "sources": {
+                    target: {
+                        **{
+                            key: value
+                            for key, value in reference.items()
+                            if key in {"source", "step_id", "pointer"}
+                        },
+                        "source_digest": digest(sources[target].get("source_digest"))
+                        if {
+                            key: value
+                            for key, value in sources[target].items()
+                            if key != "source_digest"
+                        }
+                        == reference
+                        else None,
+                        "reference_matches": {
+                            key: value
+                            for key, value in sources[target].items()
+                            if key != "source_digest"
+                        }
+                        == reference,
+                    }
+                    for target, reference in step.data_bindings.get(
+                        "inputs", {}
+                    ).items()
+                    if isinstance(reference, dict)
+                    and isinstance(sources.get(target), dict)
+                },
+            },
+            "output_digest": digest(checkpoint.get("output_digest")),
+            "status": checkpoint.get("status")
+            if isinstance(checkpoint.get("status"), str)
+            and checkpoint["status"]
+            in {
+                "started",
+                "waiting_approval",
+                "completed",
+                "skipped",
+                "failed",
+                "unknown",
+                "cancelled",
+            }
+            else "unknown",
+            "data_validation_failed": checkpoint.get("data_validation_failed") is True,
+        }
     return ok_response(
         {
             "run": _view(run),
+            "step_bindings": binding_views,
             "events": [
                 event.to_dict() for event in runtime.events.load_events(run_id)[-200:]
             ],

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from copy import deepcopy
+from dataclasses import replace
 import math
 from typing import Any, Callable
 
@@ -193,12 +194,23 @@ class WorkflowRuntime:
                     ),
                 )
             if checkpoint.get("status") in {"completed", "skipped"}:
+                if any(
+                    (checkpoints.get(dependency) or {}).get("status")
+                    not in {"completed", "skipped"}
+                    for dependency in step.depends_on
+                ):
+                    return self._binding_failure(
+                        run,
+                        WorkflowBindingError(
+                            "Completed Workflow step has unfinished dependencies"
+                        ),
+                    )
                 try:
                     self._validate_checkpoint(run, step, checkpoint)
                 except WorkflowBindingError as exc:
                     return self._binding_failure(run, exc)
                 run.step_states[step.step_id] = str(checkpoint["status"])
-                if "output" in checkpoint:
+                if checkpoint.get("output") or step.step_id in run.outputs:
                     run.outputs[step.step_id] = checkpoint["output"]
         try:
             self.store.save_run(run)
@@ -269,6 +281,19 @@ class WorkflowRuntime:
                 return run
             failed = next((item for item in results if item[1] == "failed"), None)
             if failed:
+                if (
+                    self.store.checkpoints(run.run_id)
+                    .get(failed[0].step_id, {})
+                    .get("data_validation_failed")
+                ):
+                    # A contract error does not authorize replay or compensation
+                    # of upstream effects whose original evidence remains valid.
+                    return self._finish(
+                        run.run_id,
+                        WorkflowState.FAILED,
+                        failed[2],
+                        step_id=failed[0].step_id,
+                    )
                 completed = [
                     step.step_id
                     for step in definition.steps
@@ -319,6 +344,13 @@ class WorkflowRuntime:
         return run
 
     def _step_binding(self, run: WorkflowRun, step: WorkflowStep) -> str:
+        dependencies = {key: run.outputs.get(key) for key in step.depends_on}
+        if step.data_bindings is not None:
+            checkpoints = self.store.checkpoints(run.run_id)
+            dependencies = {
+                key: (checkpoints.get(key) or {}).get("output")
+                for key in step.depends_on
+            }
         return binding_digest(
             {
                 "run_id": run.run_id,
@@ -326,13 +358,15 @@ class WorkflowRuntime:
                 "inputs_digest": run.inputs_digest,
                 "step_id": step.step_id,
                 "params": step.params,
-                "dependencies": {key: run.outputs.get(key) for key in step.depends_on},
+                "dependencies": dependencies,
             }
         )
 
     def _validate_checkpoint(self, run, step, checkpoint):
         if checkpoint.get("status") in {"completed", "skipped"} and (
-            not checkpoint.get("binding_digest") or not checkpoint.get("output_digest")
+            not checkpoint.get("binding_digest")
+            or not checkpoint.get("output_digest")
+            or not isinstance(checkpoint.get("output"), dict)
         ):
             raise WorkflowBindingError(
                 "Completed Workflow checkpoint has incomplete evidence bindings"
@@ -342,6 +376,77 @@ class WorkflowRuntime:
             "output_digest"
         ] != binding_digest(checkpoint.get("output") or {}):
             raise WorkflowBindingError("Workflow checkpoint output binding changed")
+        if step.data_bindings is not None and checkpoint.get("status") in {
+            "completed",
+            "skipped",
+        }:
+            try:
+                _, metadata = self._resolve_step_data(run, step)
+                if checkpoint.get("data_binding") != metadata:
+                    raise WorkflowBindingError(
+                        "Workflow checkpoint data binding changed"
+                    )
+                if checkpoint["status"] == "completed":
+                    self.compiler.validate_step_data(
+                        step, checkpoint.get("output") or {}, outputs=True
+                    )
+            except WorkflowValidationError:
+                raise WorkflowBindingError(
+                    "Workflow checkpoint data contract is no longer valid"
+                ) from None
+
+    def _resolve_step_data(self, run, step):
+        if step.data_bindings is None:
+            return step, None
+        checkpoints = self.store.checkpoints(run.run_id)
+        definition = self.store.get_definition(run.workflow_id, run.workflow_version)
+        if definition is None:
+            raise WorkflowBindingError("Workflow data definition is unavailable")
+        declared = {item.step_id: item for item in definition.steps}
+        sources = {}
+        for reference in step.data_bindings.get("inputs", {}).values():
+            if reference["source"] != "step":
+                continue
+            source_id = reference["step_id"]
+            checkpoint = checkpoints.get(source_id) or {}
+            if checkpoint.get("status") != "completed":
+                raise WorkflowValidationError(
+                    "Workflow data source has no completed result"
+                )
+            self.store._validate_checkpoint(
+                checkpoint, self._step_binding(run, declared[source_id])
+            )
+            output = checkpoint.get("output")
+            if (
+                not checkpoint.get("binding_digest")
+                or not isinstance(output, dict)
+                or checkpoint.get("output_digest") != binding_digest(output)
+                or output != run.outputs.get(source_id, {})
+            ):
+                raise WorkflowBindingError("Workflow data source evidence changed")
+            sources[source_id] = output
+        public_inputs = {
+            key: value for key, value in run.inputs.items() if not key.startswith("_")
+        }
+        params = self.compiler.resolve_step_bindings(step, public_inputs, sources)
+        metadata = {
+            "schema_version": 1,
+            "params_digest": binding_digest(params),
+            "sources": {
+                target: {
+                    **reference,
+                    "source_digest": binding_digest(
+                        public_inputs
+                        if reference["source"] == "inputs"
+                        else sources[reference["step_id"]]
+                    ),
+                }
+                for target, reference in step.data_bindings.get("inputs", {}).items()
+            },
+        }
+        return replace(
+            step, params=params, data_bindings=deepcopy(step.data_bindings)
+        ), metadata
 
     def _handler(self, step: WorkflowStep):
         key = step.action if step.action in self.handlers else step.step_type.value
@@ -434,6 +539,36 @@ class WorkflowRuntime:
             or legacy_failure
             or run.step_states.get(step.step_id) in {"started", "running", "unknown"}
         )
+        if checkpoint.get("data_validation_failed"):
+            return (
+                checkpoint["status"],
+                checkpoint.get("output") or {},
+                checkpoint.get("error") or "Workflow data validation failed",
+            )
+        try:
+            resolved_step, data_binding = self._resolve_step_data(run, step)
+            if (
+                step.data_bindings is not None
+                and (checkpoint or step.step_id in run.step_states)
+                and checkpoint.get("data_binding") != data_binding
+            ):
+                raise WorkflowBindingError("Workflow data changed after step admission")
+        except WorkflowBindingError as exc:
+            return "unknown", {}, str(exc)
+        except WorkflowValidationError as exc:
+            if prior_started:
+                return "unknown", {}, "Original Workflow data cannot be reconciled"
+            return self._record_step(
+                run,
+                step,
+                binding,
+                attempts,
+                snapshot,
+                "failed",
+                {},
+                str(exc),
+                data_validation_failed=True,
+            )
         if prior_started:
             if (
                 checkpoint.get("handler_policy")
@@ -465,6 +600,7 @@ class WorkflowRuntime:
                     "unknown",
                     checkpoint.get("output") or {},
                     "Started Workflow step requires reconciliation; replay blocked",
+                    data_binding=data_binding,
                 )
         if run.cancellation_requested:
             return "cancelled", {}, ""
@@ -478,6 +614,7 @@ class WorkflowRuntime:
                 "failed",
                 {},
                 f"no workflow handler registered for {step.step_type.value}:{step.action}",
+                data_binding=data_binding,
             )
         if step.approval_required or step.step_type is StepType.APPROVAL:
             if step.step_id not in set(run.inputs.get("_approved_steps") or ()):
@@ -490,12 +627,21 @@ class WorkflowRuntime:
                     "waiting_approval",
                     {},
                     "human approval required",
+                    data_binding=data_binding,
                 )
         if step.step_type is StepType.CONDITION:
-            key = str(step.params.get("input") or "")
-            if key and run.inputs.get(key) != step.params.get("equals"):
+            key = str(resolved_step.params.get("input") or "")
+            if key and run.inputs.get(key) != resolved_step.params.get("equals"):
                 return self._record_step(
-                    run, step, binding, attempts, snapshot, "skipped", {}, ""
+                    run,
+                    step,
+                    binding,
+                    attempts,
+                    snapshot,
+                    "skipped",
+                    {},
+                    "",
+                    data_binding=data_binding,
                 )
         while True:
             previous_attempts = attempts
@@ -506,16 +652,24 @@ class WorkflowRuntime:
                 "binding_digest": binding,
                 "handler_policy": snapshot,
             }
+            if data_binding is not None:
+                started["data_binding"] = data_binding
             if not self.store.admit_step(
                 run.run_id, step.step_id, started, expected_attempts=previous_attempts
             ):
                 return "cancelled", {}, ""
             output = {}
             status = "unknown"
+            received_result = False
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(handler, step, context)
+                future = executor.submit(
+                    handler,
+                    resolved_step,
+                    deepcopy(context) if data_binding is not None else context,
+                )
                 try:
                     result = future.result(timeout=step.timeout_seconds)
+                    received_result = True
                     from nous_runtime.core.redaction import redact_sensitive_data
 
                     output = redact_sensitive_data(dict(result or {}))
@@ -530,6 +684,7 @@ class WorkflowRuntime:
                         "waiting_approval",
                         exc.workflow_output,
                         str(exc),
+                        data_binding=data_binding,
                     )
                 except FutureTimeout:
                     error = f"step timed out after {step.timeout_seconds} seconds"
@@ -538,6 +693,21 @@ class WorkflowRuntime:
                 except Exception as exc:
                     from nous_runtime.core.redaction import redact_sensitive_text
 
+                    if received_result and step.data_bindings is not None:
+                        return self._record_step(
+                            run,
+                            step,
+                            binding,
+                            attempts,
+                            snapshot,
+                            "failed"
+                            if snapshot["side_effect_class"] in _PURE_EFFECTS
+                            else "unknown",
+                            {},
+                            "Workflow result cannot be recorded; original output unavailable",
+                            data_binding=data_binding,
+                            data_validation_failed=True,
+                        )
                     error = redact_sensitive_text(str(exc))
                     output = dict(getattr(exc, "workflow_output", {}) or {})
                     if (
@@ -546,11 +716,44 @@ class WorkflowRuntime:
                     ):
                         status = "failed"
             if status == "completed":
+                try:
+                    self.compiler.validate_step_data(step, output, outputs=True)
+                except WorkflowValidationError as exc:
+                    return self._record_step(
+                        run,
+                        step,
+                        binding,
+                        attempts,
+                        snapshot,
+                        "failed"
+                        if snapshot["side_effect_class"] in _PURE_EFFECTS
+                        else "unknown",
+                        output,
+                        str(exc),
+                        data_binding=data_binding,
+                        data_validation_failed=True,
+                    )
                 return self._record_step(
-                    run, step, binding, attempts, snapshot, status, output, error
+                    run,
+                    step,
+                    binding,
+                    attempts,
+                    snapshot,
+                    status,
+                    output,
+                    error,
+                    data_binding=data_binding,
                 )
             self._record_step(
-                run, step, binding, attempts, snapshot, status, output, error
+                run,
+                step,
+                binding,
+                attempts,
+                snapshot,
+                status,
+                output,
+                error,
+                data_binding=data_binding,
             )
             if (
                 self._require(run.run_id).cancellation_requested
@@ -559,7 +762,20 @@ class WorkflowRuntime:
             ):
                 return status, output, error
 
-    def _record_step(self, run, step, binding, attempts, policy, status, output, error):
+    def _record_step(
+        self,
+        run,
+        step,
+        binding,
+        attempts,
+        policy,
+        status,
+        output,
+        error,
+        *,
+        data_binding=None,
+        data_validation_failed=False,
+    ):
         from nous_runtime.core.redaction import (
             redact_sensitive_data,
             redact_sensitive_text,
@@ -567,6 +783,16 @@ class WorkflowRuntime:
 
         output = redact_sensitive_data(output)
         error = redact_sensitive_text(error)
+        if data_validation_failed:
+            try:
+                binding_digest(output)
+            except (TypeError, ValueError, RecursionError):
+                # Invalid JSON cannot become durable result evidence. Retain the
+                # failure marker so retry policy cannot invoke the handler again.
+                output = {}
+                error = (
+                    "Workflow result is not canonical JSON; original output unavailable"
+                )
         self.store.finish_step(
             run.run_id,
             step.step_id,
@@ -578,6 +804,8 @@ class WorkflowRuntime:
                 "attempts": attempts,
                 "binding_digest": binding,
                 "handler_policy": policy,
+                **({"data_binding": data_binding} if data_binding is not None else {}),
+                **({"data_validation_failed": True} if data_validation_failed else {}),
             },
         )
         return status, output, error

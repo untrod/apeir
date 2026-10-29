@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -12,6 +13,7 @@ from nous_runtime.planner.plan import Task, TaskStatus
 @dataclass
 class ExecutionNode:
     """A node in the execution graph."""
+
     task: Task
     children: list[ExecutionNode] = field(default_factory=list)
     level: int = 0
@@ -44,6 +46,8 @@ class TaskGraph:
         self.nodes = {}
         # Create nodes
         for t in tasks:
+            if t.task_id in self.nodes:
+                raise ValueError("TaskGraph requires unique task ids")
             self.nodes[t.task_id] = ExecutionNode(task=t)
 
         # Build dependency edges
@@ -52,17 +56,24 @@ class TaskGraph:
                 if dep_id in self.nodes:
                     self.nodes[dep_id].children.append(self.nodes[t.task_id])
 
-        # Compute levels (BFS from roots)
+        # A shared descendant must follow its longest dependency path. A DFS
+        # assignment let a later short edge move it before an approval barrier.
         roots = [n for n in self.nodes.values() if not n.task.depends_on]
-        for root in roots:
-            self._compute_levels(root, 0)
+        pending = {key: len(node.task.depends_on) for key, node in self.nodes.items()}
+        ready = deque(roots)
+        visited = 0
+        while ready:
+            node = ready.popleft()
+            visited += 1
+            for child in node.children:
+                child.level = max(child.level, node.level + 1)
+                pending[child.task_id] -= 1
+                if pending[child.task_id] == 0:
+                    ready.append(child)
+        if visited != len(self.nodes):
+            raise ValueError("TaskGraph contains missing or cyclic dependencies")
 
         return roots
-
-    def _compute_levels(self, node: ExecutionNode, level: int) -> None:
-        node.level = level
-        for child in node.children:
-            self._compute_levels(child, level + 1)
 
     def roots(self) -> list[ExecutionNode]:
         """Nodes with no incoming dependencies."""
@@ -90,8 +101,11 @@ class TaskGraph:
         return levels
 
     def is_complete(self) -> bool:
-        return all(n.task.status in (TaskStatus.COMPLETED, TaskStatus.SKIPPED, TaskStatus.FAILED)
-                   for n in self.nodes.values())
+        return all(
+            n.task.status
+            in (TaskStatus.COMPLETED, TaskStatus.SKIPPED, TaskStatus.FAILED)
+            for n in self.nodes.values()
+        )
 
     def summary(self) -> dict[str, Any]:
         roots = [n.task_id for n in self.roots()]
@@ -111,7 +125,7 @@ class TaskGraph:
         for n in self.nodes.values():
             tid = n.task_id[-8:]
             desc = n.task.description[:30]
-            lines.append(f"    {tid}[\"{desc}\"]")
+            lines.append(f'    {tid}["{desc}"]')
             for child in n.children:
                 cid = child.task_id[-8:]
                 lines.append(f"    {tid} --> {cid}")
