@@ -26,6 +26,7 @@ import { ResearchEvidence } from "./ResearchEvidence";
 import { UsageAccounting } from "./UsageAccounting";
 import { isUsageAccountingSummary, usageNumber } from "../lib/usageAccounting";
 import { useRuntimeConfigVersion } from "../store";
+import { ProviderSettings } from "./ProviderSettings";
 
 type PlatformTab = "workbench" | "research" | "projects" | "runs" | "experiments" | "models";
 
@@ -77,7 +78,7 @@ function Status({ value }: { value: string }) {
   return <span style={{ color, fontSize: typo.xs, fontWeight: typo.semibold, textTransform: "uppercase" }}>{value}</span>;
 }
 
-export function DeveloperPlatform({ modelsOnly = false }: { modelsOnly?: boolean } = {}) {
+export function DeveloperPlatform({ modelsOnly = false, manageProviders = false, locale = "en", onOpenApprovals }: { modelsOnly?: boolean; manageProviders?: boolean; locale?: "en" | "zh"; onOpenApprovals?: () => void } = {}) {
   const [tab, setTab] = useState<PlatformTab>(modelsOnly ? "models" : "workbench");
   const [overview, setOverview] = useState<DeveloperOverview | null>(null);
   const [projects, setProjects] = useState<DeveloperProject[]>([]);
@@ -200,9 +201,9 @@ export function DeveloperPlatform({ modelsOnly = false }: { modelsOnly?: boolean
       <header style={{ padding: `${space.lg} ${space.xl}`, background: colors.surface, borderBottom: `1px solid ${colors.borderLight}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: space.md, flexWrap: "wrap" }}>
           <div>
-            <h1 style={{ margin: 0, color: colors.text, fontSize: typo.lg }}>{modelsOnly ? "Model Lab" : "Developer Platform"}</h1>
+            <h1 style={{ margin: 0, color: colors.text, fontSize: typo.lg }}>{manageProviders ? (locale === "zh" ? "模型" : "Models") : modelsOnly ? "Model Lab" : "Developer Platform"}</h1>
             <p style={{ margin: `${space.xs} 0 0`, color: colors.textSecondary, fontSize: typo.sm }}>
-              {modelsOnly ? "Recorded model performance and usage accounting from the Controller." : "Governed editing, strict execution, real web evidence, canonical Runtime runs, experiments, and model evidence."}
+              {manageProviders ? (locale === "zh" ? "服务商配置、模型测试及用量。" : "Provider configuration, model tests and usage.") : modelsOnly ? "Recorded model performance and usage accounting from the Controller." : "Governed editing, strict execution, real web evidence, canonical Runtime runs, experiments, and model evidence."}
             </p>
           </div>
           <button onClick={() => void refresh()} disabled={busy} style={btnSecondary}>Refresh</button>
@@ -239,6 +240,7 @@ export function DeveloperPlatform({ modelsOnly = false }: { modelsOnly?: boolean
           baselineScores={baselineScores} candidateScores={candidateScores}
           setBaselineScores={setBaselineScores} setCandidateScores={setCandidateScores} onEvaluate={evaluateExperiment} />}
         {tab === "models" && <>
+          {manageProviders && <ProviderSettings key={configurationVersion} locale={locale} models={snapshotVersion === configurationVersion ? modelLab?.models || [] : []} onChanged={refresh} onOpenApprovals={onOpenApprovals} />}
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: space.sm, marginBottom: space.md }}>
             <label style={{ color: colors.textSecondary, fontSize: typo.sm }}>Usage day (UTC) <input aria-label="Usage day (UTC)" type="date"
               value={usageDay || (snapshotVersion === configurationVersion ? modelLab?.usage_accounting?.day : "") || ""} onChange={event => setUsageDay(event.target.value)} style={field} /></label>

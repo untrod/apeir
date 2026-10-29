@@ -37,6 +37,7 @@ Models, Agents and UI extensions cannot authorize themselves.
 ## What you can do
 
 - Browse projects, review file diffs and submit version-bound changes for approval.
+- Configure saved Provider references in Models and run an explicit inference test only when a registered model is available.
 - Arrange docked panels and read-only Dashboards; save, import and reuse layouts.
 - Inspect real Runtime/Kernel status, registered Nodes, Devices, Work and evidence.
 - Create Workflow graphs, validate/register canonical definitions and run the bound pure steps through Governance; inspect original Run history in Studio.

@@ -566,24 +566,24 @@ export function captureRuntimeConnection() {
   };
 }
 
-export async function humanMutation<T = unknown>(path: string, body: Record<string, unknown>, guard: () => void = () => {}) {
+export async function humanMutation<T = unknown>(path: string, body: Record<string, unknown>, guard: () => void = () => {}, method: "POST" | "PATCH" | "DELETE" = "POST") {
   const current = captureRuntimeConnection();
   const check = () => { current(); guard(); };
   check();
   // Serialize once; the exact body used to issue the nonce is the mutation body.
   const serialized = JSON.stringify(body);
   const { nonce } = await api<{ nonce: string }>("/api/v1/control/human/nonce", {
-    method: "POST", body: JSON.stringify({ method: "POST", path, body: JSON.parse(serialized) }),
+    method: "POST", body: JSON.stringify({ method, path, body: JSON.parse(serialized) }),
   });
   check();
   if (typeof nonce !== "string" || !nonce) throw new ApiError("NOUS_HUMAN_APPROVAL_REQUIRED", "Trusted human approval nonce is unavailable");
-  const result = await api<T>(path, { method: "POST", body: serialized, headers: { "X-Control-Nonce": nonce } });
+  const result = await api<T>(path, { method, body: serialized, headers: { "X-Control-Nonce": nonce } });
   check();
   return result;
 }
 
 /** Same service/human surface, with no automatic replay of a mutation. */
-export async function governedStudioMutation<T>(path: string, body: Record<string, unknown>, guard: () => void = () => {}) {
+export async function governedStudioMutation<T>(path: string, body: Record<string, unknown>, guard: () => void = () => {}, method: "POST" | "PATCH" | "DELETE" = "POST") {
   const current = captureRuntimeConnection(); current(); guard();
   let human = false;
   try { await api("/api/v1/control/human/session"); human = true; }
@@ -592,8 +592,8 @@ export async function governedStudioMutation<T>(path: string, body: Record<strin
   }
   current(); guard();
   const result = human
-    ? await humanMutation<T>(path, body, guard)
-    : await api<T>(path, { method: "POST", body: JSON.stringify(body) });
+    ? await humanMutation<T>(path, body, guard, method)
+    : await api<T>(path, { method, body: JSON.stringify(body) });
   current(); guard(); return result;
 }
 

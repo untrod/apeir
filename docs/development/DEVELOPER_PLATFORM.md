@@ -176,6 +176,12 @@ admitted call. Persistence failure preserves the preceding registration. If a
 saved update cannot refresh the Gateway, execution is fenced: inspect the saved
 record before retrying. Other running processes are not silently synchronized.
 
+![Models panel showing saved configuration, UNKNOWN health and a Governance denial](../media/studio-models-source.png)
+
+*Actual source-browser session against a model-disabled Runtime. Configuration
+survived reload; the denied removal left the original record intact. No model
+request or external Provider call was made.*
+
 | Configuration | Existing adapter path | What still needs verification |
 | --- | --- | --- |
 | OpenAI / compatible APIs, including compatible DeepSeek endpoints | Existing OpenAI-compatible client | Actual endpoint, model ID, authentication, parameters and supported calls |

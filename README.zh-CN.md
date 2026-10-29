@@ -33,6 +33,7 @@ APEIR Studio 是 APEIR Runtime 的桌面工作空间。用户可以组合项目�
 ## 可以完成什么
 
 - 浏览工程、审查文件 Diff，提交绑定原始版本的修改并请求审批。
+- 在 Models 中配置 Provider 引用；只有模型已经注册时，才由用户显式发起推理测试。
 - 组合 Docking 面板与只读 Dashboard，保存、导入及复用布局。
 - 查看真实 Runtime/Kernel 状态、已登记 Node、Device、Work 与证据。
 - 可视化编辑 Workflow，验证、注册原始定义，通过 Governance 运行已绑定的纯节点，并查看原始运行历史。

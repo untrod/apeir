@@ -5161,3 +5161,30 @@ the Linux focused result is 42 passed,2 Windows-only skips. The existing opt-in
 Core diagnostic now selects these same maintained Relay tests without satisfying
 the separate required Core/platform contexts. Actual Windows and full native
 qualification must be repeated on the corrective source.
+
+## Studio Provider configuration boundary — 2026-10-28
+
+The Studio Models panel now projects the existing host-selected Provider file
+without resolving credentials or registering an adapter. The public projection
+contains the configured name, endpoint, vendor model ID and only a boolean that
+a reference exists. It rejects symbolic-link files, inputs over 2 MiB, malformed
+records, nested legacy secret fields and URLs containing credentials, queries,
+fragments or control characters. Saved configuration remains visible while
+intelligence is disabled, but Runtime health still counts only active adapters.
+
+Create, update and removal use the existing Provider routes and exact-method
+human nonce. Validation precedes creation and performs no inference. Removal can
+be refused by Governance; Studio links to the original approval surface and
+does not delete the configuration, credential or admitted calls itself. An
+explicit model test is enabled only for a model currently reported by Model
+Center. Missing token or cost telemetry remains `UNKNOWN`, including a numeric
+zero accompanied by an unknown measurement source.
+
+Local verification passed 140 Provider/Model/Usage/Startup cases, 446 Desktop
+unit tests, TypeScript, ESLint and the production Vite build. A sandboxed
+Chromium run passed all 12 Studio E2E scenarios against two owned Runtime
+processes. Its Provider scenario created and updated a saved OpenAI-compatible
+record, reloaded it from Runtime, observed a real critical-operation denial and
+confirmed the original record remained. External model calls were 0. This is a
+source-browser software qualification, not live-model or installed-Windows
+acceptance.
