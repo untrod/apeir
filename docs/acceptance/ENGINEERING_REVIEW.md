@@ -5188,3 +5188,26 @@ record, reloaded it from Runtime, observed a real critical-operation denial and
 confirmed the original record remained. External model calls were 0. This is a
 source-browser software qualification, not live-model or installed-Windows
 acceptance.
+
+## Extension SBOM schema preparation — 2026-10-29
+
+PR #110 head `a67bc9e` passed Core, Desktop and Security but its Multi-Arch
+Windows job [122838451669](https://github.com/untrod/apeir/actions/runs/40694759599/job/122838451669)
+failed the original five-second Skill HTTP deadline at 5105 ms. The server
+snapshot was constructing the CycloneDX JSON validator registry during an
+installed-content verification. Full logs remain retained and Issue #88 open.
+
+Each generated or verified SBOM previously constructed a fresh strict validator,
+causing its bundled schemas to be read and parsed repeatedly. The existing
+validator now lives in thread-local storage. Every document is still parsed
+and strictly validated, and every package, signature, provenance and digest is
+still checked against current bytes. No result or authorization is cached.
+Different threads use independent validators. A negative regression validates
+good, changed-invalid and good documents in sequence and checks thread isolation.
+
+A local preparation probe on Linux x86_64, Python 3.12.14, used 100 validations
+per case of the same minimal valid CycloneDX 1.6 document. Fresh instances had
+p50/p95/p99 1.790/2.417/4.373 ms and 190.596 ms total CPU; reusing one instance
+had 0.018/0.080/0.180 ms and 4.234 ms CPU (including its first preparation).
+This measures schema preparation for this small input on this host only; it
+does not establish Windows HTTP latency or resolution of all Issue #88 failures.
