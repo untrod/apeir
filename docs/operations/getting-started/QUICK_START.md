@@ -279,7 +279,7 @@ smoke on Windows Server 2025. Windows 10 GUI, installation, upgrade, uninstall,
 Defender and signing remain unqualified.
 
 1. Sign in to GitHub and download
-   [windows-x64-native-development-build](https://github.com/untrod/apeir/actions/runs/40835150844/artifacts/12883321870).
+   [windows-x64-native-development-build](https://github.com/untrod/apeir/actions/runs/40862247626/artifacts/12894812901).
    Retention ends **2026-11-12**. The installer is inside the downloaded artifact ZIP.
 2. Extract it. Check its source manifest and `native-validation-report.json`.
    It contains Portable, NSIS, `SHA256SUMS.txt` and dependency/build records.
@@ -297,18 +297,19 @@ Defender and signing remain unqualified.
 
 | File | SHA-256 for this exact build |
 | --- | --- |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | `606D62761A849B2FD41F7552679DA70739D33041858D016568DF1ECB2C64951E` |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `3D5F16AB0E4288D8F4B4B231C9366FB43488CFC2572E3A14727B321B440A5158` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `78A447DF234E6F56E68EA06E67FE44A75D745CB668DBAD5FDEE9B3602D303D55` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `D07230F3E8903B3CF9D2AD08E112905DE9F62EEEC6132C060DDE1BA5F668A8F8` |
 
 Outer artifact ZIP SHA-256:
-`7f4238baa917d9c7a6a22a7f787f9941f8ba5ccb86b93aa2497487cffd2b6015`.
+`6e0f34a15460ebfb37603d2011119850363c776ee37a954b2a866c89cda4bbaa`.
 
-This candidate is source `05e061e40096d43e551dfd5bb291f8ceae6fb7a1`, **not
-current main**. It includes Provider settings and recorded Chat activity but
-predates PR110's later Work/Relay/SBOM integration. A separate Windows Context
-HTTP timeout is tracked in [Issue116](https://github.com/untrod/apeir/issues/116).
-A documentation change cannot update its binaries. Use each later build's own
-hashes even if its filenames match.
+This package is accepted source `284c1cea37fd96e07cf029c3cc35a70be5c4818c`.
+Its Core, Desktop, Multi-Arch and Security checks passed; the full-mode native
+producer passed separately. It includes Provider settings, recorded Chat activity
+and PR110's Work/Relay/SBOM changes. Later Workflow data-binding changes are not
+in this package. Historical Windows timing issues remain open; a passing run does
+not establish their complete cause. A documentation update cannot change these
+binaries. Use each build's own manifest and hashes even when filenames match.
 
 See the [native build record](../deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)
 for exact inputs and [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md) for

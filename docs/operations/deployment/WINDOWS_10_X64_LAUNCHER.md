@@ -171,50 +171,47 @@ checks do not alter the reviewed Kernel hashes or remove licensing/install gates
 
 ## Current native command-qualified build
 
-The [Portable/NSIS test bundle](https://github.com/untrod/apeir/actions/runs/40835150844/artifacts/12883321870)
+The [Portable/NSIS test bundle](https://github.com/untrod/apeir/actions/runs/40862247626/artifacts/12894812901)
 was built from accepted main
-`05e061e40096d43e551dfd5bb291f8ceae6fb7a1` in
-[full-mode run 40835150844](https://github.com/untrod/apeir/actions/runs/40835150844).
-It includes PR113 Provider settings and PR114 recorded Chat activity/model routing.
-It predates the PR110 Work/Relay/SBOM changes merged later as `284c1ce`.
+`284c1cea37fd96e07cf029c3cc35a70be5c4818c` in
+[full-mode run 40862247626](https://github.com/untrod/apeir/actions/runs/40862247626).
+It includes Provider settings, recorded Chat activity, model-routing isolation
+and PR #110's Work/Relay/SBOM changes. Later Workflow data-binding changes are not
+included. Always use the source manifest as the binary identity.
 
 GitHub sign-in is required. The artifact expires on **2026-11-12**.
 Outer artifact ZIP SHA-256:
-`7f4238baa917d9c7a6a22a7f787f9941f8ba5ccb86b93aa2497487cffd2b6015`.
+`6e0f34a15460ebfb37603d2011119850363c776ee37a954b2a866c89cda4bbaa`.
 
 | File | SHA-256 |
 | --- | --- |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `3D5F16AB0E4288D8F4B4B231C9366FB43488CFC2572E3A14727B321B440A5158` |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | `606D62761A849B2FD41F7552679DA70739D33041858D016568DF1ECB2C64951E` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `D07230F3E8903B3CF9D2AD08E112905DE9F62EEEC6132C060DDE1BA5F668A8F8` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `78A447DF234E6F56E68EA06E67FE44A75D745CB668DBAD5FDEE9B3602D303D55` |
 
-Independent download verification matched all 22 checksum entries, 13 manifest
-files and 11 nested Portable files. The four application/sidecar EXEs are x64
-PE 0x8664 and unsigned. The NSIS bootstrapper is PE 0x014c; its own architecture
-does not change the target-native Runtime. The Kernel files match the approved
-component lock. These checks establish file integrity, not an installed GUI.
+Independent download matched all 22 checksums, 13 manifest records and 11 nested
+Portable files. The existing component verifier admits the exact Kernel PE
+files against the unchanged approved lock. The four application/sidecar EXEs
+are unsigned x64 PE 0x8664. NSIS is the expected x86 bootstrapper PE 0x014c;
+its header is not the target architecture of its packaged Runtime.
 
-The producer's real NKI 1/2/3, authentication refusal, Worker/Runtime health,
-process-fault cleanup and original denied-Work recovery passed on
-**Windows Server 2025**. Pure Workflow CLI schema/refusal/history/idempotency checks
-also passed; original Run `wfr_343f4eccd8c94b9c8ff4d50a3deb3c8f`.
-There were zero external model calls. Neither SkipValidation nor SkipSidecarSmoke
-was used.
+This source's Core, Desktop, Multi-Arch and Security checks passed. The separate
+full-mode native producer also passed without validation or sidecar-smoke skips.
+Its real NKI 1/2/3, authentication rejection, Worker/Runtime health, process cleanup
+and original denied-Work recovery ran on **Windows Server 2025**.
+The frozen CLI exercised pure Workflow schema/refusal/history/idempotency;
+original Run `wfr_115c4264cee94d169a0f051c199d195a`. External model calls: 0.
 
-The same source separately failed Windows Core at a ten-second Context HTTP
-deadline ([Issue #116](https://github.com/untrod/apeir/issues/116)).
-Do not use this successful native build to override that failure or claim a
-complete reliability fix. The newer integrated source needs its own exact-head
-CI and packaging evidence.
+**Windows 10 installation, installed GUI, upgrade/uninstall, Defender, real-model
+inference and signing remain unqualified.** No independent NSIS-content extraction
+or installed lifecycle is claimed here. Historical timing failures, including
+[Issue #116](https://github.com/untrod/apeir/issues/116), retain their own evidence;
+later green runs do not establish a complete cause.
 
-**Windows 10 installation, native GUI, upgrade/uninstall, Defender, real model
-inference and signing remain unqualified.** Follow
-[Quick Start](../getting-started/QUICK_START.md#native-installation) to download
-and compare checksums. Unsigned test bundles are internal previews, not stable
-Releases.
-
-Earlier source `69c7e44` and `51d7462` builds retain their exact hashes and
-qualification in [Engineering Review](../../acceptance/ENGINEERING_REVIEW.md#historical-native-package-verification--2026-10-27).
-Do not mix files or checksums from different builds.
+Use [Quick Start](../getting-started/QUICK_START.md#native-installation) for
+download and checksum instructions. These are unsigned internal development
+packages, not stable Releases. Earlier packages retain their identities in
+[Engineering Review](../../acceptance/ENGINEERING_REVIEW.md#native-package-integrity-and-context-http-timing--2026-10-29).
+Do not mix payloads or checksums across builds.
 
 ## Verified internal native build — 2026-10-27
 
