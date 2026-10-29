@@ -5408,6 +5408,11 @@ available with unapplied binding parameters. Structural edits now reject pending
 parameter/schema drafts; keyboard deletion is blocked until Apply or Discard.
 The same real Runtime/Chromium scenario passes after the fix. Original failure
 and corrected-run logs are retained, without relaxing the assertion.
+The combined browser run and Desktop CI 40905462882 also exposed a selection
+handoff race: the previous node's editor text could temporarily look like a
+pending draft on the new node and reject a valid Delete. Editor synchronization
+now runs before paint. The original valid-deletion and protected-draft assertions
+are both retained; the corrected combined browser run passed all 12 scenarios.
 
 An owned software counterexample at main 414b376 reproduced incorrect TaskGraph
 layering when shared paths had different lengths. A later short traversal could

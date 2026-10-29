@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Background,
   Controls,
@@ -186,7 +186,11 @@ export function StudioWorkflow({
         (step.data_bindings
           ? JSON.stringify(step.data_bindings, null, 2)
           : ""));
-  useEffect(() => {
+  const pendingParameters = useRef(false);
+  pendingParameters.current = paramsPending;
+  // A new selection must not mistake the previous editor text for its own draft
+  // when a keyboard action arrives before an ordinary passive effect runs.
+  useLayoutEffect(() => {
     setParamsText(JSON.stringify(step?.params || {}, null, 2));
     setBindingsText(
       step?.data_bindings ? JSON.stringify(step.data_bindings, null, 2) : "",
@@ -226,7 +230,7 @@ export function StudioWorkflow({
     change: (definition: WorkflowDefinition) => WorkflowDefinition,
     applyPendingParameters = false,
   ) {
-    if (paramsPending && !applyPendingParameters) {
+    if (pendingParameters.current && !applyPendingParameters) {
       setError(
         t(
           "Apply or discard parameter changes before editing the Workflow.",
@@ -316,7 +320,7 @@ export function StudioWorkflow({
   function nodeChanges(changes: NodeChange[]) {
     const next = applyNodeChanges(changes, nodes);
     if (changes.some((change) => change.type === "select")) {
-      if (paramsPending)
+      if (pendingParameters.current)
         setError(
           t(
             "Apply or discard parameter changes before selecting another step.",
@@ -979,7 +983,7 @@ export function StudioWorkflow({
               })
             }
             onConnect={connect}
-            onBeforeDelete={async () => !paramsPending}
+            onBeforeDelete={async () => !pendingParameters.current}
             onDelete={({ nodes: deletedNodes, edges: deletedEdges }) =>
               edit((d) => ({
                 ...d,
