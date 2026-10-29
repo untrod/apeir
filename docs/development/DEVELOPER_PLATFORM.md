@@ -176,6 +176,16 @@ admitted call. Persistence failure preserves the preceding registration. If a
 saved update cannot refresh the Gateway, execution is fenced: inspect the saved
 record before retrying. Other running processes are not silently synchronized.
 
+Cloud and local Providers can coexist. Each model is selected by its Gateway
+identity, scoped to its Provider (for example, `cloud/vendor/model` and
+`workstation/vendor/model`), while the backend receives the original vendor
+model ID. After upgrading an older configuration that used an unscoped vendor
+ID containing `/`, select the model again from the current catalog; old ambiguous
+IDs are not silently redirected. PRIVATE/OFFLINE routing excludes cloud
+fallbacks. Automatic local detection uses exact loopback hosts; a display name,
+URL path or similar-looking hostname does not establish locality. Qualified
+remote inference nodes still need an explicit trusted host locality declaration.
+
 ![Models panel showing saved configuration, UNKNOWN health and a Governance denial](../media/studio-models-source.png)
 
 *Actual source-browser session against a model-disabled Runtime. Configuration

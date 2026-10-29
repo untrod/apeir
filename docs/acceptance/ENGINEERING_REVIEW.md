@@ -5117,3 +5117,21 @@ and does not establish a single cause for Issue #88. Keep the issue open;
 neither this read-lock correction nor a successful CI retry proves all historic
 timeouts repaired. Raw logs remain retained, with original assertions and
 deadlines unchanged.
+
+## Provider coexistence and model identity — 2026-10-29
+
+An offline counterexample registered a cloud and loopback Provider with the
+same vendor ID `vendor/model`. Factory construction raised `ModelRegistryError`
+because the slash bypassed Provider scoping. The factory now keeps the original
+vendor ID in descriptor metadata while qualifying catalog identity with its
+Provider. Already Provider-qualified IDs remain unchanged. Old unscoped vendor
+IDs containing a slash must be reselected from the catalog; no ambiguous alias
+is redirected to a different Provider. Saved Provider files are unchanged.
+
+Automatic locality detection now parses exact loopback hosts instead of using
+Provider names or URL substrings. Trusted host declarations for embedded or
+remote local inference remain explicit. Regression coverage checks shared
+vendor IDs, locked selection and fake adapter calls to both original Providers,
+PRIVATE routing without cloud fallback, exact IPv4/IPv6/localhost handling and
+refusal of name/path/lookalike-host inference. These are software routing tests;
+no live account, running model service or external model request is exercised.
