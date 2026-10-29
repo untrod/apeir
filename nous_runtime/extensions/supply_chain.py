@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import re
+import threading
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -30,6 +31,17 @@ from cyclonedx.validation.json import JsonStrictValidator
 
 from nous_runtime.extensions.models import ExtensionManifest
 from nous_runtime.extensions.sources import package_files
+
+_VALIDATORS = threading.local()
+
+
+def _sbom_validator() -> JsonStrictValidator:
+    """Reuse library schemas per thread; validate every document afresh."""
+    validator = getattr(_VALIDATORS, "sbom", None)
+    if validator is None:
+        validator = JsonStrictValidator(SchemaVersion.V1_6)
+        _VALIDATORS.sbom = validator
+    return validator
 
 
 class SignatureStatus(str, Enum):
@@ -152,7 +164,7 @@ def verify_supply_chain_records(
 
     bom_path = object_root / "bom.json"
     bom_text = bom_path.read_text(encoding="utf-8")
-    validation_error = JsonStrictValidator(SchemaVersion.V1_6).validate_str(bom_text)
+    validation_error = _sbom_validator().validate_str(bom_text)
     if validation_error is not None:
         raise ValueError(f"extension SBOM is invalid: {validation_error}")
     bom = _read_json(bom_path)
@@ -210,7 +222,9 @@ def sign_supply_chain_records(
     try:
         key = serialization.load_pem_private_key(private_key_pem, password=None)
     except (TypeError, ValueError) as exc:
-        raise ValueError("extension signing key must be an unencrypted Ed25519 PEM") from exc
+        raise ValueError(
+            "extension signing key must be an unencrypted Ed25519 PEM"
+        ) from exc
     if not isinstance(key, Ed25519PrivateKey):
         raise ValueError("extension signing key must be Ed25519 PEM")
     public = key.public_key().public_bytes(
@@ -265,7 +279,9 @@ def generate_cyclonedx_bom(
         try:
             licenses = [LicenseExpression(manifest.license)]
         except ValueError:
-            root_properties.append(Property(name="nous:declared-license", value=manifest.license))
+            root_properties.append(
+                Property(name="nous:declared-license", value=manifest.license)
+            )
     root_component = Component(
         type=ComponentType.APPLICATION,
         name=manifest.extension_id,
@@ -313,16 +329,20 @@ def generate_cyclonedx_bom(
                     x_trust_boundary=True,
                 )
             )
-    timestamp = datetime.fromisoformat(manifest.provenance.imported_at.replace("Z", "+00:00"))
+    timestamp = datetime.fromisoformat(
+        manifest.provenance.imported_at.replace("Z", "+00:00")
+    )
     bom = Bom(
         components=components,
         services=services,
-        serial_number=uuid.uuid5(uuid.NAMESPACE_URL, f"nous:{manifest.provenance.digest}"),
+        serial_number=uuid.uuid5(
+            uuid.NAMESPACE_URL, f"nous:{manifest.provenance.digest}"
+        ),
         metadata=BomMetaData(timestamp=timestamp, component=root_component),
     )
     bom.register_dependency(root_component, components)
     output = JsonV1Dot6(bom).output_as_string(indent=2)
-    error = JsonStrictValidator(SchemaVersion.V1_6).validate_str(output)
+    error = _sbom_validator().validate_str(output)
     if error is not None:
         raise ValueError(f"generated CycloneDX SBOM is invalid: {error}")
     value = json.loads(output)
@@ -356,7 +376,11 @@ def verify_signature_record(
     if record.get("payload_digest") != payload_digest:
         raise ValueError("extension signature payload binding is Invalid")
     if declared is SignatureStatus.UNSIGNED:
-        if record.get("algorithm") != "none" or record.get("signature") or record.get("public_key"):
+        if (
+            record.get("algorithm") != "none"
+            or record.get("signature")
+            or record.get("public_key")
+        ):
             raise ValueError("unsigned extension signature record is Invalid")
         return SignatureStatus.UNSIGNED
     if record.get("algorithm") != "Ed25519":
@@ -366,7 +390,9 @@ def verify_signature_record(
 
         public = base64.b64decode(str(record.get("public_key") or ""), validate=True)
         signature = base64.b64decode(str(record.get("signature") or ""), validate=True)
-        Ed25519PublicKey.from_public_bytes(public).verify(signature, canonical_json(payload))
+        Ed25519PublicKey.from_public_bytes(public).verify(
+            signature, canonical_json(payload)
+        )
     except Exception as exc:
         raise ValueError("extension signature is Invalid") from exc
     return SignatureStatus.VERIFIED
@@ -429,7 +455,11 @@ def _structured_secret_findings(value: Any, source: str) -> list[str]:
                 key = str(raw_key)
                 child_path = f"{path}.{key}"
                 sensitive = bool(_SENSITIVE_KEY.search(key))
-                if sensitive and isinstance(child, (str, int, float)) and not _is_reference(child):
+                if (
+                    sensitive
+                    and isinstance(child, (str, int, float))
+                    and not _is_reference(child)
+                ):
                     findings.append(f"{child_path}: plaintext credential value")
                 walk(child, child_path, key)
         elif isinstance(item, list):
@@ -444,7 +474,11 @@ def _assignment_secret_findings(text: str, source: str) -> list[str]:
     findings: list[str] = []
     for number, line in enumerate(text.splitlines(), 1):
         match = re.match(r"\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*=\s*['\"]?([^'\"#]+)", line)
-        if match and _SENSITIVE_KEY.search(match.group(1)) and not _is_reference(match.group(2)):
+        if (
+            match
+            and _SENSITIVE_KEY.search(match.group(1))
+            and not _is_reference(match.group(2))
+        ):
             findings.append(f"{source}:{number}: plaintext credential value")
     return findings
 

@@ -374,7 +374,7 @@ def _work_submission(body, *, authorization_context=None, lookup_only=False):
         return ok(
             {
                 "work": snapshot.to_dict(),
-                "supervisor": supervisor.inspect(snapshot.run_id)["supervisor"],
+                "supervisor": supervisor.worker_status(snapshot.run_id),
             }
         )
     except Exception as exc:

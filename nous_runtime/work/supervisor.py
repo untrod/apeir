@@ -242,6 +242,14 @@ class WorkSupervisor:
     def inspect(self, run_id: str) -> dict[str, object]:
         return self.attach(run_id)
 
+    def worker_status(self, run_id: str) -> dict[str, object]:
+        """Read process-local handles for an already resolved canonical Work.
+
+        This performs no checkpoint/history read and does not establish that a
+        Work exists or completed. Callers must retain their canonical snapshot.
+        """
+        return self._worker_projection(run_id)
+
     def list(self) -> list[dict[str, object]]:
         harness = WorkHarness(self.root)
         return [

@@ -16,6 +16,23 @@ from nous_runtime.extensions.registry import ExtensionRegistry
 from nous_runtime.extensions.supply_chain import SecretMaterialError
 
 
+def test_schema_reuse_still_rejects_changed_documents_and_is_thread_local():
+    from concurrent.futures import ThreadPoolExecutor
+
+    from nous_runtime.extensions.supply_chain import _sbom_validator
+
+    validator = _sbom_validator()
+    valid = {"bomFormat": "CycloneDX", "specVersion": "1.6", "version": 1}
+    assert validator.validate_str(json.dumps(valid)) is None
+    assert _sbom_validator() is validator
+    assert validator.validate_str(json.dumps(valid | {"unexpected": True})) is not None
+    assert validator.validate_str(json.dumps(valid)) is None
+    with ThreadPoolExecutor(max_workers=1) as worker:
+        other = worker.submit(_sbom_validator).result()
+        assert other is not validator
+        assert worker.submit(_sbom_validator).result() is other
+
+
 def _skill(root: Path) -> Path:
     root.mkdir()
     (root / "SKILL.md").write_text(

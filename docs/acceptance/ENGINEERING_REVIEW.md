@@ -5043,6 +5043,60 @@ source/native qualification. The main user guide now links to it rather than
 mixing dated failure counts into installation steps. Existing heading entrypoints
 remain available for link compatibility.
 
+## Accepted Work response and history separation — 2026-10-27
+
+Resulting-main `f6fba18` Core `40538896296` Windows job `122311568400` failed
+`test_submission_waits_for_real_approval_and_retries_original_only`: the admitted
+same-key request timed out waiting for HTTP headers after independent approval.
+The original log retains 1 failed, 5910 passed, 95 skipped and 4 warnings in 2357.55s,
+with a Governance `close` phase of 1015ms. That observation does not establish the
+whole request cause. [Issue #88 evidence](https://github.com/untrod/apeir/issues/88#issuecomment-6448210081)
+remains open; no timeout or durable SQLite setting is relaxed.
+
+Separately, code inspection found the submission response called full
+`WorkSupervisor.inspect()` only to discard its checkpoint/history result and
+keep process-local worker metadata. A deterministic actual HTTP counterexample
+makes that optional history read unavailable: the original implementation
+returns WORK_SUBMIT_ERROR after accepting/dispatching the original Work. The
+before-fix failure is retained privately; it is independent of Windows timing.
+
+Submission now returns its already resolved canonical snapshot with the existing
+worker-handle projection, without an extra checkpoint/EventStream inspection.
+The same-key repeat returns the original Run, with one approval and one actual
+deterministic deliberation. Explicit inspection still performs the canonical
+read and reports its failure; no evidence availability or completion is invented.
+The additive metadata reader owns no Work, permission, execution or persistent
+state. Original request fences, current admission and independent approval are
+unchanged. Local Work/MCP regression: 236 passed; lint/format/compile pass.
+This establishes the corrected response path, not total HTTP latency, Token/cost
+savings or a general Windows close/commit root-cause repair.
+
+The PR110 candidate's full native run `40547630660` passed from Runtime source
+`4ea86ae`: 5911 source tests passed, 95 skipped, 4 warnings in 2896.80s; official
+full-mode Portable/NSIS, real Kernel/Worker/Runtime smoke and frozen pure Workflow
+recovery passed. Independent download verifies artifact `12758561232`, 22 hashes,
+13 manifest payloads, 11 nested Portable files and the actual NSIS payload.
+Exact hashes and the pending-integration scope are in the existing
+[native download guide](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#new-work-response-candidate--awaiting-integration).
+The component lock and frozen Kernel are unchanged. This is not Windows10
+installed lifecycle or real-model qualification.
+
+Separately, exact head `ec6d5f1`, Core `40551862938`, original Windows job
+`122358226597` failed the unchanged five-second HTTP deadline in
+`test_scope_revoked_during_original_work_admission_blocks_dispatch`:
+1 failed, 5911 passed, 95 skipped, 4 warnings in 2097.45s. Failure-only thread
+capture places the request handler in GovernanceStore `_db_connect` close,
+called by `consume_lease` during the test's admission-time scope revocation.
+Recorded commit/close phases were 1187/1922/1328ms. The raw log is retained;
+this identifies the observed blocking phase, not the full underlying storage
+cause. No timeout, synchronous durability, WAL policy or assertions were relaxed.
+The native passing run does not replace this exact failing CI evidence.
+
+That Core run's original macOS job `122358227283` never acquired a runner;
+annotations report hosted macOS ARM64 capacity constraints. Only that unexecuted
+job was requested again after completion; the original Windows failure remains.
+Main integration is gated independently on all required checks.
+
 ## Frozen Worker protocol admission — 2026-10-27
 
 Code review of frozen Kernel `87fd1b2` found native model backends for
@@ -5079,6 +5133,52 @@ completion claim. Additional negatives cover both a claimed file change and
 claimed tests without a tool call. This changes transport controls, not the
 requirement for governed execution evidence.
 
+## Relay workload snapshot admission — 2026-10-28
+
+PR110 head `1dbbbd5` passed Core, Desktop and Security but failed Multi-Arch
+`40560647990`, Windows job `122388412659`: 1 failed, 5576 passed, 77 skipped,
+335 deselected, 4 warnings in 2409.54s. The original Automation read-loss recovery
+case failed loading `workload-state.json`. Its helper swallowed the underlying
+read/decode exception into an empty mapping, so the log cannot establish a
+sharing violation, corrupt JSON or a particular storage cause. The raw failure
+is retained; no test, deadline or success condition is changed.
+
+The existing reader now admits a workload snapshot strictly. Windows sharing/
+lock errors 32/33 receive at most six reads, with at most 150ms total backoff.
+Other I/O errors and damaged JSON fail closed immediately, with a chained cause
+and content-free OS codes. This only reads the existing journal; it does not
+resubmit an operation, rewrite the snapshot or relax signatures/schema checks.
+Other reader defaults and invalid sequence-encoding refusal remain compatible.
+
+Four injected pre-fix cases failed. The focused suite now passes 41 cases with
+one Windows-only skip on Linux, including original signed-result preservation,
+bounded persistent-failure refusal and corrupt-byte preservation. A separate
+Windows case uses a real exclusive CreateFileW handle and releases it at the
+first bounded read backoff; its actual Windows result is still pending CI.
+Fixing this demonstrated read-conflict case does not establish the lost
+underlying error in the historical failure or close all Windows timing issues.
+
+The Node/Automation regression passes 399 cases; the Work/MCP HTTP regression
+passes 46. Kernel, component lock, approval boundaries and effect verification
+remain unchanged. The final candidate still requires its own cross-platform CI.
+
+The actual Windows case on `2a0d330` exposed a real compatibility gap: CPython
+3.11/3.12's CRT file read reported errno13 without a `winerror` for an exclusive
+CreateFileW sharing lock. Injected errors alone did not establish that behavior.
+Core `40653463511` and Multi-Arch `40653463351` retain that failure, independently
+of the separate Core Work HTTP timeout. The failed candidate is not qualified.
+
+For strict snapshot reads only, an unknown Windows CRT access error now receives
+a read-only CreateFileW probe (OPEN_EXISTING, never create/write). Only an observed
+sharing/lock code32/33 permits the existing bounded reread. Denial/code5 and
+unclassified failures still stop immediately; the original exception remains
+chained. Probe handles are closed. Linux and the original reader defaults remain
+unchanged. A second real Windows negative case rejects non-sharing access denial;
+the Linux focused result is 42 passed,2 Windows-only skips. The existing opt-in
+Core diagnostic now selects these same maintained Relay tests without satisfying
+the separate required Core/platform contexts. Actual Windows and full native
+qualification must be repeated on the corrective source.
+
 ## Studio Provider configuration boundary — 2026-10-28
 
 The Studio Models panel now projects the existing host-selected Provider file
@@ -5105,6 +5205,29 @@ record, reloaded it from Runtime, observed a real critical-operation denial and
 confirmed the original record remained. External model calls were 0. This is a
 source-browser software qualification, not live-model or installed-Windows
 acceptance.
+
+## Extension SBOM schema preparation — 2026-10-29
+
+PR #110 head `a67bc9e` passed Core, Desktop and Security but its Multi-Arch
+Windows job [122838451669](https://github.com/untrod/apeir/actions/runs/40694759599/job/122838451669)
+failed the original five-second Skill HTTP deadline at 5105 ms. The server
+snapshot was constructing the CycloneDX JSON validator registry during an
+installed-content verification. Full logs remain retained and Issue #88 open.
+
+Each generated or verified SBOM previously constructed a fresh strict validator,
+causing its bundled schemas to be read and parsed repeatedly. The existing
+validator now lives in thread-local storage. Every document is still parsed
+and strictly validated, and every package, signature, provenance and digest is
+still checked against current bytes. No result or authorization is cached.
+Different threads use independent validators. A negative regression validates
+good, changed-invalid and good documents in sequence and checks thread isolation.
+
+A local preparation probe on Linux x86_64, Python 3.12.14, used 100 validations
+per case of the same minimal valid CycloneDX 1.6 document. Fresh instances had
+p50/p95/p99 1.790/2.417/4.373 ms and 190.596 ms total CPU; reusing one instance
+had 0.018/0.080/0.180 ms and 4.234 ms CPU (including its first preparation).
+This measures schema preparation for this small input on this host only; it
+does not establish Windows HTTP latency or resolution of all Issue #88 failures.
 
 ## Human session reads and Windows Skill timing — 2026-10-29
 

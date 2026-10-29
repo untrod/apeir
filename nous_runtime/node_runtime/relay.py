@@ -6,6 +6,7 @@ import asyncio
 import base64
 import contextlib
 import contextvars
+import errno
 from copy import deepcopy
 from functools import partial
 import hashlib
@@ -512,9 +513,15 @@ class NodeRelayServer:
         if self.state_dir is None:
             return
         path = self.state_dir / "workload-state.json"
-        if not path.exists():
+        try:
+            present = path.exists()
+        except OSError:
+            # An inaccessible metadata probe does not establish missing state.
+            # Require the actual strict read and its original error instead.
+            present = True
+        if not present:
             return
-        value = _read_json(path)
+        value = _read_json(path, strict=True)
         if value.get("schema") != "nous.relay-workloads/v1":
             raise NodeProtocolError("relay workload state is invalid")
         pending = value.get("pending")
@@ -2630,14 +2637,73 @@ async def _run_relay_io(
     return result
 
 
-def _read_json(path: Path) -> dict[str, Any]:
-    if not path.is_file():
+def _read_failure_winerror(path: Path, error: OSError) -> int | None:
+    code = getattr(error, "winerror", None)
+    if type(code) is int:
+        return code
+    if os.name != "nt" or error.errno != errno.EACCES:
+        return None
+    # The Windows CRT can reduce a sharing violation to errno13, discarding
+    # GetLastError. Probe current read access without creating or writing a file.
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create = kernel32.CreateFileW
+    create.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create.restype = wintypes.HANDLE
+    handle = create(str(path), 0x80000000, 7, None, 3, 0x80, None)
+    if handle == ctypes.c_void_p(-1).value:
+        return ctypes.get_last_error()
+    close = kernel32.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+    if not close(handle):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return None
+
+
+def _read_json(path: Path, *, strict: bool = False) -> dict[str, Any]:
+    if not strict and not path.is_file():
         return {}
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return value if isinstance(value, dict) else {}
+    for attempt in range(6):
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except OSError as exc:
+            # A bounded reread cannot replay an effect. Only Windows sharing or
+            # lock conflicts qualify; denial, missing state and corruption do not.
+            winerror = _read_failure_winerror(path, exc) if strict else None
+            if strict and winerror in {32, 33} and attempt < 5:
+                time.sleep(0.01 * (attempt + 1))
+                continue
+            if strict:
+                codes = {
+                    name: code if type(code) is int else None
+                    for name in ("errno", "winerror")
+                    for code in (getattr(exc, name, None),)
+                }
+                raise NodeProtocolError(
+                    "relay persisted state read failed "
+                    f"(errno={codes['errno']}, winerror={codes['winerror']}, "
+                    f"observed_winerror={winerror})"
+                ) from exc
+            return {}
+        except (json.JSONDecodeError, UnicodeError) as exc:
+            if strict:
+                raise NodeProtocolError("relay persisted state decode failed") from exc
+            if isinstance(exc, UnicodeError):
+                raise
+            return {}
+        return value if isinstance(value, dict) else {}
+    raise AssertionError("unreachable relay state read")
 
 
 def _utc_now() -> str:
