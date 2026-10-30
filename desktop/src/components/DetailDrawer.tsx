@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { colors, typo, radius, shadow, space, btnPrimary, btnSecondary } from "../design";
 import {
   approvalAction,
+  captureRuntimeConnection,
   fetchApprovals,
   fetchArtifact,
   fetchModelObservations,
@@ -11,8 +12,10 @@ import {
   fetchTaskVerification,
   fetchTrace,
   fetchTraceTimeline,
+  getRuntimeConfigVersion,
   testModel,
 } from "../lib/api";
+import { useRuntimeConfigVersion } from "../store";
 import { toast } from "./Toast";
 
 export type DrawerView =
@@ -32,7 +35,13 @@ interface DetailDrawerProps {
 }
 
 export function DetailDrawer({ view, onClose }: DetailDrawerProps) {
-  if (!view) return null;
+  const version = useRuntimeConfigVersion();
+  const owner = useMemo(() => ({ view, version: getRuntimeConfigVersion(), current: captureRuntimeConnection() }), [view]);
+  const active = owner.version === version;
+  useLayoutEffect(() => {
+    if (view && !active) onClose();
+  }, [view, active, onClose]);
+  if (!view || !active) return null;
 
   return (
     <>
@@ -60,15 +69,15 @@ export function DetailDrawer({ view, onClose }: DetailDrawerProps) {
           </div>
           <button onClick={onClose} title="Close" style={{ ...btnSecondary, padding: `${space.xs} ${space.sm}` }}>Close</button>
         </div>
-        <div style={{ flex: 1, overflowY: "auto", padding: space.xl }}>
+        <div key={JSON.stringify(view)} style={{ flex: 1, overflowY: "auto", padding: space.xl }}>
           {view.kind === "task" && <TaskDetails taskId={view.taskId} />}
           {view.kind === "trace" && <TraceDetails traceId={view.traceId} />}
           {view.kind === "run" && <TaskTimelineDetails taskId={view.runId} />}
           {view.kind === "node" && <NodeDetails nodeId={view.nodeId} />}
-          {view.kind === "approval" && <ApprovalDetails requestId={view.requestId} />}
+          {view.kind === "approval" && <ApprovalDetails requestId={view.requestId} current={owner.current} />}
           {view.kind === "artifact" && <ArtifactDetails artifactId={view.artifactId} />}
           {view.kind === "verification" && <VerificationDetails taskId={view.taskId} />}
-          {view.kind === "model-observations" && <ModelObservationDetails modelId={view.modelId} />}
+          {view.kind === "model-observations" && <ModelObservationDetails modelId={view.modelId} current={owner.current} />}
         </div>
       </aside>
     </>
@@ -137,7 +146,11 @@ function NodeDetails({ nodeId }: { nodeId: string }) {
   return <ObjectPanel data={data as unknown as Record<string, unknown>} preferred={["id", "node_id", "name", "platform", "arch", "role", "online", "status", "last_seen"]} />;
 }
 
-function ApprovalDetails({ requestId }: { requestId: string }) {
+function originalConnection(current: () => void) {
+  try { current(); return true; } catch { return false; }
+}
+
+function ApprovalDetails({ requestId, current }: { requestId: string; current: () => void }) {
   const [busy, setBusy] = useState(false);
   const loader = useCallback(async () => {
     const response = await fetchApprovals();
@@ -146,15 +159,18 @@ function ApprovalDetails({ requestId }: { requestId: string }) {
   const { data, loading, error, reload } = useAsync(loader);
 
   const submit = async (action: "approve" | "deny") => {
+    if (!originalConnection(current)) return;
     setBusy(true);
     try {
-      await approvalAction(requestId, action);
+      await approvalAction(requestId, action, current);
+      if (!originalConnection(current)) return;
       toast.success(action === "approve" ? "Approved" : "Denied", requestId);
       reload();
     } catch (error) {
+      if (!originalConnection(current)) return;
       toast.error("Approval failed", error instanceof Error ? error.message : "Unknown error");
     } finally {
-      setBusy(false);
+      if (originalConnection(current)) setBusy(false);
     }
   };
 
@@ -169,24 +185,27 @@ function ApprovalDetails({ requestId }: { requestId: string }) {
   );
 }
 
-function ModelObservationDetails({ modelId }: { modelId: string }) {
+function ModelObservationDetails({ modelId, current }: { modelId: string; current: () => void }) {
   const loader = useCallback(() => fetchModelObservations(modelId), [modelId]);
   const { data, loading, error } = useAsync(loader);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<Record<string, unknown> | null>(null);
   const runTest = async () => {
+    if (!originalConnection(current)) return;
     setTesting(true);
     try {
       const result = await testModel(modelId);
+      if (!originalConnection(current)) return;
       setTestResult(result as unknown as Record<string, unknown>);
-      if (result.healthy) toast.success("Model connection verified", modelId);
+      if (result.healthy) toast.success("Model test completed", modelId);
       else toast.error("Model connection failed", result.error || modelId);
     } catch (error) {
+      if (!originalConnection(current)) return;
       const message = error instanceof Error ? error.message : "Unknown error";
       setTestResult({ healthy: false, error: message });
       toast.error("Model connection failed", message);
     } finally {
-      setTesting(false);
+      if (originalConnection(current)) setTesting(false);
     }
   };
   if (loading) return <LoadingView />;

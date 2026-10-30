@@ -36,6 +36,7 @@ Endpoints:
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import hmac
 import inspect
 import logging
@@ -731,24 +732,41 @@ def handle_events_stream(
         )
 
 
+@contextmanager
+def _model_observation_reader():
+    """Own a reader for this selected workspace, never the legacy singleton."""
+    from nous_runtime.model_runtime.observation_store import ModelObservationStore
+
+    root = (
+        Path(os.environ.get("NOUS_WORKSPACE_ROOT") or Path.cwd())
+        .expanduser()
+        .resolve(strict=True)
+    )
+    if not root.is_dir():
+        raise NotADirectoryError("The selected workspace is unavailable")
+    owner = ModelObservationStore(str(root))
+    try:
+        yield owner
+    finally:
+        owner.shutdown()
+
+
 def handle_model_observations(
     model_id: str = "",
     provider_id: str = "",
     capability_id: str = "",
     limit: int = 100,
 ) -> dict[str, Any]:
-    """Query model execution observations."""
+    """Query model execution observations in the active workspace."""
     try:
-        from nous_runtime.model_runtime.observation_store import get_observation_store
-
-        store = get_observation_store()
-        observations = store.query(
-            model_id=model_id,
-            provider_id=provider_id,
-            capability_id=capability_id,
-            limit=min(int(limit), 500),
-        )
-        stats = store.get_statistics()
+        with _model_observation_reader() as owner:
+            observations = owner.query(
+                model_id=model_id,
+                provider_id=provider_id,
+                capability_id=capability_id,
+                limit=min(int(limit), 500),
+            )
+            stats = owner.get_statistics()
         return ok_response(
             {
                 "observations": observations,
@@ -757,9 +775,9 @@ def handle_model_observations(
             }
         )
     except ImportError:
-        return ok_response({"observations": [], "count": 0, "statistics": {}})
-    except Exception as e:
-        return err_response("NOUS_INTERNAL_ERROR", str(e))
+        return err_response("NOUS_DEPENDENCY_MISSING", "Model history is unavailable")
+    except Exception:
+        return err_response("NOUS_INTERNAL_ERROR", "Model history could not be read")
 
 
 def handle_model_rankings(
@@ -768,22 +786,20 @@ def handle_model_rankings(
     metric: str = "success_rate",
     min_samples: int = 10,
 ) -> dict[str, Any]:
-    """Get model performance rankings."""
+    """Read performance rankings, preserving the requested sample floor."""
     try:
-        from nous_runtime.model_runtime.observation_store import get_observation_store
-
-        store = get_observation_store()
-        rankings = store.get_model_rankings(
-            capability_id=capability_id,
-            task_type=task_type,
-            metric=metric,
-            min_samples=min(int(min_samples), 1),
-        )
+        with _model_observation_reader() as owner:
+            rankings = owner.get_model_rankings(
+                capability_id=capability_id,
+                task_type=task_type,
+                metric=metric,
+                min_samples=max(int(min_samples), 1),
+            )
         return ok_response({"rankings": rankings, "count": len(rankings)})
     except ImportError:
-        return ok_response({"rankings": [], "count": 0})
-    except Exception as e:
-        return err_response("NOUS_INTERNAL_ERROR", str(e))
+        return err_response("NOUS_DEPENDENCY_MISSING", "Model rankings are unavailable")
+    except Exception:
+        return err_response("NOUS_INTERNAL_ERROR", "Model rankings could not be read")
 
 
 # Execution Traces API

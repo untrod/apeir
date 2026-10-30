@@ -29,9 +29,13 @@ from pathlib import Path
 from typing import Any
 
 from nous_runtime.schema_registry import MODEL_OBSERVATION_SCHEMA_VERSION as SCHEMA_VERSION
+from nous_runtime.security.private_files import validate_private_database_path
 
 _log = logging.getLogger("nous.model_obs")
 
+
+class ModelObservationError(RuntimeError):
+    """History could not be read or persistence could not be confirmed."""
 
 
 # Data models
@@ -279,7 +283,7 @@ class ModelObservationStore:
     """
 
     def __init__(self, workspace_root: str = ""):
-        self._workspace = workspace_root or "."
+        self._workspace = str(Path(workspace_root or ".").expanduser().resolve())
         self._db_path = Path(self._workspace) / ".nous" / "model_observations.db"
         self._lock = threading.RLock()
         self._db: sqlite3.Connection | None = None
@@ -378,7 +382,7 @@ class ModelObservationStore:
         """Query observations with filters."""
         self._ensure_db()
         if self._db is None:
-            return []
+            raise ModelObservationError("Model observation history is unavailable")
 
         conditions = []
         params: list[Any] = []
@@ -406,8 +410,10 @@ class ModelObservationStore:
             ).fetchall()
             return [json.loads(r[0]) for r in rows]
         except Exception as e:
-            _log.warning("Observation query failed: %s", e)
-            return []
+            _log.warning("Observation query failed (%s)", type(e).__name__)
+            raise ModelObservationError(
+                "Model observation history is unavailable"
+            ) from None
 
     def query_recent(
         self,
@@ -561,7 +567,7 @@ class ModelObservationStore:
         """Rank models by a given performance metric."""
         self._ensure_db()
         if self._db is None:
-            return []
+            raise ModelObservationError("Model observation rankings are unavailable")
 
         conditions = []
         params: list[Any] = []
@@ -602,8 +608,10 @@ class ModelObservationStore:
                 for r in rows
             ]
         except Exception as e:
-            _log.warning("Model ranking failed: %s", e)
-            return []
+            _log.warning("Model ranking failed (%s)", type(e).__name__)
+            raise ModelObservationError(
+                "Model observation rankings are unavailable"
+            ) from None
 
     def get_cost_summary(
         self,
@@ -687,7 +695,7 @@ class ModelObservationStore:
         """Return aggregate statistics about the observation store."""
         self._ensure_db()
         if self._db is None:
-            return {"total_observations": 0}
+            raise ModelObservationError("Model observation statistics are unavailable")
 
         try:
             total = self._db.execute(
@@ -715,8 +723,10 @@ class ModelObservationStore:
                 "total_cost_usd": round(float(total_cost[0] or 0), 6),
             }
         except Exception as e:
-            _log.warning("Statistics query failed: %s", e)
-            return {"total_observations": 0}
+            _log.warning("Statistics query failed (%s)", type(e).__name__)
+            raise ModelObservationError(
+                "Model observation statistics are unavailable"
+            ) from None
 
     def shutdown(self) -> None:
         if self._db:
@@ -732,7 +742,9 @@ class ModelObservationStore:
         if self._db is not None:
             return
         try:
+            validate_private_database_path(self._db_path)
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
+            validate_private_database_path(self._db_path)
             self._db = sqlite3.connect(str(self._db_path), check_same_thread=False, timeout=5.0)
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA synchronous=NORMAL")
@@ -789,13 +801,15 @@ class ModelObservationStore:
                     pass
             self._db.commit()
         except Exception as e:
-            _log.warning("Failed to init observation DB: %s", e)
-            self._db = None
+            _log.warning("Failed to init observation DB (%s)", type(e).__name__)
+            failed, self._db = self._db, None
+            if failed is not None:
+                failed.close()
 
     def _persist(self, obs: ModelObservation) -> None:
         self._ensure_db()
         if self._db is None:
-            return
+            raise ModelObservationError("Model observation persistence is unavailable")
         try:
             payload = json.dumps(obs.to_dict(), ensure_ascii=False)
             self._db.execute(
@@ -809,7 +823,7 @@ class ModelObservationStore:
                     hardware, runtime_load, time_of_day_hour, retry_count,
                     fallback_used, fallback_model_id, error_category, error_message,
                     tags, metadata, payload, schema_version)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     obs.observation_id, obs.timestamp, obs.model_id, obs.provider_id,
                     obs.model_version, obs.quantization, obs.task_type.value,
@@ -828,7 +842,11 @@ class ModelObservationStore:
             )
             self._db.commit()
         except Exception as e:
-            _log.warning("Failed to persist observation %s: %s", obs.observation_id, e)
+            self._db.rollback()
+            _log.warning("Failed to persist observation (%s)", type(e).__name__)
+            raise ModelObservationError(
+                "Model observation persistence could not be confirmed"
+            ) from None
 
 
 # Singleton
@@ -880,6 +898,7 @@ def _percentile(sorted_values: list[float], pct: float) -> float:
 
 __all__ = [
     "ModelObservation",
+    "ModelObservationError",
     "ModelObservationStore",
     "ModelPerformanceSummary",
     "ObservationOutcome",
