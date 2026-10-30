@@ -279,8 +279,8 @@ smoke on Windows Server 2025. Windows 10 GUI, installation, upgrade, uninstall,
 Defender and signing remain unqualified.
 
 1. Sign in to GitHub and download
-   [windows-x64-native-development-build](https://github.com/untrod/apeir/actions/runs/40862247626/artifacts/12894812901).
-   Retention ends **2026-11-12**. The installer is inside the downloaded artifact ZIP.
+   [windows-x64-native-development-build](https://github.com/untrod/apeir/actions/runs/41006787955/artifacts/12957768657).
+   Retention ends **2026-11-13**. The installer is inside the downloaded artifact ZIP.
 2. Extract it. Check its source manifest and `native-validation-report.json`.
    It contains Portable, NSIS, `SHA256SUMS.txt` and dependency/build records.
 3. Verify the files in PowerShell:
@@ -297,19 +297,17 @@ Defender and signing remain unqualified.
 
 | File | SHA-256 for this exact build |
 | --- | --- |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | `78A447DF234E6F56E68EA06E67FE44A75D745CB668DBAD5FDEE9B3602D303D55` |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `D07230F3E8903B3CF9D2AD08E112905DE9F62EEEC6132C060DDE1BA5F668A8F8` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `9D98F7AFD0BCCD3BB838254EE44C1725B6F541D60C6C5F0FE38347575830B9B8` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `C714D78D7F56D550C30A0F7BAE4DBA36123E4C1E5292287A70561C04F004D1BF` |
 
 Outer artifact ZIP SHA-256:
-`6e0f34a15460ebfb37603d2011119850363c776ee37a954b2a866c89cda4bbaa`.
+`bdefeb3f78f787ce84a99e1511a0444efe656088e72add9edc566373436f812f`.
 
-This package is accepted source `284c1cea37fd96e07cf029c3cc35a70be5c4818c`.
-Its Core, Desktop, Multi-Arch and Security checks passed; the full-mode native
-producer passed separately. It includes Provider settings, recorded Chat activity
-and PR110's Work/Relay/SBOM changes. Later Workflow data-binding changes are not
-in this package. Historical Windows timing issues remain open; a passing run does
-not establish their complete cause. A documentation update cannot change these
-binaries. Use each build's own manifest and hashes even when filenames match.
+This package uses accepted source `a37dab8f7f25cfcf93fdea30e2b3f8af54cf6daf`.
+It includes Workflow data bindings, model-history persistence and Inspector
+context fixes. Historical Windows timing issues remain open; a passing run does
+not establish their complete cause. Use this build's own manifest and hashes,
+even when an older download has matching filenames.
 
 See the [native build record](../deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)
 for exact inputs and [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md) for

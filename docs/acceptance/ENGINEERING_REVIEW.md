@@ -5565,3 +5565,43 @@ Restored writes also apply the existing redactor to free-form errors, tags and
 metadata before returning or persisting them. A registered fake credential is
 absent from both the returned observation and every closed-state database file;
 no real credential is read or used by this qualification.
+
+
+## Accepted Studio integration and Native download — 2026-10-30
+
+PR #120 passed all 13 required checks and merged normally as main 30ff570.
+PR #118 then normally integrated the accepted base and the isolated model-history
+fix, passed all 13 checks at a37dab8, and merged as
+1ad5778eeedeae149e09d2068b79d73dd76d070a. The two Git trees are identical. That
+precise main passed Core 41008342440, Desktop 41008342451, Multi-Arch 41008342492
+and Security 41008342489. Both short feature branches were retired after ancestry
+checks. All 19 worktrees were clean; 31 historical tags were unchanged.
+
+Official Source Preview 41004829020 produced runtime Artifact12955460810 and
+frontend12955076758 from a37dab8. Their four/13 inner checksums and both outer
+archive digests were independently verified. Wheel SHA-256 is
+04c73827c730a8dbf0e3946d404710531e170af4d42759c62152ab0a97691bbe.
+A new base virtual environment outside the checkout exercised the installed
+CLI/API, pure typed Workflow and separate-process original Run recovery
+(wfr_d79edd5016d941c98ab934926bd9d1f1), plus authenticated fake-history A/B/A
+reads. Matching downloaded static Studio and installed Runtime passed sandboxed
+Chromium connection/file-read/reload/reopen. Open-tab auto-restore remains
+NOT_IMPLEMENTED; this is not a claim of persistent editor drafts.
+
+Native run 41006787955 used the unchanged approved input producer40084421303,
+Artifact12556562701 and ZIP SHA cc98ba7c98c32abdf2132facf4da4283e921aa093840044dfb54cd2e7e808536.
+The maintained full script passed 6045 Python cases, skipped95, with four warnings,
+and ran real Kernel/Worker/Runtime smoke on Server2025. Artifact12957768657 was
+independently downloaded: 22 checksums, 13 manifest entries, 11 inner Portable
+files, x64 application PE headers and approved component hashes all match.
+The four application/sidecar EXEs and x86 NSIS bootstrapper are unsigned.
+
+The [current build record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)
+retains exact hashes and the new download. NKI1/2/3 and bad/missing credential
+refusal passed; original denied workload recovery submitted zero new model
+operations. The native CLI recovered original pure Run
+wfr_e879eabc129d4e43b68f448f7e347244. External model calls: zero. Windows10
+installation, installed GUI, graceful exit, upgrade/uninstall, Defender, real
+inference, signing and formal publication remain unqualified. No independent
+NSIS payload extraction is claimed. Earlier failed runs and Issues85/88/116/121
+remain retained; green qualification does not establish one cause for them.
