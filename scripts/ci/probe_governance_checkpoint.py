@@ -59,7 +59,7 @@ def quantiles(values):
 
 
 def probe():
-    count = 31
+    count = 101
     samples = {name: [] for name in ("legacy", "retained-wal")}
     cpu = {name: [] for name in samples}
     phases = {
@@ -134,7 +134,8 @@ def probe():
                 "samples_per_path": count,
                 "ordering": "alternating paired order; fixed payload",
                 "scope": "existing Governance audit transaction; excludes schema initialization and HTTP",
-                "tail_limit": "descriptive interpolated quantiles; 31 samples do not establish a tail SLA",
+                "tail_limit": "descriptive interpolated quantiles; this sample does not establish a tail SLA",
+                "cpu_measurement": "process_time deltas; Windows accounting may be coarse, so a zero delta is not zero workload",
                 "wall": {name: quantiles(values) for name, values in samples.items()},
                 "cpu": {name: quantiles(values) for name, values in cpu.items()},
                 "phases": {
@@ -146,6 +147,8 @@ def probe():
                 },
                 "integrity_and_all_records": "PASS",
                 "raw_wall_ms": samples,
+                "raw_cpu_ms": cpu,
+                "raw_phase_ms": phases,
             }
     finally:
         store._sqlite_phase = original_phase
