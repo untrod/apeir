@@ -1,11 +1,133 @@
 """The original Governance SQLite owner closes every admitted connection."""
 
 import sqlite3
+import subprocess
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from nous_runtime.governance import store
+
+
+@pytest.mark.skipif(
+    not hasattr(sqlite3.Connection, "setconfig")
+    or not hasattr(sqlite3, "SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE"),
+    reason="SQLite connection configuration requires supported CPython/SQLite",
+)
+def test_closed_wal_commit_recovers_and_backup_includes_original_records(tmp_path):
+    path = tmp_path / "governance.db"
+    with store._db_connect(str(path)) as connection:
+        connection.execute("CREATE TABLE entries (value TEXT UNIQUE)")
+        connection.execute("INSERT INTO entries VALUES ('original')")
+        assert connection.execute("PRAGMA synchronous").fetchone()[0] == 2
+        assert connection.execute("PRAGMA wal_autocheckpoint").fetchone()[0] == 1000
+    assert Path(str(path) + "-wal").exists()
+    with pytest.raises(sqlite3.ProgrammingError):
+        connection.execute("SELECT 1")
+    with pytest.raises(ValueError, match="rollback original"):
+        with store._db_connect(str(path)) as connection:
+            connection.execute("INSERT INTO entries VALUES ('rolled-back')")
+            raise ValueError("rollback original")
+    destination = sqlite3.connect(":memory:")
+    try:
+        with store._db_connect(str(path), readonly=True) as connection:
+            assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            assert connection.execute("SELECT value FROM entries").fetchall()[0][0] == (
+                "original"
+            )
+            with pytest.raises(sqlite3.OperationalError, match="readonly"):
+                connection.execute("INSERT INTO entries VALUES ('forbidden')")
+            connection.backup(destination)
+        assert destination.execute("SELECT value FROM entries").fetchall() == [
+            ("original",)
+        ]
+    finally:
+        destination.close()
+
+
+@pytest.mark.parametrize("commit", [False, True])
+def test_abrupt_exit_recovers_original_commit_and_discards_uncommitted_work(
+    tmp_path, commit
+):
+    path = tmp_path / "governance.db"
+    with store._db_connect(str(path)) as connection:
+        connection.execute("CREATE TABLE entries (value TEXT UNIQUE)")
+        connection.execute("INSERT INTO entries VALUES ('original')")
+    script = """
+import os, sys
+from nous_runtime.governance.store import _db_connect
+with _db_connect(sys.argv[1]) as connection:
+    connection.execute("INSERT INTO entries VALUES ('next')")
+    if sys.argv[2] == "committed":
+        connection.commit()
+    os._exit(23)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(path), "committed" if commit else "open"],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 23, result.stderr.decode(errors="replace")
+    with store._db_connect(str(path), readonly=True) as connection:
+        assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        values = {
+            row[0] for row in connection.execute("SELECT value FROM entries").fetchall()
+        }
+    assert values == ({"original", "next"} if commit else {"original"})
+
+
+def test_interpreters_without_checkpoint_option_keep_existing_policy(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delattr(
+        store.sqlite3, "SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE", raising=False
+    )
+    path = tmp_path / "governance.db"
+    with store._db_connect(str(path)) as connection:
+        connection.execute("CREATE TABLE entries (value TEXT)")
+        connection.execute("INSERT INTO entries VALUES ('original')")
+    with store._db_connect(str(path), readonly=True) as connection:
+        assert connection.execute("SELECT value FROM entries").fetchone()[0] == (
+            "original"
+        )
+
+
+@pytest.mark.skipif(
+    not hasattr(sqlite3.Connection, "setconfig")
+    or not hasattr(sqlite3, "SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE"),
+    reason="SQLite connection configuration requires supported CPython/SQLite",
+)
+def test_checkpoint_configuration_failure_closes_without_admitting_transaction(
+    tmp_path, monkeypatch
+):
+    original_connect = sqlite3.connect
+    opened = []
+
+    class Connection(sqlite3.Connection):
+        closed = False
+
+        def setconfig(self, *_args):
+            raise sqlite3.OperationalError("injected configuration refusal")
+
+        def close(self):
+            self.closed = True
+            return super().close()
+
+    def connect(*args, **kwargs):
+        connection = original_connect(*args, factory=Connection, **kwargs)
+        opened.append(connection)
+        return connection
+
+    monkeypatch.setattr(store.sqlite3, "connect", connect)
+    with pytest.raises(sqlite3.OperationalError, match="configuration refusal"):
+        with store._db_connect(str(tmp_path / "governance.db")):
+            pytest.fail("failed configuration admitted a Governance transaction")
+    assert len(opened) == 1
+    assert opened[0].closed
 
 
 def test_schema_initialization_is_one_atomic_write_transaction(tmp_path, monkeypatch):

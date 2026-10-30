@@ -5383,3 +5383,57 @@ installation is claimed. The frozen NKI Gateway stream implementation currently
 awaits the original complete operation response; incremental token streaming
 cannot be qualified through that contract. Complete extension/Skill use
 attribution remains pending rather than inferred from installation state.
+
+## Model discovery dependency failure — 2026-10-29
+
+The protected Models HTTP regression reproduced an incorrect success response:
+when the canonical Model Registry import failed, a healthy Provider record was
+presented as a model with invented limits and tool support. The route now returns
+NOUS_DEPENDENCY_MISSING without reading the alternate Provider list or exposing
+the private import exception. Removing the injected failure restores the actual
+Gateway model identities through the same authenticated server. Original
+unauthenticated refusal, lifecycle and cleanup assertions remain unchanged.
+The original HTTP failure and corrected regression are retained. No Provider
+inference or credential access was performed.
+Model Center, protected HTTP, Control Plane and Provider configuration/coexistence
+regressions: 101 passed. Real inference remains separately unqualified.
+
+### Windows MCP qualification — 2026-10-30
+
+Core 40911654269 at 2aea09a failed the original MCP approval/idempotency case on
+its first submission, before a Work call. Its captured service thread was exiting
+the result-audit transaction in SQLite connection close; setup commit took
+2110 ms and later commit/close observations took1359/1031 ms. This identifies the
+observed phases, not one proven cause for every historical HTTP timeout.
+
+The existing Windows Governance diagnostic now measures a bounded same-host
+legacy/retained-WAL comparison through the canonical Store, then executes the
+unchanged original MCP regression in separate processes. The experiment uses
+SQLite's supported NO_CKPT_ON_CLOSE setting where available; it does not change
+production policy, FULL synchronization, WAL auto-checkpoint thresholds, HTTP
+deadlines or authority. Both local MCP modes passed. Linux temporary-filesystem
+timings do not qualify Windows or justify a production performance claim.
+The content-free report retains samples and exit codes; any failed regression
+still makes the diagnostic fail. Diagnostic contexts cannot satisfy the required
+Core Gate. Original Windows failure evidence remains retained.
+
+Windows Server 2025 diagnostic 40996995718 at 68d41c4 passed the original
+Governance/Control Plane and both unchanged MCP variants. With CPython 3.12.10,
+SQLite 3.49.1, 101 alternating pairs measured audit-transaction wall p50/p95/p99
+of 15.690/31.396/44.971 ms with last-close checkpointing and
+7.497/16.705/27.283 ms with retained WAL. Close alone measured
+4.115/9.303/13.236 versus 0.108/0.124/0.150 ms. An earlier 31-pair run had worse
+overall p99 for retained WAL (35.547 versus 32.308 ms); neither sample proves a
+tail SLA or resolves historic HTTP timeouts. Raw CPU/phase samples are retained;
+Windows process-time quantization does not establish zero CPU workload.
+
+The canonical connection owner now uses SQLite's supported NO_CKPT_ON_CLOSE
+option where available, retaining FULL, WAL, auto-checkpointing, original
+commit/rollback and actual connection closure. Older interpreters preserve their
+policy; configuration errors propagate. The probe explicitly selects both modes
+so a future comparison cannot accidentally measure the same policy twice.
+New regressions cover committed-WAL reopen/backup, rejected read-only writes,
+rollback, abrupt process exit before/after commit, unsupported-interpreter
+fallback and configuration-failure cleanup. These plus original SQLite/MCP/Model
+Center checks passed locally: 65 cases. Exact-source Windows and required CI
+remain necessary; no timeout, SQL permission or original assertion was relaxed.
