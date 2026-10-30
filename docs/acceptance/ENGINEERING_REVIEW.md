@@ -5605,3 +5605,71 @@ installation, installed GUI, graceful exit, upgrade/uninstall, Defender, real
 inference, signing and formal publication remain unqualified. No independent
 NSIS payload extraction is claimed. Earlier failed runs and Issues85/88/116/121
 remain retained; green qualification does not establish one cause for them.
+
+## Native Automation failure evidence — 2026-10-30
+
+Follow-up independent extraction of the preceding `a37dab8` NSIS package found
+all 11 expected application/resource files. Ten match Portable byte for byte;
+the main executable differs only at Tauri's three-byte `UNK` to `NSS` bundle
+marker, confirmed against the actual [2.11.4 bundler source](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.4/crates/tauri-bundler/src/bundle.rs).
+Its installer-payload SHA-256 is
+`1f22ddd6a27f495bc7818f059c6be270beed87297ef179b5213f335fe4157e07`.
+The installer was not executed; this does not qualify installation or uninstall.
+
+The full-mode Native refresh [41099498312](https://github.com/untrod/apeir/actions/runs/41099498312)
+at accepted source `167bcf48b1a79e47097136fb37f69be61b7087d3` stopped before packaging:
+`test_original_work_matches_only_after_human_approval_and_independent_observation`
+returned Workflow `failed` after approval. The original assertion remains
+`state == completed`; result: **1 failed, 6044 passed, 95 skipped, 4 warnings**
+in 2344.32 seconds. The truncated projection does not establish its error,
+original Work state, effect count or verification outcome. It does not establish
+the cause of [Issue #82](https://github.com/untrod/apeir/issues/82).
+
+The test now retains bounded, redacted failure metadata and monotonic
+prepare/approval/resume timings. It prints neither execution arguments nor raw
+evidence. The existing Core diagnostic runner can select
+`windows-automation-recovery` with the Native dependency set and original
+Automation tests. That optional diagnostic cannot satisfy the Core gate.
+No completion/MATCH assertion, wait limit, execution permission or retry policy
+was relaxed. This is evidence collection, not a root-cause fix or Native PASS.
+The preceding qualified `a37dab8` download remains separately identified.
+
+### Windows recovery follow-up
+
+Diagnostic [41108119177](https://github.com/untrod/apeir/actions/runs/41108119177)
+passed all 115 Automation cases with the same Native dependency set. It did not
+reproduce the failure and does not establish its cause or qualify an installer.
+
+Multi-Arch [41108108372](https://github.com/untrod/apeir/actions/runs/41108108372)
+instead failed the original ProcessSession fresh-host assertion after two
+injected read denials: the third, actual read raised `PermissionError`, errno13,
+with no WinError. The host remained `RECOVERY_REQUIRED`; no cached identity or
+replacement process was accepted. Issue85 remains open. The test now reuses the
+Relay's existing read-only Windows access probe to capture a later native error
+code, if any. That sample neither replaces the failed read nor proves its cause;
+the same assertion, three-read bound and control refusal remain intact.
+
+Core [41110012705](https://github.com/untrod/apeir/actions/runs/41110012705)
+also retained three original five-second Skill HTTP failures. Phase evidence
+includes slow SQLite commits and a sampled CAS receipt-file open; it does not
+establish a common cause with either recovery failure. Issues82/85/88 are not
+closed by a passing retry. No HTTP deadline, durability setting or permission
+check is relaxed.
+
+## Hosted macOS runner retirement — 2026-10-30
+
+PR124's macOS14 job124243165542 was cancelled before runner allocation:
+`runner_id=0`, no steps. Its check annotation names the scheduled macOS14
+brownout, not a failed software test. GitHub's [retirement notice](https://github.com/actions/runner-images/issues/13518)
+ends support on **2026-11-02**. The [official image matrix](https://github.com/actions/runner-images#available-images)
+identifies `macos-15` as the supported ARM64 replacement for the standard
+`macos-14` label.
+
+Core keeps all four Python matrix entries and its existing regression commands;
+the macOS entry and gated ARM64 Desktop job move to `macos-15`. Core records
+`sw_vers`, architecture and Python version. This does not qualify installed
+macOS14 or macOS15 Desktop behavior. The repository protection must replace
+`Python Tests (macos-14, Python 3.12)` with the actual passing
+`Python Tests (macos-15, Python 3.12)` check. Other required checks stay in place.
+Protection administration remains HTTP403 to this integration; no bypass or
+fabricated legacy-name status is used.

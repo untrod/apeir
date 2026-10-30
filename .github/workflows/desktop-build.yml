@@ -38,7 +38,9 @@ on:
         default: ''
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # PR validation must not cancel an explicitly requested full Native build of
+  # the same branch. Superseded runs still cancel within their own event scope.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
@@ -736,7 +738,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && inputs.native_target == 'macos-arm64'
     name: Build macOS ARM64
     needs: [frontend-tests]
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

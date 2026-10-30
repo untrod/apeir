@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import json
 import sqlite3
+import time
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 from threading import Thread, Event, local
@@ -65,7 +66,11 @@ def approve(consumer, pending):
 def test_original_work_matches_only_after_human_approval_and_independent_observation(
     consumer,
 ):
+    from nous_runtime.core.redaction import redact_sensitive_text
+
+    started = time.monotonic()
     binding, pending = prepare(consumer)
+    prepared = time.monotonic()
     work_id = pending["outputs"]["mutate"]["work_id"]
     authorization_id = pending["works"][-1]["execution_arguments"]["authorization_id"]
     request = consumer.gate.get_operation_request(authorization_id)
@@ -77,8 +82,39 @@ def test_original_work_matches_only_after_human_approval_and_independent_observa
     assert approval["governance_request_id"] == authorization_id
     assert approval["proposal_hash"] == authorization_id
     approve(consumer, pending)
+    approved = time.monotonic()
     completed = consumer.resume(binding["id"], pending["run_id"])
-    assert completed["state"] == "completed", completed
+    resumed = time.monotonic()
+    # Keep the successful-path assertion strict. A failed run must expose its
+    # existing state/error without dumping credentials, raw evidence or params.
+    assert completed["state"] == "completed", json.dumps(
+        {
+            "run_id": completed["run_id"],
+            "state": completed["state"],
+            "error": redact_sensitive_text(str(completed.get("error", "")))[:2000],
+            "step_states": completed["step_states"],
+            "reconciliation_required": completed["reconciliation_required"],
+            "effect_counts": completed["effect_counts"],
+            "elapsed_ms": {
+                "prepare": round((prepared - started) * 1000, 3),
+                "approval": round((approved - prepared) * 1000, 3),
+                "resume": round((resumed - approved) * 1000, 3),
+            },
+            "works": [
+                {
+                    "work_id": work["work_id"],
+                    "state": work["state"],
+                    "assigned_node": work.get("assigned_node"),
+                    "receipt_present": bool(
+                        work.get("result_summary", {}).get("remote_execution_receipt")
+                    ),
+                    "verdict": work.get("effect_verification", {}).get("verdict"),
+                }
+                for work in completed["works"]
+            ],
+        },
+        sort_keys=True,
+    )
     mutation = completed["outputs"]["mutate"]
     assert mutation["work_id"] == pending["outputs"]["mutate"]["work_id"]
     assert mutation["state"] == "COMMITTED"
