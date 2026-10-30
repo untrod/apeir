@@ -10,6 +10,15 @@ export const workflowStepTypes = [
   "transform",
 ] as const;
 export type WorkflowStepType = (typeof workflowStepTypes)[number];
+export type WorkflowDataReference =
+  | { source: "inputs"; pointer?: string }
+  | { source: "step"; step_id: string; pointer?: string };
+export type WorkflowDataBindings = {
+  schema_version: 1;
+  inputs?: Record<string, WorkflowDataReference>;
+  inputs_schema?: Record<string, unknown>;
+  outputs_schema?: Record<string, unknown>;
+};
 export type WorkflowStep = {
   step_id: string;
   step_type: WorkflowStepType;
@@ -21,6 +30,7 @@ export type WorkflowStep = {
   approval_required?: boolean;
   compensation?: string;
   params?: Record<string, unknown>;
+  data_bindings?: WorkflowDataBindings;
 };
 export type WorkflowDefinition = {
   workflow_id: string;
@@ -97,6 +107,7 @@ export function workflowDefinition(value: unknown): WorkflowDefinition {
             "approval_required",
             "compensation",
             "params",
+            "data_bindings",
           ].includes(key),
       )
     )
@@ -115,6 +126,7 @@ export function workflowDefinition(value: unknown): WorkflowDefinition {
         Array.isArray(step.params))
     )
       throw new Error("Step params must be an object");
+    if (step.data_bindings !== undefined) validateDataBindings(step);
     ids.add(step.step_id);
   }
   const active = new Set<string>(),
@@ -130,6 +142,62 @@ export function workflowDefinition(value: unknown): WorkflowDefinition {
   };
   ids.forEach(visit);
   return structuredClone(d);
+}
+function validateDataBindings(step: WorkflowStep) {
+  const data = step.data_bindings!;
+  const object = (value: unknown): value is Record<string, unknown> =>
+    !!value && typeof value === "object" && !Array.isArray(value);
+  if (
+    !object(data) ||
+    data.schema_version !== 1 ||
+    Object.keys(data).some(
+      (key) =>
+        ![
+          "schema_version",
+          "inputs",
+          "inputs_schema",
+          "outputs_schema",
+        ].includes(key),
+    )
+  )
+    throw new Error("Unsupported data binding contract");
+  for (const key of ["inputs_schema", "outputs_schema"] as const)
+    if (data[key] !== undefined && !object(data[key]))
+      throw new Error("Step schema must be an object");
+  if (data.inputs !== undefined && !object(data.inputs))
+    throw new Error("Invalid data binding targets");
+  const refs = data.inputs ?? {};
+  if (!object(refs) || Object.keys(refs).length > 64)
+    throw new Error("Invalid data binding targets");
+  for (const [target, ref] of Object.entries(refs)) {
+    if (
+      !/^[A-Za-z][A-Za-z0-9_.-]{0,127}$/.test(target) ||
+      Object.hasOwn(step.params ?? {}, target) ||
+      !object(ref)
+    )
+      throw new Error("Invalid or conflicting data binding target");
+    if (ref.source !== "inputs" && ref.source !== "step")
+      throw new Error("Invalid data source");
+    const allowed =
+      ref.source === "step"
+        ? ["source", "step_id", "pointer"]
+        : ["source", "pointer"];
+    if (Object.keys(ref).some((key) => !allowed.includes(key)))
+      throw new Error("Unknown data source field");
+    if (ref.source === "step" && !(step.depends_on ?? []).includes(ref.step_id))
+      throw new Error("Data source must be a declared dependency");
+    const pointer = ref.pointer === undefined ? "" : ref.pointer;
+    if (
+      typeof pointer !== "string" ||
+      pointer.length > 1024 ||
+      (pointer !== "" && !pointer.startsWith("/")) ||
+      /~(?![01])/.test(pointer)
+    )
+      throw new Error("Invalid data pointer");
+    const parts = pointer === "" ? [] : pointer.slice(1).split("/");
+    if (parts.length > 32 || parts.some((part) => part.startsWith("_")))
+      throw new Error("Reserved or excessive data path");
+  }
 }
 export function workflowDraft(value: unknown): WorkflowDraft {
   if (!value || typeof value !== "object" || Array.isArray(value))

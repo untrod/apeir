@@ -454,7 +454,7 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   await expect(builder).toBeVisible();
   await expect(builder.locator(".react-flow__node")).toHaveCount(1);
   await builder.getByRole("textbox", { name: "Workflow ID", exact: true }).fill("studio.browser-real");
-  await builder.getByRole("combobox", { name: "Step type" }).selectOption("wait");
+  await builder.getByRole("combobox", { name: "Step type" }).selectOption("transform");
   await builder.getByRole("button", { name: "Add step", exact: true }).click();
   await builder.getByRole("button", { name: "Validate", exact: true }).click();
   await expect(builder.getByRole("status")).toContainText("VALID");
@@ -476,12 +476,29 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   await builder.getByRole("textbox", { name: "Step parameters", exact: true }).fill('{"value":"Hello APEIR"}');
   await builder.getByRole("button", { name: "Apply parameters", exact: true }).click();
   await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
+  await builder.locator(".react-flow__node").nth(1).click();
+  await builder.locator("summary").filter({ hasText: /^Data bindings/ }).click();
+  await builder.getByLabel("Binding source", { exact: true }).selectOption("step:transform");
+  await builder.getByLabel("Binding pointer", { exact: true }).fill("/value");
+  await builder.getByRole("button", { name: "Bind input", exact: true }).click();
+  await expect(builder.getByLabel("Step parameters", { exact: true })).toHaveValue("{}");
+  const typedContract = { schema_version: 1, inputs: { value: { source: "step", step_id: "transform", pointer: "/value" } }, inputs_schema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] }, outputs_schema: { properties: { value: { type: "string" } }, required: ["value"] } };
+  await builder.getByLabel("Step data bindings", { exact: true }).fill(JSON.stringify(typedContract));
+  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
+  await expect(builder.getByRole("button", { name: "Add step", exact: true })).toBeDisabled();
+  await builder.locator(".react-flow__pane").click({ position: { x: 400, y: 70 } });
+  await page.keyboard.press("Delete");
+  await expect(builder.locator(".react-flow__node")).toHaveCount(2);
+  await expect(builder.getByLabel("Step data bindings", { exact: true })).toHaveValue(JSON.stringify(typedContract));
+  await builder.getByRole("button", { name: "Apply parameters", exact: true }).click();
+  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
   await builder.locator("summary").filter({ hasText: /^Draft/ }).click();
   const draftDownload = page.waitForEvent("download");
   await builder.getByRole("button", { name: "Save draft", exact: true }).click();
   const portableDraft = await draftDownload, draftPath = info.outputPath("workflow-draft.json"); await portableDraft.saveAs(draftPath);
   const savedDraft = JSON.parse(await readFile(draftPath, "utf8"));
   expect(savedDraft.definition.steps[1].depends_on).toEqual(["transform"]);
+  expect(savedDraft.definition.steps[1].data_bindings).toEqual(typedContract);
   await builder.getByRole("textbox", { name: "Workflow ID", exact: true }).fill("unsaved.other");
   page.once("dialog", dialog => void dialog.accept());
   await builder.locator('input[type="file"]').setInputFiles(draftPath);
@@ -518,6 +535,10 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   const evidence = await builder.locator(".studio-workflow-result pre").textContent();
   expect(evidence).toContain("workflow.completed"); expect(evidence).toContain("Hello APEIR");
   const runId = JSON.parse(evidence!).run.run_id as string;
+  const originalRecord = JSON.parse(evidence!);
+  const consumerId = definition.steps[1].step_id;
+  expect(originalRecord.run.outputs[consumerId].value).toBe("Hello APEIR");
+  expect(originalRecord.step_bindings[consumerId].data_binding.params_digest).toMatch(/^[a-f0-9]{64}$/);
   await builder.getByText("Raw record / events", { exact: true }).click();
   await expect(builder.locator(".react-flow__node").first()).toContainText("completed");
   await expect.poll(async () => {
@@ -525,6 +546,8 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
     const nodes = await builder.locator(".react-flow__node").evaluateAll(nodes => nodes.map(node => { const rect = node.getBoundingClientRect(); return { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom }; }));
     return !!canvas && nodes.every(rect => rect.x >= canvas.x && rect.y >= canvas.y && rect.right <= canvas.x + canvas.width && rect.bottom <= canvas.y + canvas.height);
   }).toBe(true);
+  await builder.locator(".react-flow__node").nth(1).click();
+  await builder.locator("summary").filter({ hasText: /^Data bindings/ }).click();
   await page.screenshot({ path: info.outputPath("workflow-real-runtime-source-browser.png"), fullPage: true });
   // Restart the actual owned CLI process against its original durable workspace.
   const originalRuntime = runtimes[0];
@@ -546,6 +569,9 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   await page.getByRole("button", { name: "Workflow Builder", exact: true }).click();
   await page.getByRole("button", { name: new RegExp(runId) }).click();
   await expect(page.locator(".studio-workflow-result pre")).toContainText(runId);
+  const recoveredRecord = JSON.parse((await page.locator(".studio-workflow-result pre").textContent())!);
+  expect(recoveredRecord.step_bindings).toEqual(originalRecord.step_bindings);
+  expect(recoveredRecord.run.outputs[consumerId].value).toBe("Hello APEIR");
   expect(errors).toEqual([]);
 });
 

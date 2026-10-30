@@ -35,6 +35,26 @@ _MAX_STDIN_BYTES = 64 * 1024
 _RUNNING_IDENTITY_UNVERIFIED = "running process host identity cannot be verified"
 
 
+class _UnavailableHostState(dict):
+    """An empty read result with local diagnostics, never a host observation."""
+
+    def __init__(self, reason: str, attempt: int, error: OSError | None = None):
+        super().__init__()
+        labels = {
+            "missing": "process host state is missing",
+            "unreadable": "process host state is unreadable",
+            "read_failed": "process host state read failed",
+            "invalid": "process host state is invalid",
+        }
+        self.message = labels[reason]
+        if reason != "missing":
+            errno = getattr(error, "errno", None)
+            winerror = getattr(error, "winerror", None)
+            errno = errno if type(errno) is int else None
+            winerror = winerror if type(winerror) is int else None
+            self.message += f" (attempts={attempt}, errno={errno}, winerror={winerror})"
+
+
 def _utc_now() -> str:
     return (
         datetime.now(timezone.utc)
@@ -256,7 +276,11 @@ class ProcessSessionStore:
         }:
             session.state = ProcessSessionState.RECOVERY_REQUIRED.value
             session.stdin_available = False
-            session.error = "process host state is missing"
+            session.error = (
+                host.message
+                if isinstance(host, _UnavailableHostState)
+                else "process host state is missing"
+            )
             session.updated_at = _utc_now()
         if session.state in _TERMINAL_STATES:
             self._materialize_logs(session)
@@ -563,10 +587,13 @@ class ProcessSessionStore:
         if status["state"] != ProcessSessionState.RUNNING.value:
             # Report admission evidence without reflecting arbitrary host error
             # text, commands, output or environment into a control exception.
-            error = str(status.get("error") or "")
+            error = str(status.get("error") or "").split(" (", 1)[0]
             reason = {
                 _RUNNING_IDENTITY_UNVERIFIED: "os_identity_unverified",
                 "process host state is missing": "host_record_unavailable",
+                "process host state is unreadable": "host_record_unreadable",
+                "process host state read failed": "host_record_read_failed",
+                "process host state is invalid": "host_record_invalid",
                 "process host binding mismatch": "host_binding_mismatch",
                 "process helper identity changed": "helper_identity_mismatch",
                 "process command binding mismatch": "command_binding_mismatch",
@@ -660,18 +687,26 @@ class ProcessSessionStore:
         for attempt in range(3):
             try:
                 value = json.loads(path.read_text(encoding="utf-8"))
-            except PermissionError:
+            except PermissionError as error:
                 # A Windows publication may briefly deny opening the file.
                 # Reobserve only this path, with at most two 10ms pauses. Never
                 # authorize from a cached snapshot or replay a control.
                 if attempt == 2:
-                    return {}
+                    return _UnavailableHostState("unreadable", attempt + 1, error)
                 time.sleep(0.01)
-            except (OSError, json.JSONDecodeError):
-                return {}
+            except FileNotFoundError as error:
+                return _UnavailableHostState("missing", attempt + 1, error)
+            except OSError as error:
+                return _UnavailableHostState("read_failed", attempt + 1, error)
+            except (json.JSONDecodeError, UnicodeError):
+                return _UnavailableHostState("invalid", attempt + 1)
             else:
-                return dict(value) if isinstance(value, Mapping) else {}
-        return {}
+                return (
+                    dict(value)
+                    if isinstance(value, Mapping) and value
+                    else _UnavailableHostState("invalid", attempt + 1)
+                )
+        return _UnavailableHostState("unreadable", 3)
 
     def _directory(self, session_id: str) -> Path:
         if not session_id.startswith("ps_") or not session_id[3:].isalnum():

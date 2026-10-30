@@ -1496,7 +1496,16 @@ def approve_credential_firmware(sim, paused):
 def assert_no_credential_on_disk(root):
     for path in root.rglob("*"):
         if path.is_file():
-            assert FAKE_CREDENTIAL.encode() not in path.read_bytes(), (
+            try:
+                content = path.read_bytes()
+            except OSError as error:
+                # An unreadable file is not a successful leakage check. Retain
+                # the owned fixture path and OS codes, never its contents.
+                raise AssertionError(
+                    f"Credential persistence scan could not read {path.relative_to(root)} "
+                    f"(errno={error.errno}, winerror={getattr(error, 'winerror', None)})"
+                ) from error
+            assert FAKE_CREDENTIAL.encode() not in content, (
                 f"Credential leaked into {path.relative_to(root)}"
             )
 

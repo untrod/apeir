@@ -5384,6 +5384,99 @@ awaits the original complete operation response; incremental token streaming
 cannot be qualified through that contract. Complete extension/Skill use
 attribution remains pending rather than inferred from installation state.
 
+## Typed Workflow results and dependency ordering — 2026-10-29
+
+The existing WorkflowStep now has an optional version 1 `data_bindings` contract.
+Absent contracts retain the previous canonical JSON and definition digest;
+no Workflow database or execution owner is added. The Compiler validates local
+schemas, bounded JSON pointers, explicit dependency references and target/literal
+conflicts. Runtime reads original checkpoint outputs, verifies their digests and
+persists source/resolved-parameter digests before dispatch. Empty results remain
+usable without changing the legacy Run projection or strict result schemas.
+
+Missing/type-invalid inputs fail before downstream invocation. A bad output
+retains its original serializable result and a durable no-retry marker; invalid
+JSON records output-unavailable instead of invented evidence. Started-effect
+uncertainty remains UNKNOWN. Contract failures do not implicitly compensate
+upstream effects. Cancellation between input resolution and admission prevents
+dispatch. API reads expose binding metadata through the original workspace
+permission boundary; the Studio uses that metadata and its existing Controller
+fences. Graph coordinates remain separate from execution.
+
+The browser regression first reproduced a missing draft guard: Add step remained
+available with unapplied binding parameters. Structural edits now reject pending
+parameter/schema drafts; keyboard deletion is blocked until Apply or Discard.
+The same real Runtime/Chromium scenario passes after the fix. Original failure
+and corrected-run logs are retained, without relaxing the assertion.
+The combined browser run and Desktop CI 40905462882 also exposed a selection
+handoff race: the previous node's editor text could temporarily look like a
+pending draft on the new node and reject a valid Delete. Editor synchronization
+now runs before paint. The original valid-deletion and protected-draft assertions
+are both retained; the corrected combined browser run passed all 12 scenarios.
+
+An owned software counterexample at main 414b376 reproduced incorrect TaskGraph
+layering when shared paths had different lengths. A later short traversal could
+overwrite a descendant's level. The existing graph now computes longest-path
+levels in dependency order, rejecting invalid graphs; it does not add a Scheduler
+or authorization authority. A waiting approval leaves the observer uncalled in
+the corrected probe. Inconsistent historical completed dependencies remain
+UNKNOWN on recovery, without another handler call. Raw baseline/candidate probes
+are retained with their source scope; this is not a Kernel or physical bypass
+qualification, and independent Work Governance remains required.
+
+Affected Planner/Workflow/API regressions: 160 passed. Agent execution,
+collaboration, Automation and external-workflow regressions: 190 passed, 1 skip
+(the explicit real OCI acceptance image was not configured).
+Existing Workspace Proposal/API/Workbench and Work-proposal consumers: 67 passed.
+Desktop: 462 passed across 62 files; TypeScript/ESLint/build passed. All 12 sandboxed
+Chromium scenarios passed against two owned model-disabled HTTP Runtimes. The
+Workflow scenario covers binding/schema editing, CLI-compatible export,
+independent approval, execution, source digests and original Run/binding recovery
+after a real Runtime restart. Standalone CLI register/run/repeated-key processes
+retain Run `wfr_b2ea07ec3168474d84922ca6575b26b9` and its actual consumer output.
+
+No model, paid Provider, host command or physical operation ran. Model/Agent
+hosts remain unbound; this completes typed step data flow, not their execution
+or Token-saving qualification. Current exact-source required CI and normal
+integration remain prerequisites. The existing Native download is older code
+and does not acquire this feature from a documentation change.
+
+### Windows qualification follow-up — 2026-10-30
+
+Core 40906704033 at 278b09e failed the original ProcessSession fresh-attach test
+with two injected read denials: the next observation returned no host state.
+The original log did not record whether the real read was denied, absent or
+invalid JSON. It does not establish a sharing violation or a Workflow regression.
+The test now retains allowlisted read-error codes and binding-match booleans on
+failure, without file bodies, paths or additional retries. Its RUNNING, original
+process/helper identity and no-control assertions are unchanged. Linux's
+initialized test harness passed all three cases with no remaining children.
+The original Windows failure and Issue #85 remain open qualification evidence.
+
+ProcessSession now distinguishes a missing host record from denied I/O, other
+read failures and invalid JSON. The public recovery message contains only the
+reason, attempt count and OS error codes, never the host body or private error
+text. All cases remain RECOVERY_REQUIRED and refuse control; no cached host is
+accepted and the existing three reads/two 10 ms pauses are unchanged. Original
+identity, startup, acknowledgement and process cleanup regressions plus seven
+read-failure negatives include invalid UTF-8 as recovery-required state rather
+than an escaping decoder error; no remaining child processes are permitted.
+This corrects misleading diagnostics; the original intermittent Windows cause
+is not established or declared fixed by these local results.
+
+Core 40998110697 at 11cd10d passed 6026 cases but failed the existing simulated
+firmware incomplete-receipt credential check on Windows: scanning a persisted
+fixture file raised PermissionError from read(), before the no-secret assertion.
+The original log did not identify that file. This is not evidence of a leaked
+credential or a proven Workflow regression. The scan now reports the owned
+fixture's relative path and OS codes if reading fails, and still fails the test.
+No file is excluded, retried, deleted or treated as inspected. Issue #121 retains
+the unresolved failure. Original Work
+UNKNOWN/no-replay and all credential assertions remain. The accepted Governance
+durability change is now integrated into this candidate; exact combined-source
+CI must run independently of both earlier source qualifications.
+
+
 ## Model discovery dependency failure — 2026-10-29
 
 The protected Models HTTP regression reproduced an incorrect success response:
@@ -5437,3 +5530,38 @@ rollback, abrupt process exit before/after commit, unsupported-interpreter
 fallback and configuration-failure cleanup. These plus original SQLite/MCP/Model
 Center checks passed locally: 65 cases. Exact-source Windows and required CI
 remain necessary; no timeout, SQL permission or original assertion was relaxed.
+
+## Workspace model history and Inspector ownership — 2026-10-30
+
+An owned audit reproduced a 37-placeholder/38-column INSERT in the existing
+ModelObservationStore. `record()` returned an object while no row was saved.
+A separately seeded fake history reproduced the old HTTP reader returning the
+first workspace's records after selecting another root. Rankings also reduced
+every requested sample floor above one to one. The original counterexamples
+are retained; lost historical observations cannot be reconstructed from an empty
+table or invented Token totals.
+
+The existing INSERT now stores the complete record. Read endpoints own and close
+a canonical Store for the selected absolute workspace; they do not retire the
+legacy SDK writer. They preserve the sample floor and return explicit failures
+without private exception text. Existing private-state admission rejects linked
+database/sidecar paths before SQLite opens them. Failed configuration closes its
+connection, invalid history is unavailable, and unconfirmed writes raise
+ModelObservationError without replay. No new store or accounting authority is
+introduced. All 398 Model Runtime/developer-API checks passed locally, including
+protected HTTP A/B/A reads, unauthenticated refusal, reopen, linked sidecars,
+damaged DB/payload retention and a lost commit confirmation retaining one row.
+
+Five UI counterexamples additionally reproduced stale Inspector content,
+approval admission and late model/approval completion after a Controller change.
+The drawer now binds its selection to the existing connection epoch, retires it
+before paint on A/B/A changes, and fences new actions and late UI results using
+the original connection guard. Changing the selected object remounts its details;
+closing the view does not cancel or replay admitted backend work. The same five
+tests pass after correction. This is software UI/HTTP qualification with owned
+fake records, not live inference, billing, native installation or physical proof.
+
+Restored writes also apply the existing redactor to free-form errors, tags and
+metadata before returning or persisting them. A registered fake credential is
+absent from both the returned observation and every closed-state database file;
+no real credential is read or used by this qualification.

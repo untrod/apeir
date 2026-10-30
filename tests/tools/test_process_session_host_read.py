@@ -1,13 +1,87 @@
 """Fresh process observations tolerate a publication read gap without replay."""
 
+import errno
 import json
 
 import pytest
 
 from nous_runtime.tools import process_session
-from nous_runtime.tools.process_session import ProcessSessionStore
+from nous_runtime.tools.process_session import ProcessSession, ProcessSessionStore
 from tests.tools.test_process_session import _start
 from tests.tools.test_process_session_startup import _cleanup_original_session
+
+
+@pytest.mark.parametrize(
+    ("failure", "message", "control_reason", "attempts"),
+    [
+        ("missing", "missing", "unavailable", 1),
+        ("denied", "unreadable", "unreadable", 3),
+        ("io", "read failed", "read_failed", 1),
+        ("json", "invalid", "invalid", 1),
+        ("encoding", "invalid", "invalid", 1),
+        ("array", "invalid", "invalid", 1),
+        ("empty", "invalid", "invalid", 1),
+    ],
+)
+def test_unavailable_host_reports_safe_reason_without_authorizing_control(
+    tmp_path, monkeypatch, failure, message, control_reason, attempts
+):
+    store = ProcessSessionStore(tmp_path)
+    session_id = "ps_" + "a" * 32
+    session = ProcessSession(
+        session_id=session_id,
+        work_id="work-original",
+        tool_call_id="call-original",
+        command=["not-launched"],
+        cwd=str(tmp_path),
+        environment_ref="sha256:" + "b" * 64,
+        command_digest=process_session._digest(["not-launched"]),
+        state="RUNNING",
+        stdin_available=True,
+    )
+    store._save(session)
+    path = store.root / session_id / "host.json"
+    original = process_session.Path.read_text
+    reads, pauses = [], []
+
+    def read(current, *args, **kwargs):
+        if current != path:
+            return original(current, *args, **kwargs)
+        reads.append(True)
+        if failure == "missing":
+            raise FileNotFoundError(errno.ENOENT, "private host path")
+        if failure == "denied":
+            raise PermissionError(errno.EACCES, "private host path")
+        if failure == "io":
+            raise OSError(errno.EIO, "private host path")
+        if failure == "encoding":
+            raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "private host payload")
+        return {"json": "private invalid payload", "array": "[]", "empty": "{}"}[
+            failure
+        ]
+
+    monkeypatch.setattr(process_session.Path, "read_text", read)
+    monkeypatch.setattr(process_session.time, "sleep", pauses.append)
+    attached = store.attach(session_id)
+    assert attached["state"] == "RECOVERY_REQUIRED"
+    assert attached["stdin_available"] is False
+    expected = (
+        "process host state read failed"
+        if message == "read failed"
+        else f"process host state is {message}"
+    )
+    assert attached["error"].startswith(expected)
+    assert "private" not in attached["error"]
+    assert str(tmp_path) not in attached["error"]
+    assert len(reads) == attempts
+    assert pauses == ([0.01, 0.01] if failure == "denied" else [])
+    with pytest.raises(ValueError, match=f"reason=host_record_{control_reason}"):
+        store.write_stdin(session_id, "must not dispatch\n")
+    assert not list(path.parent.rglob("control/*.json"))
+    persisted = store.require(session_id)
+    assert persisted.work_id == "work-original"
+    assert persisted.tool_call_id == "call-original"
+    assert persisted.action_sequence == 0
 
 
 @pytest.mark.parametrize("misses", [1, 2])
@@ -20,21 +94,55 @@ def test_attach_reobserves_fresh_host_after_transient_permission_denial(
     path = store.root / session_id / "host.json"
     read_text = process_session.Path.read_text
     failed = []
+    observations = []
 
     def read(current, *args, **kwargs):
-        if current == path and len(failed) < misses:
+        if current != path:
+            return read_text(current, *args, **kwargs)
+        if len(failed) < misses:
             failed.append(True)
             raise PermissionError("host publication is temporarily unreadable")
-        return read_text(current, *args, **kwargs)
+        try:
+            text = read_text(current, *args, **kwargs)
+        except OSError as error:
+            observations.append(
+                {
+                    "error_type": type(error).__name__,
+                    "errno": error.errno,
+                    "winerror": getattr(error, "winerror", None),
+                }
+            )
+            raise
+        try:
+            value = json.loads(text)
+        except json.JSONDecodeError:
+            observations.append({"json_valid": False, "characters": len(text)})
+        else:
+            observations.append(
+                {
+                    "json_valid": True,
+                    "object": isinstance(value, dict),
+                    "session_matches": isinstance(value, dict)
+                    and value.get("session_id") == session_id,
+                    "helper_matches": isinstance(value, dict)
+                    and value.get("helper_identity") == started["helper_identity"],
+                    "process_matches": isinstance(value, dict)
+                    and value.get("process_identity") == started["process_identity"],
+                }
+            )
+        return text
 
     try:
         assert started["state"] == "RUNNING", started
         with monkeypatch.context() as fault:
             fault.setattr(process_session.Path, "read_text", read)
             attached = ProcessSessionStore(tmp_path).attach(session_id)
-        assert attached["state"] == "RUNNING", (
-            f"Fresh attach returned {attached.get('state')}: {attached.get('error')}"
-        )
+        assert attached["state"] == "RUNNING", {
+            "state": attached.get("state"),
+            "error": attached.get("error"),
+            "injected_read_denials": len(failed),
+            "fresh_reads": observations,
+        }
         assert len(failed) == misses
         assert attached["process_identity"] == started["process_identity"]
         assert attached["helper_identity"] == started["helper_identity"]

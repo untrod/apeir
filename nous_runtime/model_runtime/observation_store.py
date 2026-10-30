@@ -28,10 +28,17 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from nous_runtime.schema_registry import MODEL_OBSERVATION_SCHEMA_VERSION as SCHEMA_VERSION
+from nous_runtime.core.redaction import redact_sensitive_data, redact_sensitive_text
+from nous_runtime.schema_registry import (
+    MODEL_OBSERVATION_SCHEMA_VERSION as SCHEMA_VERSION,
+)
+from nous_runtime.security.private_files import validate_private_database_path
 
 _log = logging.getLogger("nous.model_obs")
 
+
+class ModelObservationError(RuntimeError):
+    """History could not be read or persistence could not be confirmed."""
 
 
 # Data models
@@ -39,6 +46,7 @@ _log = logging.getLogger("nous.model_obs")
 
 class ObservationOutcome(str, Enum):
     """Outcome of a model invocation."""
+
     SUCCESS = "success"
     PARTIAL_SUCCESS = "partial_success"
     FAILURE = "failure"
@@ -49,6 +57,7 @@ class ObservationOutcome(str, Enum):
 
 class TaskCategory(str, Enum):
     """Category of the task the model performed."""
+
     CHAT = "chat"
     CODE_GENERATION = "code_generation"
     CODE_REVIEW = "code_review"
@@ -263,7 +272,6 @@ class ModelPerformanceSummary:
         }
 
 
-
 # ModelObservationStore
 
 
@@ -279,7 +287,7 @@ class ModelObservationStore:
     """
 
     def __init__(self, workspace_root: str = ""):
-        self._workspace = workspace_root or "."
+        self._workspace = str(Path(workspace_root or ".").expanduser().resolve())
         self._db_path = Path(self._workspace) / ".nous" / "model_observations.db"
         self._lock = threading.RLock()
         self._db: sqlite3.Connection | None = None
@@ -340,7 +348,8 @@ class ModelObservationStore:
             cost_usd=cost_usd,
             cost_per_1k_tokens=(
                 (cost_usd / (prompt_tokens + completion_tokens) * 1000)
-                if (prompt_tokens + completion_tokens) > 0 else 0.0
+                if (prompt_tokens + completion_tokens) > 0
+                else 0.0
             ),
             tool_call_valid_rate=tool_call_valid_rate,
             output_valid=output_valid,
@@ -353,10 +362,10 @@ class ModelObservationStore:
             retry_count=retry_count,
             fallback_used=fallback_used,
             fallback_model_id=fallback_model_id,
-            error_category=error_category,
-            error_message=error_message,
-            tags=dict(tags or {}),
-            metadata=dict(metadata or {}),
+            error_category=redact_sensitive_text(error_category),
+            error_message=redact_sensitive_text(error_message),
+            tags=redact_sensitive_data(dict(tags or {})),
+            metadata=redact_sensitive_data(dict(metadata or {})),
         )
         self._persist(obs)
         return obs
@@ -378,14 +387,16 @@ class ModelObservationStore:
         """Query observations with filters."""
         self._ensure_db()
         if self._db is None:
-            return []
+            raise ModelObservationError("Model observation history is unavailable")
 
         conditions = []
         params: list[Any] = []
 
         for col, val in [
-            ("model_id", model_id), ("provider_id", provider_id),
-            ("capability_id", capability_id), ("task_type", task_type),
+            ("model_id", model_id),
+            ("provider_id", provider_id),
+            ("capability_id", capability_id),
+            ("task_type", task_type),
             ("outcome", outcome),
         ]:
             if val:
@@ -406,8 +417,10 @@ class ModelObservationStore:
             ).fetchall()
             return [json.loads(r[0]) for r in rows]
         except Exception as e:
-            _log.warning("Observation query failed: %s", e)
-            return []
+            _log.warning("Observation query failed (%s)", type(e).__name__)
+            raise ModelObservationError(
+                "Model observation history is unavailable"
+            ) from None
 
     def query_recent(
         self,
@@ -472,8 +485,10 @@ class ModelObservationStore:
         params: list[Any] = []
 
         for col, val in [
-            ("model_id", model_id), ("provider_id", provider_id),
-            ("capability_id", capability_id), ("task_type", task_type),
+            ("model_id", model_id),
+            ("provider_id", provider_id),
+            ("capability_id", capability_id),
+            ("task_type", task_type),
         ]:
             if val:
                 conditions.append(f"{col} = ?")
@@ -495,13 +510,17 @@ class ModelObservationStore:
 
             if not rows:
                 return ModelPerformanceSummary(
-                    model_id=model_id, provider_id=provider_id,
+                    model_id=model_id,
+                    provider_id=provider_id,
                     capability_id=capability_id,
-                    task_type=TaskCategory(task_type) if task_type else TaskCategory.CHAT,
+                    task_type=TaskCategory(task_type)
+                    if task_type
+                    else TaskCategory.CHAT,
                 )
 
             summary = ModelPerformanceSummary(
-                model_id=model_id, provider_id=provider_id,
+                model_id=model_id,
+                provider_id=provider_id,
                 capability_id=capability_id,
                 task_type=TaskCategory(task_type) if task_type else TaskCategory.CHAT,
                 sample_count=len(rows),
@@ -542,7 +561,9 @@ class ModelObservationStore:
 
             output_valid_rates = [r[6] for r in rows if r[6] >= 0]
             if output_valid_rates:
-                summary.avg_output_valid = sum(output_valid_rates) / len(output_valid_rates)
+                summary.avg_output_valid = sum(output_valid_rates) / len(
+                    output_valid_rates
+                )
 
             return summary
         except Exception as e:
@@ -561,7 +582,7 @@ class ModelObservationStore:
         """Rank models by a given performance metric."""
         self._ensure_db()
         if self._db is None:
-            return []
+            raise ModelObservationError("Model observation rankings are unavailable")
 
         conditions = []
         params: list[Any] = []
@@ -597,13 +618,17 @@ class ModelObservationStore:
                     "success_rate": round(r[3], 4),
                     "avg_latency_ms": round(r[4], 2) if r[4] else 0,
                     "avg_cost_usd": round(r[5], 6) if r[5] else 0,
-                    "avg_tool_call_valid_rate": round(r[6], 4) if r[6] and r[6] >= 0 else -1,
+                    "avg_tool_call_valid_rate": round(r[6], 4)
+                    if r[6] and r[6] >= 0
+                    else -1,
                 }
                 for r in rows
             ]
         except Exception as e:
-            _log.warning("Model ranking failed: %s", e)
-            return []
+            _log.warning("Model ranking failed (%s)", type(e).__name__)
+            raise ModelObservationError(
+                "Model observation rankings are unavailable"
+            ) from None
 
     def get_cost_summary(
         self,
@@ -687,7 +712,7 @@ class ModelObservationStore:
         """Return aggregate statistics about the observation store."""
         self._ensure_db()
         if self._db is None:
-            return {"total_observations": 0}
+            raise ModelObservationError("Model observation statistics are unavailable")
 
         try:
             total = self._db.execute(
@@ -700,8 +725,7 @@ class ModelObservationStore:
             ).fetchall()
 
             by_outcome = self._db.execute(
-                "SELECT outcome, COUNT(*) FROM model_observations "
-                "GROUP BY outcome"
+                "SELECT outcome, COUNT(*) FROM model_observations GROUP BY outcome"
             ).fetchall()
 
             total_cost = self._db.execute(
@@ -715,8 +739,10 @@ class ModelObservationStore:
                 "total_cost_usd": round(float(total_cost[0] or 0), 6),
             }
         except Exception as e:
-            _log.warning("Statistics query failed: %s", e)
-            return {"total_observations": 0}
+            _log.warning("Statistics query failed (%s)", type(e).__name__)
+            raise ModelObservationError(
+                "Model observation statistics are unavailable"
+            ) from None
 
     def shutdown(self) -> None:
         if self._db:
@@ -732,8 +758,12 @@ class ModelObservationStore:
         if self._db is not None:
             return
         try:
+            validate_private_database_path(self._db_path)
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
-            self._db = sqlite3.connect(str(self._db_path), check_same_thread=False, timeout=5.0)
+            validate_private_database_path(self._db_path)
+            self._db = sqlite3.connect(
+                str(self._db_path), check_same_thread=False, timeout=5.0
+            )
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA synchronous=NORMAL")
             self._db.execute("""
@@ -778,8 +808,14 @@ class ModelObservationStore:
                     schema_version TEXT NOT NULL DEFAULT '1.0.0'
                 )
             """)
-            for col in ("model_id", "provider_id", "capability_id", "task_type",
-                         "outcome", "timestamp"):
+            for col in (
+                "model_id",
+                "provider_id",
+                "capability_id",
+                "task_type",
+                "outcome",
+                "timestamp",
+            ):
                 try:
                     self._db.execute(
                         f"CREATE INDEX IF NOT EXISTS idx_mobs_{col} "
@@ -789,13 +825,15 @@ class ModelObservationStore:
                     pass
             self._db.commit()
         except Exception as e:
-            _log.warning("Failed to init observation DB: %s", e)
-            self._db = None
+            _log.warning("Failed to init observation DB (%s)", type(e).__name__)
+            failed, self._db = self._db, None
+            if failed is not None:
+                failed.close()
 
     def _persist(self, obs: ModelObservation) -> None:
         self._ensure_db()
         if self._db is None:
-            return
+            raise ModelObservationError("Model observation persistence is unavailable")
         try:
             payload = json.dumps(obs.to_dict(), ensure_ascii=False)
             self._db.execute(
@@ -809,26 +847,55 @@ class ModelObservationStore:
                     hardware, runtime_load, time_of_day_hour, retry_count,
                     fallback_used, fallback_model_id, error_category, error_message,
                     tags, metadata, payload, schema_version)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
-                    obs.observation_id, obs.timestamp, obs.model_id, obs.provider_id,
-                    obs.model_version, obs.quantization, obs.task_type.value,
-                    obs.capability_id, obs.task_id, obs.trace_id, obs.session_id,
-                    obs.outcome.value, obs.latency_ms, obs.time_to_first_token_ms,
-                    obs.tokens_per_second, obs.prompt_tokens, obs.completion_tokens,
-                    obs.total_tokens, obs.cost_usd, obs.cost_per_1k_tokens,
-                    obs.tool_call_valid_rate, obs.output_valid, obs.user_accepted,
-                    obs.test_pass_rate, obs.verification_passed, obs.node_id,
-                    obs.hardware, obs.runtime_load, obs.time_of_day_hour,
-                    obs.retry_count, int(obs.fallback_used), obs.fallback_model_id,
-                    obs.error_category, obs.error_message,
-                    json.dumps(obs.tags), json.dumps(obs.metadata),
-                    payload, obs.schema_version,
+                    obs.observation_id,
+                    obs.timestamp,
+                    obs.model_id,
+                    obs.provider_id,
+                    obs.model_version,
+                    obs.quantization,
+                    obs.task_type.value,
+                    obs.capability_id,
+                    obs.task_id,
+                    obs.trace_id,
+                    obs.session_id,
+                    obs.outcome.value,
+                    obs.latency_ms,
+                    obs.time_to_first_token_ms,
+                    obs.tokens_per_second,
+                    obs.prompt_tokens,
+                    obs.completion_tokens,
+                    obs.total_tokens,
+                    obs.cost_usd,
+                    obs.cost_per_1k_tokens,
+                    obs.tool_call_valid_rate,
+                    obs.output_valid,
+                    obs.user_accepted,
+                    obs.test_pass_rate,
+                    obs.verification_passed,
+                    obs.node_id,
+                    obs.hardware,
+                    obs.runtime_load,
+                    obs.time_of_day_hour,
+                    obs.retry_count,
+                    int(obs.fallback_used),
+                    obs.fallback_model_id,
+                    obs.error_category,
+                    obs.error_message,
+                    json.dumps(obs.tags),
+                    json.dumps(obs.metadata),
+                    payload,
+                    obs.schema_version,
                 ),
             )
             self._db.commit()
         except Exception as e:
-            _log.warning("Failed to persist observation %s: %s", obs.observation_id, e)
+            self._db.rollback()
+            _log.warning("Failed to persist observation (%s)", type(e).__name__)
+            raise ModelObservationError(
+                "Model observation persistence could not be confirmed"
+            ) from None
 
 
 # Singleton
@@ -861,8 +928,10 @@ atexit.register(reset_observation_store)
 
 # Helpers
 
+
 def _utc_now() -> str:
     from datetime import datetime, timezone
+
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
@@ -880,6 +949,7 @@ def _percentile(sorted_values: list[float], pct: float) -> float:
 
 __all__ = [
     "ModelObservation",
+    "ModelObservationError",
     "ModelObservationStore",
     "ModelPerformanceSummary",
     "ObservationOutcome",

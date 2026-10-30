@@ -20,6 +20,30 @@ The [HTTP SDK examples](../sdk/python_quickstart.py) require an already-running,
 authenticated Server Runtime and this registered definition. They are not the
 zero-key standalone Demo; native Server prerequisites still apply.
 
+## Pass a typed result to the next step
+
+The [result-bindings definition](result-bindings.json) passes a Run input through
+two pure TRANSFORM nodes. No model, Shell or device operation is involved.
+Use a Runtime build whose validation output includes
+`"data_bindings_versions": [1]`, with Studio from the same revision. Older
+previews do not understand the new step contract.
+
+```bash
+apeir --no-intelligence workflow validate examples/hello_workflow/result-bindings.json --json
+apeir --no-intelligence workflow register examples/hello_workflow/result-bindings.json --json
+apeir --no-intelligence workflow run example.result-bindings --inputs '{"request":"Review data"}' --idempotency-key first --json
+```
+
+Both outputs contain `Review data`. The second node reads the original source
+checkpoint via `/value`; it does not receive the node's display label. Repeating
+the same key and inputs returns the original Run. Inspect it with
+`apeir --no-intelligence workflow show RUN_ID --json` after restart.
+
+In Studio, import the same definition. **Data bindings** edits source and target;
+the contract editor adds JSON Schemas. **Raw record / events** shows original
+source and resolved-parameter digests. A type or missing-path error blocks the
+consumer. Schema validation is not authorization or physical verification.
+
 ## Consume a governed simulated Automation
 
 Select a dedicated writable workspace before running the commands below. This

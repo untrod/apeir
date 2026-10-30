@@ -34,7 +34,7 @@ authority or execution.
 | Direct development | PARTIAL | Project reads, drafts, two-file Proposal review, independent approval, file readback and original history | Live-model Proposal qualification and tests in a qualified strict sandbox. File MATCH is not test PASS. |
 | Models | PARTIAL | Saved Provider lifecycle, credential references, qualified catalog IDs, explicit selection and cloud/local coexistence in software tests | Actual accounts/local services and endpoint capabilities need qualification. Frozen Worker has no Anthropic Messages backend. |
 | Chat activity | PARTIAL | Recorded model/tool events, governed search, approval/receipt references, history inspection and reconnect state | NKI returns complete responses; incremental model text is not available. Full Skill-use attribution is pending. |
-| Workflow | PARTIAL | Visual editor, Compiler, canonical definitions, pure handlers, approvals, original Runs and restart history | Model/Agent hosts and typed output-to-input bindings are not connected in the Studio API. [Builder limits](docs/development/DEVELOPER_PLATFORM.md#visual-workflow-builder). |
+| Workflow | PARTIAL | Visual editor, canonical definitions, pure handlers, versioned typed result/input bindings, source digests, approvals and original Run recovery | Model/Agent execution hosts remain unbound. [Builder limits](docs/development/DEVELOPER_PLATFORM.md#visual-workflow-builder). |
 | Context / cost | PARTIAL | Bounded selected context, source/version manifests, budgets and nullable usage accounting | No general Token-saving percentage, live twenty-task comparison or complete incremental project-cache qualification. |
 | Skills | PARTIAL | Reviewed local/HTTPS instruction catalogs, integrity, install/load/enable/disable/remove | Public publisher trust and arbitrary executable Skill workflows are not qualified. |
 | UI extensions | PARTIAL | Reviewed declarative Panel/Widget contributions, sanitized reads and governed lifecycle | Arbitrary third-party JavaScript remains BLOCKED pending verified isolation. |
@@ -71,8 +71,8 @@ result to a new commit.
 
 ## Next engineering work
 
-1. Connect Workflow model execution and typed step bindings to existing
-   Gateway/AgentSession owners, with original-request accounting and recovery.
+1. Connect Workflow model execution to existing Gateway/AgentSession owners,
+   using the bound step data and original-request accounting/recovery.
 2. Qualify one cloud Provider and one local service with explicit account and
    cost authorization. Keep unsupported protocols unavailable.
 3. Run the direct developer loop's test step in a qualified strict sandbox.

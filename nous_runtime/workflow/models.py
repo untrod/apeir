@@ -51,6 +51,7 @@ class WorkflowStep:
     approval_required: bool = False
     compensation: str = ""
     params: dict[str, Any] = field(default_factory=dict)
+    data_bindings: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,10 @@ def definition_to_dict(definition: WorkflowDefinition) -> dict[str, Any]:
         }
         for step in definition.steps
     ]
+    # Absent contracts must retain the original serialized bytes/digests.
+    for step in data["steps"]:
+        if step["data_bindings"] is None:
+            del step["data_bindings"]
     return data
 
 
@@ -128,6 +133,7 @@ def definition_from_dict(data: dict[str, Any]) -> WorkflowDefinition:
                 bool(item.get("approval_required", False)),
                 str(item.get("compensation") or ""),
                 dict(item.get("params") or {}),
+                item.get("data_bindings"),
             )
             for item in data.get("steps") or ()
         ),

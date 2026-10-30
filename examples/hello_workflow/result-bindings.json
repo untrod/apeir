@@ -1,0 +1,43 @@
+{
+  "workflow_id": "example.result-bindings",
+  "version": "1.0.0",
+  "trigger": "manual",
+  "inputs_schema": {
+    "type": "object",
+    "properties": { "request": { "type": "string" } },
+    "required": ["request"],
+    "additionalProperties": false
+  },
+  "steps": [
+    {
+      "step_id": "source",
+      "step_type": "transform",
+      "data_bindings": {
+        "schema_version": 1,
+        "inputs": { "value": { "source": "inputs", "pointer": "/request" } },
+        "inputs_schema": {
+          "type": "object",
+          "properties": { "value": { "type": "string" } },
+          "required": ["value"]
+        },
+        "outputs_schema": {
+          "properties": { "value": { "type": "string" } },
+          "required": ["value"]
+        }
+      }
+    },
+    {
+      "step_id": "consumer",
+      "step_type": "transform",
+      "depends_on": ["source"],
+      "data_bindings": {
+        "schema_version": 1,
+        "inputs": { "value": { "source": "step", "step_id": "source", "pointer": "/value" } },
+        "inputs_schema": {
+          "properties": { "value": { "type": "string" } },
+          "required": ["value"]
+        }
+      }
+    }
+  ]
+}

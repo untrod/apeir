@@ -47,6 +47,7 @@ def validate_workflow(path: Path, as_json: bool = typer.Option(False, "--json"))
     _emit(
         {
             "valid": True,
+            "data_bindings_versions": [1],
             "workflow_id": definition.workflow_id,
             "version": definition.version,
         },

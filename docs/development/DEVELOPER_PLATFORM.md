@@ -154,14 +154,33 @@ WorkflowDefinition used by the Compiler, WorkflowStore and public CLI.
 | Handler in the Studio API | Actual behavior |
 | --- | --- |
 | TRANSFORM | Returns `params.value` and the Run inputs |
-| CONDITION | Compares `params.input` with `params.equals` |
+| CONDITION | Compares `params.input` with `params.equals`; mismatch skips this node, without true/false branch ports |
 | WAIT | Immediate barrier; not a timer |
 | APPROVAL | Waits for a current authorized human on `workflow:RUN_ID:STEP_ID` |
 | AGENT / CAPABILITY / CONNECTOR / COMMAND | UNSUPPORTED here; no execution host is bound |
 
-Arrows express dependencies. They do **not** bind an upstream output to a
-downstream input. Model/Agent consumers and typed result bindings remain software
-integration gaps; adding account credentials alone does not enable them.
+Arrows express dependencies. In **Data bindings**, select a target parameter,
+the Run inputs or a direct dependency, and a JSON pointer such as `/value`.
+**Bind input** explicitly replaces that target's literal parameter. Bound edges
+show their target names; remove a binding before removing its dependency.
+The version 1 `data_bindings` step contract holds input references and optional
+per-step `inputs_schema` / `outputs_schema`. **Apply parameters** applies the
+parameter and contract drafts together. The backend Compiler validates both.
+
+Bindings read original persisted results, not canvas labels. Missing paths or
+input-type mismatches stop before downstream dispatch. An invalid result retains
+its original output and checkpoint; it does not authorize another attempt or
+implicit compensation. Changed evidence remains UNKNOWN. Digests and source
+references appear in **Raw record / events** without copying resolved values
+into the binding manifest. Resolved parameters and accepted results are bounded to 96 KiB.
+There are no executable expressions or external schema fetches.
+
+Use the [result-binding example](../../examples/hello_workflow/result-bindings.json)
+with matching Runtime/Studio builds. Workflow catalog and CLI validation advertise
+`data_bindings_versions: [1]`; older builds do not implement these fields.
+The new UI does not run a bound definition against an older catalog.
+Model/Agent consumers are still not bound here; account credentials alone do
+not supply that missing execution host. Data contracts do not grant permission.
 Unsupported imported steps retain their fields for inspection/export. Validation
 alone does not establish an executable handler.
 
@@ -455,6 +474,14 @@ AuthorizationContext, matching actor/purpose and current Governance decision;
 private data additionally needs its explicit owner and trusted human boundary.
 A model profile, copied identity claim or successful health probe supplies none
 of that authority.
+
+Performance history belongs to the selected workspace. Its observation and
+ranking endpoints do not use the legacy process-wide writer; rankings retain
+their requested minimum sample count. `ModelObservationStore.record()` reports
+unconfirmed persistence with `ModelObservationError`. Inspect the original
+record; never repeat a Provider request to repair a telemetry failure. Unreadable
+history is unavailable, not an empty success. These records are not the billing
+ledger; [Usage](#model-usage-and-cost) remains the accounting view.
 
 ## Current boundary
 
