@@ -5530,3 +5530,33 @@ rollback, abrupt process exit before/after commit, unsupported-interpreter
 fallback and configuration-failure cleanup. These plus original SQLite/MCP/Model
 Center checks passed locally: 65 cases. Exact-source Windows and required CI
 remain necessary; no timeout, SQL permission or original assertion was relaxed.
+
+## Workspace model history and Inspector ownership — 2026-10-30
+
+An owned audit reproduced a 37-placeholder/38-column INSERT in the existing
+ModelObservationStore. `record()` returned an object while no row was saved.
+A separately seeded fake history reproduced the old HTTP reader returning the
+first workspace's records after selecting another root. Rankings also reduced
+every requested sample floor above one to one. The original counterexamples
+are retained; lost historical observations cannot be reconstructed from an empty
+table or invented Token totals.
+
+The existing INSERT now stores the complete record. Read endpoints own and close
+a canonical Store for the selected absolute workspace; they do not retire the
+legacy SDK writer. They preserve the sample floor and return explicit failures
+without private exception text. Existing private-state admission rejects linked
+database/sidecar paths before SQLite opens them. Failed configuration closes its
+connection, invalid history is unavailable, and unconfirmed writes raise
+ModelObservationError without replay. No new store or accounting authority is
+introduced. All 398 Model Runtime/developer-API checks passed locally, including
+protected HTTP A/B/A reads, unauthenticated refusal, reopen, linked sidecars,
+damaged DB/payload retention and a lost commit confirmation retaining one row.
+
+Five UI counterexamples additionally reproduced stale Inspector content,
+approval admission and late model/approval completion after a Controller change.
+The drawer now binds its selection to the existing connection epoch, retires it
+before paint on A/B/A changes, and fences new actions and late UI results using
+the original connection guard. Changing the selected object remounts its details;
+closing the view does not cancel or replay admitted backend work. The same five
+tests pass after correction. This is software UI/HTTP qualification with owned
+fake records, not live inference, billing, native installation or physical proof.

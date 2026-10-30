@@ -475,6 +475,14 @@ private data additionally needs its explicit owner and trusted human boundary.
 A model profile, copied identity claim or successful health probe supplies none
 of that authority.
 
+Performance history belongs to the selected workspace. Its observation and
+ranking endpoints do not use the legacy process-wide writer; rankings retain
+their requested minimum sample count. `ModelObservationStore.record()` reports
+unconfirmed persistence with `ModelObservationError`. Inspect the original
+record; never repeat a Provider request to repair a telemetry failure. Unreadable
+history is unavailable, not an empty success. These records are not the billing
+ledger; [Usage](#model-usage-and-cost) remains the accounting view.
+
 ## Current boundary
 
 Runtime state stays in the selected workspace, not the presentation layout.
