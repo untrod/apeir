@@ -5452,3 +5452,13 @@ failure, without file bodies, paths or additional retries. Its RUNNING, original
 process/helper identity and no-control assertions are unchanged. Linux's
 initialized test harness passed all three cases with no remaining children.
 The original Windows failure and Issue #85 remain open qualification evidence.
+
+ProcessSession now distinguishes a missing host record from denied I/O, other
+read failures and invalid JSON. The public recovery message contains only the
+reason, attempt count and OS error codes, never the host body or private error
+text. All cases remain RECOVERY_REQUIRED and refuse control; no cached host is
+accepted and the existing three reads/two 10 ms pauses are unchanged. Original
+identity, startup, acknowledgement and process cleanup regressions plus six
+read-failure negatives passed locally: 46 cases, no remaining child processes.
+This corrects misleading diagnostics; the original intermittent Windows cause
+is not established or declared fixed by these local results.
