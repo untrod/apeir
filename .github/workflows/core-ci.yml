@@ -28,7 +28,7 @@ jobs:
           - { os: ubuntu-22.04, python: '3.10' }
           - { os: ubuntu-22.04, python: '3.12' }
           - { os: windows-latest, python: '3.12' }
-          - { os: macos-14, python: '3.12' }
+          - { os: macos-15, python: '3.12' }
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,6 +37,12 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
+      - name: Record macOS runner identity
+        if: startsWith(matrix.os, 'macos-')
+        run: |
+          sw_vers
+          uname -m
+          python --version
       - name: Select conservative PR scope
         id: scope
         env:

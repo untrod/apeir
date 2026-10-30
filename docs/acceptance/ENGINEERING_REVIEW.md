@@ -5647,3 +5647,21 @@ includes slow SQLite commits and a sampled CAS receipt-file open; it does not
 establish a common cause with either recovery failure. Issues82/85/88 are not
 closed by a passing retry. No HTTP deadline, durability setting or permission
 check is relaxed.
+
+## Hosted macOS runner retirement — 2026-10-30
+
+PR124's macOS14 job124243165542 was cancelled before runner allocation:
+`runner_id=0`, no steps. Its check annotation names the scheduled macOS14
+brownout, not a failed software test. GitHub's [retirement notice](https://github.com/actions/runner-images/issues/13518)
+ends support on **2026-11-02**. The [official image matrix](https://github.com/actions/runner-images#available-images)
+identifies `macos-15` as the supported ARM64 replacement for the standard
+`macos-14` label.
+
+Core keeps all four Python matrix entries and its existing regression commands;
+the macOS entry and gated ARM64 Desktop job move to `macos-15`. Core records
+`sw_vers`, architecture and Python version. This does not qualify installed
+macOS14 or macOS15 Desktop behavior. The repository protection must replace
+`Python Tests (macos-14, Python 3.12)` with the actual passing
+`Python Tests (macos-15, Python 3.12)` check. Other required checks stay in place.
+Protection administration remains HTTP403 to this integration; no bypass or
+fabricated legacy-name status is used.
