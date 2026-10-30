@@ -49,6 +49,14 @@ def _db_connect(db_path: str, readonly: bool = False):
                 conn = sqlite3.connect(str(path))
         with _sqlite_phase("configure", readonly):
             conn.row_factory = sqlite3.Row
+            # A FULL-synchronous WAL commit is durable without checkpointing
+            # every last connection close. Keep SQLite's normal auto-checkpoint
+            # threshold and release this connection; never retain a pooled lock.
+            checkpoint_option = getattr(
+                sqlite3, "SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE", None
+            )
+            if checkpoint_option is not None and hasattr(conn, "setconfig"):
+                conn.setconfig(checkpoint_option, True)
             conn.execute("PRAGMA busy_timeout=5000")
             if not readonly:
                 conn.execute("PRAGMA journal_mode=WAL")

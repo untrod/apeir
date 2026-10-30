@@ -280,6 +280,18 @@ cross-site consistency, distributed consensus or Controller high availability.
 Remote secret transport, fleet/federation and physical faults require their
 own later acceptance evidence. M3.3-C remains PENDING.
 
+### Local SQLite durability and backups
+
+Governance keeps WAL, FULL synchronization and SQLite's normal auto-checkpoint
+threshold. On supported CPython/SQLite versions, closing the last connection
+does not force another checkpoint; the connection is still closed. Older
+interpreters retain their existing checkpoint behavior. Committed records can
+therefore remain in `governance.db-wal` after all connections close. That file is
+part of durable state, not disposable cache. Use SQLite's backup API for a
+consistent snapshot; copying only `governance.db` can omit committed records.
+Do not remove WAL/journal files to resolve recovery or disk errors. This changes
+storage work, not transaction identity, authorization or effect replay rules.
+
 
 A process-startup poll classifies the one host record it just observed. It must
 not re-read the file inside that decision and classify a different or missing

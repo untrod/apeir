@@ -328,46 +328,8 @@ def handle_list_models(params: dict[str, Any] | None = None) -> dict[str, Any]:
             }
         )
     except ImportError:
-        # Fallback via provider list
-        try:
-            from nous_runtime.provider.registry import ProviderRegistry
-
-            models = []
-            for p in ProviderRegistry().list_all():
-                health_status = p.get("health", {}).get("status", "unknown")
-                models.append(
-                    {
-                        "model_id": p.get("id", "unknown"),
-                        "display_name": p.get("name", p.get("id", "unknown")),
-                        "provider_id": p.get("id", "unknown"),
-                        "endpoint_type": "CLOUD_API",
-                        "modalities": ["TEXT"],
-                        "capabilities": p.get("capabilities", []),
-                        "context_length": 8192,
-                        "tool_calling": True,
-                        "structured_output": False,
-                        "reasoning_level": "MEDIUM",
-                        "coding_level": "MEDIUM",
-                        "vision_level": "NONE",
-                        "latency_level": "MEDIUM",
-                        "cost_level": "MEDIUM",
-                        "privacy_class": "STANDARD",
-                        "is_local": False,
-                        "availability": health_status == "ok",
-                        "health_status": health_status,
-                    }
-                )
-            result = _paginate(models, page, page_size)
-            return ok_response(
-                {
-                    "models": result["items"],
-                    "pagination": result["pagination"],
-                    "total_count": len(models),
-                    "available_count": sum(1 for m in models if m["availability"]),
-                }
-            )
-        except Exception as e:
-            return err_response("NOUS_INTERNAL_ERROR", str(e))
+        # Provider health cannot establish model identity, context or tool support.
+        return err_response("NOUS_DEPENDENCY_MISSING", "Model registry is unavailable.")
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 

@@ -119,6 +119,43 @@ def test_protected_http_model_snapshot_preserves_persisted_identities(
             assert model["cost_per_1k_tokens_usd"] is None
         assert sum(model["state"] == "enabled" for model in models.values()) == 1
 
+        # A healthy Provider is not a qualified Model Registry replacement.
+        # Exercise the same authenticated HTTP route and recover afterward.
+        from types import SimpleNamespace
+        from nous_runtime.control_plane import routes as control_routes
+        from nous_runtime.provider import registry as provider_registry
+
+        fallback_reads = []
+
+        def unavailable_registry():
+            raise ImportError("PRIVATE_MODEL_IMPORT_FIXTURE")
+
+        def fallback_list():
+            fallback_reads.append(True)
+            return [{"id": "saved-provider-not-a-model", "health": {"status": "ok"}}]
+
+        with monkeypatch.context() as failing:
+            failing.setattr(control_routes, "_get_model_registry", unavailable_registry)
+            failing.setattr(
+                provider_registry,
+                "ProviderRegistry",
+                lambda: SimpleNamespace(list_all=fallback_list),
+            )
+            with pytest.raises(HTTPError) as unavailable:
+                urlopen(
+                    Request(url, headers={"Authorization": "Bearer " + token}),
+                    timeout=5,
+                )
+            with unavailable.value as response:
+                assert response.code == 500
+                failure = json.load(response)
+            assert failure["ok"] is False
+            assert failure["error"]["code"] == "NOUS_DEPENDENCY_MISSING"
+            assert "PRIVATE_MODEL_IMPORT_FIXTURE" not in json.dumps(failure)
+            assert "saved-provider-not-a-model" not in json.dumps(failure)
+            assert fallback_reads == []
+        assert snapshot()["total_count"] == 2
+
         registry.disable("enabled-model")
         registry.transition("registered-model", ModelLifecycleState.REMOVED)
         # Reopen the persisted registry through the same canonical Gateway
