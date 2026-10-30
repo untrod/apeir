@@ -11,6 +11,7 @@ import pytest
 
 from nous_runtime.api import routes
 from nous_runtime.api.server import RuntimeAPIHandler, RuntimeHTTPServer
+from nous_runtime.core.redaction import register_sensitive_value
 from nous_runtime.model_runtime import observation_store
 
 
@@ -37,6 +38,29 @@ def test_public_record_survives_connection_close_and_reopen(tmp_path):
         assert reopened.count() == 1
     finally:
         reopened.shutdown()
+
+
+def test_history_redacts_known_credential_material_before_return_and_persistence(
+    tmp_path,
+):
+    marker = "APEIR_FAKE_ONLY_HISTORY_SENSITIVE_MATERIAL_68319"
+    register_sensitive_value(marker)
+    owner = observation_store.ModelObservationStore(str(tmp_path))
+    try:
+        record = owner.record(
+            model_id="shared-model",
+            provider_id="fake-provider",
+            error_message=f"Remote failure: {marker}",
+            tags={"debug": marker},
+            metadata={"headers": {"Authorization": "Bearer " + marker}},
+        )
+        assert marker not in json.dumps(record.to_dict())
+        assert owner.query() == [record.to_dict()]
+    finally:
+        owner.shutdown()
+    for path in (tmp_path / ".nous").iterdir():
+        if path.is_file():
+            assert marker.encode() not in path.read_bytes()
 
 
 def test_protected_history_reads_selected_workspace_and_preserves_sample_floor(

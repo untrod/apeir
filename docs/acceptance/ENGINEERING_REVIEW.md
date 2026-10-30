@@ -5560,3 +5560,8 @@ the original connection guard. Changing the selected object remounts its details
 closing the view does not cancel or replay admitted backend work. The same five
 tests pass after correction. This is software UI/HTTP qualification with owned
 fake records, not live inference, billing, native installation or physical proof.
+
+Restored writes also apply the existing redactor to free-form errors, tags and
+metadata before returning or persisting them. A registered fake credential is
+absent from both the returned observation and every closed-state database file;
+no real credential is read or used by this qualification.

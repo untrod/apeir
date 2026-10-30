@@ -28,6 +28,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from nous_runtime.core.redaction import redact_sensitive_data, redact_sensitive_text
 from nous_runtime.schema_registry import MODEL_OBSERVATION_SCHEMA_VERSION as SCHEMA_VERSION
 from nous_runtime.security.private_files import validate_private_database_path
 
@@ -357,10 +358,10 @@ class ModelObservationStore:
             retry_count=retry_count,
             fallback_used=fallback_used,
             fallback_model_id=fallback_model_id,
-            error_category=error_category,
-            error_message=error_message,
-            tags=dict(tags or {}),
-            metadata=dict(metadata or {}),
+            error_category=redact_sensitive_text(error_category),
+            error_message=redact_sensitive_text(error_message),
+            tags=redact_sensitive_data(dict(tags or {})),
+            metadata=redact_sensitive_data(dict(metadata or {})),
         )
         self._persist(obs)
         return obs
