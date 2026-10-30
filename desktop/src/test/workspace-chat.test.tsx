@@ -13,8 +13,9 @@ vi.mock("../store", async importOriginal => ({
   useMessages: () => [], useActiveTasks: () => [], useModels: () => [], useNodes: () => [], useStoreHydrated: () => false,
 }));
 vi.mock("../components/Markdown", () => ({ Markdown: ({ content }: { content: string }) => <span>{content}</span> }));
-vi.mock("../components/Composer", async importOriginal => ({ ...await importOriginal<typeof import("../components/Composer")>(), Composer: ({ onSend, readOnly }: { onSend: (text: string, attachments: ComposerAttachment[], constraints: ComposerConstraints) => void; readOnly: boolean }) =>
+vi.mock("../components/Composer", async importOriginal => ({ ...await importOriginal<typeof import("../components/Composer")>(), Composer: ({ onSend, onStop, streaming, readOnly }: { onSend: (text: string, attachments: ComposerAttachment[], constraints: ComposerConstraints) => void; onStop: () => void; streaming: boolean; readOnly: boolean }) =>
   <><button onClick={() => onSend("Explain the selected file", [], { agent_mode: "agent" })}>{readOnly ? "Send read-only request" : "Send request"}</button>
+    {streaming && <button onClick={onStop}>Stop waiting</button>}
     <button onClick={() => onSend("Read the attachment", [{ id: "attachment", name: "report.pdf", kind: "file" }], { agent_mode: "agent" })}>Send crafted attachment</button>
     <button onClick={() => onSend("Use a target", [], { node_id: "node" })}>Send node target</button>
     <button onClick={() => onSend("Private request", [], { privacy_level: "strict" })}>Send privacy constraint</button>
@@ -32,6 +33,93 @@ beforeEach(() => {
 afterEach(() => { delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView; vi.unstubAllGlobals(); });
 
 describe("workspace collaboration through the existing Chat Runtime", () => {
+  it("keeps the original Run inspectable when an explicit replacement request detaches it", async () => {
+    vi.mocked(runPrompt).mockReturnValue(new Promise(() => {}));
+    render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
+    const send = screen.getByRole("button", { name: "Send read-only request" });
+    fireEvent.click(send); fireEvent.click(send);
+    await waitFor(() => expect(runPrompt).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(runPrompt).mock.calls[0][4]?.aborted).toBe(true);
+    expect(vi.mocked(runPrompt).mock.calls[1][4]?.aborted).toBe(false);
+    expect(await screen.findByText(/Runtime cancellation is unconfirmed/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Execution activity" }));
+    await waitFor(() => expect(fetchRunEvents).toHaveBeenCalledWith(vi.mocked(runPrompt).mock.calls[0][5], 0));
+    expect(runPrompt).toHaveBeenCalledTimes(2);
+  });
+  it("keeps the original Run inspectable when the user stops waiting before any event", async () => {
+    vi.mocked(runPrompt).mockImplementation((_prompt, _model, _conversation, _mode, signal) => new Promise((_resolve, reject) => {
+      signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    }));
+    render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    await waitFor(() => expect(runPrompt).toHaveBeenCalledTimes(1));
+    const original = vi.mocked(runPrompt).mock.calls[0][5];
+    fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+    expect(await screen.findByText(/Runtime cancellation is unconfirmed/)).toBeInTheDocument();
+    expect(vi.mocked(runPrompt).mock.calls[0][4]?.aborted).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Execution activity" }));
+    await waitFor(() => expect(fetchRunEvents).toHaveBeenCalledWith(original, 0));
+    expect(runPrompt).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/cancelled successfully/i)).not.toBeInTheDocument();
+  });
+
+  it("does not publish a stopped request's late result or stop the next request", async () => {
+    let finish!: (value: Awaited<ReturnType<typeof runPrompt>>) => void;
+    vi.mocked(runPrompt).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    vi.mocked(runPrompt).mockReturnValueOnce(new Promise(() => {}));
+    const proposal = vi.fn(), created = vi.fn();
+    render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} onProposalCreated={proposal} onConversationCreated={created} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Stop waiting" }));
+    expect(await screen.findByText(/Runtime cancellation is unconfirmed/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    await waitFor(() => expect(runPrompt).toHaveBeenCalledTimes(2));
+    await act(async () => finish({ conversation_id: "stopped-conversation", status: "waiting_approval", message: "Late stopped response", result: { proposal_id: "stopped-proposal" } }));
+    expect(proposal).not.toHaveBeenCalled(); expect(created).not.toHaveBeenCalled();
+    expect(screen.queryByText("Late stopped response")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop waiting" })).toBeInTheDocument();
+    expect(vi.mocked(runPrompt).mock.calls[1][4]?.aborted).toBe(false);
+  });
+
+  it("preserves an inspectable original request after a lost response without replaying it", async () => {
+    vi.mocked(runPrompt).mockRejectedValueOnce(new Error("Response lost"));
+    render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    expect(await screen.findByText("Error: Response lost")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Execution activity" }));
+    await waitFor(() => expect(fetchRunEvents).toHaveBeenCalledWith(vi.mocked(runPrompt).mock.calls[0][5], 0));
+    expect(runPrompt).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports the unconfirmed cancellation in Chinese", async () => {
+    vi.mocked(runPrompt).mockReturnValueOnce(new Promise(() => {}));
+    render(<ChatView locale="zh" readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Stop waiting" }));
+    expect(await screen.findByText(/尚未确认 Runtime 取消/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "执行记录" })).toBeInTheDocument();
+  });
+
+  it.each(["token", "ABA"] as const)("retires the original Stop control after a %s connection change", async change => {
+    vi.mocked(runPrompt).mockReturnValueOnce(new Promise(() => {}));
+    render(<ChatView readOnly onCardClick={vi.fn()} onTraceClick={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send read-only request" }));
+    const originalStop = await screen.findByRole("button", { name: "Stop waiting" });
+    const originalSignal = vi.mocked(runPrompt).mock.calls[0][4];
+    act(() => {
+      if (change === "ABA") {
+        setConfig({ url: "https://temporary.example.test", token: "chat.fake.temporary" });
+        setConfig({ url: "http://localhost:8770", token: "chat.fake.service" });
+      } else setConfig({ url: "http://localhost:8770", token: "chat.fake.rotated" });
+    });
+    expect(screen.queryByRole("button", { name: "Stop waiting" })).not.toBeInTheDocument();
+    expect(originalSignal?.aborted).toBe(true);
+    fireEvent.click(originalStop);
+    expect(screen.queryByText(/Runtime cancellation is unconfirmed/)).not.toBeInTheDocument();
+    expect(fetchRunEvents).not.toHaveBeenCalled();
+    expect(runPrompt).toHaveBeenCalledTimes(1);
+  });
+
   it("retains recorded tool activity after the response without claiming verification", async () => {
     vi.mocked(fetchRunEvents).mockResolvedValue({
       run_id: "original-run", next_after_sequence: 1,

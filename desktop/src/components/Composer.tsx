@@ -5,7 +5,7 @@
  *   - Multi-line auto-growing textarea
  *   - Draft auto-save to localStorage per conversation
  *   - File/image/workspace attachments via drag-drop and paste
- *   - Stop generation button (visible during streaming)
+ *   - Stop waiting button (local request abort, not backend cancellation)
  *   - Model selector, node target, privacy level, budget constraint
  *   - Cmd+Enter to send, Shift+Enter for newline
  */
@@ -45,6 +45,7 @@ export interface ComposerProps {
   readOnly?: boolean;
   attachmentsSupported?: boolean;
   extendedConstraintsSupported?: boolean;
+  stopLabel?: string;
 }
 
 export const CHAT_ATTACHMENTS_UNAVAILABLE = "File attachment delivery is unavailable. Select a saved file in Workspace instead; the Runtime checks permission before reading it.";
@@ -80,6 +81,7 @@ export function Composer({
   onSend, onStop, disabled, streaming,
   models, nodes, conversationId, readOnly = false,
   attachmentsSupported = true, extendedConstraintsSupported = true,
+  stopLabel = "Stop waiting",
 }: ComposerProps) {
   const [text, setText] = useState(() => loadDraft(conversationId));
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -114,7 +116,7 @@ export function Composer({
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
-    if ((!trimmed && attachments.length === 0) || disabled) return;
+    if ((!trimmed && attachments.length === 0) || disabled || streaming) return;
     if (attachments.length > 0 && !attachmentsSupported) {
       setAdmissionError(CHAT_ATTACHMENTS_UNAVAILABLE);
       return;
@@ -128,7 +130,7 @@ export function Composer({
     setText("");
     setAttachments([]);
     saveDraft(conversationId, "");
-  }, [text, attachments, constraints, disabled, conversationId, onSend, attachmentsSupported, extendedConstraintsSupported]);
+  }, [text, attachments, constraints, disabled, streaming, conversationId, onSend, attachmentsSupported, extendedConstraintsSupported]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -389,7 +391,8 @@ export function Composer({
           {streaming ? (
             <button
               onClick={onStop}
-              title="Stop generation"
+              title={stopLabel}
+              aria-label={stopLabel}
               style={{
                 ...iconBtnStyle,
                 width: 36, height: 36,

@@ -40,21 +40,26 @@ import { ContextInspector } from "./ContextInspector";
 
 
 function MessageBubble({
-  msg, onCardClick, onTraceClick, onContextClick, onActivityClick,
+  msg, onCardClick, onTraceClick, onContextClick, onActivityClick, locale = "en",
 }: {
   msg: { id: string; role: string; content: string; timestamp: string; traceId?: string; runId?: string; modelId?: string; cards?: RuntimeEventEnvelope[] };
   onCardClick: (event: RuntimeEventEnvelope) => void;
   onTraceClick: (traceId: string) => void;
   onContextClick: (runId: string) => void;
   onActivityClick: (runId: string) => void;
+  locale?: "en" | "zh";
 }) {
   const isUser = msg.role === "user";
   const isSystem = msg.role === "system";
 
   if (isSystem) {
     return (
-      <div style={{ textAlign: "center", padding: `${space.sm} 0`, fontSize: typo.xs, color: colors.textTertiary }}>
+      <div style={{ textAlign: "center", padding: `${space.sm} 0`, fontSize: msg.runId ? typo.sm : typo.xs, color: msg.runId ? colors.textSecondary : colors.textTertiary, overflowWrap: "anywhere" }}>
         {msg.content}
+        {msg.runId && <div style={{ marginTop: space.sm }}>
+          <code>{msg.runId}</code>{" "}
+          <button onClick={() => onActivityClick(msg.runId!)} style={btnSecondary}>{locale === "zh" ? "执行记录" : "Execution activity"}</button>
+        </div>}
       </div>
     );
   }
@@ -273,6 +278,18 @@ function ChatSession({
   const currentView = useCallback(() => {
     try { connection(); return active.current; } catch { return false; }
   }, [connection]);
+  const recordStoppedWait = useCallback((runId: string) => {
+    if (!runId) return;
+    setLocalMessages((prev) => prev.some(message => message.id === `stopped_wait_${runId}`) ? prev : [...prev, {
+      id: `stopped_wait_${runId}`,
+      role: "system",
+      content: locale === "zh"
+        ? "已停止等待。尚未确认 Runtime 取消，原始请求可能仍在执行或产生费用。再次提交前，请先查看原始执行记录。"
+        : "Stopped waiting. Runtime cancellation is unconfirmed; the original request may still be running or incur cost. Inspect its recorded activity before submitting it again.",
+      timestamp: new Date().toISOString(),
+      runId,
+    }]);
+  }, [locale]);
   const inspectActivity = async (runId: string) => {
     if (!currentView()) return;
     const request = ++historyRequest.current;
@@ -354,6 +371,7 @@ function ChatSession({
       setLocalMessages(prev => [...prev, { id: `e_${Date.now()}`, role: "system", content: "Controller changed; remove the original file reference before continuing.", timestamp: new Date().toISOString() }]);
       return;
     }
+    if (abortRef.current && !abortRef.current.signal.aborted) recordStoppedWait(activeRunId);
     const userMsg = { id: `u_${Date.now()}`, role: "user", content: text, timestamp: new Date().toISOString() };
     setLocalMessages((prev) => [...prev, userMsg]);
     setLoading(true);
@@ -430,6 +448,7 @@ function ChatSession({
       setLocalMessages((prev) => [...prev, {
         id: `e_${Date.now()}`, role: "system",
         content: `Error: ${err instanceof Error ? err.message : "Request failed"}`,
+        runId: requestId,
         timestamp: new Date().toISOString(),
       }]);
     } finally {
@@ -443,14 +462,16 @@ function ChatSession({
         }
       }
     }
-  }, [conversationId, onConversationCreated, workspaceFile, readOnly, onProposalCreated, currentView]);
+  }, [conversationId, onConversationCreated, workspaceFile, readOnly, onProposalCreated, currentView, activeRunId, recordStoppedWait]);
 
   const handleStop = useCallback(() => {
-    abortRef.current?.abort();
+    if (!currentView() || !abortRef.current || abortRef.current.signal.aborted) return;
+    abortRef.current.abort();
     subscriptionRef.current?.close();
+    recordStoppedWait(activeRunId);
     setStreaming(false);
     setLoading(false);
-  }, []);
+  }, [activeRunId, currentView, recordStoppedWait]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: colors.bg }}>
@@ -487,7 +508,7 @@ function ChatSession({
           </div>
         ) : (
           allMessages.map((msg) => (
-            <MessageBubble key={msg.id} msg={msg} onCardClick={onCardClick} onTraceClick={onTraceClick} onContextClick={inspectContext} onActivityClick={inspectActivity} />
+            <MessageBubble key={msg.id} msg={msg} onCardClick={onCardClick} onTraceClick={onTraceClick} onContextClick={inspectContext} onActivityClick={inspectActivity} locale={locale} />
           ))
         )}
 
@@ -523,6 +544,7 @@ function ChatSession({
         onStop={handleStop}
         disabled={loading && !streaming}
         streaming={streaming}
+        stopLabel={t("Stop waiting", "停止等待")}
         models={models}
         nodes={nodes}
         conversationId={conversationId}
