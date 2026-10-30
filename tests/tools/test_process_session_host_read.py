@@ -2,6 +2,7 @@
 
 import errno
 import json
+import sys
 
 import pytest
 
@@ -105,13 +106,27 @@ def test_attach_reobserves_fresh_host_after_transient_permission_denial(
         try:
             text = read_text(current, *args, **kwargs)
         except OSError as error:
-            observations.append(
-                {
-                    "error_type": type(error).__name__,
-                    "errno": error.errno,
-                    "winerror": getattr(error, "winerror", None),
-                }
-            )
+            observation = {
+                "error_type": type(error).__name__,
+                "errno": error.errno,
+                "winerror": getattr(error, "winerror", None),
+            }
+            if sys.platform == "win32":
+                # Reuse the Relay's read-only native access probe: the CRT can
+                # discard GetLastError. This later sample cannot certify the
+                # failed read or replace it with a successful host observation.
+                from nous_runtime.node_runtime.relay import _read_failure_winerror
+
+                try:
+                    observation["observed_winerror"] = _read_failure_winerror(
+                        current, error
+                    )
+                except OSError as probe_error:
+                    observation["probe_errno"] = probe_error.errno
+                    observation["probe_winerror"] = getattr(
+                        probe_error, "winerror", None
+                    )
+            observations.append(observation)
             raise
         try:
             value = json.loads(text)

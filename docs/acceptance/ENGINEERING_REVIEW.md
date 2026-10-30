@@ -5625,3 +5625,25 @@ Automation tests. That optional diagnostic cannot satisfy the Core gate.
 No completion/MATCH assertion, wait limit, execution permission or retry policy
 was relaxed. This is evidence collection, not a root-cause fix or Native PASS.
 The preceding qualified `a37dab8` download remains separately identified.
+
+### Windows recovery follow-up
+
+Diagnostic [41108119177](https://github.com/untrod/apeir/actions/runs/41108119177)
+passed all 115 Automation cases with the same Native dependency set. It did not
+reproduce the failure and does not establish its cause or qualify an installer.
+
+Multi-Arch [41108108372](https://github.com/untrod/apeir/actions/runs/41108108372)
+instead failed the original ProcessSession fresh-host assertion after two
+injected read denials: the third, actual read raised `PermissionError`, errno13,
+with no WinError. The host remained `RECOVERY_REQUIRED`; no cached identity or
+replacement process was accepted. Issue85 remains open. The test now reuses the
+Relay's existing read-only Windows access probe to capture a later native error
+code, if any. That sample neither replaces the failed read nor proves its cause;
+the same assertion, three-read bound and control refusal remain intact.
+
+Core [41110012705](https://github.com/untrod/apeir/actions/runs/41110012705)
+also retained three original five-second Skill HTTP failures. Phase evidence
+includes slow SQLite commits and a sampled CAS receipt-file open; it does not
+establish a common cause with either recovery failure. Issues82/85/88 are not
+closed by a passing retry. No HTTP deadline, durability setting or permission
+check is relaxed.
