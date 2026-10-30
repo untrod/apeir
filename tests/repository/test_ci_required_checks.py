@@ -24,9 +24,11 @@ def test_core_prs_produce_all_required_python_platform_contexts():
         ("ubuntu-22.04", "3.10"),
         ("ubuntu-22.04", "3.12"),
         ("windows-latest", "3.12"),
-        ("macos-14", "3.12"),
+        ("macos-15", "3.12"),
     }
     assert workflow["jobs"]["core-gate"]["needs"] == ["python-tests"]
+    desktop, _ = _workflow("desktop-build.yml")
+    assert desktop["jobs"]["build-macos-arm64"]["runs-on"] == "macos-15"
 
 
 def test_multi_arch_required_contexts_run_actual_existing_jobs_on_prs():
