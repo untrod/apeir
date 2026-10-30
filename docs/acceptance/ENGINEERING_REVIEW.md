@@ -5440,3 +5440,15 @@ hosts remain unbound; this completes typed step data flow, not their execution
 or Token-saving qualification. Current exact-source required CI and normal
 integration remain prerequisites. The existing Native download is older code
 and does not acquire this feature from a documentation change.
+
+### Windows qualification follow-up — 2026-10-30
+
+Core 40906704033 at 278b09e failed the original ProcessSession fresh-attach test
+with two injected read denials: the next observation returned no host state.
+The original log did not record whether the real read was denied, absent or
+invalid JSON. It does not establish a sharing violation or a Workflow regression.
+The test now retains allowlisted read-error codes and binding-match booleans on
+failure, without file bodies, paths or additional retries. Its RUNNING, original
+process/helper identity and no-control assertions are unchanged. Linux's
+initialized test harness passed all three cases with no remaining children.
+The original Windows failure and Issue #85 remain open qualification evidence.
