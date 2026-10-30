@@ -5608,6 +5608,14 @@ remain retained; green qualification does not establish one cause for them.
 
 ## Native Automation failure evidence — 2026-10-30
 
+Follow-up independent extraction of the preceding `a37dab8` NSIS package found
+all 11 expected application/resource files. Ten match Portable byte for byte;
+the main executable differs only at Tauri's three-byte `UNK` to `NSS` bundle
+marker, confirmed against the actual [2.11.4 bundler source](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.4/crates/tauri-bundler/src/bundle.rs).
+Its installer-payload SHA-256 is
+`1f22ddd6a27f495bc7818f059c6be270beed87297ef179b5213f335fe4157e07`.
+The installer was not executed; this does not qualify installation or uninstall.
+
 The full-mode Native refresh [41099498312](https://github.com/untrod/apeir/actions/runs/41099498312)
 at accepted source `167bcf48b1a79e47097136fb37f69be61b7087d3` stopped before packaging:
 `test_original_work_matches_only_after_human_approval_and_independent_observation`
