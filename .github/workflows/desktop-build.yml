@@ -38,7 +38,9 @@ on:
         default: ''
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # PR validation must not cancel an explicitly requested full Native build of
+  # the same branch. Superseded runs still cancel within their own event scope.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
