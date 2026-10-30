@@ -75,6 +75,61 @@ async function dashboardMenu(page: Page) {
   if (!(await summary.evaluate(node => (node.parentElement as HTMLDetailsElement).open))) await summary.click();
 }
 
+test("Chat stops waiting without claiming backend cancellation or resubmitting the original Run", async ({ page }, info) => {
+  await open(page);
+  await page.getByRole("button", { name: "Open Chat", exact: true }).click();
+  const chat = page.getByRole("region", { name: "AI conversation", exact: true });
+  let original = "", submissions = 0, stopped = false;
+  let release!: () => void, received!: () => void, settled!: () => void;
+  let transportError: unknown;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const responseReceived = new Promise<void>(resolve => { received = resolve; });
+  const routeSettled = new Promise<void>(resolve => { settled = resolve; });
+  await page.route("**/api/v1/chat", async route => {
+    if (route.request().method() !== "POST") { await route.continue(); return; }
+    submissions += 1; original = String(route.request().postDataJSON().request_id || "");
+    try {
+      // Hold an actual model-disabled Runtime response, not a fabricated reply.
+      const response = await route.fetch(); received(); await held;
+      try { await route.fulfill({ response }); } catch (error) { if (!stopped) throw error; }
+    } catch (error) { transportError = error; received(); }
+    finally { settled(); }
+  });
+  try {
+    await chat.getByRole("textbox", { name: "Message", exact: true }).fill("Explain a pure function.");
+    await chat.getByTitle("Send (Enter)", { exact: true }).click();
+    await responseReceived;
+    expect(transportError).toBeUndefined(); expect(original).toMatch(/^[0-9a-f-]{36}$/);
+    const draft = chat.getByRole("textbox", { name: "Message", exact: true });
+    await draft.fill("Keep this follow-up draft"); await draft.press("Enter");
+    await expect(draft).toHaveValue("Keep this follow-up draft"); expect(submissions).toBe(1);
+    const aborted = page.waitForEvent("requestfailed", { predicate: request => request.url().endsWith("/api/v1/chat") && request.method() === "POST" });
+    stopped = true;
+    await chat.getByRole("button", { name: "Stop waiting", exact: true }).click();
+    expect((await aborted).failure()?.errorText).toContain("ERR_ABORTED");
+    release(); await routeSettled;
+    await expect(chat.getByText(/Runtime cancellation is unconfirmed/)).toBeVisible();
+    await expect(chat.getByText(original, { exact: true })).toBeVisible();
+    const inspected = page.waitForResponse(response => response.request().method() === "GET" && new URL(response.url()).pathname === `/api/v1/runtime/runs/${original}/events`);
+    await chat.getByRole("button", { name: "Execution activity", exact: true }).click();
+    const response = await inspected;
+    expect(response.status()).toBe(200);
+    const envelope = await response.json();
+    expect(envelope.data.run_id).toBe(original);
+    expect(envelope.data.events.length).toBeGreaterThan(0);
+    expect(submissions).toBe(1);
+    await expect(chat.getByRole("button", { name: "Stop waiting", exact: true })).toBeHidden();
+    await writeFile(info.outputPath("chat-original-run-after-stop-source.json"), JSON.stringify({
+      scope: "Actual model-disabled HTTP/Chromium; not live inference or backend cancellation",
+      original_run_id: original, submissions, browser_request_aborted: true,
+      backend_cancellation_confirmed: false, external_provider_calls: 0,
+      event_types: (envelope.data.events as Array<{ event_type: string }>).map(event => event.event_type),
+      follow_up_draft_retained: await draft.inputValue() === "Keep this follow-up draft",
+    }, null, 2));
+    await page.screenshot({ path: info.outputPath("chat-original-run-after-stop-source.png"), fullPage: true });
+  } finally { release(); if (submissions) await routeSettled; }
+});
+
 test("Studio configures and inspects saved Providers through the real model-disabled Runtime", async ({ page }, info) => {
   await open(page);
   await page.getByRole("button", { name: /Add panel/ }).click();

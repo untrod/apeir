@@ -116,6 +116,14 @@ historical inspection initially reads up to 200. A disconnected event reader
 shows a reconnecting state: that does not establish that the backend task stopped.
 Missing usage remains UNKNOWN; receipt-backed Usage remains the accounting view.
 
+**Stop waiting** closes the local request and event reader. It does not confirm
+Runtime cancellation or stop an already admitted charge. The message retains
+**Execution activity** for the original Run; inspect that record before submitting
+the task again. A lost response also retains its original activity link. While a
+request is active, Enter preserves the next draft instead of dispatching an
+overlapping request.
+“停止等待”不等于后端已取消；请先核对原始记录，避免重复提交。
+
 When an Agent request explicitly allows networking, `search_web` calls the same
 governed `network.fetch`/Research service used by the **Research** tab. It accepts
 a query and a bounded result count; it cannot change authorization or choose an

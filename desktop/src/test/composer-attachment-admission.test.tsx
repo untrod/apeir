@@ -4,6 +4,27 @@ import { Composer } from "../components/Composer";
 
 const props = { onSend: vi.fn(), onStop: vi.fn(), disabled: false, streaming: false, models: [], nodes: [] };
 describe("unsupported Chat attachments", () => {
+  it("labels the local abort as stopping the wait rather than confirmed model cancellation", () => {
+    const stop = vi.fn(), send = vi.fn();
+    render(<Composer {...props} streaming onStop={stop} onSend={send} />);
+    fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+    expect(stop).toHaveBeenCalledOnce(); expect(send).not.toHaveBeenCalled();
+    expect(screen.queryByTitle("Stop generation")).not.toBeInTheDocument();
+  });
+
+  it("keeps a follow-up draft without dispatching another request during the active wait", () => {
+    const send = vi.fn();
+    const view = render(<Composer {...props} onSend={send} streaming />);
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "Keep this follow-up" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+    expect(send).not.toHaveBeenCalled(); expect(input).toHaveValue("Keep this follow-up");
+    view.rerender(<Composer {...props} onSend={send} streaming={false} />);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(send).toHaveBeenCalledExactlyOnceWith("Keep this follow-up", [], {});
+  });
+
   it("disables attachment selection and explains the governed workspace alternative", () => {
     render(<Composer {...props} attachmentsSupported={false} />);
     expect(screen.getByTitle("Attach files")).toBeDisabled();
