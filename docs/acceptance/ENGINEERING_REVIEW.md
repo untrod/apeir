@@ -5397,3 +5397,22 @@ The original HTTP failure and corrected regression are retained. No Provider
 inference or credential access was performed.
 Model Center, protected HTTP, Control Plane and Provider configuration/coexistence
 regressions: 101 passed. Real inference remains separately unqualified.
+
+### Windows MCP qualification — 2026-10-30
+
+Core 40911654269 at 2aea09a failed the original MCP approval/idempotency case on
+its first submission, before a Work call. Its captured service thread was exiting
+the result-audit transaction in SQLite connection close; setup commit took
+2110 ms and later commit/close observations took1359/1031 ms. This identifies the
+observed phases, not one proven cause for every historical HTTP timeout.
+
+The existing Windows Governance diagnostic now measures a bounded same-host
+legacy/retained-WAL comparison through the canonical Store, then executes the
+unchanged original MCP regression in separate processes. The experiment uses
+SQLite's supported NO_CKPT_ON_CLOSE setting where available; it does not change
+production policy, FULL synchronization, WAL auto-checkpoint thresholds, HTTP
+deadlines or authority. Both local MCP modes passed. Linux temporary-filesystem
+timings do not qualify Windows or justify a production performance claim.
+The content-free report retains samples and exit codes; any failed regression
+still makes the diagnostic fail. Diagnostic contexts cannot satisfy the required
+Core Gate. Original Windows failure evidence remains retained.

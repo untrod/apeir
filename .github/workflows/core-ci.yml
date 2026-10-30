@@ -174,6 +174,16 @@ jobs:
       - name: Exercise original Governance initialization and identity failures
         if: inputs.diagnostic == 'windows-governance'
         run: python -m pytest -q tests/governance/test_sqlite_connection_lifecycle.py tests/control_plane/test_human_sessions.py tests/context/test_guard_admission.py --tb=short --timeout=60 -rA
+      - name: Measure last-close checkpoint work and exercise original MCP deadlines
+        if: inputs.diagnostic == 'windows-governance'
+        run: python scripts/ci/probe_governance_checkpoint.py --report "$env:RUNNER_TEMP/governance-checkpoint-probe.json" --exercise-mcp
+      - uses: actions/upload-artifact@v4
+        if: always() && inputs.diagnostic == 'windows-governance'
+        with:
+          name: windows-governance-checkpoint-probe-${{ github.sha }}
+          path: ${{ runner.temp }}/governance-checkpoint-probe.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Governance and Control Plane regression after focused qualification
         if: inputs.diagnostic == 'windows-governance'
         env:
