@@ -34,12 +34,14 @@ def connection_mode(retain_wal: bool):
     @contextmanager
     def experimental(path, readonly=False):
         with original(path, readonly=readonly) as connection:
-            connection.setconfig(sqlite3.SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, True)
-            assert connection.getconfig(sqlite3.SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE)
+            connection.setconfig(sqlite3.SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, retain_wal)
+            assert (
+                connection.getconfig(sqlite3.SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE)
+                is retain_wal
+            )
             yield connection
 
-    if retain_wal:
-        store._db_connect = experimental
+    store._db_connect = experimental
     try:
         yield
     finally:

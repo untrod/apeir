@@ -5416,3 +5416,24 @@ timings do not qualify Windows or justify a production performance claim.
 The content-free report retains samples and exit codes; any failed regression
 still makes the diagnostic fail. Diagnostic contexts cannot satisfy the required
 Core Gate. Original Windows failure evidence remains retained.
+
+Windows Server 2025 diagnostic 40996995718 at 68d41c4 passed the original
+Governance/Control Plane and both unchanged MCP variants. With CPython 3.12.10,
+SQLite 3.49.1, 101 alternating pairs measured audit-transaction wall p50/p95/p99
+of 15.690/31.396/44.971 ms with last-close checkpointing and
+7.497/16.705/27.283 ms with retained WAL. Close alone measured
+4.115/9.303/13.236 versus 0.108/0.124/0.150 ms. An earlier 31-pair run had worse
+overall p99 for retained WAL (35.547 versus 32.308 ms); neither sample proves a
+tail SLA or resolves historic HTTP timeouts. Raw CPU/phase samples are retained;
+Windows process-time quantization does not establish zero CPU workload.
+
+The canonical connection owner now uses SQLite's supported NO_CKPT_ON_CLOSE
+option where available, retaining FULL, WAL, auto-checkpointing, original
+commit/rollback and actual connection closure. Older interpreters preserve their
+policy; configuration errors propagate. The probe explicitly selects both modes
+so a future comparison cannot accidentally measure the same policy twice.
+New regressions cover committed-WAL reopen/backup, rejected read-only writes,
+rollback, abrupt process exit before/after commit, unsupported-interpreter
+fallback and configuration-failure cleanup. These plus original SQLite/MCP/Model
+Center checks passed locally: 65 cases. Exact-source Windows and required CI
+remain necessary; no timeout, SQL permission or original assertion was relaxed.
