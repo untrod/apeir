@@ -5464,6 +5464,18 @@ than an escaping decoder error; no remaining child processes are permitted.
 This corrects misleading diagnostics; the original intermittent Windows cause
 is not established or declared fixed by these local results.
 
+Core 40998110697 at 11cd10d passed 6026 cases but failed the existing simulated
+firmware incomplete-receipt credential check on Windows: scanning a persisted
+fixture file raised PermissionError from read(), before the no-secret assertion.
+The original log did not identify that file. This is not evidence of a leaked
+credential or a proven Workflow regression. The scan now reports the owned
+fixture's relative path and OS codes if reading fails, and still fails the test.
+No file is excluded, retried, deleted or treated as inspected. Issue #121 retains
+the unresolved failure. Original Work
+UNKNOWN/no-replay and all credential assertions remain. The accepted Governance
+durability change is now integrated into this candidate; exact combined-source
+CI must run independently of both earlier source qualifications.
+
 
 ## Model discovery dependency failure — 2026-10-29
 
