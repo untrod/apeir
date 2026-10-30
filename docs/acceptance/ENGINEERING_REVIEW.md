@@ -5458,7 +5458,8 @@ read failures and invalid JSON. The public recovery message contains only the
 reason, attempt count and OS error codes, never the host body or private error
 text. All cases remain RECOVERY_REQUIRED and refuse control; no cached host is
 accepted and the existing three reads/two 10 ms pauses are unchanged. Original
-identity, startup, acknowledgement and process cleanup regressions plus six
-read-failure negatives passed locally: 46 cases, no remaining child processes.
+identity, startup, acknowledgement and process cleanup regressions plus seven
+read-failure negatives include invalid UTF-8 as recovery-required state rather
+than an escaping decoder error; no remaining child processes are permitted.
 This corrects misleading diagnostics; the original intermittent Windows cause
 is not established or declared fixed by these local results.

@@ -698,7 +698,7 @@ class ProcessSessionStore:
                 return _UnavailableHostState("missing", attempt + 1, error)
             except OSError as error:
                 return _UnavailableHostState("read_failed", attempt + 1, error)
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, UnicodeError):
                 return _UnavailableHostState("invalid", attempt + 1)
             else:
                 return (

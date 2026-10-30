@@ -18,6 +18,7 @@ from tests.tools.test_process_session_startup import _cleanup_original_session
         ("denied", "unreadable", "unreadable", 3),
         ("io", "read failed", "read_failed", 1),
         ("json", "invalid", "invalid", 1),
+        ("encoding", "invalid", "invalid", 1),
         ("array", "invalid", "invalid", 1),
         ("empty", "invalid", "invalid", 1),
     ],
@@ -53,6 +54,8 @@ def test_unavailable_host_reports_safe_reason_without_authorizing_control(
             raise PermissionError(errno.EACCES, "private host path")
         if failure == "io":
             raise OSError(errno.EIO, "private host path")
+        if failure == "encoding":
+            raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "private host payload")
         return {"json": "private invalid payload", "array": "[]", "empty": "{}"}[
             failure
         ]
