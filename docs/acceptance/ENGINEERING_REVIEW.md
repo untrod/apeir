@@ -5605,3 +5605,23 @@ installation, installed GUI, graceful exit, upgrade/uninstall, Defender, real
 inference, signing and formal publication remain unqualified. No independent
 NSIS payload extraction is claimed. Earlier failed runs and Issues85/88/116/121
 remain retained; green qualification does not establish one cause for them.
+
+## Native Automation failure evidence — 2026-10-30
+
+The full-mode Native refresh [41099498312](https://github.com/untrod/apeir/actions/runs/41099498312)
+at accepted source `167bcf48b1a79e47097136fb37f69be61b7087d3` stopped before packaging:
+`test_original_work_matches_only_after_human_approval_and_independent_observation`
+returned Workflow `failed` after approval. The original assertion remains
+`state == completed`; result: **1 failed, 6044 passed, 95 skipped, 4 warnings**
+in 2344.32 seconds. The truncated projection does not establish its error,
+original Work state, effect count or verification outcome. It does not establish
+the cause of [Issue #82](https://github.com/untrod/apeir/issues/82).
+
+The test now retains bounded, redacted failure metadata and monotonic
+prepare/approval/resume timings. It prints neither execution arguments nor raw
+evidence. The existing Core diagnostic runner can select
+`windows-automation-recovery` with the Native dependency set and original
+Automation tests. That optional diagnostic cannot satisfy the Core gate.
+No completion/MATCH assertion, wait limit, execution permission or retry policy
+was relaxed. This is evidence collection, not a root-cause fix or Native PASS.
+The preceding qualified `a37dab8` download remains separately identified.
