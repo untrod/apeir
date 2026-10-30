@@ -29,7 +29,9 @@ from pathlib import Path
 from typing import Any
 
 from nous_runtime.core.redaction import redact_sensitive_data, redact_sensitive_text
-from nous_runtime.schema_registry import MODEL_OBSERVATION_SCHEMA_VERSION as SCHEMA_VERSION
+from nous_runtime.schema_registry import (
+    MODEL_OBSERVATION_SCHEMA_VERSION as SCHEMA_VERSION,
+)
 from nous_runtime.security.private_files import validate_private_database_path
 
 _log = logging.getLogger("nous.model_obs")
@@ -44,6 +46,7 @@ class ModelObservationError(RuntimeError):
 
 class ObservationOutcome(str, Enum):
     """Outcome of a model invocation."""
+
     SUCCESS = "success"
     PARTIAL_SUCCESS = "partial_success"
     FAILURE = "failure"
@@ -54,6 +57,7 @@ class ObservationOutcome(str, Enum):
 
 class TaskCategory(str, Enum):
     """Category of the task the model performed."""
+
     CHAT = "chat"
     CODE_GENERATION = "code_generation"
     CODE_REVIEW = "code_review"
@@ -268,7 +272,6 @@ class ModelPerformanceSummary:
         }
 
 
-
 # ModelObservationStore
 
 
@@ -345,7 +348,8 @@ class ModelObservationStore:
             cost_usd=cost_usd,
             cost_per_1k_tokens=(
                 (cost_usd / (prompt_tokens + completion_tokens) * 1000)
-                if (prompt_tokens + completion_tokens) > 0 else 0.0
+                if (prompt_tokens + completion_tokens) > 0
+                else 0.0
             ),
             tool_call_valid_rate=tool_call_valid_rate,
             output_valid=output_valid,
@@ -389,8 +393,10 @@ class ModelObservationStore:
         params: list[Any] = []
 
         for col, val in [
-            ("model_id", model_id), ("provider_id", provider_id),
-            ("capability_id", capability_id), ("task_type", task_type),
+            ("model_id", model_id),
+            ("provider_id", provider_id),
+            ("capability_id", capability_id),
+            ("task_type", task_type),
             ("outcome", outcome),
         ]:
             if val:
@@ -479,8 +485,10 @@ class ModelObservationStore:
         params: list[Any] = []
 
         for col, val in [
-            ("model_id", model_id), ("provider_id", provider_id),
-            ("capability_id", capability_id), ("task_type", task_type),
+            ("model_id", model_id),
+            ("provider_id", provider_id),
+            ("capability_id", capability_id),
+            ("task_type", task_type),
         ]:
             if val:
                 conditions.append(f"{col} = ?")
@@ -502,13 +510,17 @@ class ModelObservationStore:
 
             if not rows:
                 return ModelPerformanceSummary(
-                    model_id=model_id, provider_id=provider_id,
+                    model_id=model_id,
+                    provider_id=provider_id,
                     capability_id=capability_id,
-                    task_type=TaskCategory(task_type) if task_type else TaskCategory.CHAT,
+                    task_type=TaskCategory(task_type)
+                    if task_type
+                    else TaskCategory.CHAT,
                 )
 
             summary = ModelPerformanceSummary(
-                model_id=model_id, provider_id=provider_id,
+                model_id=model_id,
+                provider_id=provider_id,
                 capability_id=capability_id,
                 task_type=TaskCategory(task_type) if task_type else TaskCategory.CHAT,
                 sample_count=len(rows),
@@ -549,7 +561,9 @@ class ModelObservationStore:
 
             output_valid_rates = [r[6] for r in rows if r[6] >= 0]
             if output_valid_rates:
-                summary.avg_output_valid = sum(output_valid_rates) / len(output_valid_rates)
+                summary.avg_output_valid = sum(output_valid_rates) / len(
+                    output_valid_rates
+                )
 
             return summary
         except Exception as e:
@@ -604,7 +618,9 @@ class ModelObservationStore:
                     "success_rate": round(r[3], 4),
                     "avg_latency_ms": round(r[4], 2) if r[4] else 0,
                     "avg_cost_usd": round(r[5], 6) if r[5] else 0,
-                    "avg_tool_call_valid_rate": round(r[6], 4) if r[6] and r[6] >= 0 else -1,
+                    "avg_tool_call_valid_rate": round(r[6], 4)
+                    if r[6] and r[6] >= 0
+                    else -1,
                 }
                 for r in rows
             ]
@@ -709,8 +725,7 @@ class ModelObservationStore:
             ).fetchall()
 
             by_outcome = self._db.execute(
-                "SELECT outcome, COUNT(*) FROM model_observations "
-                "GROUP BY outcome"
+                "SELECT outcome, COUNT(*) FROM model_observations GROUP BY outcome"
             ).fetchall()
 
             total_cost = self._db.execute(
@@ -746,7 +761,9 @@ class ModelObservationStore:
             validate_private_database_path(self._db_path)
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
             validate_private_database_path(self._db_path)
-            self._db = sqlite3.connect(str(self._db_path), check_same_thread=False, timeout=5.0)
+            self._db = sqlite3.connect(
+                str(self._db_path), check_same_thread=False, timeout=5.0
+            )
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA synchronous=NORMAL")
             self._db.execute("""
@@ -791,8 +808,14 @@ class ModelObservationStore:
                     schema_version TEXT NOT NULL DEFAULT '1.0.0'
                 )
             """)
-            for col in ("model_id", "provider_id", "capability_id", "task_type",
-                         "outcome", "timestamp"):
+            for col in (
+                "model_id",
+                "provider_id",
+                "capability_id",
+                "task_type",
+                "outcome",
+                "timestamp",
+            ):
                 try:
                     self._db.execute(
                         f"CREATE INDEX IF NOT EXISTS idx_mobs_{col} "
@@ -826,19 +849,44 @@ class ModelObservationStore:
                     tags, metadata, payload, schema_version)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
-                    obs.observation_id, obs.timestamp, obs.model_id, obs.provider_id,
-                    obs.model_version, obs.quantization, obs.task_type.value,
-                    obs.capability_id, obs.task_id, obs.trace_id, obs.session_id,
-                    obs.outcome.value, obs.latency_ms, obs.time_to_first_token_ms,
-                    obs.tokens_per_second, obs.prompt_tokens, obs.completion_tokens,
-                    obs.total_tokens, obs.cost_usd, obs.cost_per_1k_tokens,
-                    obs.tool_call_valid_rate, obs.output_valid, obs.user_accepted,
-                    obs.test_pass_rate, obs.verification_passed, obs.node_id,
-                    obs.hardware, obs.runtime_load, obs.time_of_day_hour,
-                    obs.retry_count, int(obs.fallback_used), obs.fallback_model_id,
-                    obs.error_category, obs.error_message,
-                    json.dumps(obs.tags), json.dumps(obs.metadata),
-                    payload, obs.schema_version,
+                    obs.observation_id,
+                    obs.timestamp,
+                    obs.model_id,
+                    obs.provider_id,
+                    obs.model_version,
+                    obs.quantization,
+                    obs.task_type.value,
+                    obs.capability_id,
+                    obs.task_id,
+                    obs.trace_id,
+                    obs.session_id,
+                    obs.outcome.value,
+                    obs.latency_ms,
+                    obs.time_to_first_token_ms,
+                    obs.tokens_per_second,
+                    obs.prompt_tokens,
+                    obs.completion_tokens,
+                    obs.total_tokens,
+                    obs.cost_usd,
+                    obs.cost_per_1k_tokens,
+                    obs.tool_call_valid_rate,
+                    obs.output_valid,
+                    obs.user_accepted,
+                    obs.test_pass_rate,
+                    obs.verification_passed,
+                    obs.node_id,
+                    obs.hardware,
+                    obs.runtime_load,
+                    obs.time_of_day_hour,
+                    obs.retry_count,
+                    int(obs.fallback_used),
+                    obs.fallback_model_id,
+                    obs.error_category,
+                    obs.error_message,
+                    json.dumps(obs.tags),
+                    json.dumps(obs.metadata),
+                    payload,
+                    obs.schema_version,
                 ),
             )
             self._db.commit()
@@ -880,8 +928,10 @@ atexit.register(reset_observation_store)
 
 # Helpers
 
+
 def _utc_now() -> str:
     from datetime import datetime, timezone
+
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
