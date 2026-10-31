@@ -51,20 +51,22 @@ jobs:
           hostname = socket.gethostname()
           if not re.fullmatch(r"[A-Za-z0-9.-]{1,253}", hostname):
               raise SystemExit("Unexpected runner hostname; refusing hosts configuration")
-          probe = "import socket; socket.getaddrinfo(socket.gethostname(), None); print(socket.getfqdn('0.0.0.0'))"
+          probe = "import socket; print('forward_start', flush=True); socket.getaddrinfo(socket.gethostname(), None); print('forward_ready', flush=True); socket.getfqdn('0.0.0.0'); print('reverse_ready', flush=True)"
           def observe():
               started = time.monotonic()
               try:
                   result = subprocess.run([sys.executable, "-c", probe], capture_output=True, timeout=2)
                   state = "ready" if result.returncode == 0 else "error"
-              except subprocess.TimeoutExpired:
+                  phases = result.stdout.decode().splitlines()
+              except subprocess.TimeoutExpired as error:
                   state = "timeout"
-              return {"state": state, "elapsed_s": time.monotonic() - started}
+                  phases = (error.stdout or b"").decode().splitlines()
+              return {"state": state, "phases": phases, "elapsed_s": time.monotonic() - started}
           before = observe()
-          names = " ".join(dict.fromkeys([hostname, hostname.split(".")[0]]))
-          subprocess.run(["sudo", "tee", "-a", "/etc/hosts"], input=f"\n127.0.0.1 {names}\n::1 {names}\n", text=True, stdout=subprocess.DEVNULL, check=True)
+          subprocess.run(["sudo", "scutil", "--set", "HostName", "localhost"], check=True)
+          subprocess.run(["sudo", "hostname", "localhost"], check=True)
           after = observe()
-          print(json.dumps({"hostname": hostname, "before": before, "after": after}))
+          print(json.dumps({"original_hostname": hostname, "qualified_hostname": socket.gethostname(), "before": before, "after": after}))
           if after["state"] != "ready":
               raise SystemExit("Runner does not meet the existing resolvable-hostname prerequisite")
           PY

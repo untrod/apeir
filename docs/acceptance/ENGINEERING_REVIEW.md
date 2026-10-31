@@ -5640,7 +5640,9 @@ the new real-listener test fails before the fix and passes afterwards. Existing
 authentication, wildcard/TLS admission and rate-limit tests remain unchanged.
 
 The ephemeral macOS CI runner now records bounded before/after name-resolution
-probes and assigns its own hostname to loopback in its own hosts file. This
+probes and sets its own system hostname to `localhost`. Adding hosts aliases
+alone did not repair the image's `.local` resolution: both original probes
+timed out at two seconds in run41177046173, before test execution. This
 meets the existing resolvable-hostname development prerequisite; it does not
 modify user hosts, bypass TLS or supply Node execution permission. Node resource
 probe failure still prevents resource readiness, independently of original
