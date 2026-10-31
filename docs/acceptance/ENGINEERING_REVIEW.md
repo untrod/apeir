@@ -5648,3 +5648,12 @@ modify user hosts, bypass TLS or supply Node execution permission. Node resource
 probe failure still prevents resource readiness, independently of original
 result delivery. Full macOS15 requalification remains required; no deadline or
 failure assertion is relaxed.
+
+The next preflight41177833673 isolated the two lookups: setting `localhost`
+repaired forward resolution, but reverse resolution still blocked. Forward
+resolution remains a host prerequisite; an unused reverse name is recorded
+separately rather than required for numeric listeners. The actual child TLS
+fixture now uses numeric binding too, without replacing its SSL context,
+certificate checks, sockets or five-second startup assertion. Four affected
+transport cases run before the unchanged full macOS regression so an unresolved
+startup failure fails early instead of repeating a two-hour cascade.
