@@ -43,6 +43,31 @@ jobs:
           sw_vers
           uname -m
           python --version
+      - name: Qualify the ephemeral macOS runner's local hostname
+        if: startsWith(matrix.os, 'macos-')
+        run: |
+          python - <<'PY'
+          import json, re, socket, subprocess, sys, time
+          hostname = socket.gethostname()
+          if not re.fullmatch(r"[A-Za-z0-9.-]{1,253}", hostname):
+              raise SystemExit("Unexpected runner hostname; refusing hosts configuration")
+          probe = "import socket; socket.getaddrinfo(socket.gethostname(), None); print(socket.getfqdn('0.0.0.0'))"
+          def observe():
+              started = time.monotonic()
+              try:
+                  result = subprocess.run([sys.executable, "-c", probe], capture_output=True, timeout=2)
+                  state = "ready" if result.returncode == 0 else "error"
+              except subprocess.TimeoutExpired:
+                  state = "timeout"
+              return {"state": state, "elapsed_s": time.monotonic() - started}
+          before = observe()
+          names = " ".join(dict.fromkeys([hostname, hostname.split(".")[0]]))
+          subprocess.run(["sudo", "tee", "-a", "/etc/hosts"], input=f"\n127.0.0.1 {names}\n::1 {names}\n", text=True, stdout=subprocess.DEVNULL, check=True)
+          after = observe()
+          print(json.dumps({"hostname": hostname, "before": before, "after": after}))
+          if after["state"] != "ready":
+              raise SystemExit("Runner does not meet the existing resolvable-hostname prerequisite")
+          PY
       - name: Select conservative PR scope
         id: scope
         env:

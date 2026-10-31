@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import threading
 import urllib.error
 import urllib.request
@@ -10,6 +11,19 @@ import pytest
 from nous_runtime.api.server import RuntimeAPIHandler, create_server
 
 
+def test_literal_listener_starts_without_reverse_dns(monkeypatch):
+    def unavailable_dns(*_args):
+        raise AssertionError("reverse DNS is not required to bind a local API")
+
+    monkeypatch.setattr(socket, "getfqdn", unavailable_dns)
+    server = create_server("127.0.0.1", 0)
+    try:
+        assert server.server_name == "127.0.0.1"
+        assert server.server_port == server.socket.getsockname()[1] > 0
+    finally:
+        server.server_close()
+
+
 def request(url, *, token="", data=None):
     headers = {}
     if token:
@@ -17,7 +31,9 @@ def request(url, *, token="", data=None):
     body = json.dumps(data).encode() if data is not None else None
     if body is not None:
         headers["Content-Type"] = "application/json"
-    return urllib.request.urlopen(urllib.request.Request(url, data=body, headers=headers), timeout=5)
+    return urllib.request.urlopen(
+        urllib.request.Request(url, data=body, headers=headers), timeout=5
+    )
 
 
 def test_http_server_authenticates_and_serves_localhost(monkeypatch):
@@ -52,7 +68,11 @@ def test_http_server_enforces_request_size(monkeypatch):
     thread.start()
     try:
         with pytest.raises(urllib.error.HTTPError) as denied:
-            request(f"http://127.0.0.1:{server.server_port}/api/runtime/run", token="test-server-token", data={"user_input": "x" * 100})
+            request(
+                f"http://127.0.0.1:{server.server_port}/api/runtime/run",
+                token="test-server-token",
+                data={"user_input": "x" * 100},
+            )
         assert denied.value.code == 413
         denied.value.close()
     finally:

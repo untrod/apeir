@@ -5623,3 +5623,26 @@ macOS14 or macOS15 Desktop behavior. The repository protection must replace
 `Python Tests (macos-15, Python 3.12)` check. Other required checks stay in place.
 Protection administration remains HTTP403 to this integration; no bypass or
 fabricated legacy-name status is used.
+
+### macOS15 local-name resolution failure — 2026-10-31
+
+The first actual macOS15/ARM64 qualifications failed: Core41110012705 and
+41117017033 each recorded 192 failures and 37 setup errors. Their 2-hour logs
+retain the original assertions. A timeout stack enters Python HTTPServer's
+`server_bind -> socket.getfqdn -> gethostbyaddr`; another enters the Node's
+`probe_resources -> getaddrinfo(gethostname(), None)`. TLS fixtures failed
+before writing their listening port; these are not certificate-verification
+failures. The image was macOS15.8.2, macos-15-arm6420261028.0489.1.
+
+Runtime HTTP binding now preserves its actual socket address/port without the
+unnecessary reverse-DNS display-name lookup. With reverse DNS made unavailable,
+the new real-listener test fails before the fix and passes afterwards. Existing
+authentication, wildcard/TLS admission and rate-limit tests remain unchanged.
+
+The ephemeral macOS CI runner now records bounded before/after name-resolution
+probes and assigns its own hostname to loopback in its own hosts file. This
+meets the existing resolvable-hostname development prerequisite; it does not
+modify user hosts, bypass TLS or supply Node execution permission. Node resource
+probe failure still prevents resource readiness, independently of original
+result delivery. Full macOS15 requalification remains required; no deadline or
+failure assertion is relaxed.
