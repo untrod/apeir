@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 import { CacheMetrics, DeviceTopology, ResourceRow, WorkOutcome } from "../components/studio/StudioDashboard";
 
 import { usageFixture } from "./usage-fixture";
-import { cacheShare, parseWorkflowProgress } from "../lib/studioOverview";
+import { cacheShare, parseWorkflowProgress, widgetSourceUnavailable } from "../lib/studioOverview";
 
 const report = { node_id: "fixture-node", connected: true, trust_status: "TRUSTED", resource_report_current: true, resource_report_fresh: true, resources: { cpu_logical: 8, memory_available_bytes: 3 * 1073741824, memory_total_bytes: 8 * 1073741824 } };
 it("plots only a current trusted memory report and distinguishes CPU capacity from utilization", () => {
@@ -65,4 +65,13 @@ it("keeps older Workflow state readable but rejects inconsistent new progress co
   expect(parseWorkflowProgress({ runs: [{ ...run, step_counts: counts }] })[0].state).toBe("unknown");
   expect(() => parseWorkflowProgress({ runs: [{ ...run, step_counts: { ...counts, completed: 2 } }] })).toThrow(/counts/);
   expect(() => parseWorkflowProgress({ runs: [{ ...run, step_counts: { ...counts, total: Infinity } }] })).toThrow();
+});
+
+it("does not project a failed Controller's fallback empty list as zero nodes", () => {
+  const failed = { degraded: true, components: [{ component: "controller", status: "UNKNOWN" }] };
+  for (const widget of ["nodes", "resources", "topology"]) expect(widgetSourceUnavailable(widget, failed)).toBe(true);
+  expect(widgetSourceUnavailable("devices", failed)).toBe(false);
+  expect(widgetSourceUnavailable("nodes", { components: [] })).toBe(false);
+  expect(widgetSourceUnavailable("nodes", {})).toBe(true);
+  expect(widgetSourceUnavailable("evidence", { components: [{ component: "works", status: "UNKNOWN" }] })).toBe(true);
 });

@@ -891,3 +891,34 @@ test("Studio recovers a dashboard-only or empty saved workspace without deleting
   await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath("studio-recovered-empty-workspace-source.png"), fullPage: true });
 });
+
+test("Studio periodic reads do not overlap or continue while the document is hidden", async ({ page }, info) => {
+  const periodic = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/v1/tasks" && url.searchParams.get("limit") === "50";
+  }, { timeout: 7000 });
+  await open(page);
+  // Observe a completed periodic read, so holding a bootstrap request cannot
+  // accidentally prevent connected polling and make this assertion vacuous.
+  await (await periodic).finished();
+  let reads = 0, release!: () => void, settled!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const finished = new Promise<void>(resolve => { settled = resolve; });
+  await page.route("**/api/v1/tasks?**", async route => {
+    reads++;
+    if (reads !== 1) { await route.continue(); return; }
+    try { const original = await route.fetch(); await held; await route.fulfill({ response: original }); }
+    finally { settled(); }
+  });
+  try {
+    await expect.poll(() => reads, { timeout: 7000 }).toBe(1);
+    // One subsequent five-second refresh period: a slow read must stay singular.
+    await page.waitForTimeout(6000); expect(reads).toBe(1);
+    await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" }); document.dispatchEvent(new Event("visibilitychange")); });
+    release(); await finished;
+    await page.waitForTimeout(6000); expect(reads).toBe(1);
+    await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" }); document.dispatchEvent(new Event("visibilitychange")); });
+    await expect.poll(() => reads).toBe(2);
+    await writeFile(info.outputPath("overview-periodic-read-admission.json"), JSON.stringify({ scope: "Real Runtime HTTP with one held read and instrumented document visibility", held_read_repeated: false, hidden_periodic_task_reads: 0, fresh_read_on_visibility: true, backend_cancellation_claimed: false }, null, 2));
+  } finally { release(); if (reads) await finished; }
+});

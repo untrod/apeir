@@ -7,7 +7,7 @@ import { createStudioLayout } from "../../lib/studioLayout";
 import { useStudioSnapshot } from "./StudioData";
 import { refreshCostSummary, useCostSummary } from "../../store/hooks";
 import { eventClient } from "../../store/eventClient";
-import { cacheShare } from "../../lib/studioOverview";
+import { cacheShare, widgetSourceUnavailable } from "../../lib/studioOverview";
 import { usageNumber, usageTotal } from "../../lib/usageAccounting";
 import { availableContributions } from "../../lib/studioExtensions";
 import { StudioExtensionView } from "./StudioExtensionView";
@@ -119,6 +119,7 @@ function DataWidget({ type, active, inspect, open, locale, sort = "source" }: { 
   }
   if (loading && !data) return <Empty state="LOADING">{t("Loading records", "正在加载")}</Empty>;
   if (error || !data) return <Empty state="UNAVAILABLE">{error || t("No records reported", "暂无记录")}</Empty>;
+  if (widgetSourceUnavailable(type, data.health)) return <><Empty state="UNKNOWN">{t("Source unavailable", "数据源不可用")}</Empty><button onClick={() => open("diagnostics")}>{t("Diagnostics", "诊断")}</button></>;
   if (type === "topology") return <DeviceTopology nodes={Array.isArray(data.nodes) ? data.nodes : []} devices={Array.isArray(data.devices) ? data.devices : []} locale={locale} />;
   const collection = type === "resources" ? "nodes" : type === "diagnostics" ? "incidents" : type;
   const source = data[collection as keyof typeof data];

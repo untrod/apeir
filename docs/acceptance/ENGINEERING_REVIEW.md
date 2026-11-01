@@ -5771,3 +5771,14 @@ returned UNKNOWN/HTTP500 for Node facts. The harness now provisions only its
 owned temporary Controller identity; no Node, device, model or permission is
 installed by that fixture. The failed sample is retained and excluded from any
 performance comparison.
+
+The existing App read-refresh loop also admitted a new five-resource batch every
+five seconds while its previous batch was still pending, including in a hidden
+document. The unchanged old production bundle fails the new real-HTTP held-read
+case with two task reads instead of one. The candidate uses one in-flight read
+batch, pauses periodic reads when hidden and refreshes after visibility returns.
+The same strengthened browser case passes (23.5s), with no backend-cancellation
+claim. A failed Operations source now has an explicit UNKNOWN diagnostic entry
+rather than the generic empty-history message. Neither change grants execution
+permission or changes backend deadlines. The current Desktop suite passed495
+cases; the affected canonical Workflow/model/accounting regression passed155.

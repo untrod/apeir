@@ -21,3 +21,11 @@ export function parseWorkflowProgress(raw: unknown): WorkflowProgress[] {
     return { ...result, step_counts: Object.fromEntries(fields.map(key => [key, parsed[key]])) };
   });
 }
+
+/** An empty fallback from a failed source is not evidence of zero resources. */
+export function widgetSourceUnavailable(type: string, health: unknown): boolean {
+  const sources: Record<string, string[]> = { nodes: ["controller"], resources: ["controller"], devices: ["devices"], topology: ["controller", "devices"], works: ["works"], evidence: ["works"], diagnostics: ["works"] };
+  if (!sources[type]) return false;
+  if (!health || typeof health !== "object" || !("components" in health) || !Array.isArray(health.components)) return true;
+  return health.components.some(value => value && typeof value === "object" && "component" in value && sources[type].includes(String(value.component)));
+}
