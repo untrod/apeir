@@ -1,22 +1,44 @@
-# Example Gallery
+# Examples
 
-- [Verified Execution](hello_runtime/README.md) — real governed simulated firmware Work, independent observation, MATCH-only commit and no-replay recovery.
-- [Hello Provider](hello_provider/README.md) — public SDK, explicit read-only Governance, signed Node Work, CAS evidence, error mapping and removal.
-- [Hello Skill](hello_skill/README.md) — existing Registry discovery, instruction loading, CAS provenance and persistent disable; no authority or operation execution.
-- `hello_connector/` — workspace-scoped contract probe with an approval test double, not full Governance acceptance.
-- `hello_plugin/` — checksum-bound, permission-declared Plugin lifecycle.
-- [Hello Workflow](hello_workflow/README.md) — runnable registered pure-transform definition.
-- `sdk/python_quickstart.py` — governed Workflow execution through the Python Server Runtime client.
-- `sdk/typescript_quickstart.ts` — the same Workflow path through the TypeScript client.
+<!-- Compatibility anchors for existing documentation links. -->
+<a name="example-gallery"></a>
 
-Start with the [Source Quick Start](../docs/operations/getting-started/QUICK_START.md).
-Use dedicated workspaces and retain uncertain-effect evidence until reconciled;
-do not publish private keys or Runtime databases. The connector uses a contract
-test double, not full Governance acceptance; Plugin lifecycle is not isolated
-execution qualification. HTTP SDK examples need an authenticated existing
-Server Runtime. Legacy edge/capture scripts are compatibility examples, not
-recommended Developer Preview entry points. No example establishes physical
-hardware or production-release acceptance.
+
+Start from an existing supported task. These examples use the installed Runtime
+and public interfaces; they do not require reading Core internals. Use a
+dedicated workspace and the matching [Quick Start](../docs/operations/getting-started/QUICK_START.md).
+
+| Task | Prerequisite | Example / actual outcome |
+| --- | --- | --- |
+| Start Runtime and open Studio | Downloaded matching Runtime/Studio pair, Python3.10+ | [Quick Start](../docs/operations/getting-started/QUICK_START.md): authenticated service, real file/status views; no model needed |
+| Inspect execution and recovery | Installed public CLI, empty dedicated workspace | [Verified Execution](hello_runtime/README.md): original simulated Work, approval, receipt, independent observation and effect-count-one recovery |
+| Run a supported Workflow | Installed CLI and the checked-in definition | [Hello Workflow](hello_workflow/README.md): validate/register, completed pure transform, original Run and same-key recovery |
+| Add a Provider adapter | Matching beta SDK and this example copied outside the checkout | [Hello Provider](hello_provider/README.md): read-only signed loopback Work returning a greeting, refusal and removal checks; no cloud model call |
+| Add a declarative Widget | Running authenticated Runtime/Studio, independent lifecycle approval | [System Monitor](studio_system_monitor/README.md): review/install/enable, sanitized status, disable/revoke/remove; no arbitrary JavaScript |
+
+For an actual API or local model, use [Models and Providers](../docs/operations/guides/PROVIDER_GUIDE.md).
+It requires the real endpoint, credentials and authorized inference budget.
+A successful deterministic Provider example does not qualify that model.
+
+## More examples
+
+- [Hello Skill](hello_skill/README.md): catalog, instruction loading, CAS integrity
+  and disable; instruction loading does not execute its suggested tools.
+- [Connector](hello_connector/README.md): contract probe with an approval test
+  double, not complete Governance acceptance.
+- [Plugin](hello_plugin/README.md): checksum/permission-declared lifecycle, not
+  arbitrary-code isolation qualification.
+- [Python HTTP client](sdk/python_quickstart.py) and
+  [TypeScript HTTP client](sdk/typescript_quickstart.ts): require an existing
+  authenticated service, registered Workflow and current permission.
+
+Keep original Run/Work records after a lost response. Do not publish private Node
+keys, Runtime databases or credentials. Legacy edge/capture scripts remain
+compatibility examples, not recommended Preview entry points. No example alone
+establishes physical hardware, live-model or native-installation acceptance.
+
+<details>
+<summary>Scientific reference: prerequisites and retained parameters</summary>
 
 ## Scientific computation and reports
 
@@ -64,3 +86,5 @@ agreement validates this bounded computation; symbolic expressions are not a
 formal mathematical proof. Existing scientific/simulation/report tests remain
 the structural and integrity checks. Historical Windows evidence is retained;
 this source preview claims no new native report qualification.
+
+</details>

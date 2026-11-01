@@ -1,71 +1,40 @@
 # User Guide
 
+The task-oriented [Studio guide](guides/USER_GUIDE.md) is the current user manual.
+This page keeps existing links usable without maintaining a second set of setup
+commands.
+
 ## First checks
 
-```powershell
-nous doctor
-nous status
-nous models doctor
-```
-
-`nous doctor` reports the Runtime version, workspace, optional dependencies,
-provider availability, and foundation health. Warnings about optional packages
-or missing provider keys do not prevent the built-in demo from running.
+Use [Quick Start](getting-started/QUICK_START.md#first-inspection) for model-free
+inspection and actual Runtime connection status.
 
 ## Workspaces
 
-Initialize the current directory:
-
-```powershell
-nous init --path .
-```
-
-Runtime state is stored under `.nous/` and is excluded from Git. Back up the
-workspace before migrations or destructive maintenance.
+[Open and review project files](guides/USER_GUIDE.md#reviewing-workspace-changes).
+The selected workspace owns its state. Back up the whole workspace before
+migration; do not copy private credentials into a CI environment.
 
 ## Providers and models
 
-```powershell
-nous provider list
-nous provider add
-nous provider status
-nous provider doctor
-nous models list
-nous models doctor
-nous models configure
-```
-
-Use credential references or environment variables. Do not paste credentials
-into public logs, screenshots, configuration examples, or issue reports.
+[Configure a Provider](guides/PROVIDER_GUIDE.md). A saved profile or health probe
+is not inference qualification.
 
 ## Tasks and interaction
 
-```powershell
-nous demo
-nous chat
-nous task list
-nous trace
-```
-
-The task owner records lifecycle state, checkpoints, artifacts, events, and
-verification results. Clients display that state rather than maintaining a
-second task database.
+[Run a supported Workflow](guides/WORKFLOW_GUIDE.md) and inspect its original
+records. [Context and Usage](guides/CONTEXT_AND_USAGE.md) explains the selected
+input and accounting views.
 
 ## Local Control Plane
 
-```powershell
-nous server init --host 127.0.0.1 --port 9770
-nous server start
-```
-
-Keep the service bound to localhost for a single-device deployment. Remote
-access requires authentication, TLS termination, firewall rules, and an
-explicit threat review.
+For persistent Controller/Node services use the
+[Compute Mesh runbook](compute-mesh/OPERATIONS.md). The first-run Studio path
+uses the authenticated local Runtime API from Quick Start; remote deployment
+has additional identity, TLS, network and permission requirements.
 
 ## Troubleshooting
 
-1. Activate the intended virtual environment.
-2. Run `where.exe nous` and `python --version`.
-3. Run the three diagnostic commands at the top of this guide.
-4. Review the [troubleshooting guide](getting-started/TROUBLESHOOTING.md).
-5. Report reproducible non-security issues with redacted diagnostics.
+Use [Troubleshooting](getting-started/TROUBLESHOOTING.md) and
+[CLI reference](../development/CLI_REFERENCE.md). Report sanitized steps and
+version/source identity, not private Runtime databases or credentials.

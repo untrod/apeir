@@ -2,99 +2,53 @@
 
 ## Overview
 
-A Pack is the distribution unit for the Nous ecosystem. It bundles capabilities, providers, and configuration into a single installable artifact.
+The [Pack guide](../operations/guides/PACK_GUIDE.md) owns current local usage.
+[Pack Model](PACK_MODEL.md) retains the domain-package design reference; it is
+not a claim that every described package or future service is implemented.
 
 ## Quick Start
 
-```bash
-nous dev new pack my-pack
-cd my-pack
-nous dev validate
-nous pack install .
-```
+Start with [Hello Provider](../../examples/hello_provider/README.md) for an
+executable read-only SDK adapter, or [Hello Skill](../../examples/hello_skill/README.md)
+for instruction packaging. Both have explicit tested scope. Inspect the
+[existing hello manifest](../../packs/examples/hello_pack/pack.yaml) before using
+local Pack management.
 
 ## Pack Structure
 
-```
-my-pack/
-├── pack.yaml          # Required: manifest
-├── src/               # Python module
-│   ├── __init__.py    # register() called on install
-│   └── providers.py   # Provider implementations
-├── tests/             # Pack tests
-└── README.md          # Documentation
-```
+Use the current manifest parser and the package's actual entry points. A copied
+scaffold does not establish public SDK compatibility or execution isolation.
 
 ## Manifest (pack.yaml)
 
-```yaml
-name: my_pack
-version: 1.0.0
-description: What this pack does
-
-capabilities:
-  - my_pack.action_one
-  - my_pack.action_two
-
-providers:
-  - MyProvider
-
-dependencies:
-  runtime: ">=1.0"
-
-config:
-  setting_one: default_value
-```
+The authoritative field validation is in the existing
+[PackManifest](../../nous_runtime/pack/manifest.py). Versioned dependencies name
+other Packs; they are not blanket permission or a software-release certification.
 
 ## Writing a Provider
 
-```python
-from remote_terminal.nous_core.provider import Provider
-
-class MyProvider(Provider):
-    name = "my_provider"
-    version = "1.0.0"
-
-    def list_capabilities(self) -> list[str]:
-        return ["my_pack.action_one"]
-
-    def invoke(self, capability_id: str, **params) -> dict:
-        # Execute the capability
-        return {"ok": True, "result": "done"}
-
-    def health(self) -> dict:
-        return {"status": "ok"}
-```
+Follow [Provider Development](PROVIDER_DEVELOPMENT.md) and the public
+`nous_provider.runtime` contracts. The former `remote_terminal.nous_core`
+registration examples are not the recommended external SDK.
 
 ## Registration
 
-In `src/__init__.py`:
-
-```python
-def register(pack):
-    from remote_terminal.nous_core.provider import register_adapter
-    from .providers import MyProvider
-    register_adapter(MyProvider())
-    pack.registered_providers.append("MyProvider")
-```
+The host uses the existing Registry and admission owners. Installing a Pack
+cannot register its own permission authority or bypass execution checks.
 
 ## Testing
 
-```bash
-nous dev test
-```
+Exercise the actual supported host, success/refusal, integrity and removal.
+Retain original Work/results when a response is lost. Contract probes and package
+metadata are separate from model, native and physical qualification.
 
 ## Distribution
 
-```bash
-nous dev pack           # Create distributable archive
-nous pack install .     # Install from directory
-```
+Share exact reviewed source/version/digest. Remote Pack publishing is not a
+qualified service, and no future release date is promised by this guide.
 
 ## Rules
 
-1. Packs must not modify Runtime kernel code
-2. Packs must not access another Pack's internal state
-3. Pack names must be snake_case
-4. Capability IDs must be dot-separated: `pack_name.action`
-5. Dependencies are checked on install
+Preserve canonical Runtime owners, compatibility identifiers and manifest checks.
+Do not change Kernel, resolve secrets into package files, or treat installation
+as permission. [CONTRIBUTING](../../CONTRIBUTING.md) owns integration rules.

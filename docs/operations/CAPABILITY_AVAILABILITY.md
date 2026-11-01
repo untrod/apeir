@@ -1,89 +1,79 @@
-# Capability Availability — Provider-Dependent Feature Degradation
+# Capability availability
+
+<!-- Compatibility anchors for existing documentation links. -->
+<a name="capability-availability--provider-dependent-feature-degradation"></a>
+
+
+Inspect which implementations the current Runtime can find and which
+prerequisites are missing. Availability is a projection, not an authorization
+grant, executed command, model response or verified effect.
 
 ## Overview
 
-Not every capability is available at all times.  Availability depends on
-which providers are registered and whether they are healthy.  Nous
-Runtime shows you exactly what's available and what's not — with reasons.
+A capability names an operation. Its implementation may belong to the Kernel
+model path, an existing Runtime service, a sandboxed command or a remote Node.
+One Provider-health rule cannot establish readiness for all those scopes.
 
 ## How Availability Is Determined
 
-A capability is **available** when all three checks pass:
+The current [availability owner](../../nous_runtime/capability/availability.py)
+reads enabled catalog entries and their executor metadata:
 
-1. **Enabled** — the capability is not disabled in the database
-2. **Provider registered** — the capability's declared provider exists
-3. **Provider healthy** — the provider reports health status != "down"
+| Executor | Projection checks / limit |
+| --- | --- |
+| Provider | Registered Provider, health metadata and declared capability; actual inference still needs its model, credentials, Gateway/NKI and permission |
+| Runtime | A supported built-in central-dispatcher implementation; marked `requires_authorization` |
+| Subprocess | An immutable configured command and installed executable; marked `requires_authorization`, without proving qualified strict isolation |
+| Node | Requires a bound live execution host; this legacy availability view does not itself perform Node discovery or make a remote capability ready |
 
-If any check fails, the capability is **unavailable** with a specific
-reason.
+Inspect the returned scope, state and reason. Health or traversal-looking
+metadata is not proof that an operation actually ran. Use original execution
+records and receipts for that fact.
 
 ## Viewing Availability
 
 ```bash
-# CLI
-nous capability availability
-
-# Interactive shell
-/ capabilities
+apeir --no-intelligence capability list
+apeir --no-intelligence capability availability
 ```
 
-Example output:
-
-```
-Available (5):
-  model.reason              openai           low
-  file.read                 pc_agent         low
-  project.scan              nous_core        low
-  notification.send         nous_notify      low
-  rag.search                chromadb         low
-
-Unavailable (3):
-  image.analyze             requires vision provider
-  image.generate            requires image provider
-  speech.transcribe         requires audio provider
-```
+In the documented source installation these commands reported **16 available /
+53 unavailable** with models disabled. Those are environment-specific metadata
+counts, not16 granted tools or successful executions. They are not a promise
+about another workspace. Missing model Providers do not remove every built-in
+Runtime capability.
 
 ## Degradation Paths
 
 ### Scenario: DeepSeek-only user (text-only)
 
-If you only configure a DeepSeek provider:
-
-- **Available**: `model.reason`, `model.code` (text capabilities)
-- **Unavailable**: `model.transcribe` (requires whisper), `model.tts` (requires edge_tts), `image.*` (requires vision)
-
-The user sees exactly what they can use and why the rest is unavailable.
-No surprises, no "it should work but doesn't."
+A compatible endpoint may supply its actually supported text capabilities after
+configuration and qualification. The vendor name does not establish vision,
+audio, tool calling, authentication or model availability. Follow
+[Models and Providers](guides/PROVIDER_GUIDE.md).
 
 ### Scenario: No providers configured
 
-If no providers are registered at all:
-
-- All capabilities show as unavailable
-- Reason: "requires X provider"
-- The system doesn't crash or throw errors
+Model capabilities remain unconfigured/unavailable. Built-in service or installed
+command metadata may still appear; admission and strict execution checks remain
+independent. Source file inspection and supported pure Workflow examples can be
+used without a model account.
 
 ## Integration with Capability Resolver
 
-The availability check is separate from execution.  Even if a capability
-is marked "available", execution can still fail (provider crash, timeout,
-etc.).  Availability is a helpful overview, not a hard guarantee.
+Execution revalidates current permission, host prerequisites, original request
+and resource binding. It can be refused after discovery. A missing strict sandbox
+stays BLOCKED; there is no unrestricted host fallback.
 
 ## API (Python)
 
-```python
-from nous_runtime.capability.availability import check_availability
-
-result = check_availability()
-for cap in result["available"]:
-    print(f"Yes {cap['name']}")
-for cap in result["unavailable"]:
-    print(f"No {cap['name']} — {cap['reason']}")
-```
+Use the [public SDK/API reference](../development/API_REFERENCE.md) and
+[Provider contracts](../development/PROVIDER_DEVELOPMENT.md) for integrations.
+The internal availability helper is a projection implementation, not a new
+public permission or invocation API.
 
 ## Design Principles
 
-- **Honest** — never pretend a capability is available when it isn't
-- **Specific** — every unavailable capability has a clear reason
-- **Text-first** — users with only a text model can still use every text capability
-- **No hardcoding** — availability is derived from live provider state
+Show real state and a specific reason. Keep UNKNOWN distinct from success,
+installation distinct from execution, and a receipt distinct from independent
+observation. See [current boundaries](../../ROADMAP.md).

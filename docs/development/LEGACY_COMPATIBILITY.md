@@ -2,7 +2,10 @@
 
 ## Purpose
 
-`nous_runtime.compat` is the temporary compatibility boundary between APEIR Runtime 2.0 and the legacy core implementation.
+`nous_runtime.compat` isolates the historical Python implementation behind the
+current Distribution. The former “Runtime 2.0” migration label is not the current
+package release version. Existing namespaces remain compatibility identifiers;
+new external integrations use the public SDK.
 
 Runtime modules must import legacy functionality through this package instead of importing `remote_terminal.nous_core` directly.
 

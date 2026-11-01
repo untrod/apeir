@@ -1,36 +1,40 @@
-# Governance v1.0
+# Project governance
+
+<!-- Compatibility anchors for existing documentation links. -->
+<a name="governance-v10"></a>
+
+
+This page concerns project decisions. Runtime authorization is defined by the
+[security contract](../architecture/SECURITY_CONTRACT.md), not repository roles.
 
 ## Roles
 
-| Role | Responsibility |
-|------|----------------|
-| **Maintainer** | Merge PRs, cut releases, enforce architecture |
-| **Contributor** | Submit PRs, review others, report issues |
-| **Pack Author** | Create and maintain packs |
-| **User** | Install, use, report issues |
+Maintainers review integration/release decisions. Contributors propose changes,
+review code and report problems. Pack/Provider authors follow the same contribution
+process; publishing source does not make it trusted or authorized in a Runtime.
 
 ## Decision Making
 
-- **Kernel changes**: Require maintainer approval + architecture review
-- **Provider additions**: Any contributor can submit
-- **Pack additions**: Any pack author can publish
-- **Documentation**: Any contributor can improve
+[CONTRIBUTING](../../CONTRIBUTING.md) owns branch, review, test and merge rules.
+`main` is the only permanent development branch. Kernel is frozen unless its
+separate change is explicitly authorized; a documentation PR does not grant that
+authorization. SDK/schema compatibility changes require their existing review.
 
 ## Architecture Review
 
-Changes to these areas require architecture review:
-- `nous_core/` modules
-- Provider ABC interface
-- Capability contract
-- Pack manifest schema
-- Public API endpoints
+Read the canonical contracts before changing admission, authority, execution,
+evidence, state ownership or public interfaces. Reuse existing owners; do not
+create a second Registry or permission authority to integrate an extension.
 
 ## Release Authority
 
-- Maintainer approves and tags releases
-- Release follows RELEASE_PROCESS.md
-- Breaking changes require MAJOR version bump
+Follow the [Release Runbook](../acceptance/RELEASE_RUNBOOK.md) and
+[version policy](VERSIONING_POLICY.md). Signing/publication require explicit
+maintainer approval. A milestone tag or internal unsigned artifact is not a
+stable Release or an installed-platform qualification.
 
 ## Code of Conduct
 
-See CODE_OF_CONDUCT.md. One strike policy for malicious contributions.
+The root [Code of Conduct](../../CODE_OF_CONDUCT.md) is the community policy.
+[SECURITY](../../SECURITY.md) describes private vulnerability reporting.
+This page adds no separate enforcement rule or support SLA.

@@ -10,6 +10,9 @@
 
 All endpoints are served from the Nous Runtime HTTP server (default `http://localhost:8770`).
 Auth: Bearer token via `Authorization` header. Public: `/api/v1/health`, `/api/v1/version`.
+URL tokens are refused. A service token does not supply human approval or
+workspace permission; mutations retain the existing human/nonce and Governance
+boundaries. [Current integration entry](../docs/development/API_REFERENCE.md).
 
 ### 1.1 Core v1 (`/api/v1/`)
 
@@ -70,10 +73,16 @@ Auth: Bearer token via `Authorization` header. Public: `/api/v1/health`, `/api/v
 | GET | `/control/approvals` | — | `{ approvals }` |
 | GET | `/logs` | `?level=&limit=` | `{ lines, level, total }` |
 | GET | `/models` | — | `{ models: ModelView[], summary }` |
-| POST | `/models/action` | `{ action, model_id, provider_id?, api_key? }` | varies |
+| POST | `/models/action` | `{ action, model_id, catalog_path?, accept_license? }` | varies |
 | GET | `/workspace` | — | `WorkspaceEntry` |
 | GET | `/health/dashboard` | — | `HealthDashboard` |
 | GET | `/service/status` | — | `ServiceStatus` |
+
+The model action endpoint manages the existing catalog lifecycle (`enable`,
+`disable`, `remove`, `repair`, `verify`, `install`, `update`); it is not a Provider
+credential-entry API. Provider configuration uses credential references. Keep raw
+keys out of this payload; native local credential entry has its restricted
+system-store path.
 
 The qualified Automation actions are `trigger`, `run_due` (1–10 one-shot due
 proposals), `resume`, `reconcile`, `cancel`, `enable` and `disable`. Execution

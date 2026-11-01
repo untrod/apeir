@@ -1,120 +1,93 @@
-# APEIR Studio
+# APEIR
 
-A developer workspace for project files, governed workflows and execution
-evidence, powered by APEIR Runtime.
+<!-- Compatibility anchors for existing documentation links. -->
+<a name="apeir-studio"></a>
+<a name="contributing"></a>
+<a name="current-status"></a>
+<a name="developer-platform"></a>
+<a name="documentation"></a>
+<a name="overview"></a>
+<a name="quick-start"></a>
+<a name="sdk--extensions"></a>
+<a name="start-here"></a>
+<a name="what-you-can-do"></a>
 
+
+A workspace for project files, workflows and connected resources—with approvals
+and execution records you can inspect.
+
+[**Windows Preview**](https://github.com/untrod/apeir/actions/runs/41309010299/artifacts/13085683076) ·
 [**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
-[**Windows test build**](docs/operations/getting-started/QUICK_START.md#native-installation) ·
 [**Quick Start**](docs/operations/getting-started/QUICK_START.md) ·
-[**SDK & Extensions**](docs/development/DEVELOPER_PLATFORM.md#declarative-ui-extension-sdk) ·
 [**Documentation**](docs/README.md) · [简体中文](README.zh-CN.md)
 
-![APEIR Studio with Chat, project files and a split editor](docs/media/studio-workspace-source.png)
+![APEIR Studio showing project files, an editor and Chat](docs/media/studio-workspace-source.png)
 
-*Actual source-browser interface connected to a local, model-disabled Runtime.
-This is a Source Developer Preview, not a Windows installation screenshot.*
+*Actual Studio Source Preview connected to a model-disabled Runtime. This is a
+browser capture, not a Windows installation or live-model demonstration.*
 
-## Start here
+APEIR Studio puts project, conversation, Workflow, task and evidence panels in
+one configurable workspace. APEIR Runtime handles admitted operations and their
+history. Models and extensions supply capabilities; they do not approve their
+own actions.
 
-- **Try the workspace:** download matching Runtime and Studio bundles, then follow
-  [Quick Start](docs/operations/getting-started/QUICK_START.md). Python 3.10+ is
-  required; the built browser interface needs no Node.js or Rust.
-- **Develop APEIR:** use [Developer Setup](docs/operations/getting-started/QUICK_START.md#developer-setup)
-  for the editable checkout, UI development server and tests.
-- **Extend Studio:** start with the [System Monitor example](examples/studio_system_monitor/README.md)
-  or the [Provider example](examples/hello_provider/README.md).
+## What can I do?
 
-## Overview
+| Task | Start here |
+| --- | --- |
+| Read a project, review a multi-file Diff and apply an independently approved change | [Studio and project changes](docs/operations/guides/USER_GUIDE.md#reviewing-workspace-changes) |
+| Create a supported Workflow, inspect its original Run and recover its history | [Workflow guide](docs/operations/guides/WORKFLOW_GUIDE.md) |
+| Add a read-only Studio Widget through the public declarative interface | [System Monitor example](examples/studio_system_monitor/README.md) |
 
-APEIR Runtime is an open, local-first runtime for heterogeneous intelligence
-and real-world resources.
+You can also [configure compatible cloud and local models](docs/operations/guides/PROVIDER_GUIDE.md),
+inspect Nodes and Devices, and read recorded tool activity. Model calls require
+an available supported endpoint and authenticated Kernel. Test commands require
+their permission and qualified sandbox. Missing prerequisites stay visible.
 
-APEIR Studio is the desktop workspace over APEIR Runtime. Arrange project,
-conversation, task, resource and evidence panels while the existing Runtime owns
-execution, Governance owns authorization, and durable records support recovery.
-Models, Agents and UI extensions cannot authorize themselves.
+## Download and start
 
-## What you can do
+Use the [installation guide](docs/operations/getting-started/QUICK_START.md) to
+choose your path:
 
-- Browse projects, review file diffs and submit version-bound changes for approval.
-- Configure saved Provider references in Models and run an explicit inference test only when a registered model is available.
-- Follow recorded model/tool activity, inspect original requests and reconnect without resubmitting the task.
-- Arrange docked panels and read-only Dashboards; save, import and reuse layouts.
-- Inspect real Runtime/Kernel status, registered Nodes, Devices, Work and evidence.
-- Create Workflow graphs, validate/register canonical definitions and run the bound pure steps through Governance; inspect original Run history in Studio.
-- Install reviewed Skill instructions and data-only Studio UI extensions; use the public Provider SDK.
-- Run the offline [Verified Execution Demo](examples/hello_runtime/README.md),
-  including rejection, UNKNOWN, response-loss reconciliation and restart.
+- **Source Preview:** matching Runtime wheel and built browser Studio; Python
+  3.10+ required. No Node.js or Rust is needed for the downloaded frontend.
+- **Windows Development Build:** unsigned x64 Portable and NSIS packages inside
+  the linked GitHub Actions artifact. GitHub sign-in is required.
+- **Developer Setup:** clone the source for editable Runtime and Studio development.
 
-Cloud and local Providers can coexist; compatibility depends on their actual
-protocol and model capabilities. Current NKI responses are buffered, so recorded
-execution progress is available but token-by-token model output is not.
+[Download metadata](docs/operations/getting-started/QUICK_START.md#download-metadata)
+records versions, SHA-256, expiry and tested scope. These are temporary preview
+artifacts; no stable Release or one-line installer is available.
 
-Model calls require their configured Provider and authenticated Kernel. Commands
-require their existing permissions and qualified sandbox. Instruction installation
-is not tool authorization; execution success is not independent effect verification.
+## Developer Preview status
 
-## Quick Start
+Version **0.1.0-rc1** supports source installation and scoped software workflows.
+Unsigned Windows builds pass build/sidecar checks; Windows 10 installed lifecycle
+remains pending. Live model accounts, strict command isolation and physical
+operations have separate qualification requirements. [ROADMAP](ROADMAP.md) is
+the current status record. A file MATCH does not mean tests ran or a device effect
+was independently verified.
 
-Follow the [single installation and first-run guide](docs/operations/getting-started/QUICK_START.md).
-It separates downloadable **Source Preview**, **Developer Setup** and
-**Native Installation**. Source inspection and the simulated Demo need no API key
-or hardware. Downloadable source packages are not Windows installers.
+## Develop and extend
 
-**Windows x64 Preview:** [Portable + NSIS installer](https://github.com/untrod/apeir/actions/runs/41309010299#artifacts).
-Sign in to GitHub, download **windows-x64-native-development-build**, then verify
-its included checksums. The artifact expires on **2026-11-15**.
-See [version, hashes and tested scope](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)
-and [installation steps](docs/operations/getting-started/QUICK_START.md#native-installation).
-This unsigned development build has not completed Windows 10 installation,
-upgrade/uninstall or live-model qualification. It is not a stable Release.
+[Developer Platform](docs/development/DEVELOPER_PLATFORM.md) ·
+[Public Provider SDK](docs/development/PROVIDER_DEVELOPMENT.md) ·
+[UI Extension SDK](docs/development/STUDIO_UI_EXTENSIONS.md) ·
+[Examples](examples/README.md) · [API / CLI reference](docs/development/README.md)
 
-## Developer Platform
+The SDK is beta. Studio UI extensions currently use reviewed data-only manifests;
+arbitrary third-party JavaScript is not enabled. The separately maintained
+[Kernel](https://github.com/untrod/apeir-kernel) is pinned by the
+[component lock](runtime-components.lock.json).
 
-The [Studio guide](docs/development/DEVELOPER_PLATFORM.md#apeir-studio) covers
-panels, keyboard navigation, layout editing, model configuration and current limits.
-Use [Developer Setup](docs/operations/getting-started/QUICK_START.md#developer-setup)
-for source changes and browser debugging. Studio is part of this Distribution;
-the independently maintained [Kernel](https://github.com/untrod/apeir-kernel)
-is pinned by [component lock](runtime-components.lock.json).
+## Contribute
 
-## SDK & Extensions
-
-Start with the [public Developer Platform](docs/development/DEVELOPER_PLATFORM.md),
-[Provider example](examples/hello_provider/README.md) and
-[Skill example](examples/hello_skill/README.md).
-The [declarative UI SDK](docs/development/DEVELOPER_PLATFORM.md#declarative-ui-extension-sdk)
-adds reviewed panels and widgets without loading arbitrary JavaScript in the
-trusted window. Executable third-party Studio UI remains disabled until its
-isolation is qualified. Installing a package never grants execution permission.
-
-## Current Status
-
-Distribution `0.1.0-rc1` is a **Source Developer Preview**.
-Source installation and scoped software scenarios are qualified; the complete
-product remains PARTIAL. Real model accounts, strict execution isolation,
-Windows native installation, real IdP and physical Jetson/ESP32 writes have
-separate prerequisites. [ROADMAP](ROADMAP.md) is the single status source.
-
-UNKNOWN fails closed. Receipt is not Observation. An uncertain effect is
-reconciled instead of blindly executed again.
-
-## Documentation
-
-[Architecture contracts](docs/architecture/README.md) ·
-[Operations](docs/operations/README.md) ·
-[Compute Mesh](docs/operations/compute-mesh/OPERATIONS.md) ·
-[Engineering review](docs/acceptance/ENGINEERING_REVIEW.md) ·
-[Release Runbook](docs/acceptance/RELEASE_RUNBOOK.md)
-
-## Contributing
-
-Read [CONTRIBUTING](CONTRIBUTING.md) and [SECURITY](SECURITY.md).
-Use [Issues](https://github.com/untrod/apeir/issues) for sanitized reproductions;
-report vulnerabilities privately. `nous_runtime`, `nous`, `NOUS_*` and existing
-wire identifiers remain compatibility names.
+Start with [CONTRIBUTING](CONTRIBUTING.md). Report reproducible problems through
+[Issues](https://github.com/untrod/apeir/issues); use [SECURITY](SECURITY.md) for
+private vulnerability reports. Architecture and acceptance records are indexed
+under [Documentation](docs/README.md). Existing `nous` commands and identifiers
+remain compatibility names.
 
 ## License
 
-Apache-2.0: [LICENSE](LICENSE), [NOTICE](NOTICE),
-[third-party notices](THIRD_PARTY_NOTICES.md).
+[Apache-2.0](LICENSE) · [NOTICE](NOTICE) · [Third-party notices](THIRD_PARTY_NOTICES.md)
