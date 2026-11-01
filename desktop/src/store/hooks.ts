@@ -299,6 +299,9 @@ export function useCostSummary(isActive = visibleDocument, selectedDay = "today"
   if (state.configuration_version !== version || state.controller !== getConfig().url) {
     return { status: "loading", controller: getConfig().url, configuration_version: version, summary: null, error: null };
   }
+  if (selectedDay && selectedDay !== "today" && state.summary && state.summary.day !== selectedDay) {
+    return { ...state, status: "unavailable", summary: null, error: "The ledger response does not match the selected UTC date. Check Controller and system time." };
+  }
   return state;
 }
 

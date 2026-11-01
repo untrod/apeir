@@ -87,3 +87,13 @@ it("a retired Controller's historical reply cannot restore private accounting", 
   await act(async () => { finish({ ok: true, json: async () => ({ ok: true, data: usageFixture({ day: "2000-01-01", requests: 99 }) }) }); });
   expect(view.result.current.summary?.requests).toBe(2); view.unmount();
 });
+
+it("an explicit current-date alias cannot display a Controller's different UTC day", async () => {
+  vi.useFakeTimers(); setConfig({ url: "http://127.0.0.1:8770", token: "fake-history-clock" });
+  const selected = new Date().toISOString().slice(0, 10);
+  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, data: usageFixture({ day: "1999-01-01" }) }) })));
+  const view = renderHook(() => useCostSummary(() => true, selected));
+  await act(async () => { await Promise.resolve(); });
+  expect(view.result.current.status).toBe("unavailable"); expect(view.result.current.summary).toBeNull();
+  expect(view.result.current.error).toContain("UTC date"); view.unmount();
+});
