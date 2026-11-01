@@ -5934,3 +5934,22 @@ an older package with the same filenames. The current screenshots are unedited
 production-source browser captures from the matching Runtime integration run;
 they are not installed-Desktop photographs. New documentation does not change
 Runtime/Studio implementation, frozen Kernel or the approved component lock.
+
+### Windows selected-context HTTP deadline — 2026-11-01
+
+Source e167357 passed Core/Desktop/Security, but Multi-Arch41283182740 failed
+on Windows Python3.11 job124779103885 in
+`test_saved_reference_crosses_real_api_and_http_provider`: one failed,
+5716 passed,77 skipped,341 deselected,four warnings. The client timed out
+reading the original HTTP response at ten seconds. The retained fixture had
+received the model input by teardown; that does not establish which stage was
+active when the deadline expired. The original complete logs remain retained.
+
+The selected-context tests reuse the existing bounded content-free phase
+observer and dump code-only thread locations before timeout teardown. The
+original deadline and assertions remain intact. The existing Windows3.11
+diagnostic now exercises this file and six bounded cold-process repetitions;
+it does not qualify Core or establish a repair from a green retry. The local
+observer's static-verifier binding mistake was caught and corrected before
+publication, separately from the original Windows timeout. Root cause remains
+unestablished pending live-stage evidence; historical Issues remain open.

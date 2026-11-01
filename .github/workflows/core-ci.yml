@@ -212,6 +212,19 @@ jobs:
         env:
           APEIR_SKILL_HTTP_DIAGNOSTIC: '1'
         run: python -m pytest -q tests/governance/test_sqlite_connection_lifecycle.py tests/control_plane/test_remote_skill_center.py --tb=short --timeout=60 -rA
+      - name: Diagnose selected-context HTTP on the original Windows Python version
+        if: inputs.diagnostic == 'windows-skill-http'
+        env:
+          APEIR_CONTEXT_HTTP_DIAGNOSTIC: '1'
+        run: |
+          python -m pytest -q tests/context/test_selected_input_integration.py --tb=long --timeout=60 -rA
+          if ($LASTEXITCODE -ne 0) { throw 'Original selected-context HTTP regression failed.' }
+          # Bounded cold-process reproduction; original ten-second HTTP limit
+          # and all assertions remain intact. A green sample is not a fix.
+          for ($sample = 1; $sample -le 6; $sample++) {
+            python -m pytest -q tests/context/test_selected_input_integration.py::test_saved_reference_crosses_real_api_and_http_provider --tb=long --timeout=60 -rA
+            if ($LASTEXITCODE -ne 0) { throw "Original context HTTP failure at cold sample $sample." }
+          }
       - name: Exercise original Relay journals and actual Windows read conflicts
         if: inputs.diagnostic == 'windows-relay-recovery'
         timeout-minutes: 5
