@@ -5731,3 +5731,32 @@ revoked/serialized identity refusal. They use a simulated NKI protocol journal
 with the actual Runtime, Gateway and accounting. They are not real Kernel/model,
 paid-account or hardware acceptance. Cloud/local inference remains PENDING;
 strict Linux execution and Windows10 installation retain their separate gates.
+
+
+## Overview presentation and navigation — 2026-11-01
+
+| Area | Decision | Actual scope |
+| --- | --- | --- |
+| Docking, Layout library, themes | REUSE | Existing panel hosts and layout owner; no new window system. |
+| Usage and refresh | REUSE | CostController/EntityStore shared usage transport and StudioSnapshot visibility subscriptions. |
+| Presentation | EXTEND | Explicit nested Dashboardv2 settings; v1 IDs, coordinates and implicit geometry retained. |
+| Progress | EXTEND | Existing WorkflowStore summary adds validated-definition logical step counts; no task database or execution path. |
+| Panel navigation | FIX | Detail/quick navigation focuses an existing panel. Add panel still creates independent instances. |
+| GitHub | EXTEND | Product connection, authorization and activity consumer still missing. Repository Actions credentials are not reused as user GitHub authorization. |
+| Ollama lifecycle | EXTEND | Existing Provider endpoint configuration remains usable; install/download/load/unload controls are not implemented or qualified. No local service or live-model credentials are attached. |
+
+The browser counterexample found that the previous detail callback always created
+another Chat. A draft then appeared empty in the new instance. The same assertion
+now passes after binding navigation to the existing reveal path; no prompt is
+written into a layout and no backend request is submitted by navigation.
+
+Production-built Studio with actual model-disabled Runtime HTTP passed14 browser
+cases on Linux Chromium, including original Workflow progress, two cards sharing
+one read, v1-to-v2 identity/geometry preservation, keyboard collision refusal,
+restart-style page reload, retained conversation draft, Controller separation,
+original Workflow history, governed registration and declarative extension
+revocation. This is not live-model or native Windows acceptance.51 initial
+Dashboard/metrics/subscription tests and19 Workflow API cases passed; the Desktop
+suite passed494 cases before the final navigation callback correction, whose
+actual-browser counterexample was then rerun successfully. Current-head follow-up
+checks and paired performance measurements are recorded with their own scope.

@@ -39,3 +39,22 @@ it("never publishes a retired Controller response into the new scoped provider",
   await act(async () => { resolveA({ nodes: [{ node_id: "PRIVATE_A" }] }); });
   expect(view.container.textContent).not.toContain("PRIVATE_A");
 });
+
+it("shares Workflow history reads and stops them when all progress cards are hidden", async () => {
+  setConfig({ url: "http://localhost:8770", token: "dashboard.fake.progress" });
+  vi.mocked(api).mockImplementation(async path => path === "/api/v1/workflow" ? { runs: [{ run_id: "original", workflow_id: "review", state: "unknown" }] } : { nodes: [] });
+  let shared!: ReturnType<typeof useStudioSnapshot>;
+  function Reader() { shared = useStudioSnapshot(); return <p>{shared.workflow.data?.[0]?.state}</p>; }
+  vi.useFakeTimers();
+  const view = render(<StudioSnapshot><Reader /></StudioSnapshot>);
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  const reads = () => vi.mocked(api).mock.calls.filter(([path]) => path === "/api/v1/workflow").length;
+  expect(reads()).toBe(0);
+  let visible = true;
+  const stopA = shared.subscribeLive(() => visible, ["workflow"]), stopB = shared.subscribeLive(() => visible, ["workflow"]);
+  await act(async () => { await vi.advanceTimersByTimeAsync(30); });
+  expect(reads()).toBe(1); expect(view.container.textContent).toContain("unknown");
+  await act(async () => { await vi.advanceTimersByTimeAsync(5000); }); expect(reads()).toBe(2);
+  visible = false; await act(async () => { await vi.advanceTimersByTimeAsync(10000); }); expect(reads()).toBe(2);
+  stopA(); stopB(); view.unmount();
+});

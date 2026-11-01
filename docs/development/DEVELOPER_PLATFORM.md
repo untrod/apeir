@@ -88,6 +88,32 @@ current trusted report; logical CPU capacity is not CPU utilization. Topology
 uses exact reported Device-to-Node bindings. Missing data stays UNKNOWN, and
 unsupported GPU/network/sensor metrics stay UNSUPPORTED.
 
+#### Overview / 概览
+
+**Simple, Standard and Professional** change information density, not the saved
+panel arrangement. Widget settings add compact/comfortable density, theme-token
+accents, a small icon set, card/plain presentation and collection sorting.
+In layout editing, focus a widget title and use arrow keys to move it;
+Shift+arrows changes its size. Invalid bounds or collisions leave it unchanged.
+Version1 configurations stay version1 until a new presentation setting is chosen;
+version2 retains the original widget IDs and grid coordinates. Both formats use
+the same Layout library, import validation and size limits.
+
+| Widget | Source and scope |
+| --- | --- |
+| Model Usage / Cache tokens | Existing CostController, current UTC day. Nullable counters remain UNKNOWN; estimates remain estimates. Cached-input share is not money saved. |
+| Workflow Progress | Existing WorkflowStore, newest100 runs. Recorded completed/skipped steps are not an ETA, a test result or independent effect verification. Expand Run ID for the original identity. |
+| Quick Actions | Opens the existing Chat, Files, Models, Tasks or Workflow panel. Adding a separate instance remains available through Add panel. It never submits a task. |
+| Node resources / topology | Current trusted resource reports and exact Device-to-Node bindings. No inferred GPU load or network throughput. |
+
+快捷入口优先切回已打开的面板，保留未提交的对话草稿。关闭面板、停止等待
+和取消后端执行仍是不同操作。布局文件不保存提示词、API密钥或审批权限。
+
+GitHub authorization/activity and Ollama download/load/unload management are not
+implemented in Overview. Configure supported local endpoints in Models; service
+health is not inference qualification. The default path never installs a model,
+opens a port or silently switches to a cloud Provider.
+
 ### Watching a request
 
 | Data / 数据 | Current behavior |

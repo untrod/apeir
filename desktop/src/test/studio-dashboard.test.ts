@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Model } from "flexlayout-react";
-import { compactDashboard, defaultDashboard, validateDashboard } from "../lib/studioDashboard";
+import { compactDashboard, defaultDashboard, validateDashboard, upgradeDashboard, moveDashboardWidget } from "../lib/studioDashboard";
 import { captureStudioLayout, createStudioLayout, parseStudioLayout, studioModel } from "../lib/studioLayout";
 
 const layout = (config: unknown) => {
@@ -51,5 +51,43 @@ describe("Dashboard shares the bounded Studio presentation contract", () => {
   it("does not admit Dashboard configuration into an executable or unknown panel", () => {
     const source = JSON.stringify(layout(defaultDashboard()));
     expect(() => parseStudioLayout(source.replace('"component":"dashboard"', '"component":"editor"'))).toThrow(/does not accept/);
+  });
+});
+
+
+describe("Overview v2 presentation compatibility", () => {
+  it("upgrades explicitly, retaining every v1 widget identity, position and size", () => {
+    const legacy = defaultDashboard(), original = structuredClone(legacy);
+    const upgraded = upgradeDashboard(legacy, "professional");
+    expect(legacy).toEqual(original);
+    expect(upgraded.widgets).toEqual(legacy.widgets);
+    upgraded.widgets[0].presentation = { density: "compact", accent: "info", icon: "tasks", style: "plain" };
+    const source = layout(upgraded);
+    const saved = captureStudioLayout(Model.fromJson(studioModel(source)).toJson(), source);
+    expect(parseStudioLayout(JSON.stringify(saved))).toEqual(source);
+    expect(validateDashboard(legacy).schemaVersion).toBe(1);
+    expect(upgraded.schemaVersion).toBe(2);
+  });
+  it.each(["credential", "script", "endpoint", "permission", "source", "html", "__proto__"])("refuses sensitive or executable widget setting %s", key => {
+    const value = upgradeDashboard(defaultDashboard());
+    value.widgets[0].presentation = JSON.parse(`{"${key}":"untrusted"}`);
+    expect(() => validateDashboard(value)).toThrow(/sensitive/);
+  });
+  it.each([{ density: "tiny" }, { accent: "#bad" }, { icon: "<script>" }, { style: "javascript" }, { sort: "price" }])("refuses unsupported presentation values %j", presentation => {
+    const value = upgradeDashboard(defaultDashboard());
+    Object.assign(value.widgets[0], { presentation });
+    expect(() => validateDashboard(value)).toThrow();
+  });
+  it("rejects implicit v1 presentation, unknown modes, and accidental overlap from keyboard input", () => {
+    const legacy = defaultDashboard(); legacy.widgets[0].presentation = { density: "compact" };
+    expect(() => validateDashboard(legacy)).toThrow(/sensitive/);
+    delete legacy.widgets[0].presentation;
+    expect(() => validateDashboard({ ...upgradeDashboard(legacy), mode: "execute" })).toThrow(/mode/);
+    expect(() => moveDashboardWidget(legacy, "widget-1", "ArrowRight")).toThrow(/overlap/);
+    const value = validateDashboard({ schemaVersion: 2, mode: "simple", widgets: [legacy.widgets[0]] });
+    const moved = moveDashboardWidget(value, "widget-1", "ArrowRight");
+    const resized = moveDashboardWidget(moved, "widget-1", "ArrowDown", true);
+    expect(resized.widgets[0]).toMatchObject({ id: "widget-1", x: 1, w: 4, h: 7 });
+    expect(resized.schemaVersion).toBe(2); expect(value.widgets[0].x).toBe(0);
   });
 });

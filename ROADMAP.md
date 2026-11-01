@@ -30,7 +30,7 @@ authority or execution.
 
 | Component | Status | Implemented | Remaining / evidence |
 | --- | --- | --- | --- |
-| Studio | PARTIAL | Docking, eight presets, named layouts, Dashboard, themes, bilingual navigation and Controller isolation | Executable third-party UI and live media are not qualified. [Studio guide](docs/development/DEVELOPER_PLATFORM.md#apeir-studio). |
+| Studio | PARTIAL | Docking, eight presets, named layouts, v1/v2 Overview presentation, canonical progress/cache cards, themes, bilingual navigation and Controller isolation | GitHub connection and Ollama lifecycle management remain missing; executable third-party UI and live media are not qualified. [Studio guide](docs/development/DEVELOPER_PLATFORM.md#apeir-studio). |
 | Direct development | PARTIAL | Project reads, drafts, two-file Proposal review, independent approval, file readback and original history | Live-model Proposal qualification and tests in a qualified strict sandbox. File MATCH is not test PASS. |
 | Models | PARTIAL | Saved Provider lifecycle, credential references, qualified catalog IDs, explicit selection and cloud/local coexistence in software tests | Actual accounts/local services and endpoint capabilities need qualification. Frozen Worker has no Anthropic Messages backend. |
 | Chat activity | PARTIAL | Recorded model/tool events, governed search, approval/receipt references, history inspection and reconnect state | NKI returns complete responses; incremental model text is not available. Full Skill-use attribution is pending. |
