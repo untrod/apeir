@@ -5139,8 +5139,9 @@ The PR110 candidate's full native run `40547630660` passed from Runtime source
 full-mode Portable/NSIS, real Kernel/Worker/Runtime smoke and frozen pure Workflow
 recovery passed. Independent download verifies artifact `12758561232`, 22 hashes,
 13 manifest payloads, 11 nested Portable files and the actual NSIS payload.
-Exact hashes and the pending-integration scope are in the existing
-[native download guide](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#new-work-response-candidate--awaiting-integration).
+Exact hashes and the then-pending integration scope were recorded with the
+[original producer artifact](https://github.com/untrod/apeir/actions/runs/40547630660/artifacts/12758561232).
+This is historical build evidence, not the current download recommendation.
 The component lock and frozen Kernel are unchanged. This is not Windows10
 installed lifecycle or real-model qualification.
 

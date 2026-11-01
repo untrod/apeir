@@ -1,41 +1,37 @@
 # Write a Module
 
-Modules group business logic: Learning, Capture, Notification.
+Choose an existing public extension boundary before adding Core code. Most
+integrations do not need a Runtime module.
+
+| Goal | Supported starting point |
+| --- | --- |
+| Add a read-only panel or Widget | [UI Extension SDK](STUDIO_UI_EXTENSIONS.md) |
+| Supply a tool/model/device adapter | [Provider SDK](PROVIDER_DEVELOPMENT.md) and [Hello Provider](../../examples/hello_provider/README.md) |
+| Supply reviewable instructions | [Hello Skill](../../examples/hello_skill/README.md) |
+| Package reviewed domain data | [Pack development](PACK_DEVELOPMENT.md) |
 
 ## Module Manifest
 
-```json
-{
-  "module_id": "my_module",
-  "version": "1.0.0",
-  "capabilities": ["my_module.analyze"],
-  "permissions": ["read_data"],
-  "events": ["my_module.completed"]
-}
-```
+Use the versioned manifest for the chosen extension kind. Manifest permission
+requests do not become grants. There is no generic JSON file that authorizes a
+new module to access the host.
 
 ## Module Class
 
-```python
-class MyModule:
-    module_id = "my_module"
-
-    def on_init(self, kernel):
-        self.kernel = kernel
-
-    def on_event(self, event):
-        if event.type == "chat.message.received":
-            self.process(event.payload)
-```
+Core modules follow the existing owners in the
+[Runtime module map](RUNTIME_MODULE_MAP.md). They are implementation details,
+not an unrestricted third-party lifecycle API.
 
 ## Registration
 
-```python
-from nous_core.security import register_module_permissions
-register_module_permissions("my_module", ["read_data", "send_notification"])
-```
+New integrations use the existing host/Registry appropriate to their kind.
+Do not import the old `nous_core.security.register_module_permissions` sketch
+as a public authority API. Core changes require the normal architecture and
+PR process in [CONTRIBUTING](../../CONTRIBUTING.md); Kernel remains frozen.
 
 ## Isolation Rules
-- Module failure must not crash the kernel
-- Module cannot access another module's internal state
-- All external access must go through capabilities
+
+An imported Python module is not automatically sandboxed. Use the qualified
+execution environment for untrusted code, current resource permissions and the
+canonical execution path. Missing isolation stays BLOCKED; installing an
+extension does not supply it.

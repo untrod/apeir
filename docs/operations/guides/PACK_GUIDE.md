@@ -2,86 +2,62 @@
 
 ## What is a Pack?
 
-A Pack bundles capabilities, providers, and configuration into a single installable unit. Packs are how you extend the Runtime with new functionality.
+A local Pack groups reviewed domain data, Provider declarations and configuration.
+Package installation does not grant permissions or prove that its declared tools
+can execute. For a runnable new adapter, start with
+[Hello Provider](../../../examples/hello_provider/README.md).
 
-## Creating Your First Pack (5 minutes)
+<a name="creating-your-first-pack-5-minutes"></a>
+
+## Start from a reviewed example
+
+Inspect the existing [hello manifest](../../../packs/examples/hello_pack/pack.yaml)
+and [manifest parser](../../../nous_runtime/pack/manifest.py). Use the current
+local command help rather than old scaffold or publishing snippets:
 
 ```bash
-nous dev new pack hello
-cd hello
-nous dev validate
-nous pack install .
-nous capability run hello.hello
+apeir --no-intelligence pack list
+apeir pack --help
 ```
+
+Only install code whose source you reviewed. The ordinary local Python package
+path is not an isolated environment for arbitrary downloaded code.
 
 ## Pack Structure
 
-```
-hello/
-├── pack.yaml          # Manifest
-├── src/
-│   ├── __init__.py    # register() called on install
-│   └── providers.py   # Provider implementations
-├── tests/
-│   └── test_providers.py
-└── README.md
-```
+The actual package determines its files and entry points. A `pack.yaml` is parsed
+by the existing Pack owner; a directory named `src` or a `register()` function
+does not establish permission or successful loading.
 
 ## pack.yaml
 
-```yaml
-name: hello
-version: 1.0.0
-description: My first pack
-
-capabilities:
-  - hello.greet
-
-providers:
-  - GreetProvider
-
-dependencies:
-  runtime: ">=1.0"
-```
+The current parser requires `name`, `version` and `description`. It accepts
+Provider/capability declarations, configuration and dependencies on other Packs.
+Do not copy an old `runtime: ">=1.0"` dependency as the current Distribution
+version requirement; Pack dependency entries and software release versions are
+different contracts. Use the actual parser/example rather than a hypothetical
+manifest from an older guide.
 
 ## Writing a Provider
 
-```python
-from remote_terminal.nous_core.provider import Provider
-
-class GreetProvider(Provider):
-    name = "greeter"
-    version = "1.0.0"
-    provider_id = "greeter_hello"
-
-    def list_capabilities(self):
-        return ["hello.greet"]
-
-    def invoke(self, capability_id, **params):
-        name = params.get("name", "World")
-        return {"ok": True, "message": f"Hello, {name}!"}
-
-    def health(self):
-        return {"status": "ok"}
-```
+Use [the public Provider SDK](../../development/PROVIDER_DEVELOPMENT.md).
+New third-party code must not depend on `remote_terminal.nous_core` internals.
 
 ## Registration
 
-In `src/__init__.py`:
-```python
-def register(pack):
-    from remote_terminal.nous_core.provider import register_adapter
-    from .providers import GreetProvider
-    register_adapter(GreetProvider())
-    pack.registered_providers.append("GreetProvider")
-```
+Host registration and authorization stay with existing Runtime services. A Pack
+cannot approve its own Work or create authority through a manifest.
 
 ## Testing Your Pack
 
-```bash
-nous dev test
-```
+Test the declared implementation, admission refusal, failure and removal paths.
+An installed record or an available catalog entry alone is not execution evidence.
+The [read-only Provider example](../../../examples/hello_provider/README.md)
+demonstrates an actual governed result without pretending to be arbitrary-code
+sandbox qualification.
 
 ## Sharing Your Pack
 
-For v1.1.0, share the directory. Registry support planned for v1.2.0.
+Share reviewed source and the manifest with its exact version and digest.
+There is no qualified public Pack publishing service in this preview. Do not
+bundle credentials, private Runtime state or implied execution grants.

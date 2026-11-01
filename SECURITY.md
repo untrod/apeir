@@ -9,8 +9,14 @@
 
 ## Reporting a vulnerability
 
-Report suspected vulnerabilities privately through
-[GitHub Security Advisories](https://github.com/untrod/apeir/security/advisories/new).
+Use GitHub’s **Report a vulnerability** entry when private vulnerability reporting
+is enabled for this repository. Maintainers can also prepare a
+[private security advisory](https://github.com/untrod/apeir/security/advisories/new).
+
+If that private entry is unavailable, ask a maintainer to enable it or provide a
+private channel. A public Issue may contain only that contact request, without
+vulnerability details, affected private data or reproduction material. No
+separate security email or public support chat is promised by this policy.
 Do not open a public issue containing credentials, private data, exploit
 details, or instructions for bypassing approvals.
 

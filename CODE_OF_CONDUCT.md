@@ -12,4 +12,4 @@ We pledge to make participation in our community a harassment-free experience fo
 ## Enforcement
 Report issues to project maintainers. All reports will be reviewed and investigated.
 
-[Full text: https://www.contributor-covenant.org/version/2/1/code_of_conduct/]
+[Full text](https://www.contributor-covenant.org/version/2/1/code_of_conduct/)

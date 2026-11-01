@@ -1,69 +1,52 @@
-# APEIR Developer Ecosystem
+# Extensions and integration paths
+
+<!-- Compatibility anchors for existing documentation links. -->
+<a name="apeir-developer-ecosystem"></a>
+
+
+Choose the smallest existing interface that fits the task. The preview provides
+examples and beta contracts; it does not claim an established public marketplace
+or a stable universal SDK.
 
 ## Getting Started
 
-```bash
-# 1. Install from the checkout after following the source Quick Start
-python -m pip install -e .
+| Integration | Guide | Runnable example |
+| --- | --- | --- |
+| Provider adapter | [Provider SDK](PROVIDER_DEVELOPMENT.md) | [Hello Provider](../../examples/hello_provider/README.md) |
+| Instruction Skill | [Skills](DEVELOPER_PLATFORM.md#skills-and-tools) | [Hello Skill](../../examples/hello_skill/README.md) |
+| Declarative Studio UI | [UI Extension SDK](STUDIO_UI_EXTENSIONS.md) | [System Monitor](../../examples/studio_system_monitor/README.md) |
+| Supported Workflow | [Workflow guide](../operations/guides/WORKFLOW_GUIDE.md) | [Hello Workflow](../../examples/hello_workflow/README.md) |
 
-# 2. Verify
-nous version
-nous doctor
-
-# 3. Create your first pack
-nous dev new pack hello
-cd hello
-nous dev validate
-nous pack install .
-nous capability run hello.hello
-
-```
+Follow [Quick Start](../operations/getting-started/QUICK_START.md) for the matching
+Runtime/SDK. Keep package source, versions, digests and tested scope with the
+result. Avoid private Runtime imports in third-party adapters.
 
 ## Pack Registry (Concept)
 
-Remote pack publication/discovery is a future concept, not an exercised service.
-
-```
-nous pack search study        # Search for packs
-nous pack install study_pack  # Install by name
-nous pack publish             # Publish your pack
-```
-
-Use local directories for currently supported pack installation. Current milestone
-status is maintained only in [ROADMAP](../../ROADMAP.md); no production version
-or release timeline is implied by these command sketches.
+Public Pack search/publishing is not an exercised service. No `pack publish`
+command or future release date is promised here. Current local package handling
+is described in [Pack development](PACK_DEVELOPMENT.md).
 
 ## Pack Templates
 
-| Template | Command | Description |
-|----------|---------|-------------|
-| `pack` | `nous dev new pack` | Basic pack with one capability |
-| *(more in v1.1)* | | |
+Start with a reviewed existing package and the actual manifest parser. Legacy
+scaffold output is not proof that an entry point works with the public SDK or
+that execution is isolated.
 
 ## Development Workflow
 
-```
-1. nous dev new pack <name>     # Scaffold
-2. Edit src/providers.py        # Add logic
-3. nous dev validate            # Check manifest
-4. nous dev test                # Run tests
-5. nous pack install .          # Install locally
-6. nous capability run <id>     # Test capability
-7. git commit && git push       # Share
-```
+Copy a supported example → review its manifest → implement the narrow adapter
+or presentation → test success and refusal → inspect original evidence → submit
+a scoped PR. Installation, enablement, permission and execution are separate.
 
 ## Community
 
-- Architecture: `docs/architecture/`
-- Contracts: `docs/architecture/*_CONTRACT.md`
-- Developer guides: `docs/development/`
-- Example packs: `packs/examples/`
+Use [Issues](https://github.com/untrod/apeir/issues) for sanitized reproductions
+and proposals. Architecture, examples and contributor requirements are indexed
+in [Documentation](../README.md). No separate support chat or response SLA is
+claimed here.
 
 ## Contributing
 
-See `CONTRIBUTING.md` for:
-- Provider development
-- Capability registration
-- Pack creation
-- Documentation
-- Testing
+[CONTRIBUTING](../../CONTRIBUTING.md) owns setup, code style, checks and protected
+PR integration. [SECURITY](../../SECURITY.md) owns private vulnerability reporting.

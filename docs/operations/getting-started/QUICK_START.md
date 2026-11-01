@@ -12,6 +12,43 @@ Install APEIR, open Studio and run a first task.
 No API key or hardware is needed for model-free browsing and the simulated Demo.
 [ROADMAP](../../../ROADMAP.md) records current qualification and remaining work.
 
+## Download metadata
+
+Current tested product source: `5bdbadf2a072c222b016b1ccbe8b89ad5e0c25ff`.
+Distribution/Studio version: `0.1.0-rc1` (Python normalizes this to `0.1.0rc1`).
+Later documentation commits do not change the source identity of these files.
+
+| Path | Requirements / tested scope | Source and expiry |
+| --- | --- | --- |
+| Source Preview | Python 3.10+ and a browser. Independently installed and exercised on Linux x64; platform software CI is recorded separately. No native Desktop installation claim. | [Runtime wheel bundle](https://github.com/untrod/apeir/actions/runs/41308994710/artifacts/13084616985) + [built Studio](https://github.com/untrod/apeir/actions/runs/41308994710/artifacts/13084911108), both from run41308994710; expires2026-11-08 |
+| Windows Development Build | x64 target, WebView2 prerequisite; Python and Kernel sidecars included. Full build/real component Smoke passed on Windows Server2025. Windows10 GUI/install/upgrade/uninstall/Defender remain PENDING. | [Portable + NSIS bundle](https://github.com/untrod/apeir/actions/runs/41309010299/artifacts/13085683076), full-mode run41309010299; expires2026-11-15 |
+| Developer Setup | Python 3.10+, Git; Node.js22.19+ for Studio development. Rust/platform SDKs are only needed for native packaging. | [Source checkout](#developer-setup); use the Git revision as its identity |
+| Future Stable Release | Not available. Installation lifecycle, signing, supply-chain review and publication authorization are incomplete. | No stable download or one-line installer is offered |
+
+GitHub sign-in is required for Actions artifacts. Download matching files from
+one reviewed run; inspect the included source manifest and checksums. An expired
+artifact requires another qualified build, not a similarly named old EXE.
+
+| File inside the artifact | SHA-256 |
+| --- | --- |
+| `apeir_distribution-0.1.0rc1-py3-none-any.whl` | `f29024714ed6090ce2012bbe03380589ea1c31dadd9b8cc4920da5b1b7142c6b` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `8595f42722ef602874c340c130f45f3ceaad2d028737dd33d2e9c3fe4d5f331b` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `af7abc5c637772d008fde00b46c4b394334d50883bd1fb1a271c74273a0c57ce` |
+
+<details>
+<summary>Outer download ZIP hashes</summary>
+
+These hashes apply to the GitHub artifact ZIPs, before extracting them. They are
+not the hashes of the wheel or installer inside.
+
+| Download | SHA-256 |
+| --- | --- |
+| Runtime source artifact ZIP | `3c2dc49117e41b21cc03859c168abd6223ffbd4e6bd9e0cb638713fb647a59be` |
+| Studio frontend artifact ZIP | `a9c8e2b566c7768689d863eb9c7ed602c49cbe08ddd233d97773e58af85c59ae` |
+| Windows native artifact ZIP | `9337aa979c9958d1635ead02c415944de1be297958d1516644f5ad6ec53bfa55` |
+
+</details>
+
 ## Source Preview
 
 ### Download matching packages
@@ -303,7 +340,7 @@ Use the **unsigned Windows x64 test package** from the reviewed main build below
 Windows 10 GUI, installation, upgrade, uninstall, Defender and signing remain
 unqualified. A successful build or Sidecar Smoke does not complete those Gates.
 
-1. Sign in to GitHub and open the [reviewed Windows build](https://github.com/untrod/apeir/actions/runs/41309010299#artifacts).
+1. Sign in to GitHub and open the [reviewed Windows build](https://github.com/untrod/apeir/actions/runs/41309010299/artifacts/13085683076).
    Wait for **Build Windows x86_64** to succeed, then select the artifact
    **windows-x64-native-development-build**. Retention ends **2026-11-15**.
    The installer is inside the downloaded artifact ZIP.

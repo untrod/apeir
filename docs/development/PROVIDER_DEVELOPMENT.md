@@ -1,6 +1,8 @@
 # Provider Development Guide
 
-Install the public `nous-provider-sdk` package. Import Distribution contracts from
+Install the beta `nous-provider-sdk` from the matching checkout using
+[Quick Start](../operations/getting-started/QUICK_START.md#public-sdk-examples);
+this guide does not claim a published stable package. Import Distribution contracts from
 `nous_provider.runtime`, conformance from `nous_provider.conformance`, and legacy
 Kernel NPA interfaces from `nous_provider`. The SDK forwards to authoritative
 implementations; third-party packages do not import internal Runtime modules.
