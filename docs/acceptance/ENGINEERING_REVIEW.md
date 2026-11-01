@@ -5817,3 +5817,38 @@ live inference need their own environments. Reproduce using the maintained
 baseline/candidate/Runtime checkouts, the Python executable and a new output file.
 Current-source full production-browser acceptance passed15 cases, including the
 same previously failing non-overlap and in-flight/hidden-read assertions.
+
+
+## Dated Overview accounting and bounded build prerequisites — 2026-11-01
+
+Usage/Cache cards now select a UTC day through the existing CostController API;
+Usage cards select a bounded field list. Dashboardv1 remains readable, and v2
+imports reject invalid dates, future dates, unknown/duplicate fields and accounting
+settings on unrelated widgets. These are presentation settings, not permissions.
+
+The existing EntityStore owns transient date projections, with at most32 retained
+history entries. The existing shared transport deduplicates by date, admits at
+most eight visible dates, stops hidden reads and rejects mismatched-date or retired
+Controller replies. Usage-only updates no longer schedule an IndexedDB save of a
+projection that was already excluded from that cache. No accounting records,
+Provider fees or reservations are changed by these reads.
+
+Native run41258516903 stalled during Playwright's dependency installation,
+00:52:46→05:39:21 UTC, before any Windows build. The retained log shows APT
+fallback/Package index requests to the Azure Ubuntu mirror, followed by no
+progress until cancellation. This is separate from a test failure or component
+integrity result. The ephemeral Ubuntu CI runner now replaces that locator with
+the official Ubuntu HTTPS archive, retains package signature verification, bounds
+APT connection waits/retries and limits the dependency step to15 minutes. Tests,
+strict browser sandbox, native validation and Native Smoke remain mandatory.
+The cancelled run remains evidence; a later successful build would qualify its
+source, not prove a cause for unrelated historical Windows timing failures.
+
+Validation of this extension:500 Desktop cases, TypeScript/ESLint/build and16
+actual Runtime HTTP/production-browser cases passed. The added browser case
+selects the real dated ledger, shares a date between Usage and Cache, changes the
+visible fields/day and restores both after reload. Its ledger has no model
+receipts; it is not live Provider usage. Negative cases cover duplicate/unknown
+fields, impossible/future dates, wrong-day responses, the visible-date limit and
+retired Controller data. The existing repository workflow contracts and shell/
+embedded-Python syntax checks pass without changing this Cloud host's APT config.

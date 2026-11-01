@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { GridLayout, useContainerWidth, type Layout } from "react-grid-layout";
 import { noOverlapCompactor } from "react-grid-layout/core";
-import { compactDashboard, defaultDashboard, validateDashboard, WIDGET_TYPES, OVERVIEW_MODES, WIDGET_ACCENTS, WIDGET_ICONS, dashboardMode, upgradeDashboard, moveDashboardWidget, type WidgetPresentation, type DashboardWidget } from "../../lib/studioDashboard";
+import { compactDashboard, defaultDashboard, validateDashboard, WIDGET_TYPES, OVERVIEW_MODES, WIDGET_ACCENTS, WIDGET_ICONS, USAGE_FIELDS, dashboardMode, upgradeDashboard, moveDashboardWidget, type WidgetPresentation, type DashboardWidget } from "../../lib/studioDashboard";
 import { captureStudioLayout, parseStudioLayout, MAX_LAYOUT_BYTES, type StudioLayout } from "../../lib/studioLayout";
 import { createStudioLayout } from "../../lib/studioLayout";
 import { useStudioSnapshot } from "./StudioData";
@@ -41,12 +41,13 @@ export function WorkOutcome({ row, locale }: { row: Record<string, unknown>; loc
 function Empty({ children, state = "UNKNOWN" }: { children: React.ReactNode; state?: string }) {
   return <div className="studio-empty" role="status"><Status state={state} /><span>{children}</span></div>;
 }
-function UsageWidget({ active, locale }: { active: () => boolean; locale: Locale }) {
-  const value = useCostSummary(active), t = translate(locale);
+function UsageWidget({ active, locale, presentation = {} }: { active: () => boolean; locale: Locale; presentation?: WidgetPresentation }) {
+  const value = useCostSummary(active, presentation.day), t = translate(locale);
   if (value.status !== "ready" || !value.summary) return <Empty state={value.status === "loading" ? "LOADING" : "UNKNOWN"}>{value.error || t("Usage unavailable", "暂无用量数据")}</Empty>;
   const summary = value.summary, empty = summary.requests === 0 && summary.pending_requests === 0;
-  return <><div className="studio-metric-value">{empty ? "—" : usageTotal(summary)}</div><div className="studio-metric-caption">{empty ? t("No model requests yet", "尚无模型请求") : t("Accounted cost · USD", "已记账费用 · USD")}</div>
-    <dl className="studio-metric-pairs studio-usage-pairs"><div><dt>{t("Requests", "请求")}</dt><dd>{usageNumber(summary.requests)}</dd></div><div><dt>Token</dt><dd>{empty ? "UNKNOWN" : usageNumber(summary.total_tokens)}</dd></div><div><dt>{t("Pending", "待核算")}</dt><dd>{usageNumber(summary.pending_requests)}</dd></div><div><dt>{t("Unknown cost", "费用未知")}</dt><dd>{usageNumber(summary.unknown_cost_requests)}</dd></div></dl>
+  const shows = (field: typeof USAGE_FIELDS[number]) => !presentation.fields || presentation.fields.includes(field);
+  return <>{shows("cost") && <><div className="studio-metric-value">{empty ? "—" : usageTotal(summary)}</div><div className="studio-metric-caption">{empty ? t("No model requests yet", "尚无模型请求") : t("Accounted cost · USD", "已记账费用 · USD")}</div></>}
+    <dl className="studio-metric-pairs studio-usage-pairs">{shows("requests") && <div><dt>{t("Requests", "请求")}</dt><dd>{usageNumber(summary.requests)}</dd></div>}{shows("tokens") && <div><dt>Token</dt><dd>{empty ? "UNKNOWN" : usageNumber(summary.total_tokens)}</dd></div>}{shows("pending") && <div><dt>{t("Pending", "待核算")}</dt><dd>{usageNumber(summary.pending_requests)}</dd></div>}{shows("unknown_cost") && <div><dt>{t("Unknown cost", "费用未知")}</dt><dd>{usageNumber(summary.unknown_cost_requests)}</dd></div>}</dl>
     <details className="studio-card-details"><summary>{t("Usage details", "用量详情")}</summary><UsageAccounting summary={summary} /></details><small>{summary.day} UTC · CostController</small></>;
 }
 export function CacheMetrics({ summary, locale }: { summary: import("../../store/types").UsageAccountingSummary; locale: Locale }) {
@@ -55,8 +56,8 @@ export function CacheMetrics({ summary, locale }: { summary: import("../../store
     <dl className="studio-metric-pairs"><div><dt>{t("Cache read · tokens", "缓存读取 · Token")}</dt><dd>{usageNumber(summary.cached_input_tokens)}</dd></div><div><dt>{t("Cache write · tokens", "缓存写入 · Token")}</dt><dd>{usageNumber(summary.cache_creation_input_tokens)}</dd></div></dl>
     <small>{summary.day} UTC · CostController</small><details className="studio-card-details"><summary>{t("Measurement", "计量说明")}</summary>{t("Accounted tokens, including estimates. This ratio does not measure money saved.", "账务 Token 含估算值；缓存占比不是实际费用节省。")}</details></>;
 }
-function CacheWidget({ active, locale }: { active: () => boolean; locale: Locale }) {
-  const value = useCostSummary(active);
+function CacheWidget({ active, locale, presentation }: { active: () => boolean; locale: Locale; presentation?: WidgetPresentation }) {
+  const value = useCostSummary(active, presentation?.day);
   if (value.status !== "ready" || !value.summary) return <Empty state={value.status === "loading" ? "LOADING" : "UNKNOWN"}>{value.error || translate(locale)("Usage unavailable", "暂无用量数据")}</Empty>;
   return <CacheMetrics summary={value.summary} locale={locale} />;
 }
@@ -100,11 +101,11 @@ export function DeviceTopology({ nodes, devices, locale }: { nodes: Record<strin
   if (!nodes.length && !devices.length) return <Empty>{t("No nodes or devices", "暂无节点或设备")}</Empty>;
   return <div className="studio-topology" aria-label={t("Device topology", "设备拓扑")}>{nodes.slice(0, 40).map((node, i) => <div key={String(node.node_id ?? i)}><div className="studio-row-heading"><strong>▣ {text(node.node_name || node.node_id)}</strong><Status state={node.connected === true ? "CONNECTED" : node.connected === false ? "OFFLINE" : "UNKNOWN"} /></div><small>{t("Trust", "信任")}: {text(node.trust_status)}</small><ul>{devices.filter(device => typeof node.node_id === "string" && node.node_id && device.node_id === node.node_id).slice(0, 40).map(item)}</ul></div>)}{unbound.length > 0 && <div><small>{t("Node binding", "节点绑定")}: UNKNOWN</small><ul>{unbound.slice(0, 40).map(item)}</ul></div>}</div>;
 }
-function DataWidget({ type, active, inspect, open, locale, sort = "source" }: { sort?: WidgetPresentation["sort"]; type: string; active: () => boolean; inspect: PanelProps["inspect"]; open: PanelProps["open"]; locale: Locale }) {
+function DataWidget({ type, active, inspect, open, locale, presentation, sort = "source" }: { presentation?: WidgetPresentation; sort?: WidgetPresentation["sort"]; type: string; active: () => boolean; inspect: PanelProps["inspect"]; open: PanelProps["open"]; locale: Locale }) {
   const { data, loading, error, health } = useStudioSnapshot(), t = translate(locale);
   if (type.startsWith("ui:")) return <StudioExtensionView type={type} isVisible={active} locale={locale} />;
-  if (type === "usage") return <UsageWidget active={active} locale={locale} />;
-  if (type === "cache") return <CacheWidget active={active} locale={locale} />;
+  if (type === "usage") return <UsageWidget active={active} locale={locale} presentation={presentation} />;
+  if (type === "cache") return <CacheWidget active={active} locale={locale} presentation={presentation} />;
   if (type === "progress") return <ProgressWidget locale={locale} open={open} />;
   if (type === "quick-actions") return <QuickActions locale={locale} open={open} />;
   if (type === "events") return <EventWidget active={active} locale={locale} />;
@@ -140,7 +141,7 @@ function Widget({ widget, isVisible, inspect, open, locale }: { widget: Dashboar
     if (["usage", "cache", "quick-actions", "events", "gpu", "network", "sensors"].includes(widget.type)) return;
     return subscribeLive(active, [widget.type === "progress" ? "workflow" : widget.type.startsWith("ui:") ? "extensions" : widget.type === "kernel" || widget.type === "runtime" ? "health" : "operations"]);
   }, [active, subscribeLive, widget.type]);
-  return widget.paused ? <Empty state="PAUSED">{translate(locale)("Updates paused", "已暂停刷新")}</Empty> : <DataWidget type={widget.type} sort={widget.presentation?.sort} active={active} inspect={inspect} open={open} locale={locale} />;
+  return widget.paused ? <Empty state="PAUSED">{translate(locale)("Updates paused", "已暂停刷新")}</Empty> : <DataWidget type={widget.type} presentation={widget.presentation} sort={widget.presentation?.sort} active={active} inspect={inspect} open={open} locale={locale} />;
 }
 function download(value: StudioLayout) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }));
@@ -186,7 +187,7 @@ export function StudioDashboard({ config, updateConfig, isVisible, locale, inspe
     if (!settings) return;
     try { updateConfig(validateDashboard({ ...upgradeDashboard(dashboard), widgets: dashboard.widgets.map(widget => widget.id === selected ? { ...widget, presentation: { ...widget.presentation, ...fields } } : widget) })); setMessage(""); } catch (error) { setMessage(String(error)); }
   };
-  const presentationFields: Array<[keyof WidgetPresentation, readonly string[], string, string]> = [
+  const presentationFields: Array<[Exclude<keyof WidgetPresentation, "day" | "fields">, readonly string[], string, string]> = [
     ["density", ["compact", "comfortable"], "Density", "密度"], ["accent", WIDGET_ACCENTS, "Accent", "强调色"],
     ["icon", WIDGET_ICONS, "Icon", "图标"], ["style", ["card", "plain"], "Style", "样式"],
   ];
@@ -214,7 +215,10 @@ export function StudioDashboard({ config, updateConfig, isVisible, locale, inspe
         updateConfig(validateDashboard(panels[0].config)); setSelected(null); setMessage("Dashboard imported. No Runtime operation was executed.");
       } catch (error) { setMessage(String(error)); }
     }} />
-    {editing && settings && <form className="studio-widget-settings" aria-label="Widget settings" onSubmit={event => event.preventDefault()}><strong>{t("Widget settings", "组件设置")} · {settings.type}</strong><label>{t("Title", "标题")}<input aria-label="Widget title" maxLength={64} value={settings.title} onChange={event => update({ title: event.target.value })} /></label>{(["x", "y", "w", "h"] as const).map(key => <label key={key}>{key}<input aria-label={`Widget ${key}`} type="number" value={settings[key]} onChange={event => update({ [key]: Number(event.target.value) })} /></label>)}{presentationFields.map(([key, choices, en, zh]) => <label key={key}>{t(en, zh)}<select aria-label={`Widget ${key}`} value={settings.presentation?.[key] || ""} onChange={event => appearance({ [key]: event.target.value })}><option value="" disabled>{t("Default", "默认")}</option>{choices.map(choice => <option key={choice} value={choice}>{choice}</option>)}</select></label>)}<label><input type="checkbox" checked={settings.paused} onChange={event => update({ paused: event.target.checked })} />{t("Pause display", "暂停显示")}</label><button onClick={() => setSelected(null)}>{t("Close settings", "关闭设置")}</button></form>}
+    {editing && settings && <form className="studio-widget-settings" aria-label="Widget settings" onSubmit={event => event.preventDefault()}><strong>{t("Widget settings", "组件设置")} · {settings.type}</strong><label>{t("Title", "标题")}<input aria-label="Widget title" maxLength={64} value={settings.title} onChange={event => update({ title: event.target.value })} /></label>{(["x", "y", "w", "h"] as const).map(key => <label key={key}>{key}<input aria-label={`Widget ${key}`} type="number" value={settings[key]} onChange={event => update({ [key]: Number(event.target.value) })} /></label>)}{presentationFields.map(([key, choices, en, zh]) => <label key={key}>{t(en, zh)}<select aria-label={`Widget ${key}`} value={settings.presentation?.[key] || ""} onChange={event => appearance({ [key]: event.target.value })}><option value="" disabled>{t("Default", "默认")}</option>{choices.map(choice => <option key={choice} value={choice}>{choice}</option>)}</select></label>)}{["usage", "cache"].includes(settings.type) && <><label>{t("UTC date", "UTC 日期")}<input type="date" aria-label="Usage UTC date" min="1970-01-01" max={new Date().toISOString().slice(0, 10)} value={settings.presentation?.day && settings.presentation.day !== "today" ? settings.presentation.day : ""} onChange={event => appearance({ day: event.target.value || "today" })} /></label><button onClick={() => appearance({ day: "today" })}>{t("Today", "今天")}</button></>}{settings.type === "usage" && <fieldset className="studio-usage-fields"><legend>{t("Card fields", "卡片字段")}</legend>{USAGE_FIELDS.map((field, index) => <label key={field}><input type="checkbox" aria-label={`Usage field ${field}`} checked={!settings.presentation?.fields || settings.presentation.fields.includes(field)} onChange={event => {
+      const fields = settings.presentation?.fields || [...USAGE_FIELDS];
+      appearance({ fields: event.target.checked ? [...fields, field] : fields.filter(value => value !== field) });
+    }} />{t(["Cost", "Requests", "Tokens", "Pending", "Unknown cost"][index], ["费用", "请求", "Token", "待核算", "费用未知"][index])}</label>)}</fieldset>}<label><input type="checkbox" checked={settings.paused} onChange={event => update({ paused: event.target.checked })} />{t("Pause display", "暂停显示")}</label><button onClick={() => setSelected(null)}>{t("Close settings", "关闭设置")}</button></form>}
     <div className="studio-dashboard-grid" ref={containerRef as React.RefObject<HTMLDivElement>}>{mounted && <GridLayout width={gridWidth} gridConfig={{ cols: 12, rowHeight: 40, margin: [8, 8], maxRows: 200 }} compactor={noOverlapCompactor} resizeConfig={{ enabled: editing }} dragConfig={{ enabled: editing, handle: ".studio-widget-grip", allowMobileScroll: true }} layout={dashboard.widgets.map(widget => ({ i: widget.id, x: widget.x, y: widget.y, w: widget.w, h: widget.h, minW: 2, minH: 2, maxH: 30 }))} onLayoutChange={positions}>
       {dashboard.widgets.map(widget => <div key={widget.id} className={`studio-widget widget-density-${widget.presentation?.density || "inherit"} widget-accent-${widget.presentation?.accent || "neutral"} widget-style-${widget.presentation?.style || "card"} ${selected === widget.id && editing ? "studio-widget-selected" : ""}`} data-widget-id={widget.id}><header>{widget.presentation?.icon && widget.presentation.icon !== "default" && <StudioIcon name={widget.presentation.icon} />}{editing ? <><button className="studio-widget-grip" aria-label={`${t("Move", "移动")} ${title(widget)}`} title={t("Drag or use arrow keys to move; Shift + arrows to resize", "拖动或方向键移动；Shift + 方向键调整大小")} onKeyDown={event => {
         if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;

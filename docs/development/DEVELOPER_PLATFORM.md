@@ -101,10 +101,21 @@ the same Layout library, import validation and size limits.
 
 | Widget | Source and scope |
 | --- | --- |
-| Model Usage / Cache tokens | Existing CostController, current UTC day. Nullable counters remain UNKNOWN; estimates remain estimates. Cached-input share is not money saved. |
+| Model Usage / Cache tokens | Existing CostController, selected UTC day (today by default). Nullable counters remain UNKNOWN; estimates remain estimates. Cached-input share is not money saved. |
 | Workflow Progress | Existing WorkflowStore, newest100 runs. Recorded completed/skipped steps are not an ETA, a test result or independent effect verification. Expand Run ID for the original identity. |
 | Quick Actions | Opens the existing Chat, Files, Models, Tasks or Workflow panel. Adding a separate instance remains available through Add panel. It never submits a task. |
 | Node resources / topology | Current trusted resource reports and exact Device-to-Node bindings. No inferred GPU load or network throughput. |
+
+In **Widget settings**, Usage and Cache cards accept a UTC date; **Today** restores
+the live daily view. Usage cards also let you choose the displayed fields. This
+is a daily ledger view, not a sum across a date range. Up to eight visible dates
+share one request each per refresh; additional dates show the limit until another
+is paused. Changing Controller retires the original reads and cached projections.
+Historical receipts stay historical; the budget policy shown in details is the
+currently configured policy, not a reconstructed historical policy.
+
+日期和字段只控制展示，不授予数据访问或模型执行权限。布局保存这些选择，
+不保存账务内容；未知用量和未知费用仍显示 UNKNOWN。
 
 快捷入口优先切回已打开的面板，保留未提交的对话草稿。关闭面板、停止等待
 和取消后端执行仍是不同操作。布局文件不保存提示词、API密钥或审批权限。

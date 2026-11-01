@@ -91,3 +91,22 @@ describe("Overview v2 presentation compatibility", () => {
     expect(resized.schemaVersion).toBe(2); expect(value.widgets[0].x).toBe(0);
   });
 });
+
+it("retains bounded accounting presentation through layout capture without granting data access", () => {
+  const value = upgradeDashboard(compactDashboard(["usage", "cache"]));
+  value.widgets[0].presentation = { day: "2000-02-29", fields: ["tokens", "unknown_cost"] };
+  const parsed = validateDashboard(value);
+  expect(parseStudioLayout(JSON.stringify(layout(parsed)))).toEqual(layout(parsed));
+  parsed.widgets[0].presentation!.fields!.push("requests");
+  expect(value.widgets[0].presentation!.fields).toEqual(["tokens", "unknown_cost"]);
+  for (const fields of [[], ["tokens", "tokens"], ["credential"], "cost"]) {
+    const invalid = structuredClone(value); Object.assign(invalid.widgets[0].presentation!, { fields });
+    expect(() => validateDashboard(invalid)).toThrow(/fields/);
+  }
+  for (const day of ["2001-02-29", "2000-13-01", "https://example.invalid", "9999-01-01", "1969-01-01"]) {
+    const invalid = structuredClone(value); invalid.widgets[0].presentation!.day = day;
+    expect(() => validateDashboard(invalid)).toThrow(/UTC/);
+  }
+  value.widgets[0].type = "nodes";
+  expect(() => validateDashboard(value)).toThrow(/UTC/);
+});

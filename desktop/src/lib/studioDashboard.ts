@@ -4,7 +4,10 @@ export type WidgetType = typeof WIDGET_TYPES[number];
 export const OVERVIEW_MODES = ["simple", "standard", "professional"] as const;
 export const WIDGET_ACCENTS = ["neutral", "accent", "info"] as const;
 export const WIDGET_ICONS = ["default", "dashboard", "model", "node", "tasks", "history", "evidence"] as const;
+export const USAGE_FIELDS = ["cost", "requests", "tokens", "pending", "unknown_cost"] as const;
 export type WidgetPresentation = {
+  day?: string;
+  fields?: typeof USAGE_FIELDS[number][];
   density?: "compact" | "comfortable";
   accent?: typeof WIDGET_ACCENTS[number];
   icon?: typeof WIDGET_ICONS[number];
@@ -43,11 +46,15 @@ export function validateDashboard(input: unknown): DashboardConfig {
     if (x + w > 12 || y + h > 200) throw new Error("Widget exceeds grid bounds.");
     let presentation: WidgetPresentation | undefined;
     if (item.presentation !== undefined) {
-      const source = object(item.presentation); exact(source, ["density", "accent", "icon", "style", "sort"]);
+      const source = object(item.presentation); exact(source, ["density", "accent", "icon", "style", "sort", "day", "fields"]);
       const choices = { density: ["compact", "comfortable"], accent: WIDGET_ACCENTS, icon: WIDGET_ICONS, style: ["card", "plain"], sort: ["source", "name", "state"] };
       for (const [key, values] of Object.entries(choices)) if (source[key] !== undefined && !(values as readonly unknown[]).includes(source[key])) throw new Error("Invalid widget presentation value.");
+      if (source.day !== undefined) {
+        if (!["usage", "cache"].includes(item.type) || typeof source.day !== "string" || source.day !== "today" && (!/^\d{4}-\d{2}-\d{2}$/.test(source.day) || !Number.isFinite(Date.parse(source.day + "T00:00:00Z")) || new Date(source.day + "T00:00:00Z").toISOString().slice(0, 10) !== source.day || source.day < "1970-01-01" || source.day > new Date().toISOString().slice(0, 10))) throw new Error("Select a valid UTC usage date up to today.");
+      }
+      if (source.fields !== undefined && (item.type !== "usage" || !Array.isArray(source.fields) || !source.fields.length || source.fields.length > USAGE_FIELDS.length || new Set(source.fields).size !== source.fields.length || !source.fields.every(field => USAGE_FIELDS.includes(field as typeof USAGE_FIELDS[number])))) throw new Error("Select supported usage fields.");
       if (source.sort !== undefined && !["nodes", "devices", "resources", "works", "evidence", "activity", "diagnostics"].includes(item.type)) throw new Error("Widget source does not support sorting.");
-      presentation = { ...source } as WidgetPresentation;
+      presentation = { ...source, ...(Array.isArray(source.fields) ? { fields: [...source.fields] } : {}) } as WidgetPresentation;
     }
     return { id: item.id, type: item.type, title: item.title, x, y, w, h, paused: item.paused, ...(presentation ? { presentation } : {}) };
   });

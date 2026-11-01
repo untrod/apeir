@@ -84,3 +84,6 @@
 .studio-quick-actions button { display:inline-flex; align-items:center; gap:6px; min-height:30px; }
 .studio-dashboard select:focus-visible { outline:2px solid var(--nous-border-focus); outline-offset:1px; }
 .studio-widget > header > .studio-icon { flex:none; color:var(--nous-text-secondary); }
+
+.studio-usage-fields { display:flex; flex-wrap:wrap; gap:6px 10px; margin:0; border:1px solid var(--nous-border); padding:4px 8px; }
+.studio-usage-fields legend { padding:0 4px; font-size:11px; color:var(--nous-text-secondary); }

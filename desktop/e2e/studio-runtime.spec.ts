@@ -922,3 +922,30 @@ test("Studio periodic reads do not overlap or continue while the document is hid
     await writeFile(info.outputPath("overview-periodic-read-admission.json"), JSON.stringify({ scope: "Real Runtime HTTP with one held read and instrumented document visibility", held_read_repeated: false, hidden_periodic_task_reads: 0, fresh_read_on_visibility: true, backend_cancellation_claimed: false }, null, 2));
   } finally { release(); if (reads) await finished; }
 });
+
+test("Overview history and selected fields use the actual dated ledger and survive reload", async ({ page }, info) => {
+  await open(page); const days: string[] = [];
+  page.on("request", request => { const url = new URL(request.url()); if (url.pathname === "/api/v1/usage" && url.searchParams.has("day")) days.push(url.searchParams.get("day")!); });
+  const widgets = ["usage", "cache"].map((type, i) => ({ id: `history-${i}`, type, title: "", x: i * 6, y: 0, w: 6, h: 6, paused: false, presentation: { day: "2000-01-01", ...(type === "usage" ? { fields: ["tokens", "requests"] } : {}) } }));
+  const layout = { schemaVersion: 1, kind: "dashboard", name: "Dated overview", locale: "en", layout: { type: "row", id: "r", children: [{ type: "tabset", id: "g", children: [{ type: "tab", id: "history", component: "dashboard", config: { schemaVersion: 2, mode: "standard", widgets } }] }] } };
+  await page.getByLabel("Import Studio layout", { exact: true }).setInputFiles({ name: "dated.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(layout)) });
+  await expect(page.getByText("2000-01-01 UTC · CostController", { exact: true })).toHaveCount(2);
+  expect(days).toEqual(["2000-01-01"]);
+  const usage = page.locator('[data-widget-id="history-0"]');
+  expect(await usage.locator(".studio-usage-pairs dt").allTextContents()).toEqual(["Requests", "Token"]);
+  await page.getByRole("button", { name: "Edit layout", exact: true }).click();
+  await page.getByRole("button", { name: "Settings Model Usage", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Usage field pending", exact: true }).check();
+  await page.getByLabel("Usage UTC date", { exact: true }).fill("2000-01-02");
+  await expect(usage.getByText("2000-01-02 UTC · CostController", { exact: true })).toBeVisible();
+  expect(await usage.locator(".studio-usage-pairs dt").allTextContents()).toEqual(["Requests", "Token", "Pending"]);
+  await page.getByRole("button", { name: "Close settings", exact: true }).click();
+  await dashboardMenu(page); await page.getByRole("button", { name: "Save dashboard", exact: true }).click();
+  const saved = await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"));
+  expect(saved).toContain('"day":"2000-01-02"'); expect(saved).toContain('"fields":["tokens","requests","pending"]'); expect(saved).not.toContain(token);
+  await page.reload();
+  await expect(page.locator('[data-widget-id="history-0"]').getByText("2000-01-02 UTC · CostController", { exact: true })).toBeVisible();
+  await expect(page.locator('[data-widget-id="history-1"]').getByText("2000-01-01 UTC · CostController", { exact: true })).toBeVisible();
+  await writeFile(info.outputPath("overview-history-source.json"), JSON.stringify({ scope: "Actual dated CostController API with no model receipts; not live Provider usage", dates: days, fields_saved: true, reload_restored: true, model_calls: 0, source: "existing /api/v1/usage" }, null, 2));
+  await page.screenshot({ path: info.outputPath("overview-history-source.png"), fullPage: true });
+});

@@ -21,7 +21,7 @@ import type {
   EntityStoreState,
   Conversation, Session, Message,
   Task, Plan, Approval, Artifact, Verification,
-  Node, Model, Evidence, UsageRecord, UsageAccountingSummary,
+  Node, Model, Evidence, UsageRecord, UsageAccountingSummary, CostSummary,
   WorkspaceEntry,
   RuntimeEventEnvelope,
 } from "./types";
@@ -132,6 +132,8 @@ class EntityStoreImpl {
   private listeners = new Set<Listener>();
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private usageReadSequence = 0;
+  private usageSequences = new Map<string, number>();
+  private usageHistory = new Map<string, CostSummary>();
   private hydrationSequence = 0;
 
   /** Debounced persistence to IndexedDB */
@@ -143,10 +145,10 @@ class EntityStoreImpl {
   }
 
   /** Notify all React hooks */
-  private notify(): void {
+  private notify(persist = true): void {
     // useSyncExternalStore compares snapshot identity before notifying views.
     this.state = { ...this.state };
-    this.scheduleSave();
+    if (persist) this.scheduleSave();
     for (const fn of this.listeners) fn();
   }
 
@@ -411,28 +413,38 @@ class EntityStoreImpl {
 
   // REST API data loading
 
-  beginUsageRead(controller: string, configurationVersion: number): number {
+  /** Transient billing projections stay in this owner and never enter IndexedDB. */
+  getUsageSummary(day = ""): CostSummary {
+    return day ? this.usageHistory.get(day) || EMPTY_STATE.usage_accounting : this.state.usage_accounting;
+  }
+
+  private setUsageSummary(day: string, value: CostSummary): void {
+    if (day) {
+      this.usageHistory.delete(day); this.usageHistory.set(day, value);
+      if (this.usageHistory.size > 32) {
+        const oldest = this.usageHistory.keys().next().value!;
+        this.usageHistory.delete(oldest); this.usageSequences.delete(oldest);
+      }
+    } else this.state.usage_accounting = value;
+    this.notify(false);
+  }
+
+  beginUsageRead(controller: string, configurationVersion: number, day = ""): number {
     const sequence = ++this.usageReadSequence;
-    this.state.usage_accounting = {
-      status: "loading", controller, configuration_version: configurationVersion, summary: null, error: null,
-    };
-    this.notify();
+    this.usageSequences.set(day, sequence);
+    this.setUsageSummary(day, { status: "loading", controller, configuration_version: configurationVersion, summary: null, error: null });
     return sequence;
   }
 
-  finishUsageRead(sequence: number, summary: UsageAccountingSummary): void {
-    if (sequence !== this.usageReadSequence) return;
-    this.state.usage_accounting = { ...this.state.usage_accounting, status: "ready", summary, error: null };
-    this.notify();
+  finishUsageRead(sequence: number, summary: UsageAccountingSummary, day = ""): void {
+    if (sequence !== this.usageSequences.get(day)) return;
+    this.setUsageSummary(day, { ...this.getUsageSummary(day), status: "ready", summary, error: null });
   }
 
-  failUsageRead(sequence: number): void {
-    if (sequence !== this.usageReadSequence) return;
-    this.state.usage_accounting = {
-      ...this.state.usage_accounting, status: "unavailable", summary: null,
-      error: "Usage accounting could not be loaded. Spend remains UNKNOWN.",
-    };
-    this.notify();
+  failUsageRead(sequence: number, day = ""): void {
+    if (sequence !== this.usageSequences.get(day)) return;
+    this.setUsageSummary(day, { ...this.getUsageSummary(day), status: "unavailable", summary: null,
+      error: "Usage accounting could not be loaded. Spend remains UNKNOWN." });
   }
 
   upsertTasks(tasks: Task[]): void {
@@ -550,6 +562,7 @@ class EntityStoreImpl {
 
   clearStore(): void {
     this.usageReadSequence++;
+    this.usageSequences.clear(); this.usageHistory.clear();
     this.hydrationSequence++;
     this.state = structuredClone(EMPTY_STATE);
     this.notify();
