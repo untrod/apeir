@@ -5782,3 +5782,38 @@ claim. A failed Operations source now has an explicit UNKNOWN diagnostic entry
 rather than the generic empty-history message. Neither change grants execution
 permission or changes backend deadlines. The current Desktop suite passed495
 cases; the affected canonical Workflow/model/accounting regression passed155.
+
+### Overview paired measurement
+
+Measured frontend0311fbf against f836958, whose Desktop tree is byte-identical to
+main4411878 (`f513ee2148e8ad9ebcc59566fda29d5249279c3b`). Both actual production
+builds used the same owned model-disabled Runtime, equivalent v1 Overview and
+provisioned temporary Controller. Linux amd64, Node24.19.0, Chromium156.0.8078.4;
+three alternating pairs, eleven-second visible windows and instrumented six-second
+hidden windows. A preliminary run overlapping browser acceptance is retained as
+exploratory only; the table uses the subsequent separate measurement.
+
+| Measurement | Baseline p50 / p95 / p99 | Candidate p50 / p95 / p99 |
+| --- | --- | --- |
+| Warm Overview restoration, ms | 120.69 /138.59 /138.59 | 129.08 /234.79 /234.79 |
+| Overview→Chat, ms | 78.27 /102.50 /102.50 | 63.86 /130.96 /130.96 |
+| Chat→Overview, ms | 49.10 /59.68 /59.68 | 56.30 /58.34 /58.34 |
+| Composer fill, ms | 10.61 /11.46 /11.46 | 22.92 /36.49 /36.49 |
+| Pointer move, ms | 260.64 /282.25 /282.25 | 261.70 /283.40 /283.40 |
+| Owned browser CPU time in visible window, s | 0.23 /0.23 /0.23 | 0.21 /0.21 /0.21 |
+
+Both versions made two periodic Usage reads per visible window. Every hidden
+window recorded one read each for Tasks/Nodes/Models/Approvals/Conversations on
+the baseline and zero on the candidate; three EventStream reads remained in
+both. Browser/API failures and Runtime mutations were zero. Maximum sampled
+renderer heap-after was12736604 versus12997896 bytes, not peak process memory.
+
+This is an exploratory n=3 comparison: p95/p99 are sample maxima, and automation
+waits contribute to interaction times. Higher restoration/composer tail samples
+remain recorded; no overall speed, CPU-saving percentage or Token-cost benefit
+is established. Native process-tree usage, installer size, model load/unload and
+live inference need their own environments. Reproduce using the maintained
+`desktop/scripts/benchmark-studio-usage.mjs --scenario overview`, passing clean
+baseline/candidate/Runtime checkouts, the Python executable and a new output file.
+Current-source full production-browser acceptance passed15 cases, including the
+same previously failing non-overlap and in-flight/hidden-read assertions.
