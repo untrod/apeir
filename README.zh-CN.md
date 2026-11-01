@@ -12,7 +12,7 @@
 <a name="概览"></a>
 
 
-把工程文件、工作流和连接资源放进同一个工作台：修改先审查，操作有审批，结果有记录。
+开放、以本地工作为起点的工程工作台：组织文件、工作流和连接资源，修改先审查，操作有审批，结果有记录。
 
 [**Windows 预览包**](https://github.com/untrod/apeir/actions/runs/41309010299/artifacts/13085683076) ·
 [**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·

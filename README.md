@@ -13,8 +13,8 @@
 <a name="what-you-can-do"></a>
 
 
-A workspace for project files, workflows and connected resources—with approvals
-and execution records you can inspect.
+An open, local-first workspace for project files, workflows and connected
+resources—with approvals and execution records you can inspect.
 
 [**Windows Preview**](https://github.com/untrod/apeir/actions/runs/41309010299/artifacts/13085683076) ·
 [**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
