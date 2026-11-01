@@ -27,15 +27,17 @@ GitHub sign-in is required. Source artifacts expire after seven days. Use a newe
 qualified run if one has expired; do not mix revisions. A repository source ZIP
 or a frontend-only PR artifact is not this complete pair.
 
-The current reviewed candidate is `aacb840` ([PR124](https://github.com/untrod/apeir/pull/124)):
-[Runtime wheel](https://github.com/untrod/apeir/actions/runs/41278566620/artifacts/13072497439)
-and [built Studio](https://github.com/untrod/apeir/actions/runs/41278566620/artifacts/13072018777).
+The verified Source Preview is `5bdbadf` (the main integration of
+[PR124](https://github.com/untrod/apeir/pull/124)):
+[Runtime wheel](https://github.com/untrod/apeir/actions/runs/41308994710/artifacts/13084616985)
+and [built Studio](https://github.com/untrod/apeir/actions/runs/41308994710/artifacts/13084911108).
 The wheel was installed in a fresh environment and the downloaded Studio was
 exercised against it outside the checkout. Core, Desktop, Multi-Arch and Security
-passed for that exact source; protected-main integration is still pending. Downloads expire on
+passed for that exact source. These downloads retain their original build
+identity when later documentation changes land. Downloads expire on
 **2026-11-08**. Its wheel SHA-256 is:
 
-`bc204f577c643f809b94e037f0fa4da2b680289f3020db89c52c68f6ceb3fd1e`
+`f29024714ed6090ce2012bbe03380589ea1c31dadd9b8cc4920da5b1b7142c6b`
 
 Extract into separate directories. Check that both manifests'
 `distribution_revision` values match. From each extracted directory, verify
@@ -297,15 +299,18 @@ private paths. Vulnerabilities follow [SECURITY](../../../SECURITY.md).
 
 ## Native Installation
 
-The **unsigned Windows x64 test package** has passed build and native sidecar
-smoke on Windows Server 2025. Windows 10 GUI, installation, upgrade, uninstall,
-Defender and signing remain unqualified.
+Use the **unsigned Windows x64 test package** from the reviewed main build below.
+Windows 10 GUI, installation, upgrade, uninstall, Defender and signing remain
+unqualified. A successful build or Sidecar Smoke does not complete those Gates.
 
-1. Sign in to GitHub and download
-   [windows-x64-native-development-build](https://github.com/untrod/apeir/actions/runs/41278566620/artifacts/13073474480).
-   Retention ends **2026-11-15**. The installer is inside the downloaded artifact ZIP.
-2. Extract it. Check its source manifest and `native-validation-report.json`.
-   It contains Portable, NSIS, `SHA256SUMS.txt` and dependency/build records.
+1. Sign in to GitHub and open the [reviewed Windows build](https://github.com/untrod/apeir/actions/runs/41309010299#artifacts).
+   Wait for **Build Windows x86_64** to succeed, then select the artifact
+   **windows-x64-native-development-build**. Retention ends **2026-11-15**.
+   The installer is inside the downloaded artifact ZIP.
+2. Extract it. Confirm `source-manifest.json` identifies
+   `5bdbadf2a072c222b016b1ccbe8b89ad5e0c25ff`. In `native-validation-report.json`,
+   require `status=passed` and `full_validation_executed=true`; installation
+   acceptance remains independent. Keep the included build/dependency records.
 3. Verify the files in PowerShell:
 
    ```powershell
@@ -313,26 +318,15 @@ Defender and signing remain unqualified.
    Get-FileHash .\APEIR-Portable-0.1.0-rc1-windows-x64.zip -Algorithm SHA256
    ```
 
-   Compare with that same artifact's `SHA256SUMS.txt`.
+   Compare with **that same artifact's** `SHA256SUMS.txt`; its release manifest
+   also records file sizes and hashes. An older build may use the same filenames.
 4. Extract Portable and keep **all** files together beside `APEIR.exe`, or use
    the NSIS current-user installer. WebView2 setup may require network access.
-   Do not copy the launcher alone or replace its sidecars.
+   Do not copy the launcher alone or replace its sidecars. Back up existing
+   workspaces; first test with a separate empty workspace.
 
-| File | SHA-256 for this exact build |
-| --- | --- |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | `729B8B2DA7C4D20D37BC38B418D6E360CEBC777D7998F0754F895EB552271302` |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `D4A8051E651C4C29497B3A73D0A61F68F88EF14DE436FCE701AB17327102179E` |
-
-Outer artifact ZIP SHA-256:
-`f83a8cf90b17437a46ea86def838c27c4c5b9abec2f9f21a136d16ae340f1819`.
-
-This package uses source `aacb840eceb0caa752eeba031d95c4e343030561`
-([PR124](https://github.com/untrod/apeir/pull/124), awaiting main integration).
-It includes Overview 2.0, UTC-day accounting and the approved model-step host.
-Real inference is not qualified by this model-free Native Smoke. Historical
-Windows timing issues remain open; a passing run does not establish their cause. Use this build's own manifest and hashes,
-even when an older download has matching filenames.
-
-See the [native build record](../deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)
-for exact inputs and [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md) for
-remaining Gates. This package is a development build, not a stable Release.
+The [native build record](../deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)
+explains provenance, component checks and the actual tested scope. The
+[Release Runbook](../../acceptance/RELEASE_RUNBOOK.md) owns publication Gates.
+This is a development build, not a stable Release. Cloud/local inference and
+historical Windows timing issues retain their independent acceptance records.

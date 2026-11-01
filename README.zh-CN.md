@@ -54,15 +54,11 @@ APEIR Studio 是 APEIR Runtime 的桌面工作空间。用户可以组合项目�
 它明确区分 **Source Preview**、**Developer Setup** 和 **Native Installation**。
 源码检查和模拟 Demo 不需要 API Key 或硬件。可下载的源码包不是 Windows 安装程序。
 
-**Windows 下载：**[Portable 便携包 + NSIS 安装程序](https://github.com/untrod/apeir/actions/runs/41278566620/artifacts/13073474480)
-已打包在 **windows-x64-native-development-build** 中。登录 GitHub 后下载工件 ZIP，
-解压并校验哈希，再选择便携包或安装程序。工件保留至 **2026-11-15**。
-这是未签名开发预览，源码为 `aacb840`（[PR124](https://github.com/untrod/apeir/pull/124)，
-待合入主线），包含 Overview 2.0 和需要独立审批的模型工作流步骤。真实推理仍待验收。
-准确版本和验收范围见
-[构建记录](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)。
-Windows 10 安装、升级、卸载及签名尚未验收，不能当作稳定版。
-具体步骤见[下载与校验](docs/operations/getting-started/QUICK_START.md#native-installation)。
+**Windows x64 预览：**[Portable 便携包 + NSIS 安装程序](https://github.com/untrod/apeir/actions/runs/41309010299#artifacts)。
+登录 GitHub 后下载 **windows-x64-native-development-build**，解压并校验附带的摘要。
+工件保留至 **2026-11-15**；[版本、哈希与验收范围](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)
+和[安装步骤](docs/operations/getting-started/QUICK_START.md#native-installation)分别记录在官方指南中。
+这是未签名开发预览。Windows 10 安装、升级、卸载及真实模型调用仍待验收，不能当作稳定版。
 
 第一次体验可以先打开工程或运行无模型 Demo，不必一次配置完全部组件。
 API Key 请留在凭据库，别让它客串截图主角。

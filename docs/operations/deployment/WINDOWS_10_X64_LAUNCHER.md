@@ -171,53 +171,49 @@ checks do not alter the reviewed Kernel hashes or remove licensing/install gates
 
 ## Current native command-qualified build
 
-The [Portable/NSIS test bundle](https://github.com/untrod/apeir/actions/runs/41278566620/artifacts/13073474480)
-was built from source `aacb840eceb0caa752eeba031d95c4e343030561` in
-[full-mode run 41278566620](https://github.com/untrod/apeir/actions/runs/41278566620).
-This candidate is under [PR124](https://github.com/untrod/apeir/pull/124), awaiting
-protected-main integration. It includes Overview 2.0, UTC-date Usage controls,
-original-event recovery and the approved single-turn Workflow model host.
-Always use its source manifest as the binary identity; native build success does
-not qualify live-model inference.
+The current reviewed producer is [full-mode run41309010299](https://github.com/untrod/apeir/actions/runs/41309010299),
+from main `5bdbadf2a072c222b016b1ccbe8b89ad5e0c25ff` (PR124/125 integration).
+It includes Overview 2.0, the approved single-turn model host, original-event
+recovery and atomic Evaluation/Experience schema initialization.
 
-GitHub sign-in is required. The artifact expires on **2026-11-15**.
-Outer artifact ZIP SHA-256:
-`f83a8cf90b17437a46ea86def838c27c4c5b9abec2f9f21a136d16ae340f1819`.
+In **Artifacts**, select **windows-x64-native-development-build**. GitHub sign-in
+is required; this run's native artifact is retained until **2026-11-15**. Use it
+only after **Build Windows x86_64** succeeds. A successful frontend or source
+preview job does not qualify the Native package.
 
-| File | SHA-256 |
+The artifact is the build record. Keep these files together:
+
+| Record | Check |
 | --- | --- |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `D4A8051E651C4C29497B3A73D0A61F68F88EF14DE436FCE701AB17327102179E` |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | `729B8B2DA7C4D20D37BC38B418D6E360CEBC777D7998F0754F895EB552271302` |
+| `source-manifest.json` | Exact Distribution/Kernel revisions and component-lock digest |
+| `release-manifest.json` | Packaged filenames, sizes and SHA-256 |
+| `SHA256SUMS.txt` | Hashes of this build's actual Portable, installer and resources |
+| `native-validation-report.json` | Actual host, full-validation flag, sidecar Smoke and installation status |
+| `reviewed-input-provenance.json` | Reviewed Kernel producer, artifact identity and archive digest |
 
-Independent download matched both 22-entry checksum lists, 13 manifest records
-and 11 nested Portable files. The existing component verifier admits both actual
-Kernel PE files against the unchanged approved lock. Application/sidecar EXEs
-are unsigned x64 PE 0x8664; NSIS is the expected x86 bootstrapper PE 0x014c, not
-the architecture of its packaged Runtime. Independent NSIS extraction matched
-ten Portable files exactly. The main executable differs only at Tauri 2.11.4's
-three-byte UNK→NSS bundle stamp; no artifact bytes or published hashes were
-normalized or changed.
+Require `status=passed` and `full_validation_executed=true` in the native report.
+Its `installation_acceptance=NOT_RUN` is deliberately independent. The full-mode
+entry does not use SkipValidation or SkipSidecarSmoke. It checks real NKI health,
+authentication refusal, Worker/Runtime startup, restart/query of original Work,
+app-local CRT and owned-process cleanup. Model-free Smoke is not live inference.
 
-This source passed Core, Desktop, Multi-Arch and Security. The full-mode Native
-producer passed 6058 Python cases, skipped 95, with four warnings; Desktop passed 501.
-It did not skip validation or Sidecar Smoke. Actual NKI 1/2/3 health,
-authentication rejection, Worker/Runtime startup, app-local CRT loading,
-owned-process cleanup and original denied-Work recovery ran on
-**Windows Server 2025**, not Windows 10. The frozen CLI recovered original pure
-Workflow Run `wfr_77018143144e4efcbacfa47c7ab85a5b`; invalid input and unbound
-actions were refused. External model calls: 0.
+Application/sidecar executables are unsigned x64 PE; the NSIS bootstrapper is x86,
+which does not change the architecture of its packaged Runtime. Independent
+inspection uses the unchanged component verifier, both checksum lists, release
+manifest, nested Portable and extracted NSIS payload. Tauri's documented
+three-byte Portable/NSIS bundle stamp is reported separately; actual files and
+published hashes are never normalized.
 
-**Windows 10 installation, installed GUI, graceful Desktop exit, upgrade/uninstall,
-Defender, real-model inference and signing remain unqualified.** The installer
-was inspected, not executed on this Linux qualification host. Historical Windows
-timing failures retain their original Issues and evidence; this successful build
-does not establish a common cause or close them.
+**Windows 10 GUI/install/upgrade/uninstall, graceful Desktop exit, Defender,
+real-model inference and signing retain their separate Gates.** A CI host is not
+a clean Windows 10 installation. Preserve original timing failures; a successful
+build does not establish their common cause.
 
 Use [Quick Start](../getting-started/QUICK_START.md#native-installation) for
-download and checksum instructions. These are unsigned internal development
-packages, not stable Releases. Earlier packages retain their identities in
-[Engineering Review](../../acceptance/ENGINEERING_REVIEW.md#native-package-integrity-and-context-http-timing--2026-10-29).
-Do not mix payloads or checksums across builds with the same filenames.
+download and verification. These are unsigned internal development packages,
+not stable Releases. The earlier AACB package's exact hashes and measured
+acceptance remain in [Engineering Review](../../acceptance/ENGINEERING_REVIEW.md#native-package-integrity-and-context-http-timing--2026-10-29).
+Do not substitute a historical hash or payload merely because filenames match.
 
 ## Verified internal native build — 2026-10-27
 

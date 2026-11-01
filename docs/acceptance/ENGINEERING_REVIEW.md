@@ -5978,3 +5978,73 @@ results do not establish a Windows or full-request benefit; Experience's local
 p99 increased from0.761 to0.993ms and remains recorded. Actual Windows paired
 measurement and exact-head CI remain required. The original HTTP failure's
 complete cause is not declared repaired by this adjacent correctness fix.
+
+### Main integration and installed Source Preview — 2026-11-01
+
+PR125 merged normally as425e477; PR124 followed as
+`5bdbadf2a072c222b016b1ccbe8b89ad5e0c25ff`, preserving accepted head06bc9be.
+All13 required contexts passed before protected-main integration. GitHub first
+reported two successful aggregate checks as expected; rerunning their existing
+workflow jobs and dependencies registered the checks. No protection rule,
+assertion, deadline or administrator bypass was used. Completed branches were
+removed only after ancestry and exact remote-head checks; all31 historical tags
+remain unchanged. Kernel and the approved component lock remain unchanged.
+
+Windows3.11 diagnostic41289670762 passed58 Governance/Skill cases with two
+existing SQLite-capability skips,38 Context cases and six cold original cases.
+The unchanged ten-second HTTP deadline held for all nine observed requests
+(1.739–2.607s). Schema-only paired measurements contain21 samples per arm/owner:
+
+| Owner | Legacy p50 / p95 / p99, ms | Atomic p50 / p95 / p99, ms |
+| --- | --- | --- |
+| EvaluationHistory | 81.48 / 104.47 / 124.10 | 64.76 / 105.83 / 123.83 |
+| ExperienceStore | 116.15 / 142.68 / 172.37 | 70.30 / 89.17 / 99.70 |
+
+Evaluation p95 and some CPU tails do not improve. The diagnostic artifact retains
+all samples, transaction states and integrity checks. These are cold-schema
+measurements, not an HTTP reliability SLA, total-product speedup or Token/cost
+saving. Historical Windows timeout issues remain open.
+
+The matching [Runtime wheel](https://github.com/untrod/apeir/actions/runs/41308994710/artifacts/13084616985)
+and [production Studio](https://github.com/untrod/apeir/actions/runs/41308994710/artifacts/13084911108)
+were independently downloaded: four Runtime and13 frontend checksum entries,
+matching source manifests and wheel SHA
+`f29024714ed6090ce2012bbe03380589ea1c31dadd9b8cc4920da5b1b7142c6b`.
+A fresh base venv outside the checkout ran the public CLI with Python isolated
+mode and served the downloaded frontend to sandboxed Linux Chromium.
+
+Actual HTTP/browser checks read project files, retained the original Chat Run
+and15 event IDs over Runtime restart, restored an Overview v2 layout and retained
+pure Workflow `wfr_d82ea876b92d4735b2661ce3f545e0b3` under its original key.
+The two-file Proposal `wfr_3b904fff6f4547a1b91fc0a9b347e453` and Work
+`work_73682eef18b7e837d84b04dc08b6243c` refused unapproved apply, accepted the
+original independent CLI approval, verified actual file hashes and refused a
+stale external overwrite. Restart retained the original records; reconciliation
+after the external change returned MISMATCH without replay. This was human
+editing, not a live-model coding task; file MATCH is not test PASS.
+
+The external public Widget example completed six independently approved
+lifecycle changes; disabled/removed/undeclared reads and conflicting versions
+were refused. Simulated response-loss Run `wfr_e086797b0d0546a48efd68c5afffc29c`
+recovered its original receipt with effect count one before and after recovery.
+Terminal-session re-execution was refused. All owned consumer processes closed
+with exit0. An independently approved project-test request returned
+STRICT_SANDBOX_UNAVAILABLE without executing its probe. External model calls0;
+physical and Windows installation acceptance were not exercised.
+
+Resulting main5bdbadf passed its own [Core41308994595](https://github.com/untrod/apeir/actions/runs/41308994595),
+[Desktop41308994710](https://github.com/untrod/apeir/actions/runs/41308994710),
+[Multi-Arch41308994587](https://github.com/untrod/apeir/actions/runs/41308994587)
+and [Security41308994729](https://github.com/untrod/apeir/actions/runs/41308994729).
+Core recorded Windows3.12:6061 passed/95 skipped; macOS15.8.2 ARM64:6068/88;
+Linux3.12:6083/73; Linux3.10:6070/86, each with four warnings. Multi-Arch recorded
+Windows3.11:5717/77/345 deselected, Linux amd64 and ARM64:5720/74/345 deselected,
+each with four warnings. Windows ARM64 remains metadata-only, not native execution.
+These exact-source software records do not close historical intermittent failures.
+
+The follow-up Windows producer is [full-mode run41309010299](https://github.com/untrod/apeir/actions/runs/41309010299),
+using the original approved binary input and unchanged lock. Download only its
+successful Windows x64 artifact and inspect its own report/hashes. Its full
+Native result is independently required before that package is admitted; source
+CI and the earlier AACB build cannot supply it. Later documentation-only changes
+preserve this exact binary/source identity rather than relabeling an older EXE.
