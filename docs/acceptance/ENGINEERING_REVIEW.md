@@ -5596,8 +5596,11 @@ independently downloaded: 22 checksums, 13 manifest entries, 11 inner Portable
 files, x64 application PE headers and approved component hashes all match.
 The four application/sidecar EXEs and x86 NSIS bootstrapper are unsigned.
 
-The [current build record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)
-retains exact hashes and the new download. NKI1/2/3 and bad/missing credential
+The historical [a37dab8 bundle](https://github.com/untrod/apeir/actions/runs/41006787955/artifacts/12957768657)
+retains its own outer SHA `bdefeb3f78f787ce84a99e1511a0444efe656088e72add9edc566373436f812f`,
+NSIS SHA `9D98F7AFD0BCCD3BB838254EE44C1725B6F541D60C6C5F0FE38347575830B9B8`
+and Portable SHA `C714D78D7F56D550C30A0F7BAE4DBA36123E4C1E5292287A70561C04F004D1BF`.
+The current download is recorded separately in the Windows guide. NKI1/2/3 and bad/missing credential
 refusal passed; original denied workload recovery submitted zero new model
 operations. The native CLI recovered original pure Run
 wfr_e879eabc129d4e43b68f448f7e347244. External model calls: zero. Windows10
@@ -5852,3 +5855,82 @@ receipts; it is not live Provider usage. Negative cases cover duplicate/unknown
 fields, impossible/future dates, wrong-day responses, the visible-date limit and
 retired Controller data. The existing repository workflow contracts and shell/
 embedded-Python syntax checks pass without changing this Cloud host's APT config.
+
+The final explicit-date guard is included in source `aacb840`. Its Core
+41278567992, Desktop41278568041, Multi-Arch41278567938 and
+Security41278567941 all passed. Windows Core recorded6059 passed/95 skipped;
+Linux3.10 recorded6068/86, Linux3.12 6081/73 and macOS15 6066/88, each with four
+warnings. Desktop recorded501 tests and16 real-HTTP/production-browser scenarios.
+These are candidate results: protected-main integration remains pending, and
+main441's older macOS14 cancellation is not rewritten as a successful run.
+
+The official Runtime artifact13072497439 and Studio artifact13072018777 from
+run41278566620 have matching `aacb840` manifests and all4/13 file checksums.
+Wheel SHA-256 is
+`bc204f577c643f809b94e037f0fa4da2b680289f3020db89c52c68f6ceb3fd1e`.
+A fresh base venv outside the checkout exercised the public CLI, production
+model-disabled API, separate approval processes, simulated response-loss
+reconciliation and normal cleanup. Effect count remained one after loss.
+Downloaded Studio read an actual project, retained original Chat events and
+recovered pure Workflow history and v2 layout after a real Runtime restart.
+
+Installed-product browser acceptance edited two Python files, reviewed their
+original SHA-bound diffs, refused unapproved application, applied the original
+independently approved Proposal and recovered its records after restart. An
+external file change refused stale overwrite; reconciliation reported MISMATCH
+without replay. This was human editing, not a claimed live-model proposal or
+successful test execution. The external standard-library UI example completed
+six independently approved lifecycle changes against the installed Runtime;
+unauthenticated, undeclared-source, conflicting-version and revoked reads were
+denied. No internal Python imports, executable UI or device grants were used.
+
+After separate approval, the installed command API returned
+`STRICT_SANDBOX_UNAVAILABLE` for original Run
+`workbench-exec-b8c73e26bf1a451b`, exit-1 and `resource_only`. No probe process
+ran and no host-Shell fallback occurred. Typed pure results passed between two
+nodes; wrong input types were rejected, and a cancelled approval-waiting Run
+remained CANCELLED under its original key across CLI processes. These are
+software and fail-closed acceptance, not qualified strict Linux execution.
+
+A new clean-source paired measurement compared `aacb840` with the same f836
+baseline/Runtime setup described above: three alternating pairs, Linux x64,
+Node24.19.0 and Chromium156.0.8078.4. The hidden-read reduction remained five
+to zero per six-second instrumented window; visible Usage and EventStream
+behavior stayed the same. Browser-process-group CPU p50/p95/p99 was
+0.18/0.20/0.20 versus0.16/0.17/0.17 seconds per eleven-second window. Warm
+restoration was101.62/132.14/132.14 versus114.82/160.72/160.72 milliseconds;
+the regression is retained. Maximum heap-after was10694424 versus10828464
+bytes, not peak memory. With n=3, tail ranks are sample maxima, not stable
+percentiles. No native process-tree, model-load, Token-saving or fee-saving
+qualification follows from these measurements.
+
+
+### Native and source qualification of aacb840
+
+Full Native run41278566620 completed successfully and produced
+[artifact13073474480](https://github.com/untrod/apeir/actions/runs/41278566620/artifacts/13073474480),
+retained until2026-11-15. Independent outer SHA-256:
+`f83a8cf90b17437a46ea86def838c27c4c5b9abec2f9f21a136d16ae340f1819`. Both22-entry checksum lists,
+13 manifest records and11 Portable members match. The unchanged canonical
+component verifier admits the two approved Kernel PE files. Actual NSIS payload
+extraction matches all expected resources; the launcher differs only at the
+upstream three-byte Tauri bundle stamp. The published raw installer SHA is
+`729B8B2DA7C4D20D37BC38B418D6E360CEBC777D7998F0754F895EB552271302`;
+Portable SHA is `D4A8051E651C4C29497B3A73D0A61F68F88EF14DE436FCE701AB17327102179E`.
+
+The official complete script executed6058 Python cases/95 skips/four warnings,
+501 Desktop tests, the unchanged frozen Kernel validation and actual NKI,
+Worker/Runtime health, invalid-auth refusal, restart and process cleanup. The
+original pure CLI Workflow Run is `wfr_77018143144e4efcbacfa47c7ab85a5b`.
+No SkipValidation or SkipSidecarSmoke was used; model calls were zero. Host:
+Windows Server2025, Python3.12.10, Node22.23.4, Rust/Cargo1.99.1,
+MSVC14.51.36260.0 and Windows SDK10.0.26100.0. The longer build's Runtime
+regression took2686.01 seconds; this is not a paired hardware/network comparison
+or proof of a source performance regression. Windows10 GUI/install/upgrade/
+uninstall, Defender, live inference and signing remain unqualified.
+
+README, Quick Start and Windows guide now point to this exact candidate, not
+an older package with the same filenames. The current screenshots are unedited
+production-source browser captures from the matching Runtime integration run;
+they are not installed-Desktop photographs. New documentation does not change
+Runtime/Studio implementation, frozen Kernel or the approved component lock.

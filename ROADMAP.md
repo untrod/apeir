@@ -18,11 +18,11 @@ authority or execution.
 
 | Level | Status | Qualified scope / remaining work |
 | --- | --- | --- |
-| SOURCE_READY | PASS | Independent wheel installation, authenticated model-free API, browser Studio and simulated original-result recovery. Download matching source bundles from a qualified main run. |
+| SOURCE_READY | PASS | Independent wheel installation, authenticated model-free API, browser Studio and simulated original-result recovery. Use the matching qualified main bundles or the explicitly identified reviewed candidate in Quick Start. |
 | PRODUCT_READY | PARTIAL | Setup, saved Provider management, reviewed file proposals, evidence and restart paths work in software. Live-model development and safely executed tests still need their separate prerequisites. |
 | NATIVE_READY | PARTIAL | Approved components and unsigned Portable/NSIS builds exist. Current Windows 10 installed lifecycle is not qualified. |
 | NATIVE_COMPONENT_READY | PASS | PR101 admitted the approved frozen-source x64 PE files through the existing component lock. [Exact inputs](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#approved-component-lock-migration--2026-10-26). |
-| NATIVE_BUILD_READY | PASS | Source a37dab8 accepted as main 1ad5778 passed Core/Desktop/Multi-Arch/Security; full-mode run 41006787955 produced independently checked Portable/NSIS, with actual Server 2025 component/CLI smoke. This does not qualify Windows 10 installation or close historical timing issues. [Build identity and hashes](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build). |
+| NATIVE_BUILD_READY | PASS | Candidate aacb840 (PR124, pending main integration) passed Core/Desktop/Multi-Arch/Security; full-mode run41278566620 produced independently checked Portable/NSIS and actual Server2025 component/CLI smoke. This does not qualify Windows 10 installation or close historical timing issues. [Build identity and hashes](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build). |
 | NATIVE_INSTALL_READY | PENDING | Requires current-version Windows 10 x64 GUI, install, upgrade, restart, uninstall and Defender checks. No such host is attached. |
 | RELEASE_READY | BLOCKED | Installed lifecycle, signing, supply-chain review and explicit publication authorization remain required. No stable Release is claimed. |
 
@@ -30,7 +30,7 @@ authority or execution.
 
 | Component | Status | Implemented | Remaining / evidence |
 | --- | --- | --- | --- |
-| Studio | PARTIAL | Docking, eight presets, named layouts, v1/v2 Overview presentation, canonical progress/cache cards, themes, bilingual navigation and Controller isolation | GitHub connection and Ollama lifecycle management remain missing; executable third-party UI and live media are not qualified. [Studio guide](docs/development/DEVELOPER_PLATFORM.md#apeir-studio). |
+| Studio | PARTIAL | Docking, eight presets, named layouts, v1/v2 Overview presentation, UTC-day Usage/field controls, canonical progress/cache cards, themes, bilingual navigation and Controller isolation | GitHub connection and Ollama lifecycle management remain missing; executable third-party UI and live media are not qualified. [Studio guide](docs/development/DEVELOPER_PLATFORM.md#apeir-studio). |
 | Direct development | PARTIAL | Project reads, drafts, two-file Proposal review, independent approval, file readback and original history | Live-model Proposal qualification and tests in a qualified strict sandbox. File MATCH is not test PASS. |
 | Models | PARTIAL | Saved Provider lifecycle, credential references, qualified catalog IDs, explicit selection and cloud/local coexistence in software tests | Actual accounts/local services and endpoint capabilities need qualification. Frozen Worker has no Anthropic Messages backend. |
 | Chat activity | PARTIAL | Recorded model/tool events, governed search, approval/receipt references, history inspection and reconnect state | NKI returns complete responses; incremental model text is not available. Full Skill-use attribution is pending. |

@@ -54,11 +54,11 @@ APEIR Studio 是 APEIR Runtime 的桌面工作空间。用户可以组合项目�
 它明确区分 **Source Preview**、**Developer Setup** 和 **Native Installation**。
 源码检查和模拟 Demo 不需要 API Key 或硬件。可下载的源码包不是 Windows 安装程序。
 
-**Windows 下载：**[Portable 便携包 + NSIS 安装程序](https://github.com/untrod/apeir/actions/runs/41006787955/artifacts/12957768657)
+**Windows 下载：**[Portable 便携包 + NSIS 安装程序](https://github.com/untrod/apeir/actions/runs/41278566620/artifacts/13073474480)
 已打包在 **windows-x64-native-development-build** 中。登录 GitHub 后下载工件 ZIP，
-解压并校验哈希，再选择便携包或安装程序。工件保留至 **2026-11-13**。
-这是未签名开发预览，源码 `a37dab8` 已合入主线，包含工作流数据绑定、
-模型历史和窗口上下文修复。
+解压并校验哈希，再选择便携包或安装程序。工件保留至 **2026-11-15**。
+这是未签名开发预览，源码为 `aacb840`（[PR124](https://github.com/untrod/apeir/pull/124)，
+待合入主线），包含 Overview 2.0 和需要独立审批的模型工作流步骤。真实推理仍待验收。
 准确版本和验收范围见
 [构建记录](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)。
 Windows 10 安装、升级、卸载及签名尚未验收，不能当作稳定版。

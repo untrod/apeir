@@ -61,14 +61,15 @@ It separates downloadable **Source Preview**, **Developer Setup** and
 **Native Installation**. Source inspection and the simulated Demo need no API key
 or hardware. Downloadable source packages are not Windows installers.
 
-**Windows download:** [Portable ZIP + NSIS installer](https://github.com/untrod/apeir/actions/runs/41006787955/artifacts/12957768657)
+**Windows download:** [Portable ZIP + NSIS installer](https://github.com/untrod/apeir/actions/runs/41278566620/artifacts/13073474480)
 are available together in **windows-x64-native-development-build**. Sign in to
 GitHub, download the artifact ZIP and verify the included checksums before use.
-The unsigned candidate build expires on **2026-11-13**. Its exact source and
+The unsigned candidate build expires on **2026-11-15**. Its exact source and
 qualification limits are in the [build record](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build);
-the package uses accepted source `a37dab8`, with Workflow data bindings, model
-history and Inspector context fixes. Windows 10 installation, upgrade/uninstall
-and signing remain unqualified. Follow the
+the package uses source `aacb840` ([PR124](https://github.com/untrod/apeir/pull/124),
+awaiting main integration), including Overview 2.0 and governed model Workflow
+steps. Windows 10 installation, live inference, upgrade/uninstall and signing
+remain unqualified. Follow the
 [download and verification steps](docs/operations/getting-started/QUICK_START.md#native-installation).
 This is a development build, not a stable Release.
 

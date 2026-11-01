@@ -176,8 +176,9 @@ loaded Skill does not establish that a model used it in a particular request.
 
 ![Dark Dashboard with actual Runtime data; absent resources remain UNKNOWN](../media/studio-source-overview.png)
 
-These screenshots are real [source-browser evidence](https://github.com/untrod/apeir/actions/runs/40351274217)
-at `f9e8301`, not installed Windows, live-model or physical-device qualification.
+These screenshots are real [source-browser evidence](https://github.com/untrod/apeir/actions/runs/41278566620)
+at `aacb840`, using the production frontend and model-disabled Runtime. They do
+not qualify installed Windows, live-model inference or physical devices.
 Browser Studio initializes the original EntityStore after authenticated health;
 Work and original task summaries share the existing adapter. Missing progress or
 unknown task states do not become successful tasks or enable controls.
