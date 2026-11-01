@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field, replace
 from enum import Enum
@@ -181,6 +182,7 @@ class GatewayVerificationRequirements:
 class GatewayRequest:
     operation: GatewayOperation
     execution: GatewayExecutionContext
+    request_id: str = field(default="", kw_only=True)
     _input_admission: Any = field(default=None, repr=False, compare=False, kw_only=True)
     input: Any = None
     messages: tuple[Mapping[str, Any], ...] = ()
@@ -210,6 +212,11 @@ class GatewayRequest:
     stream: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.request_id, str) or (
+            self.request_id
+            and not re.fullmatch(r"modelreq_[0-9a-f]{32,64}", self.request_id)
+        ):
+            raise ModelRuntimeError("Invalid original model request ID")
         operation = (
             self.operation
             if isinstance(self.operation, GatewayOperation)
@@ -330,7 +337,7 @@ class GatewayRequest:
             metadata["thinking"] = {"type": self.reasoning_mode.value}
         if self.reasoning_effort is not None:
             metadata["reasoning_effort"] = self.reasoning_effort.value
-        return ModelRequest(
+        request = ModelRequest(
             task_id=self.execution.task_id,
             _input_admission=self._input_admission,
             required_capabilities=capabilities,
@@ -349,6 +356,9 @@ class GatewayRequest:
             timeout_s=self.timeout_s,
             stream=self.stream,
             metadata=metadata,
+        )
+        return (
+            replace(request, request_id=self.request_id) if self.request_id else request
         )
 
 
@@ -421,14 +431,26 @@ class ModelGatewayFacade:
             raise ModelRuntimeError("gateway must be a ModelGateway")
         self.gateway = gateway
 
-    async def invoke(self, request: GatewayRequest) -> GatewayResponse:
+    async def invoke(
+        self, request: GatewayRequest, *, reconcile_only: bool = False
+    ) -> GatewayResponse:
         model_request = self._prepare(request)
-        response = await self.gateway.invoke(model_request)
+        response = await (
+            self.gateway.invoke(model_request, reconcile_only=True)
+            if reconcile_only
+            else self.gateway.invoke(model_request)
+        )
         return self._normalize(request, response)
 
-    def invoke_sync(self, request: GatewayRequest) -> GatewayResponse:
+    def invoke_sync(
+        self, request: GatewayRequest, *, reconcile_only: bool = False
+    ) -> GatewayResponse:
         model_request = self._prepare(request)
-        response = self.gateway.invoke_sync(model_request)
+        response = (
+            self.gateway.invoke_sync(model_request, reconcile_only=True)
+            if reconcile_only
+            else self.gateway.invoke_sync(model_request)
+        )
         return self._normalize(request, response)
 
     async def try_invoke(self, request: GatewayRequest) -> GatewayResponse:

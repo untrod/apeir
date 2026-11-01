@@ -22,6 +22,7 @@ from nous_runtime.workflow.models import (
     StepType,
     WorkflowDefinition,
     WorkflowHandlerPolicy,
+    WorkflowOutcomeUnknown,
     WorkflowRun,
     WorkflowState,
     WorkflowStep,
@@ -690,6 +691,11 @@ class WorkflowRuntime:
                     error = f"step timed out after {step.timeout_seconds} seconds"
                     if snapshot["side_effect_class"] in _PURE_EFFECTS:
                         status = "failed"
+                except WorkflowOutcomeUnknown as exc:
+                    from nous_runtime.core.redaction import redact_sensitive_text
+
+                    error = redact_sensitive_text(str(exc))
+                    status = "unknown"
                 except Exception as exc:
                     from nous_runtime.core.redaction import redact_sensitive_text
 

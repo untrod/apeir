@@ -5707,3 +5707,27 @@ fixture now uses numeric binding too, without replacing its SSL context,
 certificate checks, sockets or five-second startup assertion. Four affected
 transport cases run before the unchanged full macOS regression so an unresolved
 startup failure fails early instead of repeating a two-hour cascade.
+
+## Approved Workflow model host — 2026-11-01
+
+The Studio API binds `agent:model.invoke` to existing AgentSession, ModelGateway,
+CostController and NKI owners. It is one model turn, not a new Agent harness.
+Model identity, instruction and Token/USD budgets remain explicit; typed bindings
+may supply only input data. Current original-step human authority is checked at
+dispatch, after the approval audit transaction commits. The adapter requests no
+tool, file or device execution authority.
+
+The original Run/step binding determines the request/session IDs. A resumed intent
+uses reconciliation-only Gateway admission: absent original accounting cannot
+create a new reservation, and a missing committed Kernel receipt cannot authorize
+submission. Canonical Workflow checkpoints and AgentSession results persist;
+there is no new execution database. An explicit unknown-outcome exception lets a
+reconciliation host preserve UNKNOWN without changing other handler failures.
+
+Ten focused software cases exercise two explicit cloud/local Provider identities,
+structured result binding, separate human approval, committed-audit visibility,
+original response-loss recovery, missing Kernel/accounting/session records and
+revoked/serialized identity refusal. They use a simulated NKI protocol journal
+with the actual Runtime, Gateway and accounting. They are not real Kernel/model,
+paid-account or hardware acceptance. Cloud/local inference remains PENDING;
+strict Linux execution and Windows10 installation retain their separate gates.

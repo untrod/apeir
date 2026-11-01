@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Background,
   Controls,
@@ -19,10 +25,13 @@ import {
   captureRuntimeConnection,
   governedStudioMutation as mutate,
   humanMutation,
+  fetchModels,
+  type ModelView,
 } from "../../lib/api";
 import {
   arrangeWorkflow,
   initialWorkflow,
+  modelWorkflowStep,
   runnableStep,
   workflowDefinition,
   workflowDraft,
@@ -48,6 +57,7 @@ type Run = {
   verification: string;
 };
 type Catalog = {
+  step_types?: { type: string; available: boolean; actions?: string[] }[];
   data_bindings_versions?: number[];
   definitions: { workflow_id: string; version: string }[];
   runs: Pick<Run, "run_id" | "workflow_id" | "workflow_version" | "state">[];
@@ -92,6 +102,8 @@ export function StudioWorkflow({
     [inputs, setInputs] = useState("{}"),
     [paramsText, setParamsText] = useState("{}");
   const [bindingsText, setBindingsText] = useState("");
+  const [models, setModels] = useState<ModelView[]>([]);
+  const [modelsError, setModelsError] = useState("");
   const [bindingTarget, setBindingTarget] = useState("value"),
     [bindingSource, setBindingSource] = useState("inputs"),
     [bindingPointer, setBindingPointer] = useState("/value");
@@ -179,6 +191,55 @@ export function StudioWorkflow({
   const step = draft.definition.steps.find(
     (item) => item.step_id === selected[0],
   );
+  const isModel = !!step && modelWorkflowStep(step);
+  const modelHostAvailable =
+    catalog?.step_types?.some(
+      (type) =>
+        type.type === "agent" &&
+        type.available &&
+        type.actions?.includes("model.invoke"),
+    ) === true;
+  const needsModels = kind === "agent" || isModel;
+  useEffect(() => {
+    if (!needsModels) return;
+    let current = true;
+    const check = captureRuntimeConnection();
+    void fetchModels()
+      .then((result) => {
+        check();
+        if (current && active.current) {
+          setModels(result.models);
+          setModelsError("");
+        }
+      })
+      .catch((error) => {
+        try {
+          check();
+        } catch {
+          return;
+        }
+        if (current && active.current)
+          setModelsError(String(error.message || error));
+      });
+    return () => {
+      current = false;
+    };
+  }, [needsModels]);
+  let modelParams: Record<string, unknown> | null = null;
+  if (isModel) {
+    try {
+      const value: unknown = JSON.parse(paramsText);
+      if (value && typeof value === "object" && !Array.isArray(value))
+        modelParams = value as Record<string, unknown>;
+    } catch {
+      /* The original JSON draft stays intact until it is valid. */
+    }
+  }
+  function updateModelParams(values: Record<string, unknown>) {
+    if (!modelParams) return;
+    setParamsText(JSON.stringify({ ...modelParams, ...values }, null, 2));
+    setDirty(true);
+  }
   const paramsPending =
     !!step &&
     (paramsText !== JSON.stringify(step.params || {}, null, 2) ||
@@ -198,6 +259,7 @@ export function StudioWorkflow({
     setBindingSource(
       step?.depends_on?.length ? `step:${step.depends_on[0]}` : "inputs",
     );
+    setBindingTarget(step && modelWorkflowStep(step) ? "input" : "value");
   }, [step]);
   function commit(next: WorkflowDraft, previous = currentDraft.current) {
     if (JSON.stringify(next) === JSON.stringify(previous)) return;
@@ -293,9 +355,17 @@ export function StudioWorkflow({
         <>
           <strong>{item.step_id}</strong>
           <span>
-            {item.step_type.toUpperCase()} ·{" "}
+            {modelWorkflowStep(item) ? "MODEL" : item.step_type.toUpperCase()} ·{" "}
             {(graphMatchesRun && run?.step_states[item.step_id]) ||
-              (runnableStep(item) ? "READY" : "UNSUPPORTED")}
+              (modelWorkflowStep(item)
+                ? !modelHostAvailable
+                  ? "BLOCKED"
+                  : runnableStep(item)
+                    ? "CONFIGURED"
+                    : "UNCONFIGURED"
+                : runnableStep(item)
+                  ? "READY"
+                  : "UNSUPPORTED")}
           </span>
         </>
       ),
@@ -506,7 +576,11 @@ export function StudioWorkflow({
             paramsPending ||
             (draft.definition.steps.some((item) => item.data_bindings) &&
               !catalog?.data_bindings_versions?.includes(1)) ||
-            draft.definition.steps.some((item) => !runnableStep(item))
+            draft.definition.steps.some(
+              (item) =>
+                !runnableStep(item) ||
+                (modelWorkflowStep(item) && !modelHostAvailable),
+            )
           }
           onClick={() =>
             void action(async () => {
@@ -598,15 +672,16 @@ export function StudioWorkflow({
               <option
                 key={type}
                 value={type}
-                disabled={[
-                  "agent",
-                  "capability",
-                  "connector",
-                  "command",
-                ].includes(type)}
+                disabled={
+                  (type === "agent" && !modelHostAvailable) ||
+                  ["capability", "connector", "command"].includes(type)
+                }
               >
-                {type.toUpperCase()}
-                {["agent", "capability", "connector", "command"].includes(type)
+                {type === "agent"
+                  ? t("MODEL · APPROVAL", "模型 · 需审批")
+                  : type.toUpperCase()}
+                {["capability", "connector", "command"].includes(type) ||
+                (type === "agent" && !modelHostAvailable)
                   ? " · UNSUPPORTED"
                   : ""}
               </option>
@@ -622,7 +697,20 @@ export function StudioWorkflow({
                   {
                     step_id: `step-${crypto.randomUUID().slice(0, 8)}`,
                     step_type: kind,
-                    params: kind === "transform" ? { value: null } : {},
+                    ...(kind === "agent"
+                      ? { action: "model.invoke", approval_required: true }
+                      : {}),
+                    params:
+                      kind === "agent"
+                        ? {
+                            model_id: "",
+                            instruction: "",
+                            max_tokens: 512,
+                            max_cost_usd: 0.01,
+                          }
+                        : kind === "transform"
+                          ? { value: null }
+                          : {},
                   },
                 ],
               }))
@@ -700,6 +788,80 @@ export function StudioWorkflow({
           {step && (
             <>
               <strong>{step.step_id}</strong>
+              {isModel && (
+                <fieldset disabled={!modelParams}>
+                  <legend>{t("Model", "模型")}</legend>
+                  <label>
+                    {t("Registered model", "已注册模型")}
+                    <select
+                      aria-label="Workflow model"
+                      value={String(modelParams?.model_id ?? "")}
+                      onChange={(e) =>
+                        updateModelParams({ model_id: e.target.value })
+                      }
+                    >
+                      <option value="">
+                        {t("Choose a model", "选择模型")}
+                      </option>
+                      {!!modelParams?.model_id &&
+                        !models.some(
+                          (m) => m.model_id === modelParams?.model_id,
+                        ) && (
+                          <option value={String(modelParams.model_id)}>
+                            {String(modelParams.model_id)} · UNKNOWN
+                          </option>
+                        )}
+                      {models.map((m) => (
+                        <option key={m.model_id} value={m.model_id}>
+                          {m.model_id} · {m.state} / {m.health}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {modelsError && <span role="status">{modelsError}</span>}
+                  <label>
+                    {t("Instruction", "任务说明")}
+                    <textarea
+                      aria-label="Model instruction"
+                      maxLength={16384}
+                      value={String(modelParams?.instruction ?? "")}
+                      onChange={(e) =>
+                        updateModelParams({ instruction: e.target.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    {t("Maximum output Tokens", "输出 Token 上限")}
+                    <input
+                      aria-label="Model token budget"
+                      type="number"
+                      min={1}
+                      max={32768}
+                      value={Number(modelParams?.max_tokens ?? 512)}
+                      onChange={(e) =>
+                        updateModelParams({
+                          max_tokens: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    {t("Cost limit (USD)", "费用上限（美元）")}
+                    <input
+                      aria-label="Model cost budget"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={Number(modelParams?.max_cost_usd ?? 0)}
+                      onChange={(e) =>
+                        updateModelParams({
+                          max_cost_usd: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                </fieldset>
+              )}
               <label>
                 {t("Parameters", "参数")}
                 <textarea
@@ -726,7 +888,8 @@ export function StudioWorkflow({
                                 params: JSON.parse(paramsText),
                               };
                               if (bindingsText.trim())
-                                updated.data_bindings = JSON.parse(bindingsText);
+                                updated.data_bindings =
+                                  JSON.parse(bindingsText);
                               else delete updated.data_bindings;
                               return updated;
                             })()

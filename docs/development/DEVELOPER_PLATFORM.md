@@ -165,7 +165,8 @@ WorkflowDefinition used by the Compiler, WorkflowStore and public CLI.
 | CONDITION | Compares `params.input` with `params.equals`; mismatch skips this node, without true/false branch ports |
 | WAIT | Immediate barrier; not a timer |
 | APPROVAL | Waits for a current authorized human on `workflow:RUN_ID:STEP_ID` |
-| AGENT / CAPABILITY / CONNECTOR / COMMAND | UNSUPPORTED here; no execution host is bound |
+| AGENT with `action: model.invoke` | One approved model turn through AgentSession, Gateway and NKI; explicit model and budgets required |
+| Other AGENT / CAPABILITY / CONNECTOR / COMMAND | UNSUPPORTED here; no matching execution host is bound |
 
 Arrows express dependencies. In **Data bindings**, select a target parameter,
 the Run inputs or a direct dependency, and a JSON pointer such as `/value`.
@@ -187,8 +188,23 @@ Use the [result-binding example](../../examples/hello_workflow/result-bindings.j
 with matching Runtime/Studio builds. Workflow catalog and CLI validation advertise
 `data_bindings_versions: [1]`; older builds do not implement these fields.
 The new UI does not run a bound definition against an older catalog.
-Model/Agent consumers are still not bound here; account credentials alone do
-not supply that missing execution host. Data contracts do not grant permission.
+Choose **MODEL · APPROVAL** for a single model turn. Select the registered model
+ID, enter its instruction, output Token limit and USD budget, then apply the
+parameters. This uses the saved Provider and credential reference; it does not
+copy a key into the graph. Native Anthropic Messages remains unsupported by the
+frozen Worker. Real cloud/local inference still needs its own qualification.
+
+Only `params.input` may receive a data binding on a model node. The selected
+model, budget and instruction remain explicit. For JSON results, set
+`params.response_schema`; the same local-only JSON Schema validator checks it.
+A downstream node can bind `input` to `/structured_output` of its direct
+dependency. Each model turn requires the original human step approval.
+
+The Run/step binding derives one original request ID and AgentSession. Recovery
+requires the original accounting and committed Kernel receipt. Missing records
+leave UNKNOWN; restarting does not authorize another paid request. Model tool
+calls are data, never file/command permission. Generic autonomous Agent execution
+is not supplied by this single-turn adapter. Data contracts do not grant permission.
 Unsupported imported steps retain their fields for inspection/export. Validation
 alone does not establish an executable handler.
 

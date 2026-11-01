@@ -517,6 +517,7 @@ class CostController:
         context_window: int | None = None,
         output_window: int | None = None,
         kernel_binding: Mapping[str, Any] | None = None,
+        require_original: bool = False,
     ) -> Reservation:
         policy = self.policy
         identity = {
@@ -565,6 +566,10 @@ class CostController:
                 )
                 if original is not None:
                     return original
+                if require_original:
+                    raise CostLimitExceeded(
+                        "original model accounting is unavailable; dispatch blocked"
+                    )
         attempt = _positive_int("model retry attempt", attempt, 1)
         if attempt > policy.max_attempts:
             raise CostLimitExceeded("model retry attempt budget exceeded")

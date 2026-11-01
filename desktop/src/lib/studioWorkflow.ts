@@ -47,11 +47,35 @@ export type WorkflowDraft = {
   positions: WorkflowCanvas;
 };
 const identifier = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
-export const runnableStep = (step: WorkflowStep) =>
-  ["transform", "wait", "condition", "approval"].includes(step.step_type) &&
-  !step.action &&
-  !step.condition &&
-  !step.compensation;
+export const modelWorkflowStep = (step: WorkflowStep) =>
+  step.step_type === "agent" && step.action === "model.invoke";
+export const runnableStep = (step: WorkflowStep) => {
+  if (step.condition || step.compensation) return false;
+  if (modelWorkflowStep(step)) {
+    const p = step.params ?? {};
+    return (
+      step.approval_required === true &&
+      !step.retries &&
+      typeof p.model_id === "string" &&
+      !!p.model_id.trim() &&
+      typeof p.instruction === "string" &&
+      !!p.instruction.trim() &&
+      Number.isInteger(p.max_tokens) &&
+      Number(p.max_tokens) > 0 &&
+      Number(p.max_tokens) <= 32768 &&
+      typeof p.max_cost_usd === "number" &&
+      Number.isFinite(p.max_cost_usd) &&
+      p.max_cost_usd >= 0 &&
+      Object.keys(step.data_bindings?.inputs ?? {}).every(
+        (key) => key === "input",
+      )
+    );
+  }
+  return (
+    ["transform", "wait", "condition", "approval"].includes(step.step_type) &&
+    !step.action
+  );
+};
 export function workflowDefinition(value: unknown): WorkflowDefinition {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("WorkflowDefinition must be an object");
