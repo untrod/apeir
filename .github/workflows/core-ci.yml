@@ -225,6 +225,17 @@ jobs:
             python -m pytest -q tests/context/test_selected_input_integration.py::test_saved_reference_crosses_real_api_and_http_provider --tb=long --timeout=60 -rA
             if ($LASTEXITCODE -ne 0) { throw "Original context HTTP failure at cold sample $sample." }
           }
+      - name: Compare cold Runtime schema transactions on this same Windows host
+        if: inputs.diagnostic == 'windows-skill-http'
+        timeout-minutes: 5
+        run: python scripts/ci/probe_governance_checkpoint.py --runtime-schema --report "$env:RUNNER_TEMP/runtime-schema-probe.json"
+      - uses: actions/upload-artifact@v4
+        if: always() && inputs.diagnostic == 'windows-skill-http'
+        with:
+          name: windows-runtime-schema-probe-${{ github.sha }}
+          path: ${{ runner.temp }}/runtime-schema-probe.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Exercise original Relay journals and actual Windows read conflicts
         if: inputs.diagnostic == 'windows-relay-recovery'
         timeout-minutes: 5

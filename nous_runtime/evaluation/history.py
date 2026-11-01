@@ -85,7 +85,8 @@ class EvaluationHistory:
         with self._lock:
             try:
                 with _db_connect(self.db_path) as db:
-                    db.executescript("""
+                    # Publish the schema in the existing connection's transaction.
+                    db.executescript("""BEGIN IMMEDIATE;
                         CREATE TABLE IF NOT EXISTS evaluation_records (
                             id TEXT PRIMARY KEY,
                             target_type TEXT NOT NULL DEFAULT '',

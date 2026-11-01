@@ -5953,3 +5953,28 @@ it does not qualify Core or establish a repair from a green retry. The local
 observer's static-verifier binding mistake was caught and corrected before
 publication, separately from the original Windows timeout. Root cause remains
 unestablished pending live-stage evidence; historical Issues remain open.
+
+Windows3.11 diagnostic41288666506 exercised the original file and six cold
+processes without extending its ten-second client deadline. Nine actual HTTP
+samples ranged from1.175 to8.716 seconds. In the longest, Evaluation initialization
+took2.925 seconds and Experience2.233 seconds after the model response. This
+locates real latency in the same path; it does not reconstruct the missing
+server stack of the earlier failed request.
+
+Both existing stores initialized multiple CREATE statements without an explicit
+transaction. Reusing the original Governance atomic-schema tests exposed four
+real failures: each store's DDL ran outside a transaction, and a late schema
+failure left partially published tables. Adding BEGIN IMMEDIATE to their
+existing connection scopes makes the same tests pass, preserves retained data,
+and retains WAL/FULL synchronization, foreign keys, commit/rollback and closure.
+There is no new store, pool, authority, reduced deadline or host execution path.
+
+Local affected Evaluation/Experience/Governance/Context regression passed248
+cases with one Windows-only skip. The existing checkpoint probe now has a
+separate Runtime-schema mode:21 alternating cold pairs per owner, with only the
+BEGIN removed in its legacy arm, actual SQLite transaction-state verification,
+integrity checks, wall/CPU samples and descriptive tails. The local sub-millisecond
+results do not establish a Windows or full-request benefit; Experience's local
+p99 increased from0.761 to0.993ms and remains recorded. Actual Windows paired
+measurement and exact-head CI remain required. The original HTTP failure's
+complete cause is not declared repaired by this adjacent correctness fix.

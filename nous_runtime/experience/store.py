@@ -66,7 +66,8 @@ class ExperienceStore:
     def _ensure_tables(self) -> None:
         with self._lock:
             with _db_connect(self.db_path) as db:
-                db.executescript("""
+                # Publish the schema in the existing connection's transaction.
+                db.executescript("""BEGIN IMMEDIATE;
                     CREATE TABLE IF NOT EXISTS experiences (
                         id TEXT PRIMARY KEY,
                         source_type TEXT NOT NULL DEFAULT '',
