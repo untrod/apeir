@@ -130,6 +130,12 @@ print(r.start(d.workflow_id,d.version,idempotency_key="overview-original").run_i
   expect(errors).toEqual([]); expect(mutations).toEqual([]);
   await writeFile(info.outputPath("overview-v2-real-runtime.json"), JSON.stringify({ original_run_id: original, data_source: "WorkflowStore; real model-disabled Runtime", layout: configuration, runtime_mutations_from_overview: mutations, live_model_calls: 0, native_installation: "NOT_TESTED" }, null, 2));
   await page.getByRole("button", { name: "Open Dashboard", exact: true }).click();
+  const boxes = await page.locator(".studio-widget").evaluateAll(nodes => nodes.map(node => ({ id: node.getAttribute("data-widget-id"), inline: node.getAttribute("style"), className: node.className, rect: { x: node.getBoundingClientRect().x, y: node.getBoundingClientRect().y, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height }, position: getComputedStyle(node).position, transform: getComputedStyle(node).transform, gridWidth: node.parentElement?.getBoundingClientRect().width })));
+  await writeFile(info.outputPath("overview-visual-geometry.json"), JSON.stringify(boxes, null, 2));
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+    const a = boxes[i].rect, b = boxes[j].rect;
+    expect(a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y).toBe(false);
+  }
   await page.screenshot({ path: info.outputPath("overview-v2-source-browser.png"), fullPage: true });
 });
 

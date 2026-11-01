@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { GridLayout, useContainerWidth, type Layout } from "react-grid-layout";
 import { noOverlapCompactor } from "react-grid-layout/core";
 import { compactDashboard, defaultDashboard, validateDashboard, WIDGET_TYPES, OVERVIEW_MODES, WIDGET_ACCENTS, WIDGET_ICONS, dashboardMode, upgradeDashboard, moveDashboardWidget, type WidgetPresentation, type DashboardWidget } from "../../lib/studioDashboard";
@@ -150,6 +150,10 @@ export function StudioDashboard({ config, updateConfig, isVisible, locale, inspe
   const { editing } = useStudioPresentation();
   const dashboard = config === undefined ? defaultDashboard() : validateDashboard(config);
   const { width, mounted, containerRef } = useContainerWidth();
+  // Hidden dock hosts report zero. Keep the last actual grid width without
+  // remounting widgets or feeding invalid negative column sizes to the grid.
+  const [gridWidth, setGridWidth] = useState(1280);
+  useLayoutEffect(() => { if (width > 0) setGridWidth(width); }, [width]);
   const { refresh, extensions } = useStudioSnapshot();
   const contributions = availableContributions(extensions.data, "widget");
   const [type, setType] = useState("nodes"), [selected, setSelected] = useState<string | null>(null), [message, setMessage] = useState("");
@@ -210,7 +214,7 @@ export function StudioDashboard({ config, updateConfig, isVisible, locale, inspe
       } catch (error) { setMessage(String(error)); }
     }} />
     {editing && settings && <form className="studio-widget-settings" aria-label="Widget settings" onSubmit={event => event.preventDefault()}><strong>{t("Widget settings", "组件设置")} · {settings.type}</strong><label>{t("Title", "标题")}<input aria-label="Widget title" maxLength={64} value={settings.title} onChange={event => update({ title: event.target.value })} /></label>{(["x", "y", "w", "h"] as const).map(key => <label key={key}>{key}<input aria-label={`Widget ${key}`} type="number" value={settings[key]} onChange={event => update({ [key]: Number(event.target.value) })} /></label>)}{presentationFields.map(([key, choices, en, zh]) => <label key={key}>{t(en, zh)}<select aria-label={`Widget ${key}`} value={settings.presentation?.[key] || ""} onChange={event => appearance({ [key]: event.target.value })}><option value="" disabled>{t("Default", "默认")}</option>{choices.map(choice => <option key={choice} value={choice}>{choice}</option>)}</select></label>)}<label><input type="checkbox" checked={settings.paused} onChange={event => update({ paused: event.target.checked })} />{t("Pause display", "暂停显示")}</label><button onClick={() => setSelected(null)}>{t("Close settings", "关闭设置")}</button></form>}
-    <div className="studio-dashboard-grid" ref={containerRef as React.RefObject<HTMLDivElement>}>{mounted && <GridLayout width={width} gridConfig={{ cols: 12, rowHeight: 40, margin: [8, 8], maxRows: 200 }} compactor={noOverlapCompactor} resizeConfig={{ enabled: editing }} dragConfig={{ enabled: editing, handle: ".studio-widget-grip", allowMobileScroll: true }} layout={dashboard.widgets.map(widget => ({ i: widget.id, x: widget.x, y: widget.y, w: widget.w, h: widget.h, minW: 2, minH: 2, maxH: 30 }))} onLayoutChange={positions}>
+    <div className="studio-dashboard-grid" ref={containerRef as React.RefObject<HTMLDivElement>}>{mounted && <GridLayout width={gridWidth} gridConfig={{ cols: 12, rowHeight: 40, margin: [8, 8], maxRows: 200 }} compactor={noOverlapCompactor} resizeConfig={{ enabled: editing }} dragConfig={{ enabled: editing, handle: ".studio-widget-grip", allowMobileScroll: true }} layout={dashboard.widgets.map(widget => ({ i: widget.id, x: widget.x, y: widget.y, w: widget.w, h: widget.h, minW: 2, minH: 2, maxH: 30 }))} onLayoutChange={positions}>
       {dashboard.widgets.map(widget => <div key={widget.id} className={`studio-widget widget-density-${widget.presentation?.density || "inherit"} widget-accent-${widget.presentation?.accent || "neutral"} widget-style-${widget.presentation?.style || "card"} ${selected === widget.id && editing ? "studio-widget-selected" : ""}`} data-widget-id={widget.id}><header>{widget.presentation?.icon && widget.presentation.icon !== "default" && <StudioIcon name={widget.presentation.icon} />}{editing ? <><button className="studio-widget-grip" aria-label={`${t("Move", "移动")} ${title(widget)}`} title={t("Drag or use arrow keys to move; Shift + arrows to resize", "拖动或方向键移动；Shift + 方向键调整大小")} onKeyDown={event => {
         if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
         event.preventDefault(); event.stopPropagation();

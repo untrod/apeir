@@ -5760,3 +5760,14 @@ Dashboard/metrics/subscription tests and19 Workflow API cases passed; the Deskto
 suite passed494 cases before the final navigation callback correction, whose
 actual-browser counterexample was then rerun successfully. Current-head follow-up
 checks and paired performance measurements are recorded with their own scope.
+
+Screenshot review exposed a separate hidden-panel defect: the resize observer
+reported a zero width, yielding negative grid columns and overlapping cards after
+Chat→Overview navigation. The browser geometric non-overlap assertion failed on
+the original view. Retaining the last positive measured width fixes that same
+assertion without remounting widgets or changing any saved position. The paired
+benchmark's first sample was rejected because its fresh unprovisioned Controller
+returned UNKNOWN/HTTP500 for Node facts. The harness now provisions only its
+owned temporary Controller identity; no Node, device, model or permission is
+installed by that fixture. The failed sample is retained and excluded from any
+performance comparison.
