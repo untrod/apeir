@@ -5596,8 +5596,11 @@ independently downloaded: 22 checksums, 13 manifest entries, 11 inner Portable
 files, x64 application PE headers and approved component hashes all match.
 The four application/sidecar EXEs and x86 NSIS bootstrapper are unsigned.
 
-The [current build record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)
-retains exact hashes and the new download. NKI1/2/3 and bad/missing credential
+The historical [a37dab8 bundle](https://github.com/untrod/apeir/actions/runs/41006787955/artifacts/12957768657)
+retains its own outer SHA `bdefeb3f78f787ce84a99e1511a0444efe656088e72add9edc566373436f812f`,
+NSIS SHA `9D98F7AFD0BCCD3BB838254EE44C1725B6F541D60C6C5F0FE38347575830B9B8`
+and Portable SHA `C714D78D7F56D550C30A0F7BAE4DBA36123E4C1E5292287A70561C04F004D1BF`.
+The current download is recorded separately in the Windows guide. NKI1/2/3 and bad/missing credential
 refusal passed; original denied workload recovery submitted zero new model
 operations. The native CLI recovered original pure Run
 wfr_e879eabc129d4e43b68f448f7e347244. External model calls: zero. Windows10
@@ -5605,6 +5608,56 @@ installation, installed GUI, graceful exit, upgrade/uninstall, Defender, real
 inference, signing and formal publication remain unqualified. No independent
 NSIS payload extraction is claimed. Earlier failed runs and Issues85/88/116/121
 remain retained; green qualification does not establish one cause for them.
+
+## Native Automation failure evidence — 2026-10-30
+
+Follow-up independent extraction of the preceding `a37dab8` NSIS package found
+all 11 expected application/resource files. Ten match Portable byte for byte;
+the main executable differs only at Tauri's three-byte `UNK` to `NSS` bundle
+marker, confirmed against the actual [2.11.4 bundler source](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.4/crates/tauri-bundler/src/bundle.rs).
+Its installer-payload SHA-256 is
+`1f22ddd6a27f495bc7818f059c6be270beed87297ef179b5213f335fe4157e07`.
+The installer was not executed; this does not qualify installation or uninstall.
+
+The full-mode Native refresh [41099498312](https://github.com/untrod/apeir/actions/runs/41099498312)
+at accepted source `167bcf48b1a79e47097136fb37f69be61b7087d3` stopped before packaging:
+`test_original_work_matches_only_after_human_approval_and_independent_observation`
+returned Workflow `failed` after approval. The original assertion remains
+`state == completed`; result: **1 failed, 6044 passed, 95 skipped, 4 warnings**
+in 2344.32 seconds. The truncated projection does not establish its error,
+original Work state, effect count or verification outcome. It does not establish
+the cause of [Issue #82](https://github.com/untrod/apeir/issues/82).
+
+The test now retains bounded, redacted failure metadata and monotonic
+prepare/approval/resume timings. It prints neither execution arguments nor raw
+evidence. The existing Core diagnostic runner can select
+`windows-automation-recovery` with the Native dependency set and original
+Automation tests. That optional diagnostic cannot satisfy the Core gate.
+No completion/MATCH assertion, wait limit, execution permission or retry policy
+was relaxed. This is evidence collection, not a root-cause fix or Native PASS.
+The preceding qualified `a37dab8` download remains separately identified.
+
+### Windows recovery follow-up
+
+Diagnostic [41108119177](https://github.com/untrod/apeir/actions/runs/41108119177)
+passed all 115 Automation cases with the same Native dependency set. It did not
+reproduce the failure and does not establish its cause or qualify an installer.
+
+Multi-Arch [41108108372](https://github.com/untrod/apeir/actions/runs/41108108372)
+instead failed the original ProcessSession fresh-host assertion after two
+injected read denials: the third, actual read raised `PermissionError`, errno13,
+with no WinError. The host remained `RECOVERY_REQUIRED`; no cached identity or
+replacement process was accepted. Issue85 remains open. The test now reuses the
+Relay's existing read-only Windows access probe to capture a later native error
+code, if any. That sample neither replaces the failed read nor proves its cause;
+the same assertion, three-read bound and control refusal remain intact.
+
+Core [41110012705](https://github.com/untrod/apeir/actions/runs/41110012705)
+also retained three original five-second Skill HTTP failures. Phase evidence
+includes slow SQLite commits and a sampled CAS receipt-file open; it does not
+establish a common cause with either recovery failure. Issues82/85/88 are not
+closed by a passing retry. No HTTP deadline, durability setting or permission
+check is relaxed.
 
 ## Hosted macOS runner retirement — 2026-10-30
 
@@ -5657,3 +5710,271 @@ fixture now uses numeric binding too, without replacing its SSL context,
 certificate checks, sockets or five-second startup assertion. Four affected
 transport cases run before the unchanged full macOS regression so an unresolved
 startup failure fails early instead of repeating a two-hour cascade.
+
+## Approved Workflow model host — 2026-11-01
+
+The Studio API binds `agent:model.invoke` to existing AgentSession, ModelGateway,
+CostController and NKI owners. It is one model turn, not a new Agent harness.
+Model identity, instruction and Token/USD budgets remain explicit; typed bindings
+may supply only input data. Current original-step human authority is checked at
+dispatch, after the approval audit transaction commits. The adapter requests no
+tool, file or device execution authority.
+
+The original Run/step binding determines the request/session IDs. A resumed intent
+uses reconciliation-only Gateway admission: absent original accounting cannot
+create a new reservation, and a missing committed Kernel receipt cannot authorize
+submission. Canonical Workflow checkpoints and AgentSession results persist;
+there is no new execution database. An explicit unknown-outcome exception lets a
+reconciliation host preserve UNKNOWN without changing other handler failures.
+
+Ten focused software cases exercise two explicit cloud/local Provider identities,
+structured result binding, separate human approval, committed-audit visibility,
+original response-loss recovery, missing Kernel/accounting/session records and
+revoked/serialized identity refusal. They use a simulated NKI protocol journal
+with the actual Runtime, Gateway and accounting. They are not real Kernel/model,
+paid-account or hardware acceptance. Cloud/local inference remains PENDING;
+strict Linux execution and Windows10 installation retain their separate gates.
+
+
+## Overview presentation and navigation — 2026-11-01
+
+| Area | Decision | Actual scope |
+| --- | --- | --- |
+| Docking, Layout library, themes | REUSE | Existing panel hosts and layout owner; no new window system. |
+| Usage and refresh | REUSE | CostController/EntityStore shared usage transport and StudioSnapshot visibility subscriptions. |
+| Presentation | EXTEND | Explicit nested Dashboardv2 settings; v1 IDs, coordinates and implicit geometry retained. |
+| Progress | EXTEND | Existing WorkflowStore summary adds validated-definition logical step counts; no task database or execution path. |
+| Panel navigation | FIX | Detail/quick navigation focuses an existing panel. Add panel still creates independent instances. |
+| GitHub | EXTEND | Product connection, authorization and activity consumer still missing. Repository Actions credentials are not reused as user GitHub authorization. |
+| Ollama lifecycle | EXTEND | Existing Provider endpoint configuration remains usable; install/download/load/unload controls are not implemented or qualified. No local service or live-model credentials are attached. |
+
+The browser counterexample found that the previous detail callback always created
+another Chat. A draft then appeared empty in the new instance. The same assertion
+now passes after binding navigation to the existing reveal path; no prompt is
+written into a layout and no backend request is submitted by navigation.
+
+Production-built Studio with actual model-disabled Runtime HTTP passed14 browser
+cases on Linux Chromium, including original Workflow progress, two cards sharing
+one read, v1-to-v2 identity/geometry preservation, keyboard collision refusal,
+restart-style page reload, retained conversation draft, Controller separation,
+original Workflow history, governed registration and declarative extension
+revocation. This is not live-model or native Windows acceptance.51 initial
+Dashboard/metrics/subscription tests and19 Workflow API cases passed; the Desktop
+suite passed494 cases before the final navigation callback correction, whose
+actual-browser counterexample was then rerun successfully. Current-head follow-up
+checks and paired performance measurements are recorded with their own scope.
+
+Screenshot review exposed a separate hidden-panel defect: the resize observer
+reported a zero width, yielding negative grid columns and overlapping cards after
+Chat→Overview navigation. The browser geometric non-overlap assertion failed on
+the original view. Retaining the last positive measured width fixes that same
+assertion without remounting widgets or changing any saved position. The paired
+benchmark's first sample was rejected because its fresh unprovisioned Controller
+returned UNKNOWN/HTTP500 for Node facts. The harness now provisions only its
+owned temporary Controller identity; no Node, device, model or permission is
+installed by that fixture. The failed sample is retained and excluded from any
+performance comparison.
+
+The existing App read-refresh loop also admitted a new five-resource batch every
+five seconds while its previous batch was still pending, including in a hidden
+document. The unchanged old production bundle fails the new real-HTTP held-read
+case with two task reads instead of one. The candidate uses one in-flight read
+batch, pauses periodic reads when hidden and refreshes after visibility returns.
+The same strengthened browser case passes (23.5s), with no backend-cancellation
+claim. A failed Operations source now has an explicit UNKNOWN diagnostic entry
+rather than the generic empty-history message. Neither change grants execution
+permission or changes backend deadlines. The current Desktop suite passed495
+cases; the affected canonical Workflow/model/accounting regression passed155.
+
+### Overview paired measurement
+
+Measured frontend0311fbf against f836958, whose Desktop tree is byte-identical to
+main4411878 (`f513ee2148e8ad9ebcc59566fda29d5249279c3b`). Both actual production
+builds used the same owned model-disabled Runtime, equivalent v1 Overview and
+provisioned temporary Controller. Linux amd64, Node24.19.0, Chromium156.0.8078.4;
+three alternating pairs, eleven-second visible windows and instrumented six-second
+hidden windows. A preliminary run overlapping browser acceptance is retained as
+exploratory only; the table uses the subsequent separate measurement.
+
+| Measurement | Baseline p50 / p95 / p99 | Candidate p50 / p95 / p99 |
+| --- | --- | --- |
+| Warm Overview restoration, ms | 120.69 /138.59 /138.59 | 129.08 /234.79 /234.79 |
+| Overview→Chat, ms | 78.27 /102.50 /102.50 | 63.86 /130.96 /130.96 |
+| Chat→Overview, ms | 49.10 /59.68 /59.68 | 56.30 /58.34 /58.34 |
+| Composer fill, ms | 10.61 /11.46 /11.46 | 22.92 /36.49 /36.49 |
+| Pointer move, ms | 260.64 /282.25 /282.25 | 261.70 /283.40 /283.40 |
+| Owned browser CPU time in visible window, s | 0.23 /0.23 /0.23 | 0.21 /0.21 /0.21 |
+
+Both versions made two periodic Usage reads per visible window. Every hidden
+window recorded one read each for Tasks/Nodes/Models/Approvals/Conversations on
+the baseline and zero on the candidate; three EventStream reads remained in
+both. Browser/API failures and Runtime mutations were zero. Maximum sampled
+renderer heap-after was12736604 versus12997896 bytes, not peak process memory.
+
+This is an exploratory n=3 comparison: p95/p99 are sample maxima, and automation
+waits contribute to interaction times. Higher restoration/composer tail samples
+remain recorded; no overall speed, CPU-saving percentage or Token-cost benefit
+is established. Native process-tree usage, installer size, model load/unload and
+live inference need their own environments. Reproduce using the maintained
+`desktop/scripts/benchmark-studio-usage.mjs --scenario overview`, passing clean
+baseline/candidate/Runtime checkouts, the Python executable and a new output file.
+Current-source full production-browser acceptance passed15 cases, including the
+same previously failing non-overlap and in-flight/hidden-read assertions.
+
+
+## Dated Overview accounting and bounded build prerequisites — 2026-11-01
+
+Usage/Cache cards now select a UTC day through the existing CostController API;
+Usage cards select a bounded field list. Dashboardv1 remains readable, and v2
+imports reject invalid dates, future dates, unknown/duplicate fields and accounting
+settings on unrelated widgets. These are presentation settings, not permissions.
+
+The existing EntityStore owns transient date projections, with at most32 retained
+history entries. The existing shared transport deduplicates by date, admits at
+most eight visible dates, stops hidden reads and rejects mismatched-date or retired
+Controller replies. Usage-only updates no longer schedule an IndexedDB save of a
+projection that was already excluded from that cache. No accounting records,
+Provider fees or reservations are changed by these reads.
+
+Native run41258516903 stalled during Playwright's dependency installation,
+00:52:46→05:39:21 UTC, before any Windows build. The retained log shows APT
+fallback/Package index requests to the Azure Ubuntu mirror, followed by no
+progress until cancellation. This is separate from a test failure or component
+integrity result. The ephemeral Ubuntu CI runner now replaces that locator with
+the official Ubuntu HTTPS archive, retains package signature verification, bounds
+APT connection waits/retries and limits the dependency step to15 minutes. Tests,
+strict browser sandbox, native validation and Native Smoke remain mandatory.
+The cancelled run remains evidence; a later successful build would qualify its
+source, not prove a cause for unrelated historical Windows timing failures.
+
+Validation of this extension:500 Desktop cases, TypeScript/ESLint/build and16
+actual Runtime HTTP/production-browser cases passed. The added browser case
+selects the real dated ledger, shares a date between Usage and Cache, changes the
+visible fields/day and restores both after reload. Its ledger has no model
+receipts; it is not live Provider usage. Negative cases cover duplicate/unknown
+fields, impossible/future dates, wrong-day responses, the visible-date limit and
+retired Controller data. The existing repository workflow contracts and shell/
+embedded-Python syntax checks pass without changing this Cloud host's APT config.
+
+The final explicit-date guard is included in source `aacb840`. Its Core
+41278567992, Desktop41278568041, Multi-Arch41278567938 and
+Security41278567941 all passed. Windows Core recorded6059 passed/95 skipped;
+Linux3.10 recorded6068/86, Linux3.12 6081/73 and macOS15 6066/88, each with four
+warnings. Desktop recorded501 tests and16 real-HTTP/production-browser scenarios.
+These are candidate results: protected-main integration remains pending, and
+main441's older macOS14 cancellation is not rewritten as a successful run.
+
+The official Runtime artifact13072497439 and Studio artifact13072018777 from
+run41278566620 have matching `aacb840` manifests and all4/13 file checksums.
+Wheel SHA-256 is
+`bc204f577c643f809b94e037f0fa4da2b680289f3020db89c52c68f6ceb3fd1e`.
+A fresh base venv outside the checkout exercised the public CLI, production
+model-disabled API, separate approval processes, simulated response-loss
+reconciliation and normal cleanup. Effect count remained one after loss.
+Downloaded Studio read an actual project, retained original Chat events and
+recovered pure Workflow history and v2 layout after a real Runtime restart.
+
+Installed-product browser acceptance edited two Python files, reviewed their
+original SHA-bound diffs, refused unapproved application, applied the original
+independently approved Proposal and recovered its records after restart. An
+external file change refused stale overwrite; reconciliation reported MISMATCH
+without replay. This was human editing, not a claimed live-model proposal or
+successful test execution. The external standard-library UI example completed
+six independently approved lifecycle changes against the installed Runtime;
+unauthenticated, undeclared-source, conflicting-version and revoked reads were
+denied. No internal Python imports, executable UI or device grants were used.
+
+After separate approval, the installed command API returned
+`STRICT_SANDBOX_UNAVAILABLE` for original Run
+`workbench-exec-b8c73e26bf1a451b`, exit-1 and `resource_only`. No probe process
+ran and no host-Shell fallback occurred. Typed pure results passed between two
+nodes; wrong input types were rejected, and a cancelled approval-waiting Run
+remained CANCELLED under its original key across CLI processes. These are
+software and fail-closed acceptance, not qualified strict Linux execution.
+
+A new clean-source paired measurement compared `aacb840` with the same f836
+baseline/Runtime setup described above: three alternating pairs, Linux x64,
+Node24.19.0 and Chromium156.0.8078.4. The hidden-read reduction remained five
+to zero per six-second instrumented window; visible Usage and EventStream
+behavior stayed the same. Browser-process-group CPU p50/p95/p99 was
+0.18/0.20/0.20 versus0.16/0.17/0.17 seconds per eleven-second window. Warm
+restoration was101.62/132.14/132.14 versus114.82/160.72/160.72 milliseconds;
+the regression is retained. Maximum heap-after was10694424 versus10828464
+bytes, not peak memory. With n=3, tail ranks are sample maxima, not stable
+percentiles. No native process-tree, model-load, Token-saving or fee-saving
+qualification follows from these measurements.
+
+
+### Native and source qualification of aacb840
+
+Full Native run41278566620 completed successfully and produced
+[artifact13073474480](https://github.com/untrod/apeir/actions/runs/41278566620/artifacts/13073474480),
+retained until2026-11-15. Independent outer SHA-256:
+`f83a8cf90b17437a46ea86def838c27c4c5b9abec2f9f21a136d16ae340f1819`. Both22-entry checksum lists,
+13 manifest records and11 Portable members match. The unchanged canonical
+component verifier admits the two approved Kernel PE files. Actual NSIS payload
+extraction matches all expected resources; the launcher differs only at the
+upstream three-byte Tauri bundle stamp. The published raw installer SHA is
+`729B8B2DA7C4D20D37BC38B418D6E360CEBC777D7998F0754F895EB552271302`;
+Portable SHA is `D4A8051E651C4C29497B3A73D0A61F68F88EF14DE436FCE701AB17327102179E`.
+
+The official complete script executed6058 Python cases/95 skips/four warnings,
+501 Desktop tests, the unchanged frozen Kernel validation and actual NKI,
+Worker/Runtime health, invalid-auth refusal, restart and process cleanup. The
+original pure CLI Workflow Run is `wfr_77018143144e4efcbacfa47c7ab85a5b`.
+No SkipValidation or SkipSidecarSmoke was used; model calls were zero. Host:
+Windows Server2025, Python3.12.10, Node22.23.4, Rust/Cargo1.99.1,
+MSVC14.51.36260.0 and Windows SDK10.0.26100.0. The longer build's Runtime
+regression took2686.01 seconds; this is not a paired hardware/network comparison
+or proof of a source performance regression. Windows10 GUI/install/upgrade/
+uninstall, Defender, live inference and signing remain unqualified.
+
+README, Quick Start and Windows guide now point to this exact candidate, not
+an older package with the same filenames. The current screenshots are unedited
+production-source browser captures from the matching Runtime integration run;
+they are not installed-Desktop photographs. New documentation does not change
+Runtime/Studio implementation, frozen Kernel or the approved component lock.
+
+### Windows selected-context HTTP deadline — 2026-11-01
+
+Source e167357 passed Core/Desktop/Security, but Multi-Arch41283182740 failed
+on Windows Python3.11 job124779103885 in
+`test_saved_reference_crosses_real_api_and_http_provider`: one failed,
+5716 passed,77 skipped,341 deselected,four warnings. The client timed out
+reading the original HTTP response at ten seconds. The retained fixture had
+received the model input by teardown; that does not establish which stage was
+active when the deadline expired. The original complete logs remain retained.
+
+The selected-context tests reuse the existing bounded content-free phase
+observer and dump code-only thread locations before timeout teardown. The
+original deadline and assertions remain intact. The existing Windows3.11
+diagnostic now exercises this file and six bounded cold-process repetitions;
+it does not qualify Core or establish a repair from a green retry. The local
+observer's static-verifier binding mistake was caught and corrected before
+publication, separately from the original Windows timeout. Root cause remains
+unestablished pending live-stage evidence; historical Issues remain open.
+
+Windows3.11 diagnostic41288666506 exercised the original file and six cold
+processes without extending its ten-second client deadline. Nine actual HTTP
+samples ranged from1.175 to8.716 seconds. In the longest, Evaluation initialization
+took2.925 seconds and Experience2.233 seconds after the model response. This
+locates real latency in the same path; it does not reconstruct the missing
+server stack of the earlier failed request.
+
+Both existing stores initialized multiple CREATE statements without an explicit
+transaction. Reusing the original Governance atomic-schema tests exposed four
+real failures: each store's DDL ran outside a transaction, and a late schema
+failure left partially published tables. Adding BEGIN IMMEDIATE to their
+existing connection scopes makes the same tests pass, preserves retained data,
+and retains WAL/FULL synchronization, foreign keys, commit/rollback and closure.
+There is no new store, pool, authority, reduced deadline or host execution path.
+
+Local affected Evaluation/Experience/Governance/Context regression passed248
+cases with one Windows-only skip. The existing checkpoint probe now has a
+separate Runtime-schema mode:21 alternating cold pairs per owner, with only the
+BEGIN removed in its legacy arm, actual SQLite transaction-state verification,
+integrity checks, wall/CPU samples and descriptive tails. The local sub-millisecond
+results do not establish a Windows or full-request benefit; Experience's local
+p99 increased from0.761 to0.993ms and remains recorded. Actual Windows paired
+measurement and exact-head CI remain required. The original HTTP failure's
+complete cause is not declared repaired by this adjacent correctness fix.

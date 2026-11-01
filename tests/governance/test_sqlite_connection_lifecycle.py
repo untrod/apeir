@@ -1,6 +1,7 @@
 """The original Governance SQLite owner closes every admitted connection."""
 
 import sqlite3
+import importlib
 import subprocess
 import sys
 from pathlib import Path
@@ -130,7 +131,18 @@ def test_checkpoint_configuration_failure_closes_without_admitting_transaction(
     assert opened[0].closed
 
 
-def test_schema_initialization_is_one_atomic_write_transaction(tmp_path, monkeypatch):
+SCHEMA_OWNERS = (
+    ("nous_runtime.governance.store", "GovernanceStore", "governance.db"),
+    ("nous_runtime.evaluation.history", "EvaluationHistory", "evaluation.db"),
+    ("nous_runtime.experience.store", "ExperienceStore", "experience.db"),
+)
+
+
+@pytest.mark.parametrize("module_name,owner_name,filename", SCHEMA_OWNERS)
+def test_schema_initialization_is_one_atomic_write_transaction(
+    tmp_path, monkeypatch, module_name, owner_name, filename
+):
+    owner = importlib.import_module(module_name)
     original_connect = sqlite3.connect
     ddl_transactions = []
     transaction_boundaries = []
@@ -149,23 +161,26 @@ def test_schema_initialization_is_one_atomic_write_transaction(tmp_path, monkeyp
         return connection
 
     with monkeypatch.context() as trace:
-        trace.setattr(store.sqlite3, "connect", connect)
-        governance = store.GovernanceStore(tmp_path)
+        trace.setattr(owner.sqlite3, "connect", connect)
+        initialized = getattr(owner, owner_name)(tmp_path)
     assert ddl_transactions and all(ddl_transactions)
     # Older CPython executescript() calls commit() even without an active
     # transaction. Trace actual SQLite boundaries rather than that no-op call.
     assert transaction_boundaries == ["BEGIN IMMEDIATE", "COMMIT"]
-    with store._db_connect(governance.db_path, readonly=True) as connection:
+    assert Path(initialized.db_path).name == filename
+    with owner._db_connect(initialized.db_path, readonly=True) as connection:
         assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert connection.execute("PRAGMA synchronous").fetchone()[0] == 2
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
 
 
+@pytest.mark.parametrize("module_name,owner_name,filename", SCHEMA_OWNERS)
 def test_late_schema_failure_rolls_back_all_ddl_and_preserves_existing_data(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, module_name, owner_name, filename
 ):
-    path = tmp_path / "governance.db"
-    with store._db_connect(str(path)) as connection:
+    owner = importlib.import_module(module_name)
+    path = tmp_path / filename
+    with owner._db_connect(str(path)) as connection:
         connection.execute("CREATE TABLE retained (value TEXT)")
         connection.execute("INSERT INTO retained VALUES ('original')")
     original_connect = sqlite3.connect
@@ -179,20 +194,24 @@ def test_late_schema_failure_rolls_back_all_ddl_and_preserves_existing_data(
 
     raised = False
     with monkeypatch.context() as fault:
-        fault.setattr(store.sqlite3, "connect", connect)
+        fault.setattr(owner.sqlite3, "connect", connect)
         try:
-            store.GovernanceStore(tmp_path)
-        except sqlite3.DatabaseError:
+            getattr(owner, owner_name)(tmp_path)
+        except Exception as exc:
+            assert isinstance(exc, sqlite3.DatabaseError) or isinstance(
+                exc.__cause__, sqlite3.DatabaseError
+            )
             raised = True
-    with store._db_connect(str(path), readonly=True) as connection:
+    with owner._db_connect(str(path), readonly=True) as connection:
         assert not connection.execute(
-            "SELECT name FROM sqlite_master WHERE name LIKE 'governance_%'"
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name != 'retained' AND name NOT LIKE 'sqlite_%'"
         ).fetchall()
         assert (
             connection.execute("SELECT value FROM retained").fetchone()[0] == "original"
         )
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-    assert raised, "failed schema initialization returned a usable GovernanceStore"
+    assert raised, "failed schema initialization returned a usable store"
 
 
 def test_schema_failure_propagates_without_logging_private_error(

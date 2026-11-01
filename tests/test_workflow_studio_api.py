@@ -158,6 +158,18 @@ def test_real_registration_execution_history_and_restart(api, monkeypatch):
     catalog = call("GET", "/api/v1/workflow")["data"]
     assert len(catalog["runs"]) == 1
     assert "outputs" not in catalog["runs"][0]
+    assert catalog["runs"][0]["step_counts"] == {
+        "total": 1,
+        "completed": 1,
+        "skipped": 0,
+        "failed": 0,
+        "unknown": 0,
+        "waiting_approval": 0,
+        "started": 0,
+        "running": 0,
+        "pending": 0,
+        "cancelled": 0,
+    }
     assert "definition" not in catalog["definitions"][0]
     restored_definition = call("GET", "/api/v1/workflow/definitions/studio.test/1.0.0")[
         "data"
@@ -470,3 +482,24 @@ def test_public_cli_api_decisions_keep_current_human_and_denial_boundaries(
     record = gate.store.get_approval_request(request_id)
     assert record["status"] == "DENIED"
     assert gate.store.list_active_leases("api-service") == []
+
+
+def test_history_progress_refuses_changed_definition_without_exposing_inputs(api):
+    import json
+    import sqlite3
+    from nous_runtime.workflow import WorkflowRuntime
+    from nous_runtime.workflow.store import WorkflowBindingError
+
+    _, _, root = api
+    runtime = WorkflowRuntime(str(root))
+    definition = definition_from_dict(spec())
+    runtime.register(definition)
+    runtime.start(definition.workflow_id, definition.version)
+    altered = definition_to_dict(definition)
+    altered["steps"][0]["params"]["value"] = "changed-after-admission"
+    with sqlite3.connect(runtime.store.path) as db:
+        db.execute(
+            "UPDATE workflow_definitions SET definition_json=?", (json.dumps(altered),)
+        )
+    with pytest.raises(WorkflowBindingError):
+        runtime.store.list_run_summaries()

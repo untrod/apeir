@@ -75,6 +75,70 @@ async function dashboardMenu(page: Page) {
   if (!(await summary.evaluate(node => (node.parentElement as HTMLDetailsElement).open))) await summary.click();
 }
 
+test("Overview v2 preserves v1 geometry and reads canonical progress without executing Work", async ({ page }, info) => {
+  const fixture = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-c", `from nous_runtime.workflow import WorkflowRuntime
+from nous_runtime.workflow.models import definition_from_dict
+r=WorkflowRuntime(${JSON.stringify(runtimes[0].directory)})
+d=definition_from_dict({"workflow_id":"overview.read-reference","version":"1.0.0","trigger":"manual","steps":[{"step_id":"result","step_type":"transform","params":{"value":"actual-result"}}]})
+r.register(d)
+print(r.start(d.workflow_id,d.version,idempotency_key="overview-original").run_id)`], { cwd: resolve(".."), env: { ...globalThis.process.env, NOUS_WORKSPACE_ROOT: runtimes[0].directory }, stdio: ["ignore", "pipe", "pipe"] });
+  producers.push(fixture); let original = "";
+  fixture.stdout?.on("data", chunk => { original += String(chunk); });
+  expect(await new Promise(resolve => fixture.once("exit", resolve))).toBe(0);
+  original = original.trim(); expect(original).toMatch(/^wfr_/);
+  const mutations: string[] = [], errors: string[] = []; let reads = 0;
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("request", request => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/v1/workflow" && request.method() === "GET") reads++;
+    if (url.pathname.startsWith("/api/") && !["GET", "OPTIONS"].includes(request.method())) mutations.push(url.pathname);
+  });
+  await open(page);
+  const widgets = ["progress", "progress", "cache", "quick-actions"].map((type, i) => ({ id: `overview-${i}`, type, title: "", x: i % 2 * 6, y: Math.floor(i / 2) * 5, w: 6, h: 5, paused: false }));
+  const legacy = { schemaVersion: 1, kind: "dashboard", name: "Overview v1", locale: "en", layout: { type: "row", id: "overview-root", children: [{ type: "tabset", id: "overview-group", children: [{ type: "tab", id: "overview-panel", component: "dashboard", config: { schemaVersion: 1, widgets } }] }] } };
+  await page.getByLabel("Import Studio layout", { exact: true }).setInputFiles({ name: "overview-v1.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(legacy)) });
+  await expect(page.getByText("overview.read-reference", { exact: true })).toHaveCount(2);
+  await expect(page.getByText("Recorded steps: 1 / 1 · Skipped: 0", { exact: true })).toHaveCount(2);
+  await expect(page.getByText(original, { exact: true })).toHaveCount(2);
+  expect(reads).toBe(1);
+  await page.getByRole("combobox", { name: "Overview mode", exact: true }).selectOption("professional");
+  await page.getByRole("button", { name: "Edit layout", exact: true }).click();
+  await page.getByRole("button", { name: "Settings Cache tokens", exact: true }).click();
+  await page.getByRole("combobox", { name: "Widget accent", exact: true }).selectOption("info");
+  await page.getByRole("combobox", { name: "Widget density", exact: true }).selectOption("compact");
+  await page.getByRole("combobox", { name: "Widget icon", exact: true }).selectOption("model");
+  await page.getByRole("button", { name: "Close settings", exact: true }).click();
+  const grip = page.getByRole("button", { name: "Move Cache tokens", exact: true });
+  await grip.focus(); await grip.press("ArrowLeft");
+  await expect(page.getByRole("alert")).toContainText("Invalid widget position or size");
+  await grip.press("Shift+ArrowDown");
+  await dashboardMenu(page); await page.getByRole("button", { name: "Save dashboard", exact: true }).click();
+  const saved = JSON.parse((await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1")))!);
+  const configuration = saved.layout.children[0].children[0].config;
+  expect(configuration).toMatchObject({ schemaVersion: 2, mode: "professional" });
+  expect(configuration.widgets[2]).toMatchObject({ id: "overview-2", x: 0, y: 5, w: 6, h: 6, presentation: { accent: "info", density: "compact", icon: "model" } });
+  expect(configuration.widgets[0]).toEqual(widgets[0]);
+  await page.reload();
+  await expect(page.getByRole("combobox", { name: "Overview mode", exact: true })).toHaveValue("professional");
+  await expect(page.locator('[data-widget-id="overview-2"]')).toHaveClass(/widget-accent-info/);
+  await page.getByRole("button", { name: "Ask a model", exact: true }).click();
+  await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toBeVisible();
+  await page.getByRole("textbox", { name: "Message", exact: true }).fill("Keep the original draft; no new model call");
+  await page.getByRole("button", { name: "Open Dashboard", exact: true }).click();
+  await page.getByRole("button", { name: "Ask a model", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveValue("Keep the original draft; no new model call");
+  expect(errors).toEqual([]); expect(mutations).toEqual([]);
+  await writeFile(info.outputPath("overview-v2-real-runtime.json"), JSON.stringify({ original_run_id: original, data_source: "WorkflowStore; real model-disabled Runtime", layout: configuration, runtime_mutations_from_overview: mutations, live_model_calls: 0, native_installation: "NOT_TESTED" }, null, 2));
+  await page.getByRole("button", { name: "Open Dashboard", exact: true }).click();
+  const boxes = await page.locator(".studio-widget").evaluateAll(nodes => nodes.map(node => ({ id: node.getAttribute("data-widget-id"), inline: node.getAttribute("style"), className: node.className, rect: { x: node.getBoundingClientRect().x, y: node.getBoundingClientRect().y, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height }, position: getComputedStyle(node).position, transform: getComputedStyle(node).transform, gridWidth: node.parentElement?.getBoundingClientRect().width })));
+  await writeFile(info.outputPath("overview-visual-geometry.json"), JSON.stringify(boxes, null, 2));
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+    const a = boxes[i].rect, b = boxes[j].rect;
+    expect(a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y).toBe(false);
+  }
+  await page.screenshot({ path: info.outputPath("overview-v2-source-browser.png"), fullPage: true });
+});
+
 test("Chat stops waiting without claiming backend cancellation or resubmitting the original Run", async ({ page }, info) => {
   await open(page);
   await page.getByRole("button", { name: "Open Chat", exact: true }).click();
@@ -826,4 +890,62 @@ test("Studio recovers a dashboard-only or empty saved workspace without deleting
   await page.getByRole("button", { name: "Start a conversation", exact: true }).click();
   await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath("studio-recovered-empty-workspace-source.png"), fullPage: true });
+});
+
+test("Studio periodic reads do not overlap or continue while the document is hidden", async ({ page }, info) => {
+  const periodic = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/v1/tasks" && url.searchParams.get("limit") === "50";
+  }, { timeout: 7000 });
+  await open(page);
+  // Observe a completed periodic read, so holding a bootstrap request cannot
+  // accidentally prevent connected polling and make this assertion vacuous.
+  await (await periodic).finished();
+  let reads = 0, release!: () => void, settled!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const finished = new Promise<void>(resolve => { settled = resolve; });
+  await page.route("**/api/v1/tasks?**", async route => {
+    reads++;
+    if (reads !== 1) { await route.continue(); return; }
+    try { const original = await route.fetch(); await held; await route.fulfill({ response: original }); }
+    finally { settled(); }
+  });
+  try {
+    await expect.poll(() => reads, { timeout: 7000 }).toBe(1);
+    // One subsequent five-second refresh period: a slow read must stay singular.
+    await page.waitForTimeout(6000); expect(reads).toBe(1);
+    await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" }); document.dispatchEvent(new Event("visibilitychange")); });
+    release(); await finished;
+    await page.waitForTimeout(6000); expect(reads).toBe(1);
+    await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" }); document.dispatchEvent(new Event("visibilitychange")); });
+    await expect.poll(() => reads).toBe(2);
+    await writeFile(info.outputPath("overview-periodic-read-admission.json"), JSON.stringify({ scope: "Real Runtime HTTP with one held read and instrumented document visibility", held_read_repeated: false, hidden_periodic_task_reads: 0, fresh_read_on_visibility: true, backend_cancellation_claimed: false }, null, 2));
+  } finally { release(); if (reads) await finished; }
+});
+
+test("Overview history and selected fields use the actual dated ledger and survive reload", async ({ page }, info) => {
+  await open(page); const days: string[] = [];
+  page.on("request", request => { const url = new URL(request.url()); if (url.pathname === "/api/v1/usage" && url.searchParams.has("day")) days.push(url.searchParams.get("day")!); });
+  const widgets = ["usage", "cache"].map((type, i) => ({ id: `history-${i}`, type, title: "", x: i * 6, y: 0, w: 6, h: 6, paused: false, presentation: { day: "2000-01-01", ...(type === "usage" ? { fields: ["tokens", "requests"] } : {}) } }));
+  const layout = { schemaVersion: 1, kind: "dashboard", name: "Dated overview", locale: "en", layout: { type: "row", id: "r", children: [{ type: "tabset", id: "g", children: [{ type: "tab", id: "history", component: "dashboard", config: { schemaVersion: 2, mode: "standard", widgets } }] }] } };
+  await page.getByLabel("Import Studio layout", { exact: true }).setInputFiles({ name: "dated.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(layout)) });
+  await expect(page.getByText("2000-01-01 UTC · CostController", { exact: true })).toHaveCount(2);
+  expect(days).toEqual(["2000-01-01"]);
+  const usage = page.locator('[data-widget-id="history-0"]');
+  expect(await usage.locator(".studio-usage-pairs dt").allTextContents()).toEqual(["Requests", "Token"]);
+  await page.getByRole("button", { name: "Edit layout", exact: true }).click();
+  await page.getByRole("button", { name: "Settings Model Usage", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Usage field pending", exact: true }).check();
+  await page.getByLabel("Usage UTC date", { exact: true }).fill("2000-01-02");
+  await expect(usage.getByText("2000-01-02 UTC · CostController", { exact: true })).toBeVisible();
+  expect(await usage.locator(".studio-usage-pairs dt").allTextContents()).toEqual(["Requests", "Token", "Pending"]);
+  await page.getByRole("button", { name: "Close settings", exact: true }).click();
+  await dashboardMenu(page); await page.getByRole("button", { name: "Save dashboard", exact: true }).click();
+  const saved = await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"));
+  expect(saved).toContain('"day":"2000-01-02"'); expect(saved).toContain('"fields":["tokens","requests","pending"]'); expect(saved).not.toContain(token);
+  await page.reload();
+  await expect(page.locator('[data-widget-id="history-0"]').getByText("2000-01-02 UTC · CostController", { exact: true })).toBeVisible();
+  await expect(page.locator('[data-widget-id="history-1"]').getByText("2000-01-01 UTC · CostController", { exact: true })).toBeVisible();
+  await writeFile(info.outputPath("overview-history-source.json"), JSON.stringify({ scope: "Actual dated CostController API with no model receipts; not live Provider usage", dates: days, fields_saved: true, reload_restored: true, model_calls: 0, source: "existing /api/v1/usage" }, null, 2));
+  await page.screenshot({ path: info.outputPath("overview-history-source.png"), fullPage: true });
 });

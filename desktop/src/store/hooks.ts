@@ -226,74 +226,81 @@ export function useUsage(): UsageRecord[] {
   return Object.values(state.usage);
 }
 
-type UsageReader = { version: number; active: () => boolean };
+type UsageReader = { version: number; active: () => boolean; day: string; setLimited: (limited: boolean) => void };
 const usageReaders = new Set<UsageReader>();
 let usageTimer: number | undefined;
-let usageFlight: { version: number; key: object; promise: Promise<void>; abort: AbortController } | null = null;
+const usageFlights = new Map<string, { version: number; key: object; promise: Promise<void>; abort: AbortController }>();
 const visibleDocument = () => document.visibilityState !== "hidden";
-const hasVisibleUsageReader = () => [...usageReaders].some(reader => {
+const visibleUsageReaders = () => [...usageReaders].filter(reader => {
   try { return reader.version === getRuntimeConfigVersion() && reader.active() && visibleDocument(); } catch { return false; }
 });
+const visibleUsageDays = () => [...new Set(visibleUsageReaders().map(reader => reader.day))].sort((a, b) => a === "" ? -1 : b === "" ? 1 : a.localeCompare(b)).slice(0, 8);
+const hasVisibleUsageReader = (day: string) => visibleUsageReaders().some(reader => reader.day === day);
 
-/** Shared transport only. The existing EntityStore/CostController still own data. */
+/** One shared transport per visible day, bounded to eight dates. No model dispatch. */
 export function refreshCostSummary(replacePending = false): Promise<void> {
   const version = getRuntimeConfigVersion();
-  if (!hasVisibleUsageReader()) return Promise.resolve();
-  if (usageFlight?.version === version && !replacePending) return usageFlight.promise;
-  usageFlight?.abort.abort();
-  const controller = getConfig().url;
-  const sequence = entityStore.beginUsageRead(controller, version);
-  const key = {};
-  const abort = new AbortController();
-  const promise = (async () => {
-    try {
-      const summary = await fetchUsageSummary(undefined, { signal: abort.signal });
-      if (usageFlight?.key === key && hasVisibleUsageReader() && getRuntimeConfigVersion() === version && getConfig().url === controller) entityStore.finishUsageRead(sequence, summary);
-    } catch {
-      if (usageFlight?.key === key && hasVisibleUsageReader() && getRuntimeConfigVersion() === version) entityStore.failUsageRead(sequence);
-    }
-  })().finally(() => { if (usageFlight?.key === key) usageFlight = null; });
-  usageFlight = { version, key, promise, abort };
-  return promise;
+  const days = visibleUsageDays();
+  for (const reader of visibleUsageReaders()) reader.setLimited(!days.includes(reader.day));
+  for (const [day, flight] of usageFlights) if (!days.includes(day) || flight.version !== version) { flight.abort.abort(); usageFlights.delete(day); }
+  return Promise.all(days.map(day => {
+    const previous = usageFlights.get(day);
+    if (previous?.version === version && !replacePending) return previous.promise;
+    previous?.abort.abort();
+    const controller = getConfig().url;
+    const sequence = entityStore.beginUsageRead(controller, version, day);
+    const key = {}, abort = new AbortController();
+    const current = () => usageFlights.get(day)?.key === key && hasVisibleUsageReader(day) && getRuntimeConfigVersion() === version && getConfig().url === controller;
+    const promise = (async () => {
+      try {
+        const summary = await fetchUsageSummary(day || undefined, { signal: abort.signal });
+        if (day && summary.day !== day) throw new Error("Usage response has the wrong UTC date.");
+        if (current()) entityStore.finishUsageRead(sequence, summary, day);
+      } catch { if (current()) entityStore.failUsageRead(sequence, day); }
+    })().finally(() => { if (usageFlights.get(day)?.key === key) usageFlights.delete(day); });
+    usageFlights.set(day, { version, key, promise, abort });
+    return promise;
+  })).then(() => {});
 }
-
+let visibilityListener: (() => void) | undefined;
 function subscribeUsage(reader: UsageReader) {
-  const alreadyVisible = hasVisibleUsageReader();
+  const alreadyVisible = hasVisibleUsageReader(reader.day);
   usageReaders.add(reader);
   let frame: number | undefined;
-  if (!alreadyVisible && hasVisibleUsageReader()) void refreshCostSummary();
+  if (!alreadyVisible && hasVisibleUsageReader(reader.day)) void refreshCostSummary();
   else if (!alreadyVisible) frame = requestAnimationFrame(() => { if (usageReaders.has(reader)) void refreshCostSummary(); });
-  const visible = () => { if (visibleDocument()) void refreshCostSummary(); };
   if (usageTimer === undefined) {
-    // Retire a stalled read at the existing five-second refresh boundary.
-    // This aborts only an HTTP read, never a model operation or its accounting.
     usageTimer = window.setInterval(() => { void refreshCostSummary(true); }, 5000);
-    document.addEventListener("visibilitychange", visible);
-    visibilityListener = visible;
+    visibilityListener = () => { void refreshCostSummary(); };
+    document.addEventListener("visibilitychange", visibilityListener);
   }
   return () => {
     usageReaders.delete(reader);
     if (frame !== undefined) cancelAnimationFrame(frame);
+    if (![...usageReaders].some(item => item.day === reader.day)) { usageFlights.get(reader.day)?.abort.abort(); usageFlights.delete(reader.day); }
     if (!usageReaders.size && usageTimer !== undefined) {
       window.clearInterval(usageTimer); usageTimer = undefined;
-      usageFlight?.abort.abort(); usageFlight = null;
+      for (const flight of usageFlights.values()) flight.abort.abort(); usageFlights.clear();
       if (visibilityListener) document.removeEventListener("visibilitychange", visibilityListener);
       visibilityListener = undefined;
     }
   };
 }
-let visibilityListener: (() => void) | undefined;
+const dateLimitSummary: CostSummary = { status: "unavailable", controller: "", configuration_version: -1, summary: null, error: "Limit: eight visible usage dates. Pause another date to continue." };
 
-export function useCostSummary(isActive = visibleDocument): CostSummary {
+export function useCostSummary(isActive = visibleDocument, selectedDay = "today"): CostSummary {
   const version = useRuntimeConfigVersion();
+  const day = selectedDay === "today" || selectedDay === new Date().toISOString().slice(0, 10) ? "" : selectedDay;
   const activity = useRef(isActive); activity.current = isActive;
-  const state = useSyncExternalStore(
-    (listener) => entityStore.subscribe(listener),
-    () => entityStore.getState().usage_accounting,
-  );
-  useEffect(() => subscribeUsage({ version, active: () => activity.current() }), [version]);
+  const [limited, setLimited] = useState(false);
+  const state = useSyncExternalStore((listener) => entityStore.subscribe(listener), () => entityStore.getUsageSummary(day));
+  useEffect(() => subscribeUsage({ version, day, active: () => activity.current(), setLimited }), [version, day]);
+  if (limited) return dateLimitSummary;
   if (state.configuration_version !== version || state.controller !== getConfig().url) {
     return { status: "loading", controller: getConfig().url, configuration_version: version, summary: null, error: null };
+  }
+  if (selectedDay && selectedDay !== "today" && state.summary && state.summary.day !== selectedDay) {
+    return { ...state, status: "unavailable", summary: null, error: "The ledger response does not match the selected UTC date. Check Controller and system time." };
   }
   return state;
 }

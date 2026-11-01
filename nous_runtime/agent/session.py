@@ -271,6 +271,43 @@ class AgentSessionStore:
             ).fetchone()
         return AgentSession.from_dict(json.loads(row[0])) if row else None
 
+    def create_once(self, session: AgentSession) -> tuple[AgentSession, bool]:
+        """Keep one original bound session without overwriting its lifecycle."""
+        from nous_runtime.core.redaction import redact_sensitive_data
+
+        expected = redact_sensitive_data(session.to_dict())
+        with self._lock, self._db() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT session_json FROM agent_sessions WHERE session_id = ?",
+                (session.session_id,),
+            ).fetchone()
+            if row:
+                original = json.loads(row[0])
+                immutable = (
+                    "agent_id",
+                    "model",
+                    "objective",
+                    "context",
+                    "event_subscriptions",
+                    "budget",
+                    "policy_scope",
+                    "workflow_run_id",
+                )
+                if any(original.get(key) != expected.get(key) for key in immutable):
+                    raise ValueError("Original AgentSession binding changed")
+                return AgentSession.from_dict(original), False
+            connection.execute(
+                "INSERT INTO agent_sessions VALUES (?, ?, ?, ?)",
+                (
+                    session.session_id,
+                    session.state.value,
+                    session.updated_at,
+                    json.dumps(expected, sort_keys=True),
+                ),
+            )
+        return AgentSession.from_dict(expected), True
+
     def list(self, *, include_terminal: bool = True) -> list[AgentSession]:
         query = "SELECT session_json FROM agent_sessions"
         params: tuple[Any, ...] = ()

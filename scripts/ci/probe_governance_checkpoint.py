@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import importlib
 from contextlib import contextmanager
 import json
 import os
@@ -161,7 +163,31 @@ def main():
     parser.add_argument("--report", type=Path)
     parser.add_argument("--exercise-mcp", action="store_true")
     parser.add_argument("--exercise-only", choices=("legacy", "retained-wal"))
+    parser.add_argument("--runtime-schema", action="store_true")
     arguments = parser.parse_args()
+    if arguments.runtime_schema:
+        if (
+            arguments.exercise_mcp
+            or arguments.exercise_only
+            or arguments.report is None
+        ):
+            parser.error("--runtime-schema requires only --report")
+        report = {
+            "source_revision": os.environ.get(
+                "GITHUB_SHA", "local-uncommitted-diagnostic"
+            ),
+            "platform": platform.platform(),
+            "python": platform.python_version(),
+            "sqlite": sqlite3.sqlite_version,
+            "qualification": "DIAGNOSTIC_ONLY; not an HTTP deadline, model or native-install qualification",
+            "measurement": probe_runtime_schemas(),
+        }
+        arguments.report.parent.mkdir(parents=True, exist_ok=True)
+        arguments.report.write_text(
+            json.dumps(report, indent=2) + "\n", encoding="utf-8"
+        )
+        print(json.dumps(report, indent=2))
+        return 0
     if not supported():
         raise SystemExit("SQLite checkpoint experiment unavailable on this interpreter")
     if arguments.exercise_only:
@@ -207,6 +233,109 @@ def main():
     arguments.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))
     return 1 if any(outcomes.values()) else 0
+
+
+def probe_runtime_schemas():
+    """Paired cold initialization through the two existing post-model owners.
+
+    The legacy arm removes only the newly added BEGIN from the same schema SQL.
+    No production database, pool, journal policy or HTTP limit is changed.
+    """
+    results = {}
+    for module_name, class_name in (
+        ("nous_runtime.evaluation.history", "EvaluationHistory"),
+        ("nous_runtime.experience.store", "ExperienceStore"),
+    ):
+        owner = importlib.import_module(module_name)
+        original_connect = owner._db_connect
+        wall = {"legacy": [], "atomic": []}
+        cpu = {"legacy": [], "atomic": []}
+        ddl_states = {"legacy": [], "atomic": []}
+        schema_digests = set()
+
+        class LegacySchema:
+            def __init__(self, connection):
+                self.connection = connection
+
+            def executescript(self, sql):
+                prefix = "BEGIN IMMEDIATE;"
+                if not sql.startswith(prefix):
+                    raise RuntimeError("Candidate schema has no explicit BEGIN")
+                schema_digests.add(
+                    hashlib.sha256(sql[len(prefix) :].encode()).hexdigest()
+                )
+                return self.connection.executescript(sql[len(prefix) :])
+
+        @contextmanager
+        def measured(path, readonly=False):
+            with original_connect(path, readonly=readonly) as connection:
+                if readonly:
+                    yield connection
+                    return
+
+                def trace(sql):
+                    if sql.strip().upper().startswith("CREATE "):
+                        ddl_states[mode].append(connection.in_transaction)
+
+                connection.set_trace_callback(trace)
+                yield LegacySchema(connection) if mode == "legacy" else connection
+
+        with tempfile.TemporaryDirectory(prefix="apeir-runtime-schema-") as directory:
+            try:
+                owner._db_connect = measured
+                for index in range(21):
+                    order = (
+                        ("legacy", "atomic") if index % 2 == 0 else ("atomic", "legacy")
+                    )
+                    for mode in order:
+                        path = Path(directory) / f"{mode}-{index}"
+                        started_cpu, started = time.process_time(), time.perf_counter()
+                        instance = getattr(owner, class_name)(path)
+                        wall[mode].append((time.perf_counter() - started) * 1000)
+                        cpu[mode].append((time.process_time() - started_cpu) * 1000)
+                        with original_connect(
+                            instance.db_path, readonly=True
+                        ) as connection:
+                            assert (
+                                connection.execute("PRAGMA journal_mode").fetchone()[0]
+                                == "wal"
+                            )
+                            assert (
+                                connection.execute("PRAGMA synchronous").fetchone()[0]
+                                == 2
+                            )
+                            assert (
+                                connection.execute("PRAGMA foreign_keys").fetchone()[0]
+                                == 1
+                            )
+                            assert (
+                                connection.execute("PRAGMA integrity_check").fetchone()[
+                                    0
+                                ]
+                                == "ok"
+                            )
+            finally:
+                owner._db_connect = original_connect
+        assert len(schema_digests) == 1
+        assert ddl_states["legacy"] and not any(ddl_states["legacy"])
+        assert ddl_states["atomic"] and all(ddl_states["atomic"])
+        results[class_name] = {
+            "samples_per_arm": 21,
+            "ordering": "alternating paired order; fresh database per sample",
+            "legacy_schema_sql_sha256": next(iter(schema_digests)),
+            "wall_ms": {name: quantiles(values) for name, values in wall.items()},
+            "cpu_ms": {name: quantiles(values) for name, values in cpu.items()},
+            "raw_wall_ms": wall,
+            "raw_cpu_ms": cpu,
+            "wal_full_sync_foreign_keys_and_integrity": "PASS",
+            "legacy_ddl_without_explicit_transaction": True,
+            "candidate_ddl_in_single_transaction": True,
+        }
+    return {
+        "scope": "cold EvaluationHistory/ExperienceStore initialization only; no model, network or production workspace",
+        "limits": "21 samples per arm; descriptive tails, coarse CPU accounting; no whole-product, HTTP deadline or Token/cost improvement claim",
+        "owners": results,
+    }
 
 
 if __name__ == "__main__":

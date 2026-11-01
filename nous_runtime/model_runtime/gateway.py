@@ -196,9 +196,15 @@ class ModelGateway:
         self._nki_workloads: dict[str, str] = {}  # request_id → workload_id
         self._cost_controller = cost_controller
 
-    async def invoke(self, request: ModelRequest) -> ModelResponse:
+    async def invoke(
+        self, request: ModelRequest, *, reconcile_only: bool = False
+    ) -> ModelResponse:
         if not isinstance(request, ModelRequest):
             raise ModelInvocationError("request must be a ModelRequest")
+        if reconcile_only and (not self._use_nki or self._cost_controller is None):
+            raise ModelInvocationError(
+                "original model reconciliation requires Kernel accounting"
+            )
         self._add_metrics(requests=1)
         started = time.monotonic()
 
@@ -306,6 +312,7 @@ class ModelGateway:
                         kernel_binding=self._kernel_accounting_binding(provider)
                         if use_kernel
                         else None,
+                        **({"require_original": True} if reconcile_only else {}),
                     )
                     guarded_request = reservation.request
                 if use_kernel:
@@ -1480,13 +1487,17 @@ class ModelGateway:
     def active_request_ids(self) -> tuple[str, ...]:
         return tuple(sorted(set(self._active) | set(self._nki_workloads)))
 
-    def invoke_sync(self, request: ModelRequest) -> ModelResponse:
+    def invoke_sync(
+        self, request: ModelRequest, *, reconcile_only: bool = False
+    ) -> ModelResponse:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
             loop = self._ensure_sync_loop()
             future = asyncio.run_coroutine_threadsafe(
-                self.invoke(request),
+                self.invoke(request, reconcile_only=True)
+                if reconcile_only
+                else self.invoke(request),
                 loop,
             )
             try:

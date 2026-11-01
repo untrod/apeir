@@ -27,6 +27,16 @@ GitHub sign-in is required. Source artifacts expire after seven days. Use a newe
 qualified run if one has expired; do not mix revisions. A repository source ZIP
 or a frontend-only PR artifact is not this complete pair.
 
+The current reviewed candidate is `aacb840` ([PR124](https://github.com/untrod/apeir/pull/124)):
+[Runtime wheel](https://github.com/untrod/apeir/actions/runs/41278566620/artifacts/13072497439)
+and [built Studio](https://github.com/untrod/apeir/actions/runs/41278566620/artifacts/13072018777).
+The wheel was installed in a fresh environment and the downloaded Studio was
+exercised against it outside the checkout. Core, Desktop, Multi-Arch and Security
+passed for that exact source; protected-main integration is still pending. Downloads expire on
+**2026-11-08**. Its wheel SHA-256 is:
+
+`bc204f577c643f809b94e037f0fa4da2b680289f3020db89c52c68f6ceb3fd1e`
+
 Extract into separate directories. Check that both manifests'
 `distribution_revision` values match. From each extracted directory, verify
 `SHA256SUMS.txt`:
@@ -223,6 +233,19 @@ versions are rejected rather than overwritten. See
 for multi-file review and [Workbench](../../development/DEVELOPER_PLATFORM.md#professional-workbench)
 for draft handling, fixed execution profiles and sandbox requirements.
 
+GUI approval requires **Operations Console → Sign in as human** and the
+Controller's configured trusted identity provider. A service token is not a
+human login. Without that provider, review the original request and approve it
+through the local owner's existing CLI, from the same project directory:
+
+```bash
+apeir --no-intelligence approval show ORIGINAL_REQUEST_ID --json
+apeir --no-intelligence approval approve ORIGINAL_REQUEST_ID
+```
+
+Refresh the original Proposal in Studio and resume it. Do not create a second
+proposal to repeat a write whose outcome is unknown.
+
 Drafts are held in memory. Save or export them before reloading or changing
 Controller. Closing a panel does not cancel admitted Work. After a lost write
 response, inspect the original Proposal, files and evidence before trying again.
@@ -279,8 +302,8 @@ smoke on Windows Server 2025. Windows 10 GUI, installation, upgrade, uninstall,
 Defender and signing remain unqualified.
 
 1. Sign in to GitHub and download
-   [windows-x64-native-development-build](https://github.com/untrod/apeir/actions/runs/41006787955/artifacts/12957768657).
-   Retention ends **2026-11-13**. The installer is inside the downloaded artifact ZIP.
+   [windows-x64-native-development-build](https://github.com/untrod/apeir/actions/runs/41278566620/artifacts/13073474480).
+   Retention ends **2026-11-15**. The installer is inside the downloaded artifact ZIP.
 2. Extract it. Check its source manifest and `native-validation-report.json`.
    It contains Portable, NSIS, `SHA256SUMS.txt` and dependency/build records.
 3. Verify the files in PowerShell:
@@ -297,16 +320,17 @@ Defender and signing remain unqualified.
 
 | File | SHA-256 for this exact build |
 | --- | --- |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | `9D98F7AFD0BCCD3BB838254EE44C1725B6F541D60C6C5F0FE38347575830B9B8` |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `C714D78D7F56D550C30A0F7BAE4DBA36123E4C1E5292287A70561C04F004D1BF` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `729B8B2DA7C4D20D37BC38B418D6E360CEBC777D7998F0754F895EB552271302` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `D4A8051E651C4C29497B3A73D0A61F68F88EF14DE436FCE701AB17327102179E` |
 
 Outer artifact ZIP SHA-256:
-`bdefeb3f78f787ce84a99e1511a0444efe656088e72add9edc566373436f812f`.
+`f83a8cf90b17437a46ea86def838c27c4c5b9abec2f9f21a136d16ae340f1819`.
 
-This package uses accepted source `a37dab8f7f25cfcf93fdea30e2b3f8af54cf6daf`.
-It includes Workflow data bindings, model-history persistence and Inspector
-context fixes. Historical Windows timing issues remain open; a passing run does
-not establish their complete cause. Use this build's own manifest and hashes,
+This package uses source `aacb840eceb0caa752eeba031d95c4e343030561`
+([PR124](https://github.com/untrod/apeir/pull/124), awaiting main integration).
+It includes Overview 2.0, UTC-day accounting and the approved model-step host.
+Real inference is not qualified by this model-free Native Smoke. Historical
+Windows timing issues remain open; a passing run does not establish their cause. Use this build's own manifest and hashes,
 even when an older download has matching filenames.
 
 See the [native build record](../deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)

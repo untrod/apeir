@@ -8,6 +8,43 @@ import {
 } from "../lib/studioWorkflow";
 
 describe("canonical workflow graph and portable drafts", () => {
+  it("requires explicit model selection, budgets and independent approval", () => {
+    const step = {
+      step_id: "model",
+      step_type: "agent" as const,
+      action: "model.invoke",
+      approval_required: true,
+      params: {
+        model_id: "provider/registered-id",
+        instruction: "Review the input",
+        max_tokens: 512,
+        max_cost_usd: 0.01,
+      },
+    };
+    expect(runnableStep(step)).toBe(true);
+    expect(runnableStep({ ...step, approval_required: false })).toBe(false);
+    expect(
+      runnableStep({ ...step, params: { ...step.params, model_id: "" } }),
+    ).toBe(false);
+    expect(
+      runnableStep({ ...step, params: { ...step.params, max_cost_usd: NaN } }),
+    ).toBe(false);
+    expect(runnableStep({ ...step, retries: 1 })).toBe(false);
+    expect(
+      runnableStep({
+        ...step,
+        data_bindings: {
+          schema_version: 1,
+          inputs: {
+            max_cost_usd: { source: "inputs", pointer: "/untrusted" },
+          },
+        },
+      }),
+    ).toBe(false);
+    const draft = initialWorkflow();
+    draft.definition.steps.push(step);
+    expect(workflowDefinition(draft.definition).steps[1]).toEqual(step);
+  });
   it("exports the original definition without coordinates or authority", () => {
     const draft = initialWorkflow();
     draft.definition.steps.push({

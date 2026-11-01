@@ -829,20 +829,28 @@ function AppShell() {
     if (!connected) return;
     const current = captureRuntimeConnection();
     let active = true;
-    const timer = setInterval(async () => {
+    let inFlight = false;
+    const poll = async () => {
+      if (!active || inFlight || document.visibilityState === "hidden") return;
       try { current(); } catch { return; }
-      const [tasksData, nodesData, modelsData, approvalsData, conversationsData] = await Promise.allSettled([
-        fetchTasks("", 50), fetchNodes(), fetchModels(), fetchApprovals(), fetchConversations(),
-      ]);
-      try { current(); } catch { return; }
-      if (!active) return;
-      if (tasksData.status === "fulfilled" && tasksData.value?.tasks) entityStore.upsertTasks(tasksData.value.tasks as any);
-      if (nodesData.status === "fulfilled" && Array.isArray(nodesData.value)) entityStore.upsertNodes(nodesData.value as any);
-      if (modelsData.status === "fulfilled" && modelsData.value?.models) entityStore.upsertModels(modelsData.value.models as any);
-      if (approvalsData.status === "fulfilled" && approvalsData.value?.approvals) entityStore.upsertApprovals(approvalsData.value.approvals as any);
-      if (conversationsData.status === "fulfilled" && conversationsData.value?.conversations) entityStore.upsertConversations(conversationsData.value.conversations);
-    }, 5000);
-    return () => { active = false; clearInterval(timer); eventClient.stop(); };
+      inFlight = true;
+      try {
+        const [tasksData, nodesData, modelsData, approvalsData, conversationsData] = await Promise.allSettled([
+          fetchTasks("", 50), fetchNodes(), fetchModels(), fetchApprovals(), fetchConversations(),
+        ]);
+        try { current(); } catch { return; }
+        if (!active) return;
+        if (tasksData.status === "fulfilled" && tasksData.value?.tasks) entityStore.upsertTasks(tasksData.value.tasks as any);
+        if (nodesData.status === "fulfilled" && Array.isArray(nodesData.value)) entityStore.upsertNodes(nodesData.value as any);
+        if (modelsData.status === "fulfilled" && modelsData.value?.models) entityStore.upsertModels(modelsData.value.models as any);
+        if (approvalsData.status === "fulfilled" && approvalsData.value?.approvals) entityStore.upsertApprovals(approvalsData.value.approvals as any);
+        if (conversationsData.status === "fulfilled" && conversationsData.value?.conversations) entityStore.upsertConversations(conversationsData.value.conversations);
+      } finally { inFlight = false; }
+    };
+    const visible = () => { if (document.visibilityState !== "hidden") void poll(); };
+    const timer = setInterval(() => { void poll(); }, 5000);
+    document.addEventListener("visibilitychange", visible);
+    return () => { active = false; clearInterval(timer); document.removeEventListener("visibilitychange", visible); eventClient.stop(); };
   }, [connected, runtimeConfigVersion]);
 
   // Keyboard shortcuts

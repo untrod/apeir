@@ -39,6 +39,10 @@ class WorkflowState(str, Enum):
     COMPENSATION_FAILED = "compensation_failed"
 
 
+class WorkflowOutcomeUnknown(RuntimeError):
+    """A trusted handler cannot establish its original external outcome."""
+
+
 @dataclass(frozen=True)
 class WorkflowStep:
     step_id: str

@@ -38,7 +38,9 @@ on:
         default: ''
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # PR validation must not cancel an explicitly requested full Native build of
+  # the same branch. Superseded runs still cancel within their own event scope.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
@@ -323,8 +325,25 @@ jobs:
         if: steps.scope.outputs.scope == 'full'
         working-directory: .
         run: python -m pip install .
+      - name: Bound Ubuntu dependency downloads and retire stalled Azure mirror
+        if: steps.scope.outputs.scope == 'full'
+        timeout-minutes: 2
+        run: |
+          sudo python3 - <<'PYTHON'
+          from pathlib import Path
+          mirrorlist = Path('/etc/apt/apt-mirrors.txt')
+          if mirrorlist.is_file():
+              before = mirrorlist.read_text()
+              after = before.replace('http://azure.archive.ubuntu.com/ubuntu', 'https://archive.ubuntu.com/ubuntu').replace('https://azure.archive.ubuntu.com/ubuntu', 'https://archive.ubuntu.com/ubuntu')
+              if before != after:
+                  mirrorlist.write_text(after)
+                  print('Replaced the stalled Azure Ubuntu locator with the official HTTPS archive.')
+          Path('/etc/apt/apt.conf.d/99apeir-ci-network').write_text('Acquire::http::Timeout "30";\nAcquire::https::Timeout "30";\nAcquire::Retries "1";\n')
+          print('Dependency downloads are bounded; package signature verification is unchanged.')
+          PYTHON
       - name: Install sandboxed Chromium test prerequisites
         if: steps.scope.outputs.scope == 'full'
+        timeout-minutes: 15
         run: npx playwright install --with-deps chromium
       - name: Exercise source Studio against two real model-disabled Runtime processes
         if: steps.scope.outputs.scope == 'full'

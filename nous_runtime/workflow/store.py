@@ -149,12 +149,36 @@ class WorkflowStore:
                 # Reuse the canonical persisted-identity checks. An index column
                 # alone must not turn a damaged original record into success.
                 run = self._require_run(connection, row["run_id"])
+                definition = self._definition_for_run(connection, run)
+                self._validate_run(run, definition=definition)
+                # Counts describe durable logical checkpoints, not remaining time
+                # or independent verification of their effects.
+                states = [
+                    run.step_states.get(step.step_id, "pending")
+                    for step in definition.steps
+                ]
+                counts = {
+                    state: states.count(state)
+                    for state in (
+                        "completed",
+                        "skipped",
+                        "failed",
+                        "unknown",
+                        "waiting_approval",
+                        "started",
+                        "running",
+                        "pending",
+                        "cancelled",
+                    )
+                }
+                counts["total"] = len(definition.steps)
                 summaries.append(
                     {
                         "run_id": run.run_id,
                         "workflow_id": run.workflow_id,
                         "workflow_version": run.workflow_version,
                         "state": run.state.value,
+                        "step_counts": counts,
                     }
                 )
             return summaries

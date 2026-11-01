@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import faulthandler
 import hashlib
 import json
 import os
@@ -43,6 +44,51 @@ from tests.context.test_selected_input import (
 from tests.model_runtime.test_gateway import add_model
 
 admitted_context = context_fixture
+
+
+@pytest.fixture
+def http_phases(monkeypatch):
+    # Reuse the existing bounded, content-free observer. It only watches the
+    # original owners; neither the deadline nor their return values change.
+    from nous_runtime.api.server import RuntimeAPIHandler
+    from nous_runtime.governance.store import GovernanceStore
+    from tests.control_plane.test_remote_skill_center import _HTTPPhases
+
+    phases = _HTTPPhases()
+    for owner, name, phase in (
+        (RuntimeAPIHandler, "_dispatch", "http"),
+        (RuntimeAPIHandler, "_write", "http_response"),
+        (RuntimePipeline, "_build_context", "selected_input"),
+        (RuntimePipeline, "_governance", "governance"),
+        (RuntimePipeline, "_execute_capability", "capability"),
+        (ModelGateway, "invoke_sync", "model_wait"),
+        (RuntimePipeline, "_verify", "verification"),
+        (RuntimePipeline, "_evaluate", "evaluation"),
+        (RuntimePipeline, "_collect_experience", "experience"),
+        (RuntimePipeline, "_response", "response"),
+        (GovernanceStore, "_ensure_tables", "governance_init"),
+        (GovernanceStore, "save_authorization", "governance_publish"),
+    ):
+        phases.watch(monkeypatch, owner, name, phase)
+    # Observing a static verifier must not introduce an instance argument.
+    monkeypatch.setattr(
+        RuntimePipeline, "_verify", staticmethod(RuntimePipeline._verify)
+    )
+    yield phases
+    if os.environ.get("APEIR_CONTEXT_HTTP_DIAGNOSTIC") == "1":
+        print("CONTEXT_HTTP_PHASES=" + json.dumps(phases.snapshot()), flush=True)
+
+
+def _read_api_json(request, phases):
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return json.loads(response.read())
+    except TimeoutError:
+        # Capture code locations before teardown joins the original handler.
+        # Frame locals, request content, credentials and selected paths are omitted.
+        faulthandler.dump_traceback()
+        print("CONTEXT_HTTP_PHASES=" + json.dumps(phases.snapshot()), flush=True)
+        raise
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows owner-policy ACL contract")
@@ -166,7 +212,7 @@ def pipeline_fixture(admitted_context, endpoint, *, transfer=True):
 
 @requires_safe_read
 def test_saved_reference_crosses_real_api_and_http_provider(
-    admitted_context, endpoint, monkeypatch
+    admitted_context, endpoint, monkeypatch, http_phases
 ):
     from nous_runtime.api.server import create_server
     from nous_runtime.chat.runtime import ChatRuntime
@@ -199,7 +245,7 @@ def test_saved_reference_crosses_real_api_and_http_provider(
                 "Content-Type": "application/json",
             },
         )
-        result = json.loads(urllib.request.urlopen(request, timeout=10).read())
+        result = _read_api_json(request, http_phases)
         assert result["ok"], result
         assert result["data"]["status"] == "ok", result
         assert len(received) == 1
@@ -222,7 +268,7 @@ def test_saved_reference_crosses_real_api_and_http_provider(
 @requires_safe_read
 @pytest.mark.parametrize("revoke_after_setup", [False, True])
 def test_explicit_host_policy_bootstraps_real_api_without_engine_injection(
-    admitted_context, endpoint, monkeypatch, revoke_after_setup
+    admitted_context, endpoint, monkeypatch, revoke_after_setup, http_phases
 ):
     from nous_runtime.api.server import create_server
     from nous_runtime.chat.runtime import ChatRuntime
@@ -306,7 +352,7 @@ def test_explicit_host_policy_bootstraps_real_api_without_engine_injection(
                 "Content-Type": "application/json",
             },
         )
-        response = json.loads(urllib.request.urlopen(request, timeout=10).read())
+        response = _read_api_json(request, http_phases)
         if revoke_after_setup:
             assert received == []
             assert response["data"]["status"] != "ok"

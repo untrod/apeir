@@ -88,6 +88,43 @@ current trusted report; logical CPU capacity is not CPU utilization. Topology
 uses exact reported Device-to-Node bindings. Missing data stays UNKNOWN, and
 unsupported GPU/network/sensor metrics stay UNSUPPORTED.
 
+#### Overview / 概览
+
+**Simple, Standard and Professional** change information density, not the saved
+panel arrangement. Widget settings add compact/comfortable density, theme-token
+accents, a small icon set, card/plain presentation and collection sorting.
+In layout editing, focus a widget title and use arrow keys to move it;
+Shift+arrows changes its size. Invalid bounds or collisions leave it unchanged.
+Version1 configurations stay version1 until a new presentation setting is chosen;
+version2 retains the original widget IDs and grid coordinates. Both formats use
+the same Layout library, import validation and size limits.
+
+| Widget | Source and scope |
+| --- | --- |
+| Model Usage / Cache tokens | Existing CostController, selected UTC day (today by default). Nullable counters remain UNKNOWN; estimates remain estimates. Cached-input share is not money saved. |
+| Workflow Progress | Existing WorkflowStore, newest100 runs. Recorded completed/skipped steps are not an ETA, a test result or independent effect verification. Expand Run ID for the original identity. |
+| Quick Actions | Opens the existing Chat, Files, Models, Tasks or Workflow panel. Adding a separate instance remains available through Add panel. It never submits a task. |
+| Node resources / topology | Current trusted resource reports and exact Device-to-Node bindings. No inferred GPU load or network throughput. |
+
+In **Widget settings**, Usage and Cache cards accept a UTC date; **Today** restores
+the live daily view. Usage cards also let you choose the displayed fields. This
+is a daily ledger view, not a sum across a date range. Up to eight visible dates
+share one request each per refresh; additional dates show the limit until another
+is paused. Changing Controller retires the original reads and cached projections.
+Historical receipts stay historical; the budget policy shown in details is the
+currently configured policy, not a reconstructed historical policy.
+
+日期和字段只控制展示，不授予数据访问或模型执行权限。布局保存这些选择，
+不保存账务内容；未知用量和未知费用仍显示 UNKNOWN。
+
+快捷入口优先切回已打开的面板，保留未提交的对话草稿。关闭面板、停止等待
+和取消后端执行仍是不同操作。布局文件不保存提示词、API密钥或审批权限。
+
+GitHub authorization/activity and Ollama download/load/unload management are not
+implemented in Overview. Configure supported local endpoints in Models; service
+health is not inference qualification. The default path never installs a model,
+opens a port or silently switches to a cloud Provider.
+
 ### Watching a request
 
 | Data / 数据 | Current behavior |
@@ -139,8 +176,9 @@ loaded Skill does not establish that a model used it in a particular request.
 
 ![Dark Dashboard with actual Runtime data; absent resources remain UNKNOWN](../media/studio-source-overview.png)
 
-These screenshots are real [source-browser evidence](https://github.com/untrod/apeir/actions/runs/40351274217)
-at `f9e8301`, not installed Windows, live-model or physical-device qualification.
+These screenshots are real [source-browser evidence](https://github.com/untrod/apeir/actions/runs/41278566620)
+at `aacb840`, using the production frontend and model-disabled Runtime. They do
+not qualify installed Windows, live-model inference or physical devices.
 Browser Studio initializes the original EntityStore after authenticated health;
 Work and original task summaries share the existing adapter. Missing progress or
 unknown task states do not become successful tasks or enable controls.
@@ -165,7 +203,8 @@ WorkflowDefinition used by the Compiler, WorkflowStore and public CLI.
 | CONDITION | Compares `params.input` with `params.equals`; mismatch skips this node, without true/false branch ports |
 | WAIT | Immediate barrier; not a timer |
 | APPROVAL | Waits for a current authorized human on `workflow:RUN_ID:STEP_ID` |
-| AGENT / CAPABILITY / CONNECTOR / COMMAND | UNSUPPORTED here; no execution host is bound |
+| AGENT with `action: model.invoke` | One approved model turn through AgentSession, Gateway and NKI; explicit model and budgets required |
+| Other AGENT / CAPABILITY / CONNECTOR / COMMAND | UNSUPPORTED here; no matching execution host is bound |
 
 Arrows express dependencies. In **Data bindings**, select a target parameter,
 the Run inputs or a direct dependency, and a JSON pointer such as `/value`.
@@ -187,8 +226,23 @@ Use the [result-binding example](../../examples/hello_workflow/result-bindings.j
 with matching Runtime/Studio builds. Workflow catalog and CLI validation advertise
 `data_bindings_versions: [1]`; older builds do not implement these fields.
 The new UI does not run a bound definition against an older catalog.
-Model/Agent consumers are still not bound here; account credentials alone do
-not supply that missing execution host. Data contracts do not grant permission.
+Choose **MODEL · APPROVAL** for a single model turn. Select the registered model
+ID, enter its instruction, output Token limit and USD budget, then apply the
+parameters. This uses the saved Provider and credential reference; it does not
+copy a key into the graph. Native Anthropic Messages remains unsupported by the
+frozen Worker. Real cloud/local inference still needs its own qualification.
+
+Only `params.input` may receive a data binding on a model node. The selected
+model, budget and instruction remain explicit. For JSON results, set
+`params.response_schema`; the same local-only JSON Schema validator checks it.
+A downstream node can bind `input` to `/structured_output` of its direct
+dependency. Each model turn requires the original human step approval.
+
+The Run/step binding derives one original request ID and AgentSession. Recovery
+requires the original accounting and committed Kernel receipt. Missing records
+leave UNKNOWN; restarting does not authorize another paid request. Model tool
+calls are data, never file/command permission. Generic autonomous Agent execution
+is not supplied by this single-turn adapter. Data contracts do not grant permission.
 Unsupported imported steps retain their fields for inspection/export. Validation
 alone does not establish an executable handler.
 

@@ -1,7 +1,7 @@
 """Studio adapters over the canonical Workflow Runtime, Store and EventStream.
 
-Canvas state never enters this API. Only the built-in, effect-free handlers are
-bound here; host-specific handlers remain available through their existing hosts.
+Canvas state never enters this API. Pure steps and approved single-turn model
+steps use their existing owners; other handlers still require their own hosts.
 """
 
 from __future__ import annotations
@@ -23,6 +23,12 @@ from nous_runtime.workflow.models import (
 
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 _BUILTINS = {StepType.TRANSFORM, StepType.WAIT, StepType.CONDITION, StepType.APPROVAL}
+
+
+def _runtime(authorization_context):
+    from nous_runtime.workflow.model_host import bind_model_host
+
+    return bind_model_host(WorkflowRuntime(str(workspace())), authorization_context)
 
 
 def workspace() -> Path:
@@ -124,15 +130,26 @@ def validate_definition(data: Any):
     from nous_runtime.workflow.compiler import WorkflowCompiler
 
     WorkflowCompiler().compile(definition)
+    from nous_runtime.workflow.model_host import MODEL_ACTION, validate_model_step
+
+    for step in definition.steps:
+        if step.step_type is StepType.AGENT and step.action == MODEL_ACTION:
+            validate_model_step(step)
     return definition
 
 
 def unsupported_steps(definition) -> list[str]:
+    from nous_runtime.workflow.model_host import MODEL_ACTION
+
     return [
         step.step_id
         for step in definition.steps
-        if step.step_type not in _BUILTINS
-        or step.action
+        if not (
+            step.step_type is StepType.AGENT
+            and step.action == MODEL_ACTION
+            or step.step_type in _BUILTINS
+            and not step.action
+        )
         or step.condition
         or step.compensation
     ]
@@ -185,7 +202,15 @@ def handle_workflow_catalog(*, authorization_context=None):
             "limit": 100,
             "data_bindings_versions": [1],
             "step_types": [
-                {"type": item.value, "available": item in _BUILTINS}
+                {
+                    "type": item.value,
+                    "available": item in _BUILTINS or item is StepType.AGENT,
+                    **(
+                        {"actions": ["model.invoke"], "approval_required": True}
+                        if item is StepType.AGENT
+                        else {}
+                    ),
+                }
                 for item in StepType
             ],
             "execution_scope": "runtime-service",
@@ -254,7 +279,7 @@ def handle_workflow_run(body: dict, *, authorization_context=None):
             "definition",
         }:
             raise ValueError("Unknown run argument")
-        runtime = WorkflowRuntime(str(workspace()))
+        runtime = _runtime(authorization_context)
         definition = runtime.store.get_definition(
             str(body.get("workflow_id") or ""), str(body.get("version") or "1.0.0")
         )
@@ -402,7 +427,7 @@ def handle_workflow_run_action(run_id: str, body: dict, *, authorization_context
             "approve",
         }:
             raise ValueError("Invalid original-run action")
-        runtime = WorkflowRuntime(str(workspace()))
+        runtime = _runtime(authorization_context)
         original = runtime.store.get_run(run_id)
         if original is None:
             return err_response("NOUS_NOT_FOUND", "Workflow run not found")
@@ -462,7 +487,10 @@ def handle_workflow_run_action(run_id: str, body: dict, *, authorization_context
                         "resource_id": resource,
                     },
                 )
-                run = runtime.resume(run_id, approved_steps=(step_id,))
+            # Commit the human decision before executing a potentially long
+            # model call. Its host checks the current session again at admission;
+            # the original Run/checkpoint still owns execution and reconciliation.
+            run = runtime.resume(run_id, approved_steps=(step_id,))
             return ok_response(_view(run))
         # No approved_steps input on ordinary resume. It cannot turn a waiting
         # step into an approval or replay an uncertain effect.

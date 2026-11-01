@@ -171,52 +171,53 @@ checks do not alter the reviewed Kernel hashes or remove licensing/install gates
 
 ## Current native command-qualified build
 
-The [Portable/NSIS test bundle](https://github.com/untrod/apeir/actions/runs/41006787955/artifacts/12957768657)
-was built from source `a37dab8f7f25cfcf93fdea30e2b3f8af54cf6daf` in
-[full-mode run 41006787955](https://github.com/untrod/apeir/actions/runs/41006787955).
-PR #118 normally accepted this source as main
-`1ad5778eeedeae149e09d2068b79d73dd76d070a`; their Git trees are identical. The
-package includes Workflow data bindings, model-history persistence and Inspector
-context protection, as well as the earlier Work/Relay changes. Always use its
-source manifest as the binary identity.
+The [Portable/NSIS test bundle](https://github.com/untrod/apeir/actions/runs/41278566620/artifacts/13073474480)
+was built from source `aacb840eceb0caa752eeba031d95c4e343030561` in
+[full-mode run 41278566620](https://github.com/untrod/apeir/actions/runs/41278566620).
+This candidate is under [PR124](https://github.com/untrod/apeir/pull/124), awaiting
+protected-main integration. It includes Overview 2.0, UTC-date Usage controls,
+original-event recovery and the approved single-turn Workflow model host.
+Always use its source manifest as the binary identity; native build success does
+not qualify live-model inference.
 
-GitHub sign-in is required. The artifact expires on **2026-11-13**.
+GitHub sign-in is required. The artifact expires on **2026-11-15**.
 Outer artifact ZIP SHA-256:
-`bdefeb3f78f787ce84a99e1511a0444efe656088e72add9edc566373436f812f`.
+`f83a8cf90b17437a46ea86def838c27c4c5b9abec2f9f21a136d16ae340f1819`.
 
 | File | SHA-256 |
 | --- | --- |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `C714D78D7F56D550C30A0F7BAE4DBA36123E4C1E5292287A70561C04F004D1BF` |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | `9D98F7AFD0BCCD3BB838254EE44C1725B6F541D60C6C5F0FE38347575830B9B8` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `D4A8051E651C4C29497B3A73D0A61F68F88EF14DE436FCE701AB17327102179E` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `729B8B2DA7C4D20D37BC38B418D6E360CEBC777D7998F0754F895EB552271302` |
 
-Independent download matched all 22 checksums, 13 manifest records and 11 nested
-Portable files. The existing component verifier admits the exact Kernel PE
-files against the unchanged approved lock. The four application/sidecar EXEs
-are unsigned x64 PE 0x8664. NSIS is the expected x86 bootstrapper PE 0x014c;
-its header is not the target architecture of its packaged Runtime.
+Independent download matched both 22-entry checksum lists, 13 manifest records
+and 11 nested Portable files. The existing component verifier admits both actual
+Kernel PE files against the unchanged approved lock. Application/sidecar EXEs
+are unsigned x64 PE 0x8664; NSIS is the expected x86 bootstrapper PE 0x014c, not
+the architecture of its packaged Runtime. Independent NSIS extraction matched
+ten Portable files exactly. The main executable differs only at Tauri 2.11.4's
+three-byte UNK→NSS bundle stamp; no artifact bytes or published hashes were
+normalized or changed.
 
-This source's Core, Desktop, Multi-Arch and Security checks passed. The separate
-full-mode native producer also passed without validation or sidecar-smoke skips.
-Its real NKI 1/2/3, authentication rejection, Worker/Runtime health, process cleanup
-and original denied-Work recovery ran on **Windows Server 2025**.
-The frozen CLI exercised pure Workflow schema/refusal/history/idempotency;
-original Run `wfr_e879eabc129d4e43b68f448f7e347244`. External model calls: 0.
-Full-mode Python validation: 6045 passed, 95 skipped, four warnings. The Native
-report identifies the smoke as owned-process fault/restart testing; graceful
-Desktop exit still needs its installed lifecycle check.
+This source passed Core, Desktop, Multi-Arch and Security. The full-mode Native
+producer passed 6058 Python cases, skipped 95, with four warnings; Desktop passed 501.
+It did not skip validation or Sidecar Smoke. Actual NKI 1/2/3 health,
+authentication rejection, Worker/Runtime startup, app-local CRT loading,
+owned-process cleanup and original denied-Work recovery ran on
+**Windows Server 2025**, not Windows 10. The frozen CLI recovered original pure
+Workflow Run `wfr_77018143144e4efcbacfa47c7ab85a5b`; invalid input and unbound
+actions were refused. External model calls: 0.
 
-**Windows 10 installation, installed GUI, upgrade/uninstall, Defender, real-model
-inference and signing remain unqualified.** No independent NSIS-content extraction
-or installed lifecycle is claimed here. Historical timing failures, including
-[Issue #116](https://github.com/untrod/apeir/issues/116) and
-[Issue #121](https://github.com/untrod/apeir/issues/121), retain their own evidence;
-later green runs do not establish a complete cause.
+**Windows 10 installation, installed GUI, graceful Desktop exit, upgrade/uninstall,
+Defender, real-model inference and signing remain unqualified.** The installer
+was inspected, not executed on this Linux qualification host. Historical Windows
+timing failures retain their original Issues and evidence; this successful build
+does not establish a common cause or close them.
 
 Use [Quick Start](../getting-started/QUICK_START.md#native-installation) for
 download and checksum instructions. These are unsigned internal development
 packages, not stable Releases. Earlier packages retain their identities in
 [Engineering Review](../../acceptance/ENGINEERING_REVIEW.md#native-package-integrity-and-context-http-timing--2026-10-29).
-Do not mix payloads or checksums across builds.
+Do not mix payloads or checksums across builds with the same filenames.
 
 ## Verified internal native build — 2026-10-27
 
