@@ -20,7 +20,7 @@ from nous_runtime.skills import SkillRegistry
 from tests.skills.test_skill_registry import make_skill
 from tests.skills.test_remote_catalog import bundle
 
-SERVER = """import http.server, ssl, sys
+SERVER = """import http.server, socketserver, ssl, sys
 from pathlib import Path
 root=Path(sys.argv[1])
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -34,7 +34,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
         else: super().do_GET()
-server=http.server.ThreadingHTTPServer(("127.0.0.1",0),Handler)
+class LocalServer(http.server.ThreadingHTTPServer):
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name,self.server_port=self.server_address[:2]
+server=LocalServer(("127.0.0.1",0),Handler)
 context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.load_cert_chain(root/"test.pem",root/"test.key")
 server.socket=context.wrap_socket(server.socket,server_side=True)

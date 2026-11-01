@@ -28,7 +28,7 @@ jobs:
           - { os: ubuntu-22.04, python: '3.10' }
           - { os: ubuntu-22.04, python: '3.12' }
           - { os: windows-latest, python: '3.12' }
-          - { os: macos-14, python: '3.12' }
+          - { os: macos-15, python: '3.12' }
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,6 +37,40 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
+      - name: Record macOS runner identity
+        if: startsWith(matrix.os, 'macos-')
+        run: |
+          sw_vers
+          uname -m
+          python --version
+      - name: Qualify the ephemeral macOS runner's local hostname
+        if: startsWith(matrix.os, 'macos-')
+        run: |
+          python - <<'PY'
+          import json, re, socket, subprocess, sys, time
+          hostname = socket.gethostname()
+          if not re.fullmatch(r"[A-Za-z0-9.-]{1,253}", hostname):
+              raise SystemExit("Unexpected runner hostname; refusing hosts configuration")
+          forward = "import socket; socket.getaddrinfo(socket.gethostname(), None)"
+          reverse = "import socket; socket.getfqdn('0.0.0.0')"
+          def observe(probe):
+              started = time.monotonic()
+              try:
+                  result = subprocess.run([sys.executable, "-c", probe], capture_output=True, timeout=2)
+                  state = "ready" if result.returncode == 0 else "error"
+                  phases = result.stdout.decode().splitlines()
+              except subprocess.TimeoutExpired as error:
+                  state = "timeout"
+                  phases = (error.stdout or b"").decode().splitlines()
+              return {"state": state, "phases": phases, "elapsed_s": time.monotonic() - started}
+          before = {"forward": observe(forward), "reverse": observe(reverse)}
+          subprocess.run(["sudo", "scutil", "--set", "HostName", "localhost"], check=True)
+          subprocess.run(["sudo", "hostname", "localhost"], check=True)
+          after = {"forward": observe(forward), "reverse": observe(reverse)}
+          print(json.dumps({"original_hostname": hostname, "qualified_hostname": socket.gethostname(), "before": before, "after": after}))
+          if after["forward"]["state"] != "ready":
+              raise SystemExit("Runner does not meet the existing resolvable-hostname prerequisite")
+          PY
       - name: Select conservative PR scope
         id: scope
         env:
@@ -45,6 +79,13 @@ jobs:
         run: python scripts/ci/test_scope.py
       - name: Install dependencies
         run: python -m pip install ".[dev,a2a,mcp,scientific]"
+      - name: Check affected macOS local transports before the full regression
+        if: startsWith(matrix.os, 'macos-') && steps.scope.outputs.scope == 'full'
+        run: >-
+          python -m pytest -q tests/governance/test_http_server_security.py
+          tests/skills/test_remote_catalog_tls.py tests/node_runtime/test_relay_reconciliation.py
+          -k 'literal_listener or remote_binding or real_child_tls or recorded_result_reconciles'
+          --timeout=60 --tb=long
       - name: Provision real OpenBao software reference
         if: steps.scope.outputs.scope == 'full' && matrix.os == 'ubuntu-22.04' && matrix.python == '3.12'
         env:

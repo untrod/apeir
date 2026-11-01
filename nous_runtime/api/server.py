@@ -6,6 +6,7 @@ import ipaddress
 import json
 import os
 import ssl
+from socketserver import TCPServer
 import threading
 import time
 from collections import defaultdict, deque
@@ -35,6 +36,13 @@ class RuntimeHTTPServer(ThreadingHTTPServer):
         self.control_stream_slots = threading.BoundedSemaphore(32)
         self._rate_lock = threading.Lock()
         self._rate: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+
+    def server_bind(self) -> None:
+        # HTTPServer performs a blocking reverse DNS lookup after binding.
+        # A display name must not prevent an authenticated local API from
+        # starting offline. Keep the actual bound address and port instead.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
     def allow_request(self, source: str, bucket: str = "interaction") -> bool:
         """Rate-limit read polling independently from interactive effects.
