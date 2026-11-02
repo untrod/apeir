@@ -20,7 +20,7 @@
 [**文档**](docs/README.md) · [English](README.md)
 
 **Windows：**[安装版](docs/operations/getting-started/INSTALL_WINDOWS.md#setup) · [Portable 用法](docs/operations/getting-started/INSTALL_WINDOWS.md#portable) · [SHA-256 校验](docs/operations/getting-started/QUICK_START.md#download-metadata)。
-当前为未签名开发包，需要登录 GitHub 下载，Windows 10 安装仍待实机验收。
+当前是未签名开发包，不是稳定版；下载需要登录 GitHub，Windows 10 安装仍待实机验收。
 正式版还没出炉，生产环境先别急着端上桌。
 
 ![APEIR Studio 中的工程文件、编辑器与 Chat](docs/media/studio-workspace-source.png)
