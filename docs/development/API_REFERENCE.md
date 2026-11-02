@@ -50,7 +50,7 @@ interpret executor scope and prerequisites. A declared or available entry is
 not an execution result.
 
 Other useful families are `/api/v1/developer/workspace/`,
-`/api/v1/workflows/`, `/api/v1/studio/extensions/` and the existing
+`/api/v1/workflow/`, `/api/v1/studio/extensions/` and the existing
 `/api/v1/control/` human/governance surface. Their current guides are
 [Studio](../operations/guides/USER_GUIDE.md),
 [Workflow](../operations/guides/WORKFLOW_GUIDE.md) and

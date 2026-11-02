@@ -52,14 +52,6 @@ Kernel；测试命令还需要对应权限和合格沙箱。条件不足时会�
 [下载信息](docs/operations/getting-started/QUICK_START.md#download-metadata)列出版本、
 SHA-256、保留期限和验收范围。目前提供的是临时预览工件，没有稳定正式版或一键安装脚本。
 
-## Developer Preview 状态
-
-当前版本为 **0.1.0-rc1**，源码安装及部分完整软件流程已经验收。
-未签名 Windows 包通过了构建和 Sidecar 检查，Windows 10 安装生命周期仍待验收。
-真实模型账户、严格命令隔离和物理设备操作分别需要对应条件。
-[ROADMAP](ROADMAP.md)是当前状态的唯一记录入口。
-文件 MATCH 不代表测试已经运行，更不代表设备效果已经独立验证。
-
 ## 开发与扩展
 
 [开发者入口](docs/development/DEVELOPER_PLATFORM.md) ·
@@ -77,6 +69,14 @@ SDK 仍处于 beta。Studio UI 扩展目前使用经过审查的数据型 Manife
 [Issues](https://github.com/untrod/apeir/issues)报告，安全漏洞按
 [SECURITY](SECURITY.md)私下提交。架构与验收资料见[文档导航](docs/README.md)。
 已有的 `nous` 命令和标识保留兼容用途。
+
+## Developer Preview 状态
+
+当前版本为 **0.1.0-rc1**，源码安装及部分完整软件流程已经验收。
+未签名 Windows 包通过了构建和 Sidecar 检查，Windows 10 安装生命周期仍待验收。
+真实模型账户、严格命令隔离和物理设备操作分别需要对应条件。
+[ROADMAP](ROADMAP.md)是当前状态的唯一记录入口。
+文件 MATCH 不代表测试已经运行，更不代表设备效果已经独立验证。
 
 ## 许可证
 

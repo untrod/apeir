@@ -1,5 +1,101 @@
 # Repository consolidation audit
 
+## Source and consumer audit — 2026-11-02
+
+Baseline: Distribution `19e8bb7b8136ae187ae29be5705a0373bf75a813`.
+Its Core 41326290726, Desktop 41326290785, Multi-Arch 41326290727 and
+Security 41326290731 passed. Kernel remains frozen at
+`87fd1b2ff28ef14ab1a515a58162592b452fda2e`; approved component bytes and
+`runtime-components.lock.json` are unchanged. Current product qualification
+remains in [ROADMAP](../../ROADMAP.md); this audit does not promote model,
+strict-sandbox, physical or Windows 10 installation gates.
+
+### Inventory and consumer method
+
+The audit uses `git ls-files -z` and `git ls-tree -r -l -z` rather than filesystem
+size or filename guesses. It covers 2,136 tracked files, 340 directory aggregates,
+239 Markdown files and 42 Markdown-only directories. Seven zero-byte files are
+Python test package markers. Git does not represent empty directories; ignored
+build output and private working state are not repository cleanup targets.
+
+Python AST imports, literal dynamic imports, frontend imports and path references
+were checked alongside setuptools package discovery, MANIFEST, PyInstaller's
+CLI command table/data collection, Vite/TypeScript, Tauri resources, schemas,
+pytest discovery, workflow commands and SDK/header surfaces. The scan records
+1,330 files with direct reference evidence, 198 dynamic-loader/glob sites and
+75 manual-entry review candidates. Basename matches are hints only. No static
+caller is not proof of no consumer: 873 Python files belong to the maintained
+installation namespaces, and external SDK users are not visible to Git grep.
+
+Generated per-file KEEP/UPDATE/MERGE/ARCHIVE decisions, inbound references,
+recursive size tables and the qualification logs are retained with the audit
+evidence. They contain repository paths and measured scope, not credentials or
+Runtime databases. No additional maintenance framework is introduced.
+
+### Decisions and changes
+
+| Scope | Decision | Result / preservation reason |
+| --- | --- | --- |
+| Runtime, SDK, protocols, tests, legal and original acceptance data | KEEP | Preserve public/compatibility imports, discovery and evidence; tests are not removed |
+| [Code map](../development/RUNTIME_MODULE_MAP.md#current-code-entry-points) | UPDATE | Current entry points precede a collapsed, explicitly historical July plan; old headings/paths remain |
+| [Quick Start](../operations/getting-started/QUICK_START.md) / [deployment](../operations/deployment/DEPLOYMENT.md) | MERGE | Reuse current installation and task guides instead of duplicating commands; remote-human procedure retained |
+| [Platform policy](../operations/platform/PLATFORM_SUPPORT_POLICY.md) / acceptance index | UPDATE | Separate actual CI, Server2025 native build, historical RC2 host data and pending installed lifecycle |
+| Connector, Plugin and HTTP SDK examples | UPDATE | State actual refusal/approval outcomes; no implied production Plugin execution or implicit human authority |
+| `hello_pack`, old capture/NEP scripts, legacy installers and release/generation tools | ARCHIVE in place | Retain paths and possible external/history consumers; exclude from current Preview instructions |
+| Markdown-only directories and package markers | KEEP | Distinct contracts/research records or import identity; directory shape is not deletion evidence |
+| All source files | DELETE: none | No deletion was justified after packaging, compatibility, manual-entry and preservation review |
+
+The Plugin example's README participates in its content hash. Its correction
+therefore uses patch version 1.0.1 and a new verified checksum, rather than silently
+replacing 1.0.0. Executable code and requested permissions are unchanged.
+The HTTP SDK examples now exit 2 on refusal; TypeScript reports the error rather
+than an unhandled rejection. The unchanged TypeScript compatibility client has
+no explicit idempotency argument and is not a safe effect-recovery example.
+
+### Source-export defect and bounded repair
+
+The existing manual source-candidate exporter incorrectly excluded the real
+`nous_runtime/evidence/` Python package and admitted ignored browser-test output.
+A baseline fixture reproduced missing Evidence code/AGENTS and copied fake
+private test output, local config and key files. The existing exporter now keeps
+that exact package/AGENTS while excluding test-results, Playwright reports, local
+config and keys. A regression verifies both public content and private exclusions.
+Ordinary runtime evidence directories remain excluded. This is not a replacement
+packager or an assertion that the qualified Wheel/native bundle had this defect.
+
+An actual corrected source export contains 2,132 tracked files, no untracked test
+output and only the four intentionally excluded generated Tauri schemas missing
+from the Git source set. A rebuilt Wheel’s 873 Python payloads match the separately
+qualified 5bdbadf Wheel byte for byte. The checkout `.gitattributes` also separates
+an accidentally joined `.env.example`/`Dockerfile` rule; both now resolve to LF.
+
+### Qualification and limits
+
+The checked commands include the existing repository/hygiene/link/identity,
+release-version and security checks, affected example/SDK/Workflow regressions,
+real installed model-free service startup, actual HTTP SDK requests, original
+CLI approvals and Run retrieval after Runtime restart. Typed result bindings
+return `Review data` and retain the original Run for the same key. Both HTTP SDK
+examples complete the pure Workflow after independent original-request approval;
+wrong session credentials are rejected. No policy is relaxed to make them run.
+The portable C micro contract builds/runs on the Linux host; this is not physical
+FreeRTOS/Zephyr or hardware acceptance.
+
+Scientific preflight reports BLOCKED with execution false; no host fallback or
+report is fabricated. Old deployment scripts, paid model probes, live physical
+operations and formal publication are not executed by this cleanup. Existing
+security-scan medium findings concern retained image-layout/evidence paths and
+negative-test private addresses; scanner rules and original material are unchanged.
+The current unsigned Windows x64 package still identifies its original source
+and separate install/signing limits in the canonical download table.
+
+Each new PR and resulting main must pass their own required checks. The baseline
+CI above is evidence of the starting state, not a new-head pass. Historical records
+below retain their original conclusions and revisions.
+
+## Earlier consolidation record
+
+
 Audit baseline: Distribution `ff4d7b4f47b5821f05b3c1a6ef2429847a64cf6d`.
 Kernel remains `87fd1b2ff28ef14ab1a515a58162592b452fda2e`.
 This is a repository/documentation governance change; no Runtime architecture

@@ -24,7 +24,8 @@
 *.properties text eol=lf
 *.gradle text eol=lf
 .gitignore text eol=lf
-.env.example text eol=lfDockerfile text eol=lf
+.env.example text eol=lf
+Dockerfile text eol=lf
 
 *.bat text eol=crlf
 *.cmd text eol=crlf

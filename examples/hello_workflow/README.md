@@ -16,9 +16,25 @@ effect or a Governance bypass. Workflow registration and the run are persisted
 by the existing owners. Use the [Verified Execution Demo](../hello_runtime/README.md)
 for approval, Node execution and independent effect verification.
 
-The [HTTP SDK examples](../sdk/python_quickstart.py) require an already-running,
-authenticated Server Runtime and this registered definition. They are not the
-zero-key standalone Demo; native Server prerequisites still apply.
+The [Python SDK example](../sdk/python_quickstart.py) and
+[TypeScript example](../sdk/typescript_quickstart.ts) require this registered
+definition, a running Runtime on localhost:8770 and its session token through
+`NOUS_API_TOKEN`. Install the beta SDK as described in Quick Start. TypeScript
+also needs a TypeScript/Node development environment; it is not a published npm
+package or a directly executable JavaScript file.
+
+A new request can return `NOUS_APPROVAL_REQUIRED` with an original approval ID.
+That is a refusal to execute, not a completed Workflow. Inspect it in the existing
+Approval surface or local owner's CLI, approve the original request independently,
+then continue that same request. The examples exit 2 on refusal. Do not change
+permission policy to make them appear successful.
+
+The Python helper supplies the fixed `python-sdk-example` idempotency key. The
+TypeScript compatibility helper does not expose that parameter: use it only for
+this pure example, not uncertain effectful operations or response-loss recovery.
+Do not repeat a request with an unknown outcome. Model-free pure handlers use
+runtime-service scope; model/NKI, command isolation and physical effects retain
+their own prerequisites.
 
 ## Pass a typed result to the next step
 

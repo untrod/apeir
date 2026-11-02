@@ -10,5 +10,6 @@ and [Provider guide](PROVIDER_DEVELOPMENT.md), rather than internal Runtime impo
 The independently released Rust Kernel is pinned by the root component lock;
 Python compatibility modules are not a second native Kernel.
 
-[Runtime module reference](RUNTIME_MODULE_MAP.md) is navigation, not authority.
+[Current code entry points](RUNTIME_MODULE_MAP.md#current-code-entry-points) give a short source map.
+The archived planning section is historical, not a list of missing features.
 For Controller and Node setup use the [operations runbook](../operations/compute-mesh/OPERATIONS.md).

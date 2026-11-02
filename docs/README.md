@@ -35,7 +35,7 @@ prerequisites. [Operations](operations/README.md) indexes deployment and recover
 [Provider SDK](development/PROVIDER_DEVELOPMENT.md) ·
 [Extension schemas](../spec/extensions/v1/README.md) ·
 [Compatibility](development/COMPATIBILITY_MATRIX.md) ·
-[Runtime module map](development/RUNTIME_MODULE_MAP.md)
+[Code entry points](development/RUNTIME_MODULE_MAP.md#current-code-entry-points)
 
 The [Developer Platform](development/DEVELOPER_PLATFORM.md) connects these public
 interfaces. [Development](development/README.md) covers contributor setup and

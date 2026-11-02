@@ -1,3 +1,5 @@
+"""Request the registered example Workflow; inspect approval before execution."""
+
 import os
 
 from nous_provider.runtime import NousClient
@@ -7,3 +9,5 @@ response = runtime.workflow(
     "example.workflow", {"message": "Hello, Nous"}, idempotency_key="python-sdk-example"
 )
 print(response)
+if not response.get("ok"):
+    raise SystemExit(2)

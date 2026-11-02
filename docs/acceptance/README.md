@@ -13,9 +13,12 @@ These records have distinct scopes and are not blanket release certification.
 - [Release runbook](RELEASE_RUNBOOK.md) and [validation matrix](VALIDATION_MATRIX.md)
 - [0.1.0-rc1 notes](RELEASE_NOTES_0.1.0-rc1.md) and [API compatibility](API_V1_FREEZE.md)
 
-M3.3-C and M5 physical acceptance remain PENDING. Native component hash
-validation is BLOCKED without the locked binaries. Generated evidence belongs
-in retained CI/release artifacts, never private local data committed to source.
+M3.3-C and M5 physical acceptance remain PENDING. Approved Windows x64
+components and unsigned builds have their [exact build record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build).
+A source-only CI job does not stage or qualify native bytes. Windows 10 installed
+lifecycle and formal publication remain separate in [ROADMAP](../../ROADMAP.md).
+Generated evidence belongs in retained CI/release artifacts, never private local
+data committed to source.
 
 ## Finding historical checkpoints
 

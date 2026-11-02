@@ -59,15 +59,6 @@ choose your path:
 records versions, SHA-256, expiry and tested scope. These are temporary preview
 artifacts; no stable Release or one-line installer is available.
 
-## Developer Preview status
-
-Version **0.1.0-rc1** supports source installation and scoped software workflows.
-Unsigned Windows builds pass build/sidecar checks; Windows 10 installed lifecycle
-remains pending. Live model accounts, strict command isolation and physical
-operations have separate qualification requirements. [ROADMAP](ROADMAP.md) is
-the current status record. A file MATCH does not mean tests ran or a device effect
-was independently verified.
-
 ## Develop and extend
 
 [Developer Platform](docs/development/DEVELOPER_PLATFORM.md) ·
@@ -87,6 +78,15 @@ Start with [CONTRIBUTING](CONTRIBUTING.md). Report reproducible problems through
 private vulnerability reports. Architecture and acceptance records are indexed
 under [Documentation](docs/README.md). Existing `nous` commands and identifiers
 remain compatibility names.
+
+## Developer Preview status
+
+Version **0.1.0-rc1** supports source installation and scoped software workflows.
+Unsigned Windows builds pass build/sidecar checks; Windows 10 installed lifecycle
+remains pending. Live model accounts, strict command isolation and physical
+operations have separate qualification requirements. [ROADMAP](ROADMAP.md) is
+the current status record. A file MATCH does not mean tests ran or a device effect
+was independently verified.
 
 ## License
 

@@ -7,7 +7,9 @@ import pytest
 from scripts.prepare_distribution_candidate import create_candidate
 
 
-def test_candidate_excludes_private_generated_and_repository_state(tmp_path: Path) -> None:
+def test_candidate_excludes_private_generated_and_repository_state(
+    tmp_path: Path,
+) -> None:
     source = tmp_path / "source"
     destination = tmp_path / "candidate"
     (source / "nous_runtime").mkdir(parents=True)
@@ -49,3 +51,35 @@ def test_candidate_never_overwrites_an_existing_review(tmp_path: Path) -> None:
 
     with pytest.raises(FileExistsError, match="already exists"):
         create_candidate(source, destination)
+
+
+def test_candidate_keeps_evidence_code_without_exporting_runtime_state(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    destination = tmp_path / "candidate"
+    public = {
+        "AGENTS.md": "Read the canonical architecture.\n",
+        "nous_runtime/evidence/__init__.py": "",
+        "nous_runtime/evidence/service.py": "class EvidenceService: pass\n",
+        "docs/acceptance/evidence.md": "# Dated acceptance record\n",
+    }
+    private = {
+        "nous_runtime/evidence/data/private.json": "private",
+        "examples/project/evidence/result.json": "private",
+        "desktop/test-results/run/screenshot.png": "private",
+        "desktop/playwright-report/index.html": "private",
+        "remote_terminal/config.local.json": "private",
+        "examples/project/identity.key": "private",
+    }
+    for relative, content in {**public, **private}.items():
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    manifest = create_candidate(source, destination)
+
+    assert {item["path"] for item in manifest} == set(public)
+    for relative, content in public.items():
+        assert (destination / relative).read_text(encoding="utf-8") == content
+    assert not any((destination / relative).exists() for relative in private)

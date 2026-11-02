@@ -17,54 +17,163 @@ from pathlib import Path
 
 
 ROOT_FILES = {
-    ".env.example", ".gitattributes", ".gitignore", "CHANGELOG.md",
-    "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "Dockerfile", "LICENSE",
-    "MAINTAINERS.md", "MANIFEST.in", "NOTICE", "README.md",
-    "README.zh-CN.md", "ROADMAP.md", "SECURITY.md", "SUPPORT.md",
+    ".env.example",
+    ".gitattributes",
+    ".gitignore",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "Dockerfile",
+    "LICENSE",
+    "MAINTAINERS.md",
+    "MANIFEST.in",
+    "NOTICE",
+    "README.md",
+    "README.zh-CN.md",
+    "ROADMAP.md",
+    "SECURITY.md",
+    "SUPPORT.md",
     "THIRD_PARTY_NOTICES.md",
-    "config.example.json", "deploy.sh", "docker-compose.yml", "install.sh",
-    "nous-sidecar.spec", "pyproject.toml", "runtime-components.lock.json",
+    "config.example.json",
+    "deploy.sh",
+    "docker-compose.yml",
+    "install.sh",
+    "nous-sidecar.spec",
+    "pyproject.toml",
+    "runtime-components.lock.json",
 }
 
 SOURCE_DIRECTORIES = {
-    ".github", "benchmarks", "compat", "config", "conformance", "deploy", "desktop",
-    "docs", "examples", "hello_pack", "ide", "integrations", "intelligence",
-    "micro", "nous_runtime", "nous_workspace", "packs", "remote_terminal",
-    "RemoteTerminal", "research", "runtime", "scripts", "sdk", "spec",
-    "tasks", "templates", "tests", "tools",
+    ".github",
+    "benchmarks",
+    "compat",
+    "config",
+    "conformance",
+    "deploy",
+    "desktop",
+    "docs",
+    "examples",
+    "hello_pack",
+    "ide",
+    "integrations",
+    "intelligence",
+    "micro",
+    "nous_runtime",
+    "nous_workspace",
+    "packs",
+    "remote_terminal",
+    "RemoteTerminal",
+    "research",
+    "runtime",
+    "scripts",
+    "sdk",
+    "spec",
+    "tasks",
+    "templates",
+    "tests",
+    "tools",
 }
 
 EXCLUDED_PARTS = {
-    ".agents", ".apeir", ".audit", ".claude", ".codex", ".git", ".gradle",
-    ".idea", ".kotlin", ".mypy_cache", ".nous", ".pytest_cache",
-    ".ruff_cache", ".venv", "__pycache__", "artifacts", "backups", "build",
-    "cache", "checkpoints", "conversations", "data", "dist", "evidence",
-    "exports", "htmlcov", "logs", "node_modules", "reports", "server_backup",
-    "sessions", "target", "temp", "tmp", "venv",
+    ".agents",
+    ".apeir",
+    ".audit",
+    ".claude",
+    ".codex",
+    ".git",
+    ".gradle",
+    ".idea",
+    ".kotlin",
+    ".mypy_cache",
+    ".nous",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "artifacts",
+    "backups",
+    "build",
+    "cache",
+    "checkpoints",
+    "conversations",
+    "data",
+    "dist",
+    "evidence",
+    "exports",
+    "htmlcov",
+    "logs",
+    "node_modules",
+    "reports",
+    "server_backup",
+    "sessions",
+    "target",
+    "temp",
+    "tmp",
+    "venv",
 }
 
 EXCLUDED_PREFIXES = {
-    "benchmarks/rc5", "benchmarks/rc9", "benchmarks/rc10",
-    "desktop/src-tauri/gen", "docs/archive", "docs/audits",
-    "docs/release/evidence", "intelligence/manifests/store.json",
+    "benchmarks/rc5",
+    "benchmarks/rc9",
+    "benchmarks/rc10",
+    "desktop/test-results",
+    "desktop/playwright-report",
+    "desktop/src-tauri/gen",
+    "docs/archive",
+    "docs/audits",
+    "docs/release/evidence",
+    "intelligence/manifests/store.json",
 }
 
 EXCLUDED_SUFFIXES = {
-    ".7z", ".aab", ".apk", ".bak", ".bin", ".db", ".dll", ".doc",
-    ".docx", ".exe", ".gz", ".img", ".lib", ".log", ".obj", ".o",
-    ".pdf", ".pem", ".pfx", ".pyd", ".pyc", ".pyo", ".sqlite",
-    ".sqlite3", ".tar", ".wav", ".xlsx", ".zip",
+    ".7z",
+    ".aab",
+    ".apk",
+    ".bak",
+    ".bin",
+    ".db",
+    ".dll",
+    ".doc",
+    ".docx",
+    ".exe",
+    ".gz",
+    ".img",
+    ".lib",
+    ".log",
+    ".obj",
+    ".o",
+    ".pdf",
+    ".pem",
+    ".pfx",
+    ".key",
+    ".pyd",
+    ".pyc",
+    ".pyo",
+    ".sqlite",
+    ".sqlite3",
+    ".tar",
+    ".wav",
+    ".xlsx",
+    ".zip",
 }
 
 EXCLUDED_NAMES = {
-    "RC3-ARM64-ARTIFACT.json", "SHA256SUMS-arm64.txt", "local.properties",
+    "RC3-ARM64-ARTIFACT.json",
+    "SHA256SUMS-arm64.txt",
+    "local.properties",
     "workspace.json",
+    "config.local.json",
 }
 
 
 def _excluded(relative: str) -> bool:
     path = Path(relative)
-    if any(part in EXCLUDED_PARTS for part in path.parts):
+    # Evidence is also a maintained Python package, not only a state directory.
+    parts = (
+        path.parts[2:] if path.parts[:2] == ("nous_runtime", "evidence") else path.parts
+    )
+    if any(part in EXCLUDED_PARTS for part in parts):
         return True
     if path.name in EXCLUDED_NAMES:
         return True
@@ -99,11 +208,13 @@ def create_candidate(source: Path, destination: Path) -> list[dict[str, object]]
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_file, target)
-        manifest.append({
-            "path": relative,
-            "size_bytes": target.stat().st_size,
-            "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
-        })
+        manifest.append(
+            {
+                "path": relative,
+                "size_bytes": target.stat().st_size,
+                "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            }
+        )
     return manifest
 
 
@@ -133,7 +244,11 @@ def main() -> int:
             json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
-    print(json.dumps({key: payload[key] for key in ("file_count", "total_bytes")}, indent=2))
+    print(
+        json.dumps(
+            {key: payload[key] for key in ("file_count", "total_bytes")}, indent=2
+        )
+    )
     return 0
 
 

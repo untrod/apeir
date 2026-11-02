@@ -1,5 +1,65 @@
 # APEIR Runtime module reference
 
+Use this map to find an implementation, then follow its existing owner. Paths
+refer to the Distribution repository. The native Rust Kernel lives in its
+[separate repository](https://github.com/untrod/apeir-kernel), pinned by
+[the component lock](../../runtime-components.lock.json).
+
+## Current code entry points
+
+| Area | Start here | Responsibility |
+| --- | --- | --- |
+| Public CLI | [main.py](../../nous_runtime/cli/main.py), [pyproject.toml](../../pyproject.toml) | `apeir`/`nous` command registration and installed entry points |
+| Runtime HTTP API | [server.py](../../nous_runtime/api/server.py), [runtime_api.py](../../nous_runtime/cli/runtime_api.py) | Authenticated service startup; routes stay in `nous_runtime/api/` |
+| Model Gateway | [gateway.py](../../nous_runtime/model_runtime/gateway.py), [factory.py](../../nous_runtime/model_runtime/factory.py) | Registered model selection, admission and Kernel/NKI invocation |
+| Usage and budgets | [cost_control.py](../../nous_runtime/model_runtime/cost_control.py) | Reservations and nullable Provider usage; unknown is not free |
+| Workflow | [models.py](../../nous_runtime/workflow/models.py), [compiler.py](../../nous_runtime/workflow/compiler.py), [runtime.py](../../nous_runtime/workflow/runtime.py), [store.py](../../nous_runtime/workflow/store.py) | Definitions, validation, admitted handlers and original durable Runs |
+| Agent coordination | [runtime.py](../../nous_runtime/agent/runtime.py), [session.py](../../nous_runtime/agent/session.py) | Existing execution/session owners; not another Agent framework |
+| Governance | [governance](../../nous_runtime/governance), [store.py](../../nous_runtime/governance/store.py) | Authorization, approvals, revocation and durable audit |
+| Work | [supervisor.py](../../nous_runtime/work/supervisor.py), [runtime.py](../../nous_runtime/work/runtime.py) | Original Work submission and recovery |
+| Artifact and evidence | [artifact](../../nous_runtime/artifact), [evidence](../../nous_runtime/evidence) | CAS/metadata and recorded evidence; not proof of a physical effect by itself |
+| Node / Mesh | [node_runtime](../../nous_runtime/node_runtime), [distributed_work.py](../../nous_runtime/node_runtime/distributed_work.py) | Controller/Relay/Node identity, delivery and reconciliation |
+| Reality | [reality](../../nous_runtime/reality), [execution.py](../../nous_runtime/reality/execution.py), [verification.py](../../nous_runtime/reality/verification.py) | Managed resources, admitted operations and independent effect checks |
+| Studio | [App.tsx](../../desktop/src/App.tsx), [StudioShell.tsx](../../desktop/src/components/studio/StudioShell.tsx) | React entry, panels and presentation state |
+| Native Desktop | [src-tauri](../../desktop/src-tauri), [launcher build](../../scripts/build-windows-x64-launcher.ps1) | Existing Tauri launcher and verified sidecar packaging |
+| Public Provider SDK | [nous_provider](../../sdk/provider/python/nous_provider), [examples](../../examples/README.md) | External public contracts; beta, not permission authority |
+| Extensions / Skills | [extensions](../../nous_runtime/extensions), [skills](../../nous_runtime/skills), [Studio UI contract](STUDIO_UI_EXTENSIONS.md) | Verified package metadata and governed lifecycle |
+| Protocols and schemas | [spec](../../spec), [Provider contract](../architecture/PROVIDER_CONTRACT.md) | Versioned interchange and compatibility |
+
+## Which files belong to a distribution?
+
+- `pyproject.toml` discovers `nous_runtime*`, `compat*` and
+  `remote_terminal.nous_core*`. `MANIFEST.in` excludes the old application while
+  retaining that compatibility namespace. A module with no internal caller can
+  still be an externally imported SDK contract.
+- [nous-sidecar.spec](../../nous-sidecar.spec) reads the CLI's maintained dynamic
+  command table and collects Runtime data. Keep that path when assessing imports.
+- Vite/TypeScript build Studio; [Tauri configuration](../../desktop/src-tauri/tauri.conf.json)
+  names resources and three external binaries. Native bytes must pass the lock.
+- `scripts/` contains current builds, probes and manual qualification entry points.
+  `tools/`, deployment sketches and old client applications also retain historical
+  consumers; their presence does not make them current install instructions.
+- `tests/`, schemas and fixtures may be loaded by discovery or runtime paths.
+  A text search with no matches is a review hint, not deletion evidence.
+
+## Start contributing
+
+Use [Developer Setup](../operations/getting-started/QUICK_START.md#developer-setup)
+for installation, then [Development](README.md) for the smallest relevant checks.
+[State ownership](../architecture/STATE_OWNERSHIP.md) defines authority;
+[ROADMAP](../../ROADMAP.md) defines current qualification.
+
+## Historical planning inventory
+
+The material below is the original July 2026 planning inventory. Its `Missing`,
+`Refactor`, registry counts and consolidation targets describe that old branch.
+They are **not current work orders or current capability status**. Do not rebuild
+modules or merge authorities from these rows. Original headings remain available
+for existing links and historical review.
+
+<details>
+<summary>Archived July 2026 plan — original text</summary>
+
 > Date: 2026-07-27
 > Baseline: kernel/unified-model-runtime branch
 > Purpose: Map every existing module against the master plan's 10-Batch architecture
@@ -279,3 +339,6 @@ Read [canonical ownership](../architecture/STATE_OWNERSHIP.md) first.
 20. `intelligence/profiles/discovery.py` — ProviderRegistryDiscovery
 
 **Target**: All 22 should share a common `NousObject` base with standard CRUD, ID, status, and lifecycle.
+
+
+</details>

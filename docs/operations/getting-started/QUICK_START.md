@@ -265,58 +265,27 @@ For a declarative widget, use [System Monitor](../../../examples/studio_system_m
 
 ### Workspace developer panel
 
-Open **Files / Operations → Workspace**. Select files, edit drafts, review the
-Diff and request the original approval before applying a change. Changed source
-versions are rejected rather than overwritten. See
-[Workspace changes](../../development/DEVELOPER_PLATFORM.md#reviewing-workspace-changes)
-for multi-file review and [Workbench](../../development/DEVELOPER_PLATFORM.md#professional-workbench)
-for draft handling, fixed execution profiles and sandbox requirements.
-
-GUI approval requires **Operations Console → Sign in as human** and the
-Controller's configured trusted identity provider. A service token is not a
-human login. Without that provider, review the original request and approve it
-through the local owner's existing CLI, from the same project directory:
-
-```bash
-apeir --no-intelligence approval show ORIGINAL_REQUEST_ID --json
-apeir --no-intelligence approval approve ORIGINAL_REQUEST_ID
-```
-
-Refresh the original Proposal in Studio and resume it. Do not create a second
-proposal to repeat a write whose outcome is unknown.
-
-Drafts are held in memory. Save or export them before reloading or changing
-Controller. Closing a panel does not cancel admitted Work. After a lost write
-response, inspect the original Proposal, files and evidence before trying again.
+Follow [Workspace changes](../guides/USER_GUIDE.md#reviewing-workspace-changes)
+for file reads, drafts, Diff, original human approval and stale-version refusal.
+A service token cannot approve itself; closing a panel does not cancel Work.
 
 ### Task and Artifact evidence
 
-Open **Tasks**, select the original Work, then inspect its recorded execution
-and evidence. Artifact checksum validation proves byte integrity, not a physical
-effect. [Watching a request](../../development/DEVELOPER_PLATFORM.md#watching-a-request)
-explains model/tool activity, reconnecting and historical Run inspection.
+Open **Tasks** and inspect the original Work. [Watching a request](../guides/USER_GUIDE.md#watching-a-request)
+explains activity, reconnecting and history. An Artifact digest is byte integrity,
+not independent physical verification.
 
 ### Inspect model context
 
-Use **Inspect active input** while a request runs or **Inspect model input** on
-its saved response. This reads the original metadata without a model call.
-It shows application Gateway input, not proof of the Provider's final payload.
-See [context scope](../../development/DEVELOPER_PLATFORM.md#inspecting-actual-model-input)
-and [usage and cost](../../development/DEVELOPER_PLATFORM.md#model-usage-and-cost).
+Use the [Context and Usage guide](../guides/CONTEXT_AND_USAGE.md) for original
+input metadata, Tokens and cost. Missing usage stays UNKNOWN, not free.
 
 ### Environment workbench
 
-Open **Operations Console → Environments** to inspect contracts, provider state
-and original lifecycle records. Creation is not execution. Missing strict
-isolation is BLOCKED; do not fall back to an ordinary host Shell.
-Run the scientific reference's prerequisite check from its source checkout:
-
-```bash
-python -m scripts.acceptance.scientific_preview_preflight
-```
-
-Exit 2/BLOCKED is expected when its qualified sandbox is absent; this command
-does not generate a report. See the [scientific examples](../../../examples/README.md#scientific-computation-and-reports).
+See [controlled execution](../guides/USER_GUIDE.md#interactive-project-execution)
+and the [scientific prerequisites](../../../examples/README.md#scientific-computation-and-reports).
+A created environment is not an executed test. Missing strict isolation remains
+BLOCKED; never replace it with an unrestricted host Shell.
 
 ## Troubleshooting and feedback
 
