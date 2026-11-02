@@ -2637,14 +2637,8 @@ async def _run_relay_io(
     return result
 
 
-def _read_failure_winerror(path: Path, error: OSError) -> int | None:
-    code = getattr(error, "winerror", None)
-    if type(code) is int:
-        return code
-    if os.name != "nt" or error.errno != errno.EACCES:
-        return None
-    # The Windows CRT can reduce a sharing violation to errno13, discarding
-    # GetLastError. Probe current read access without creating or writing a file.
+def _windows_state_read_api():
+    """Bind read-only native I/O so the failed operation retains its error code."""
     import ctypes
     from ctypes import wintypes
 
@@ -2660,12 +2654,65 @@ def _read_failure_winerror(path: Path, error: OSError) -> int | None:
         wintypes.HANDLE,
     ]
     create.restype = wintypes.HANDLE
-    handle = create(str(path), 0x80000000, 7, None, 3, 0x80, None)
-    if handle == ctypes.c_void_p(-1).value:
-        return ctypes.get_last_error()
     close = kernel32.CloseHandle
     close.argtypes = [wintypes.HANDLE]
     close.restype = wintypes.BOOL
+    read = kernel32.ReadFile
+    read.argtypes = [
+        wintypes.HANDLE,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+        wintypes.LPVOID,
+    ]
+    read.restype = wintypes.BOOL
+    return ctypes, wintypes, kernel32
+
+
+def _read_state_text(path: Path) -> str:
+    if os.name != "nt":
+        return path.read_text(encoding="utf-8")
+    ctypes, wintypes, kernel32 = _windows_state_read_api()
+    # This is a read of an existing atomic Relay snapshot, not workspace file
+    # admission. Share replacement while retaining the opened snapshot handle;
+    # no file is created and the caller's OS access checks remain in force.
+    handle = kernel32.CreateFileW(str(path), 0x80000000, 7, None, 3, 0x80, None)
+    if handle == ctypes.c_void_p(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        chunks = []
+        buffer = ctypes.create_string_buffer(64 * 1024)
+        count = wintypes.DWORD()
+        while True:
+            if not kernel32.ReadFile(
+                handle, buffer, len(buffer), ctypes.byref(count), None
+            ):
+                raise ctypes.WinError(ctypes.get_last_error())
+            if not count.value:
+                break
+            chunks.append(buffer.raw[: count.value])
+    finally:
+        if not kernel32.CloseHandle(handle):
+            # A cleanup error is not a sharing conflict that permits a reread.
+            raise NodeProtocolError("relay state read handle cleanup failed") from (
+                ctypes.WinError(ctypes.get_last_error())
+            )
+    return b"".join(chunks).decode("utf-8")
+
+
+def _read_failure_winerror(path: Path, error: OSError) -> int | None:
+    code = getattr(error, "winerror", None)
+    if type(code) is int:
+        return code
+    if os.name != "nt" or error.errno != errno.EACCES:
+        return None
+    # Diagnostic only: a later access probe cannot establish the cause of an
+    # earlier CRT failure. Strict native reads retain their own error above.
+    ctypes, _, kernel32 = _windows_state_read_api()
+    handle = kernel32.CreateFileW(str(path), 0x80000000, 7, None, 3, 0x80, None)
+    if handle == ctypes.c_void_p(-1).value:
+        return ctypes.get_last_error()
+    close = kernel32.CloseHandle
     if not close(handle):
         raise ctypes.WinError(ctypes.get_last_error())
     return None
@@ -2676,7 +2723,9 @@ def _read_json(path: Path, *, strict: bool = False) -> dict[str, Any]:
         return {}
     for attempt in range(6):
         try:
-            value = json.loads(path.read_text(encoding="utf-8"))
+            value = json.loads(
+                _read_state_text(path) if strict else path.read_text(encoding="utf-8")
+            )
         except OSError as exc:
             # A bounded reread cannot replay an effect. Only Windows sharing or
             # lock conflicts qualify; denial, missing state and corruption do not.
