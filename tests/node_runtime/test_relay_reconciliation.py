@@ -986,3 +986,71 @@ def test_native_access_denied_is_not_retried_as_an_unknown_crt_conflict(
     with pytest.raises(NodeProtocolError, match="observed_winerror=5"):
         NodeRelayServer(state_dir=tmp_path)
     assert path.is_dir()
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32", reason="requires an actual Windows sharing conflict"
+)
+def test_recovery_retains_read_error_when_lock_closes_before_diagnostic_probe(
+    tmp_path, monkeypatch
+):
+    import ctypes
+    from ctypes import wintypes
+
+    import nous_runtime.node_runtime.relay as relay
+
+    server, node, first, _, _ = asyncio.run(
+        _record_verified_result(tmp_path, monkeypatch)
+    )
+    path = server.state_dir / "workload-state.json"
+    original_bytes = path.read_bytes()
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    create = kernel.CreateFileW
+    create.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    )
+    create.restype = wintypes.HANDLE
+    close = kernel.CloseHandle
+    close.argtypes = (wintypes.HANDLE,)
+    close.restype = wintypes.BOOL
+    handle = create(str(path), 0x80000000, 0, None, 3, 0x80, None)
+    assert handle != ctypes.c_void_p(-1).value, ctypes.WinError(ctypes.get_last_error())
+    classify = relay._read_failure_winerror
+    classifications = []
+
+    def release_before_classification(target, error):
+        nonlocal handle
+        assert target == path
+        assert handle is not None
+        assert close(handle)
+        handle = None
+        classifications.append(error)
+        # Current access now succeeds. It cannot recover the native error code
+        # of the original failed read, which the CRT may already have discarded.
+        return classify(target, error)
+
+    monkeypatch.setattr(relay, "_read_failure_winerror", release_before_classification)
+    monkeypatch.setattr(
+        node, "execute_workload", lambda *_a, **_k: pytest.fail("replayed effect")
+    )
+    try:
+        reopened = NodeRelayServer(
+            state_dir=server.state_dir, artifact_store=server.artifact_store
+        )
+        assert len(classifications) == 1
+        assert reopened.results[first.idempotency_key] == first.payload
+        assert reopened.result_envelopes[first.idempotency_key] == first.to_dict()
+        assert (
+            reopened.reconcile_work(first.idempotency_key)["work"]["state"]
+            == "VERIFIED"
+        )
+        assert path.read_bytes() == original_bytes
+    finally:
+        if handle is not None:
+            assert close(handle)
