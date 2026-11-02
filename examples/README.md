@@ -33,9 +33,17 @@ A successful deterministic Provider example does not qualify that model.
   authenticated service, registered Workflow and current permission.
 
 Keep original Run/Work records after a lost response. Do not publish private Node
-keys, Runtime databases or credentials. Legacy edge/capture scripts remain
-compatibility examples, not recommended Preview entry points. No example alone
-establishes physical hardware, live-model or native-installation acceptance.
+keys, Runtime databases or credentials. The legacy scripts below are historical
+protocol samples, not current Preview entry points.
+
+| Retained path | Status / reason |
+| --- | --- |
+| `demo_quick_capture.py` | ARCHIVE: old `/capture` API and query-token authentication; incompatible with the current authenticated Runtime. Do not put real credentials in it. |
+| `demo_edge_device.py` | ARCHIVE: legacy NEP mock and query-token API; importing/running it sends requests. Not Node pairing, current Device admission or ESP32 acceptance. |
+| `../hello_pack/` | ARCHIVE: internal legacy scaffold and generated dependency/test imports; use the public Hello Provider path instead. |
+| `../conformance/clean-room/examples/` | Native NKI reference programs, requiring an actual Kernel and their separately reviewed prerequisites; not the credential-free Preview examples. |
+
+No example alone establishes physical hardware, live-model or native-installation acceptance.
 
 <details>
 <summary>Scientific reference: prerequisites and retained parameters</summary>

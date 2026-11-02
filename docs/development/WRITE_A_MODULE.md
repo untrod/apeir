@@ -19,7 +19,7 @@ new module to access the host.
 ## Module Class
 
 Core modules follow the existing owners in the
-[Runtime module map](RUNTIME_MODULE_MAP.md). They are implementation details,
+[current code map](RUNTIME_MODULE_MAP.md#current-code-entry-points). They are implementation details,
 not an unrestricted third-party lifecycle API.
 
 ## Registration

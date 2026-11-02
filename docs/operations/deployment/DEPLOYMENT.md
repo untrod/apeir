@@ -1,136 +1,102 @@
 # APEIR Runtime Deployment Guide
 
+Use [Quick Start](../getting-started/QUICK_START.md) for installation and first
+startup. This page selects deployment references; the existing remote-human
+qualification procedure below retains its separate security requirements.
+
 ## Supported Platforms
 
-| Platform | Architecture | Status |
-|----------|-------------|--------|
-| Windows 10/11 | x64 | Supported |
-| Windows 10/11 | ARM64 | Supported (RC2) |
-| Linux | x64, ARM64 | Supported |
-| macOS | Apple Silicon, x64 | Planned |
+[Platform policy](../platform/PLATFORM_SUPPORT_POLICY.md) separates current
+software CI, historical host evidence and native installation. A declared target
+is not an installed-product qualification. [ROADMAP](../../../ROADMAP.md) owns
+current status.
 
 ## Windows ARM64 Desktop
 
 ### Prerequisites
 
-- Windows 10 ARM64 or Windows 11 ARM64
-- Visual Studio Build Tools 2022 with "Desktop development with C++"
-- MSVC v143 ARM64 build tools
-- Windows 10/11 SDK
-- Node.js 20+
-- Rust toolchain with `aarch64-pc-windows-msvc` target
-- Python 3.10–3.12
+See [the ARM64 host boundary](WINDOWS_10_ARM64_LOCAL.md#native-arm64-boundary).
+Current ARM64 CI checks metadata, not a native installer. A supported builder and
+approved target-native Kernel components are required before native packaging.
 
 ### Build
 
-```powershell
-# Install Rust ARM64 target
-rustup target add aarch64-pc-windows-msvc
-
-# Install desktop dependencies
-cd desktop
-npm ci
-npm run build
-
-# Build ARM64 installer
-npm run tauri:build:arm64
-```
-
-The NSIS installer is generated at `desktop/src-tauri/target/release/bundle/nsis/`.
+Follow the [Release Runbook](../../acceptance/RELEASE_RUNBOOK.md) only when that
+target's component and toolchain gates are satisfied. An unqualified
+`tauri build` result does not establish a distributable ARM64 application.
 
 ### Verify
 
-```powershell
-nous doctor
-nous models doctor
-npm --prefix desktop run build
-```
+Keep the exact target, OS, component hashes and executed checks in its report.
+Do not reuse x64 hashes or interpret emulation as native ARM64 acceptance.
 
 ## Windows x64 Desktop
 
-```powershell
-cd desktop
-npm ci
-npm run build
-npm run tauri:build
-```
+The current unsigned Portable/NSIS package and SHA-256 are in
+[Quick Start downloads](../getting-started/QUICK_START.md#download-metadata).
+Use the [official launcher build and validation](WINDOWS_10_X64_LAUNCHER.md),
+not a frontend-only Tauri command. Current Windows 10 installation remains PENDING.
 
 ## Linux
 
 ### Python Runtime
 
+Follow [Developer Setup](../getting-started/QUICK_START.md#developer-setup),
+then start from a dedicated project directory:
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-nous doctor
+apeir --no-intelligence runtime-api start
 ```
+
+Model-free service startup does not qualify untrusted project execution.
+Missing strict isolation stays BLOCKED; there is no host Shell fallback.
 
 ### Desktop (experimental)
 
-Requires webkit2gtk and Tauri system dependencies. See [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
+Source Studio can use a browser. Native Linux Desktop needs the
+[Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/) and its
+own component, build and installation qualification; no general native PASS is
+claimed here.
 
 ## Runtime Configuration
 
 ### Provider Credentials
 
-Provider API keys are referenced by environment variable name, never stored in configuration files:
-
-```bash
-export OPENAI_API_KEY="sk-..."
-export DEEPSEEK_API_KEY="sk-..."
-export ANTHROPIC_API_KEY="sk-ant-..."
-```
-
-Then configure:
-
-```bash
-nous provider add
-```
+Use [Models and Providers](../guides/PROVIDER_GUIDE.md). Configure credential
+references through the supported backend. Do not copy real keys into guides,
+ordinary config, logs or browser storage.
 
 ### Model Configuration
 
-```bash
-nous models doctor
-nous models list
-nous models configure
-```
+Saving a Provider, authentication and actual inference are separate checks.
+Cloud/local coexistence is covered in software; real services, model capabilities
+and authorized inference budgets require their own qualification.
 
 ## Workspace Structure
 
-```
-workspace/
-├── nous.yaml          # Project configuration
-├── models.yaml        # Model registry (optional)
-├── data/              # Runtime data
-├── packs/             # Installed packs
-└── projects/          # Project artifacts
-```
+Use an explicitly selected project root. The Runtime creates its owned state;
+do not copy another workspace's identity, approvals or credentials into it.
+[State ownership](../../architecture/STATE_OWNERSHIP.md) defines authoritative
+records; layouts and UI caches do not replace them.
 
 ## Health Verification
 
+In a second activated shell from the same project:
+
 ```bash
-# Full diagnostic
-nous doctor
-
-# Model subsystem
-nous models doctor
-
-# Runtime status
-nous status
-
-# Run demo (no API key required)
-nous demo
+apeir runtime-api status --json
 ```
+
+Use the [first verified simulated execution](../getting-started/QUICK_START.md#first-verified-execution)
+to inspect original Work, approval, receipt and independent simulated observation.
+A health response alone proves neither inference nor a device effect.
 
 ## Production Deployment
 
-For production deployments, review:
-
-- [Security documentation](../../architecture/security/OVERVIEW.md)
-- [Trust boundaries](../../architecture/security/TRUST_BOUNDARIES.md)
-- [Known limitations](../../acceptance/KNOWN_LIMITATIONS.md)
-- [Release checklist](../../acceptance/PUBLIC_RELEASE_CHECKLIST.md)
+Developer Preview is not a production release. Review
+[security](../../architecture/SECURITY_CONTRACT.md),
+[known limitations](../../acceptance/KNOWN_LIMITATIONS.md) and the
+[release checklist](../../acceptance/PUBLIC_RELEASE_CHECKLIST.md).
 
 ## Remote Human Trust qualification
 

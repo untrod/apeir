@@ -1,3 +1,6 @@
 # Discussion Guidelines
 
-Use Discussions for design questions, examples, integrations, and RFC exploration. Use Issues for reproducible defects and bounded feature proposals. Never post credentials, private Runtime state, or vulnerability details; use Security Advisories instead.
+Use Issues for reproducible defects and bounded feature proposals. If repository
+Discussions are enabled, use them for design questions, examples and RFCs.
+Do not post credentials, private Runtime state or vulnerability details;
+follow the [security reporting policy](../SECURITY.md) for a private channel.

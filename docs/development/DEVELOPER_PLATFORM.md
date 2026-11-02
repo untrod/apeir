@@ -10,6 +10,7 @@ need to extend it.
 
 | Your goal | Start here |
 | --- | --- |
+| Find the implementation | [Current code entry points](RUNTIME_MODULE_MAP.md#current-code-entry-points) |
 | Download and launch | [Quick Start](../operations/getting-started/QUICK_START.md) |
 | Arrange panels and dashboards | [Studio](../operations/guides/USER_GUIDE.md) |
 | Connect an API or local model | [Models and Providers](../operations/guides/PROVIDER_GUIDE.md) |
