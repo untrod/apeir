@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 from contextlib import contextmanager
 import threading
@@ -36,7 +37,9 @@ class DomainLockManager:
         self._observations: dict[str, LockObservation] = {}
 
     @contextmanager
-    def acquire(self, domain: str, *, owner: str, timeout: float = 5.0) -> Iterator[LockObservation]:
+    def acquire(
+        self, domain: str, *, owner: str, timeout: float = 5.0
+    ) -> Iterator[LockObservation]:
         if not domain.startswith(self.VALID_PREFIXES):
             raise ValueError(f"Unsupported lock domain: {domain}")
         bounded_timeout = max(0.0, float(timeout))
@@ -81,8 +84,22 @@ def file_lock(path: str | Path) -> Iterator[None]:
         if os.name == "nt":
             import msvcrt
 
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            # CRT LK_LOCK retries only once per second, at most ten times.
+            # Contending writers can exhaust those coarse retries. Keep the
+            # same ten-second budget, yielding between nonblocking attempts.
+            deadline = time.monotonic() + 10.0
+            while True:
+                handle.seek(0)
+                try:
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError as exc:
+                    if exc.errno not in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
+                        raise
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise
+                    time.sleep(min(0.05, remaining))
             try:
                 yield
             finally:

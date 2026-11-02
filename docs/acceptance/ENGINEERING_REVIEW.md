@@ -6094,3 +6094,37 @@ signing and publication authorization remain BLOCKED; no tag or Release was
 created. Download instructions point to the actual authenticated, expiring
 Actions bundle, not invented public Setup/Portable URLs. The Windows candidate
 does not acquire these newer source-interface changes by documentation alone.
+
+### Windows Artifact lock contention — 2026-11-02
+
+PR129 entered main as `30b9860d861bfdedd53ea53f90d37069d1d708ba` after all
+13 required checks and four PR workflows passed. Resulting-main Core, Desktop
+and Security passed, but Multi-Arch41403356021 / Windows job125139831503 failed
+`test_concurrent_instances_preserve_original_metadata_and_all_digests`:
+5720 passed, 77 skipped, 345 deselected, four warnings, one failure.
+Eight independent CAS instances reached `msvcrt.locking(..., LK_LOCK, 1)`;
+the CRT returned errno36, Resource deadlock avoided, before the failed writer
+entered the commit. The original full failure log is retained. This is a
+separate advisory-file-lock failure, not evidence of a SQLite connection leak.
+
+Windows CRT blocking locks make ten one-second attempts. The Distribution
+helper now makes nonblocking attempts with cooperative waits of at most50ms,
+within the same ten-second budget. It still acquires the actual one-byte OS
+lock before admitting a writer and releases only an acquired lock. Deadline
+exhaustion and unrelated errors propagate; the protected operation is never
+retried. POSIX locking, CAS provenance, Governance and Kernel are unchanged.
+No HTTP/test timeout or original assertion is modified, and no lock pool is added.
+
+The original concurrent-store regression remains intact. Added deterministic
+Windows API contract cases exercise contention, body-error cleanup, bounded
+exhaustion, refusal before entry and unrelated-error propagation. They fail on
+the old helper and pass after the change. Artifact/Governance/Proposal scope:
+374 passed, 11 platform/environment skips. Real Windows qualification must use
+the corrected commit's CI; earlier green runs do not prove this defect fixed.
+
+The independently inspected preceding native producer41399894606 built source
+`26bf2c18ff3547eac959bca836dcb5042be5d2bf` and artifact13123801136 successfully.
+Its recorded component/CLI Smoke is valid for that source, but it does not
+contain this lock correction and does not close the contention failure or
+Windows10 installation Gate. A corrected native package needs another full
+source-bound build; neither its filenames nor its predecessor's PASS transfer.
