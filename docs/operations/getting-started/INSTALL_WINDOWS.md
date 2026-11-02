@@ -3,16 +3,28 @@
 The current **0.1.0-rc1 development bundle** contains both an installer and a
 Portable ZIP. Pick one; you do not need to install Python or Kernel separately.
 
-[**Download Setup + Portable**](https://github.com/untrod/apeir/actions/runs/41309010299/artifacts/13085683076)
+[**Download Setup + Portable**](https://github.com/untrod/apeir/actions/runs/41467950136/artifacts/13157732606)
 · [Version, hashes and source](QUICK_START.md#download-metadata)
 
 This is an **unsigned development build**, not a stable Release. GitHub sign-in
-is required; the artifact expires on **2026-11-15**. Build and real sidecar checks
+is required; the artifact expires on **2026-11-16**. Build and real sidecar checks
 passed on Windows Server 2025. Windows 10 installation, GUI, upgrade, uninstall
 and Defender acceptance are **PENDING**. There is no public Release asset yet.
 
 中文速读：下载上面的工件，解压后任选安装版或 Portable。先校验，再打开；
 暂时没有 Windows 10 实机验收，不要把工作资料当测试沙盒。模型可以稍后配置。
+
+## Known limitations
+
+This bundle includes the Windows concurrent Artifact-lock correction. Its full
+build and native component checks passed; the installer has not been exercised
+on Windows10. GUI startup, upgrade, uninstall, Defender and old-workspace
+compatibility remain **PENDING**.
+
+A separate intermittent Windows Context persistence timeout remains under
+[investigation](https://github.com/untrod/apeir/issues/116). Exact-source CI passed
+on retry; that does not establish its root cause. After an uncertain response,
+query the original Work/Run rather than submitting the operation again.
 
 ## Before opening a package
 
@@ -31,7 +43,7 @@ outer ZIP hash. In PowerShell, `Get-FileHash -Algorithm SHA256 <file>` prints it
 A mismatch means **stop**. Do not run a similarly named file from another source.
 
 The bundle also contains `SHA256SUMS.txt`, manifests and native validation
-reports. Its binary source is `5bdbadf2a072c222b016b1ccbe8b89ad5e0c25ff`;
+reports. Its binary source is `67186696426cad60b55fc3576dfde8b93defbb37`;
 a newer README or screenshot does not change that binary.
 
 ## Setup
@@ -68,11 +80,11 @@ For developers who already use authenticated `gh`, this is the exact current
 artifact. It downloads files; it does **not** start installation:
 
 ```powershell
-gh run download 41309010299 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-0.1.0-rc1
+gh run download 41467950136 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-0.1.0-rc1
 if ($LASTEXITCODE -ne 0) { throw 'Download failed; no installer was run.' }
 $apeirFiles = @{
-    'APEIR_0.1.0-rc1_x64-setup.exe' = 'af7abc5c637772d008fde00b46c4b394334d50883bd1fb1a271c74273a0c57ce'
-    'APEIR-Portable-0.1.0-rc1-windows-x64.zip' = '8595f42722ef602874c340c130f45f3ceaad2d028737dd33d2e9c3fe4d5f331b'
+    'APEIR_0.1.0-rc1_x64-setup.exe' = '0c2a65bcfe1ac31108d7a99b03511bdc1ee9e22230fed55918e03c427bd21e18'
+    'APEIR-Portable-0.1.0-rc1-windows-x64.zip' = '077fc0ff0bad9621ba7a777a887a1155f13244e3bcb3a512a403eddba0452aa1'
 }
 foreach ($apeirName in $apeirFiles.Keys) {
     $apeirPath = Join-Path '.\apeir-0.1.0-rc1' $apeirName
@@ -84,8 +96,9 @@ Write-Host 'Package hashes match. No installer was run.'
 ```
 
 Use a new destination directory. These fixed hashes refer only to the files
-above. The archive contents and hashes were independently checked on Linux;
-this PowerShell recipe still needs target-machine execution. Public, no-login
+above. The actual archive and hash guards were independently checked with PowerShell
+on Linux, including mismatch, missing-file and download-failure refusal.
+Target-machine download and installation still need execution. Public, no-login
 Release downloads will be documented only after their actual publication.
 
 ## Exit, recovery and troubleshooting
