@@ -14,38 +14,40 @@ No API key or hardware is needed for model-free browsing and the simulated Demo.
 
 ## Download metadata
 
-Current tested product source: `5bdbadf2a072c222b016b1ccbe8b89ad5e0c25ff`.
 Distribution/Studio version: `0.1.0-rc1` (Python normalizes this to `0.1.0rc1`).
-Later documentation commits do not change the source identity of these files.
+The source and native packages below identify the same reviewed code revision.
+Later documentation does not change a package's binary identity. A bundled Quick
+Start is a build-time snapshot; its own source manifest and `SHA256SUMS.txt`
+identify its actual files.
 
 | Path | Requirements / tested scope | Source and expiry |
 | --- | --- | --- |
-| Source Preview | Python 3.10+ and a browser. Independently installed and exercised on Linux x64; platform software CI is recorded separately. No native Desktop installation claim. | [Runtime wheel bundle](https://github.com/untrod/apeir/actions/runs/41308994710/artifacts/13084616985) + [built Studio](https://github.com/untrod/apeir/actions/runs/41308994710/artifacts/13084911108), both from run41308994710; expires2026-11-08 |
-| Windows Development Build | x64 target, WebView2 prerequisite; Python and Kernel sidecars included. Full build/real component Smoke passed on Windows Server2025. Windows10 GUI/install/upgrade/uninstall/Defender remain PENDING. | [Portable + NSIS bundle](https://github.com/untrod/apeir/actions/runs/41309010299/artifacts/13085683076), full-mode run41309010299; expires2026-11-15 |
+| Source Preview | Python 3.10+ and a browser. Independently installed and exercised on Linux x64, including original project history after restart. Contains the Windows file-lock correction; native installation is separate. | Source `67186696426cad60b55fc3576dfde8b93defbb37`; [Runtime wheel](https://github.com/untrod/apeir/actions/runs/41463735828/artifacts/13150458765) + [built Studio](https://github.com/untrod/apeir/actions/runs/41463735828/artifacts/13150443615), run41463735828; expires2026-11-09 |
+| Windows Development Build | x64 target, WebView2 prerequisite; Python and Kernel sidecars included. Full build/real component Smoke passed on Windows Server2025. Includes the Artifact-lock correction; read [known limitations](INSTALL_WINDOWS.md#known-limitations). Windows10 lifecycle/Defender remain PENDING. | Source `67186696426cad60b55fc3576dfde8b93defbb37`; [Portable + NSIS bundle](https://github.com/untrod/apeir/actions/runs/41467950136/artifacts/13157732606), full-mode run41467950136; expires2026-11-16 |
 | Developer Setup | Python 3.10+, Git; Node.js22.19+ for Studio development. Rust/platform SDKs are only needed for native packaging. | [Source checkout](#developer-setup); use the Git revision as its identity |
 | Future Stable Release | Not available. Installation lifecycle, signing, supply-chain review and publication authorization are incomplete. | No stable download or one-line installer is offered |
 
-GitHub sign-in is required for Actions artifacts. Download matching files from
-one reviewed run; inspect the included source manifest and checksums. An expired
-artifact requires another qualified build, not a similarly named old EXE.
+GitHub sign-in is required for Actions artifacts. Download matching Runtime and
+Studio files from one reviewed run; inspect their manifests and checksums. An
+expired artifact requires another qualified build, not a similarly named EXE.
 
-| File inside the artifact | SHA-256 |
+| File inside the indicated artifact | SHA-256 |
 | --- | --- |
-| `apeir_distribution-0.1.0rc1-py3-none-any.whl` | `f29024714ed6090ce2012bbe03380589ea1c31dadd9b8cc4920da5b1b7142c6b` |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `8595f42722ef602874c340c130f45f3ceaad2d028737dd33d2e9c3fe4d5f331b` |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | `af7abc5c637772d008fde00b46c4b394334d50883bd1fb1a271c74273a0c57ce` |
+| `apeir_distribution-0.1.0rc1-py3-none-any.whl` | `cca52f9c0726ad233f9995360c2f7cc77a554e9400e62787c28d6a13a2880035` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `077fc0ff0bad9621ba7a777a887a1155f13244e3bcb3a512a403eddba0452aa1` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `0c2a65bcfe1ac31108d7a99b03511bdc1ee9e22230fed55918e03c427bd21e18` |
 
 <details>
 <summary>Outer download ZIP hashes</summary>
 
-These hashes apply to the GitHub artifact ZIPs, before extracting them. They are
-not the hashes of the wheel or installer inside.
+These apply to the GitHub artifact ZIPs, before extracting. They are not the
+hashes of the wheel or installer inside.
 
 | Download | SHA-256 |
 | --- | --- |
-| Runtime source artifact ZIP | `3c2dc49117e41b21cc03859c168abd6223ffbd4e6bd9e0cb638713fb647a59be` |
-| Studio frontend artifact ZIP | `a9c8e2b566c7768689d863eb9c7ed602c49cbe08ddd233d97773e58af85c59ae` |
-| Windows native artifact ZIP | `9337aa979c9958d1635ead02c415944de1be297958d1516644f5ad6ec53bfa55` |
+| Runtime source artifact ZIP | `87186759b37a4371d104280ba5fff67f42d4b41ca8ebe7ed57acac9edcc1efdf` |
+| Studio frontend artifact ZIP | `4af925fb8e91ca80de6a384947d5bc99576d5b6dd54041a1b561ba1235b8f808` |
+| Windows native artifact ZIP | `90b303ac3222d45b525f96f790d8d3551e5e5c8d0625e7dfae2cb0b89f1ff810` |
 
 </details>
 
@@ -64,17 +66,17 @@ GitHub sign-in is required. Source artifacts expire after seven days. Use a newe
 qualified run if one has expired; do not mix revisions. A repository source ZIP
 or a frontend-only PR artifact is not this complete pair.
 
-The verified Source Preview is `5bdbadf` (the main integration of
-[PR124](https://github.com/untrod/apeir/pull/124)):
-[Runtime wheel](https://github.com/untrod/apeir/actions/runs/41308994710/artifacts/13084616985)
-and [built Studio](https://github.com/untrod/apeir/actions/runs/41308994710/artifacts/13084911108).
-The wheel was installed in a fresh environment and the downloaded Studio was
-exercised against it outside the checkout. Core, Desktop, Multi-Arch and Security
-passed for that exact source. These downloads retain their original build
-identity when later documentation changes land. Downloads expire on
-**2026-11-08**. Its wheel SHA-256 is:
+The verified Source Preview is `67186696426cad60b55fc3576dfde8b93defbb37`, the main integration of
+[PR130](https://github.com/untrod/apeir/pull/130):
+[Runtime wheel](https://github.com/untrod/apeir/actions/runs/41463735828/artifacts/13150458765)
+and [built Studio](https://github.com/untrod/apeir/actions/runs/41463735828/artifacts/13150443615).
+The wheel was installed in a fresh virtual environment outside the checkout;
+the downloaded production frontend read real files and recovered the original
+Proposal, Work and three-step Workflow after Runtime restart. Model calls0;
+project test execution and native installation are not qualified by this check.
+These downloads expire on **2026-11-09**. Wheel SHA-256:
 
-`f29024714ed6090ce2012bbe03380589ea1c31dadd9b8cc4920da5b1b7142c6b`
+`cca52f9c0726ad233f9995360c2f7cc77a554e9400e62787c28d6a13a2880035`
 
 Extract into separate directories. Check that both manifests'
 `distribution_revision` values match. From each extracted directory, verify
@@ -309,16 +311,17 @@ For Setup, Portable, hash checks and first-launch steps, use
 [APEIR on Windows](INSTALL_WINDOWS.md). Both packages are in the same download;
 GitHub sign-in is currently required.
 
-Use the **unsigned Windows x64 test package** from the reviewed main build below.
+Use the **unsigned Windows x64 test package** from the reviewed source-bound build below.
 Windows 10 GUI, installation, upgrade, uninstall, Defender and signing remain
-unqualified. A successful build or Sidecar Smoke does not complete those Gates.
+unqualified. Read [known limitations](INSTALL_WINDOWS.md#known-limitations). A
+successful build or Sidecar Smoke does not complete those Gates.
 
-1. Sign in to GitHub and open the [reviewed Windows build](https://github.com/untrod/apeir/actions/runs/41309010299/artifacts/13085683076).
+1. Sign in to GitHub and open the [reviewed Windows build](https://github.com/untrod/apeir/actions/runs/41467950136/artifacts/13157732606).
    Wait for **Build Windows x86_64** to succeed, then select the artifact
-   **windows-x64-native-development-build**. Retention ends **2026-11-15**.
+   **windows-x64-native-development-build**. Retention ends **2026-11-16**.
    The installer is inside the downloaded artifact ZIP.
 2. Extract it. Confirm `source-manifest.json` identifies
-   `5bdbadf2a072c222b016b1ccbe8b89ad5e0c25ff`. In `native-validation-report.json`,
+   `67186696426cad60b55fc3576dfde8b93defbb37`. In `native-validation-report.json`,
    require `status=passed` and `full_validation_executed=true`; installation
    acceptance remains independent. Keep the included build/dependency records.
 3. Verify the files in PowerShell:

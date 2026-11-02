@@ -6128,3 +6128,45 @@ Its recorded component/CLI Smoke is valid for that source, but it does not
 contain this lock correction and does not close the contention failure or
 Windows10 installation Gate. A corrected native package needs another full
 source-bound build; neither its filenames nor its predecessor's PASS transfer.
+
+### Corrected native download and publication preparation — 2026-11-02
+
+PR130 merged normally as main `67186696426cad60b55fc3576dfde8b93defbb37`.
+Exact-source Desktop41463735828, Security41463735854 and Multi-Arch41463735718
+passed. Core41463735748 passed on attempt2; its first Windows attempt timed out
+after60 seconds in `test_changes_after_setup_never_dispatch`, while appending
+the EventStream per-run index. The original complete log and separate failure
+remain in [Issue116](https://github.com/untrod/apeir/issues/116). Linux Context
+regression37 passed/1 platform skip does not replace Windows qualification.
+The original deadline, journal persistence and policy assertions are unchanged;
+the retry is not a demonstrated root-cause repair and the issue remains open.
+
+The maintainer triggered [native41467950136](https://github.com/untrod/apeir/actions/runs/41467950136)
+from that main. The official full launcher completed without validation/smoke
+skip flags. [Artifact13157732606](https://github.com/untrod/apeir/actions/runs/41467950136/artifacts/13157732606)
+contains current Setup/Portable bytes and expires2026-11-16. Independent
+inspection checked22 checksum entries,13 manifest records,11 nested Portable
+files, the actual NSIS payload and both approved Kernel component digests.
+Kernel source/lock and all31 historical tags remain unchanged. Current hashes
+are maintained in the [download metadata](../operations/getting-started/QUICK_START.md#download-metadata).
+
+Real NKI1/2/3, wrong/missing-auth refusal, Worker health, Runtime restart/query of
+the original failed workload and process cleanup passed on Windows Server2025.
+External model calls0; installer execution NOT_RUN. Windows10 installed GUI,
+Defender, upgrade, uninstall and old-data migration remain PENDING. No source or
+browser test is substituted for these gates.
+
+The matching wheel/frontend from Desktop41463735828 were installed outside the
+checkout in a fresh Python3.12 environment. The downloaded production frontend
+read real project files, retained an unsent draft and recovered original Work,
+Proposal and three-step Workflow history after an actual Runtime restart.
+This checks source installation and read/recovery paths, not sandboxed project
+tests, real-model inference or native GUI installation.
+
+An unpublished prerelease draft retains source-bound notes. GitHub API draft
+creation succeeded; both EXE upload and a bounded small-manifest upload returned
+HTTP401 from `uploads.github.com`, while ordinary API authentication remained
+valid. Its asset list is empty. No credential was replaced or exposed, no
+published tag was created, and no public Release download is claimed. The
+authenticated Actions artifact remains the actual download until installation,
+supply-chain/publication gates and asset-upload authorization are satisfied.

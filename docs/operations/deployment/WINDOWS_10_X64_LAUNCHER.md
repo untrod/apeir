@@ -171,7 +171,50 @@ checks do not alter the reviewed Kernel hashes or remove licensing/install gates
 
 ## Current native command-qualified build
 
-The current reviewed producer is [full-mode run41309010299](https://github.com/untrod/apeir/actions/runs/41309010299),
+The current Windows development bundle is [full-mode run41467950136](https://github.com/untrod/apeir/actions/runs/41467950136),
+source `67186696426cad60b55fc3576dfde8b93defbb37`, the main integration of PR130.
+[Artifact13157732606](https://github.com/untrod/apeir/actions/runs/41467950136/artifacts/13157732606) expires on **2026-11-16** and requires GitHub sign-in.
+Later documentation commits do not change this binary identity.
+
+| File | SHA-256 |
+| --- | --- |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `0c2a65bcfe1ac31108d7a99b03511bdc1ee9e22230fed55918e03c427bd21e18` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `077fc0ff0bad9621ba7a777a887a1155f13244e3bcb3a512a403eddba0452aa1` |
+| Outer artifact ZIP | `90b303ac3222d45b525f96f790d8d3551e5e5c8d0625e7dfae2cb0b89f1ff810` |
+
+The official full launcher ran without SkipValidation or SkipSidecarSmoke.
+Independent inspection verified22 checksum entries,13 manifest entries,11 nested
+Portable files, the actual NSIS payload and both approved Kernel PE components.
+Real NKI1/2/3, Worker/Runtime authentication/refusal, original-work recovery and
+process cleanup passed on **Windows Server2025**. External model calls0;
+`installation_acceptance=NOT_RUN`. The installer was inspected, not executed.
+
+This bundle includes the bounded Artifact-lock correction. Exact-source
+Core/Desktop/Multi-Arch/Security passed; Core needed a failed-job retry. The first
+60-second Context/EventStream persistence timeout remains retained in
+[Issue116](https://github.com/untrod/apeir/issues/116); its cause is unresolved.
+A green retry does not establish a repair for all historical Windows deadlines.
+No HTTP/test deadline, persistence requirement or security assertion was relaxed.
+
+Windows10 installed GUI, upgrade/uninstall, Defender, real-model and signing
+qualification remain separate. See [Windows instructions](../getting-started/INSTALL_WINDOWS.md).
+An unpublished Release draft stages notes only; no public Release asset is claimed.
+
+### Previous Studio entry-point producer — 2026-11-02
+
+[Run41399894606](https://github.com/untrod/apeir/actions/runs/41399894606) produced
+source `26bf2c18ff3547eac959bca836dcb5042be5d2bf`; its tree matches PR129's main integration
+`30b9860`. [Artifact13123801136](https://github.com/untrod/apeir/actions/runs/41399894606/artifacts/13123801136) expires2026-11-16.
+Setup SHA-256 `99dec30c65bb3dc8391c78b008c002a34b71fb1a779fc923083aeaac7fe023f8`;
+Portable `dffa4ef6944a34b3d2d1da4e72590a75c22422c161f517c77e3260c6953fcc65`;
+outer ZIP `9107f4881abda46717bc7085af7e65c5c4eaedbe86f063f9c15b98c4a50f8132`.
+Its full build and component Smoke passed on Server2025, installation NOT_RUN.
+It predates PR130's lock correction and is retained as historical evidence,
+not offered as the current corrected build.
+
+### Previous main producer — 2026-11-01
+
+The previous reviewed producer is [full-mode run41309010299](https://github.com/untrod/apeir/actions/runs/41309010299),
 from main `5bdbadf2a072c222b016b1ccbe8b89ad5e0c25ff` (PR124/125 integration).
 It includes Overview 2.0, the approved single-turn model host, original-event
 recovery and atomic Evaluation/Experience schema initialization.
