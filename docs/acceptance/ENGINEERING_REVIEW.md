@@ -6170,3 +6170,35 @@ valid. Its asset list is empty. No credential was replaced or exposed, no
 published tag was created, and no public Release download is claimed. The
 authenticated Actions artifact remains the actual download until installation,
 supply-chain/publication gates and asset-upload authorization are satisfied.
+
+### Relay snapshot read error classification — 2026-11-02
+
+Resulting-main50f7156 Windows Multi-Arch attempt2 failed the original credential
+response-loss recovery case before its mutation approval: the initial observation
+could not read Relay state. The error was errno13 with neither an original nor a
+later observed Win32 code. Original job125453567931 records5725 passed,77 skipped,
+345 deselected,four warnings and one failure; its complete924808-character log
+is retained separately from attempt1's Skill HTTP deadline in Issue88.
+
+A real Windows sharing-lock regression on unchanged production code,
+[diagnostic41541584159](https://github.com/untrod/apeir/actions/runs/41541584159),
+source `cdb48f66bd6c8595f88569f54594c9afe7810afc`, reproduces the exact error.
+The lock is released between the failed CRT read and the later diagnostic probe.
+That successful probe cannot recover the original sharing error discarded by
+the CRT. This demonstrates a classification race, not the cause of all historical
+Windows denials or HTTP deadlines.
+
+Strict Relay snapshot reads now retain CreateFileW/ReadFile errors at the actual
+operation and close their owned handle. Existing bounded rereads still apply
+only to sharing/lock codes32/33. Access denial, unknown errors, missing/corrupt
+state and cleanup failure remain closed; no effect is replayed. Snapshot identity,
+signature, binding and credential checks are unchanged. The existing workspace
+file-admission reader is not replaced or relaxed.
+
+Original fault-injection assertions remain intact, with their injection moved
+to the strict-read seam used on both platforms. Added cases cover native open,
+read, buffer-allocation and close failures. The same Windows diagnostic also
+exercises the original credential-revocation recovery case. Current-source
+Windows/full-CI and a newly built native package are required before claiming
+the correction accepted. The preceding6718669 EXE does not acquire this change
+from a later document or test result; Windows10 installation remains PENDING.

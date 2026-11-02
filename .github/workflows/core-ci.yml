@@ -239,7 +239,7 @@ jobs:
       - name: Exercise original Relay journals and actual Windows read conflicts
         if: inputs.diagnostic == 'windows-relay-recovery'
         timeout-minutes: 5
-        run: python -m pytest -q tests/node_runtime/test_relay_reconciliation.py --tb=short --timeout=60 -rA
+        run: python -m pytest -q tests/node_runtime/test_relay_reconciliation.py tests/reality/test_simulated_execution.py::test_credential_lost_response_recovers_without_resolving_revoked_delivery_again --tb=short --timeout=60 -rA
       - name: Exercise original Automation approval and recovery without replay
         if: inputs.diagnostic == 'windows-automation-recovery'
         run: python -m pytest tests/test_automation_consumer.py -vv --tb=long --timeout=60 -rA

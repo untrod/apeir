@@ -806,11 +806,13 @@ def test_reconciliation_preserves_uncertain_original_execution(tmp_path):
 def test_original_signed_result_survives_transient_windows_read_conflict(
     tmp_path, monkeypatch, winerror, probe_conflict
 ):
+    import nous_runtime.node_runtime.relay as relay
+
     async def scenario():
         server, node, first, _, _ = await _record_verified_result(tmp_path, monkeypatch)
         path = server.state_dir / "workload-state.json"
         original_bytes = path.read_bytes()
-        read_text = Path.read_text
+        read_text = relay._read_state_text
         reads = []
 
         def temporarily_locked(target, *args, **kwargs):
@@ -822,7 +824,7 @@ def test_original_signed_result_survives_transient_windows_read_conflict(
                     raise error
             return read_text(target, *args, **kwargs)
 
-        monkeypatch.setattr(Path, "read_text", temporarily_locked)
+        monkeypatch.setattr(relay, "_read_state_text", temporarily_locked)
         if probe_conflict:
             exists = Path.exists
 
@@ -856,11 +858,13 @@ def test_original_signed_result_survives_transient_windows_read_conflict(
 def test_unavailable_original_relay_state_retains_read_cause_and_fails_closed(
     tmp_path, monkeypatch, winerror, expected_reads
 ):
+    import nous_runtime.node_runtime.relay as relay
+
     server = NodeRelayServer(state_dir=tmp_path)
     server._save_workload_state()
     path = tmp_path / "workload-state.json"
     original_bytes = path.read_bytes()
-    read_text = Path.read_text
+    read_text = relay._read_state_text
     reads = []
     error = PermissionError(13, "private-unpublished-diagnostic")
     error.winerror = winerror
@@ -871,7 +875,7 @@ def test_unavailable_original_relay_state_retains_read_cause_and_fails_closed(
             raise error
         return read_text(target, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "read_text", unavailable)
+    monkeypatch.setattr(relay, "_read_state_text", unavailable)
     with pytest.raises(NodeProtocolError, match="read failed") as caught:
         NodeRelayServer(state_dir=tmp_path)
     assert caught.value.__cause__ is error
@@ -885,11 +889,13 @@ def test_unavailable_original_relay_state_retains_read_cause_and_fails_closed(
 def test_corrupt_relay_snapshot_is_not_retried_or_replaced(
     tmp_path, monkeypatch, content
 ):
+    import nous_runtime.node_runtime.relay as relay
+
     server = NodeRelayServer(state_dir=tmp_path)
     server._save_workload_state()
     path = tmp_path / "workload-state.json"
     path.write_bytes(content)
-    read_text = Path.read_text
+    read_text = relay._read_state_text
     reads = []
 
     def counted(target, *args, **kwargs):
@@ -897,7 +903,7 @@ def test_corrupt_relay_snapshot_is_not_retried_or_replaced(
             reads.append(target)
         return read_text(target, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "read_text", counted)
+    monkeypatch.setattr(relay, "_read_state_text", counted)
     with pytest.raises(NodeProtocolError):
         NodeRelayServer(state_dir=tmp_path)
     assert len(reads) == 1
@@ -986,3 +992,132 @@ def test_native_access_denied_is_not_retried_as_an_unknown_crt_conflict(
     with pytest.raises(NodeProtocolError, match="observed_winerror=5"):
         NodeRelayServer(state_dir=tmp_path)
     assert path.is_dir()
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32", reason="requires an actual Windows sharing conflict"
+)
+def test_recovery_retains_read_error_when_lock_closes_before_diagnostic_probe(
+    tmp_path, monkeypatch
+):
+    import ctypes
+    from ctypes import wintypes
+
+    import nous_runtime.node_runtime.relay as relay
+
+    server, node, first, _, _ = asyncio.run(
+        _record_verified_result(tmp_path, monkeypatch)
+    )
+    path = server.state_dir / "workload-state.json"
+    original_bytes = path.read_bytes()
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    create = kernel.CreateFileW
+    create.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    )
+    create.restype = wintypes.HANDLE
+    close = kernel.CloseHandle
+    close.argtypes = (wintypes.HANDLE,)
+    close.restype = wintypes.BOOL
+    handle = create(str(path), 0x80000000, 0, None, 3, 0x80, None)
+    assert handle != ctypes.c_void_p(-1).value, ctypes.WinError(ctypes.get_last_error())
+    classify = relay._read_failure_winerror
+    classifications = []
+
+    def release_before_classification(target, error):
+        nonlocal handle
+        assert target == path
+        assert handle is not None
+        assert close(handle)
+        handle = None
+        classifications.append(error)
+        # Current access now succeeds. It cannot recover the native error code
+        # of the original failed read, which the CRT may already have discarded.
+        return classify(target, error)
+
+    monkeypatch.setattr(relay, "_read_failure_winerror", release_before_classification)
+    monkeypatch.setattr(
+        node, "execute_workload", lambda *_a, **_k: pytest.fail("replayed effect")
+    )
+    try:
+        reopened = NodeRelayServer(
+            state_dir=server.state_dir, artifact_store=server.artifact_store
+        )
+        assert len(classifications) == 1
+        assert reopened.results[first.idempotency_key] == first.payload
+        assert reopened.result_envelopes[first.idempotency_key] == first.to_dict()
+        assert (
+            reopened.reconcile_work(first.idempotency_key)["work"]["state"]
+            == "VERIFIED"
+        )
+        assert path.read_bytes() == original_bytes
+    finally:
+        if handle is not None:
+            assert close(handle)
+
+
+@pytest.mark.parametrize("failure", ["open", "read", "close", "allocation"])
+def test_native_snapshot_read_retains_error_and_closes_owned_handle(
+    tmp_path, monkeypatch, failure
+):
+    import ctypes
+    from ctypes import wintypes
+    from types import SimpleNamespace
+
+    import nous_runtime.node_runtime.relay as relay
+
+    opened, reads, closed = [], [], []
+    error_code = {"open": 5, "read": 33, "close": 6, "allocation": 1}[failure]
+
+    def native_error(code):
+        error = OSError(13, "native read fixture")
+        error.winerror = code
+        return error
+
+    def create(_path, access, sharing, _security, disposition, _flags, _template):
+        opened.append((access, sharing, disposition))
+        return ctypes.c_void_p(-1).value if failure == "open" else 42
+
+    def read(handle, _buffer, _length, count, _overlapped):
+        reads.append(handle)
+        count._obj.value = 0
+        return failure != "read"
+
+    def close(handle):
+        closed.append(handle)
+        return failure != "close"
+
+    def allocate(size):
+        if failure == "allocation":
+            raise MemoryError("read buffer allocation failed")
+        return ctypes.create_string_buffer(size)
+
+    api = SimpleNamespace(CreateFileW=create, ReadFile=read, CloseHandle=close)
+    native = SimpleNamespace(
+        c_void_p=ctypes.c_void_p,
+        create_string_buffer=allocate,
+        byref=ctypes.byref,
+        get_last_error=lambda: error_code,
+        WinError=native_error,
+    )
+    monkeypatch.setattr(relay, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(
+        relay, "_windows_state_read_api", lambda: (native, wintypes, api)
+    )
+    expected = {"close": NodeProtocolError, "allocation": MemoryError}.get(
+        failure, OSError
+    )
+    with pytest.raises(expected) as caught:
+        relay._read_state_text(tmp_path / "original-state.json")
+    error = caught.value.__cause__ if failure == "close" else caught.value
+    if failure != "allocation":
+        assert error.winerror == error_code
+    assert opened == [(0x80000000, 7, 3)]  # Read existing state; never create/write.
+    assert reads == ([] if failure in {"open", "allocation"} else [42])
+    assert closed == ([] if failure == "open" else [42])
