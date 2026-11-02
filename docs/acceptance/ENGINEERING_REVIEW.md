@@ -6049,3 +6049,48 @@ successful Windows x64 artifact and inspect its own report/hashes. Its full
 Native result is independently required before that package is admitted; source
 CI and the earlier AACB build cannot supply it. Later documentation-only changes
 preserve this exact binary/source identity rather than relabeling an older EXE.
+
+### Native download and first-use preparation — 2026-11-02
+
+Baseline main `0eeec61238721481d5603defd3ca75a0bc70ddbe`; Studio changes
+`1b09be440019981c1d6800b77f191cd3d3d1e7f8`. Kernel and the approved component
+lock are unchanged. Empty Chat opens the existing Models, Files and Workflow
+panels; navigation submits no Work and retains the unsent draft. Project path,
+capability details, recorded model input and file hashes remain available on
+expansion. Layout schema, drafts, approval and execution APIs are unchanged.
+
+Local verification: Desktop **501 passed**; actual CLI/HTTP/Chromium integration
+**17 passed**, including Controller isolation, untrusted layouts, original Run
+recovery and extension revocation. TypeScript, ESLint and production build passed.
+Repository regressions: **305 passed, 7 skipped**; optional native/environment
+conditions remain explicit. Existing security scan: zero HIGH findings and six
+existing MEDIUM findings; this is not a zero-finding security certification.
+
+Four raw 1600×1000 images in `docs/media` were replaced from that production
+Studio build and a real model-disabled Runtime in Linux sandboxed Chromium.
+The public-sized `orbit-demo` project has two actual Python files. Independent
+local CLI approval applied Proposal `wfr_de578ed2821345f8b2b79da25bdaca0b`, bound
+to Work `work_965b9631e40f3c356575e77cea4148a3`; fresh readback was MATCH and
+Runtime restart recovered the original Proposal. Pure three-step TRANSFORM Run
+`wfr_5b6add51332d4384a63e6e10b49774c2` completed with upstream value bindings.
+No external model calls or project test commands ran. File MATCH is not test
+PASS. Screenshots show source mode, not Windows installation or physical effects.
+
+The existing native candidate remains binary source
+`5bdbadf2a072c222b016b1ccbe8b89ad5e0c25ff`, run41309010299/artifact13085683076.
+Fresh artifact retrieval through the connected GitHub interface matched outer
+ZIP SHA-256 `9337aa979c9958d1635ead02c415944de1be297958d1516644f5ad6ec53bfa55`.
+The existing independent package inspector verified all 22 checksum entries,
+13 manifest records, nested Portable files, approved PE components and actual
+NSIS payload. The upstream Tauri NSIS header stamp comparison does not change
+any retained binary or raw digest. Setup was not executed. A direct `gh run
+download` attempt reached the artifact redirect but this environment denied its
+blob URL with HTTP403; the documented PowerShell recipe is not a Windows10 test.
+
+The maintainer has no Windows10 test host currently available and requested
+completion of independent delivery preparation. Installation, upgrade, uninstall,
+GUI/Defender and data-retention acceptance remain PENDING. Public Release assets,
+signing and publication authorization remain BLOCKED; no tag or Release was
+created. Download instructions point to the actual authenticated, expiring
+Actions bundle, not invented public Setup/Portable URLs. The Windows candidate
+does not acquire these newer source-interface changes by documentation alone.

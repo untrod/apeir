@@ -14,15 +14,19 @@
 
 开放、以本地工作为起点的工程工作台：组织文件、工作流和连接资源，修改先审查，操作有审批，结果有记录。
 
-[**Windows 预览包**](https://github.com/untrod/apeir/actions/runs/41309010299/artifacts/13085683076) ·
+[**⬇ Windows 安装版 + Portable**](https://github.com/untrod/apeir/actions/runs/41309010299/artifacts/13085683076) ·
 [**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
 [**快速开始**](docs/operations/getting-started/QUICK_START.md) ·
 [**文档**](docs/README.md) · [English](README.md)
 
+**Windows：**[安装版](docs/operations/getting-started/INSTALL_WINDOWS.md#setup) · [Portable 用法](docs/operations/getting-started/INSTALL_WINDOWS.md#portable) · [SHA-256 校验](docs/operations/getting-started/QUICK_START.md#download-metadata)。
+当前为未签名开发包，需要登录 GitHub 下载，Windows 10 安装仍待实机验收。
+正式版还没出炉，生产环境先别急着端上桌。
+
 ![APEIR Studio 中的工程文件、编辑器与 Chat](docs/media/studio-workspace-source.png)
 
-*当前 Studio 源码预览界面的真实浏览器截图，连接的是已禁用模型的 Runtime；
-不是 Windows 安装截图，也没有展示真实模型调用。*
+*Studio 源码界面的真实截图（Linux 浏览器，模型已禁用）。
+下载的 Windows 包有独立构建版本；此图不代表 Windows 安装或真实模型验收。*
 
 APEIR Studio 可以组合工程、对话、Workflow、任务和证据面板，保存自己的工作布局。
 APEIR Runtime 负责已获准的操作与原始记录。模型和扩展提供能力，不负责批准自己的请求。
