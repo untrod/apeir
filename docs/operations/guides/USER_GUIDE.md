@@ -32,7 +32,9 @@ npm ci
 npm run dev
 ```
 
-Current Studio opens with Chat and Files in a new General layout. Existing saved
+Current Studio opens with Chat and Files in a new General layout. Empty Chat
+offers **Connect a model**, **Open project files** and **Open Workflow**; these
+open existing panels without submitting a task. Existing saved
 layouts are kept. If you see only a Dashboard, choose **Chat** or **Files** on
 the left rail; **More / Add panel** opens the full searchable library.
 **Workspace → Operations Console → Controller connection** configures the Runtime
@@ -164,19 +166,24 @@ loaded Skill does not establish that a model used it in a particular request.
 
 ![Dark Dashboard with actual Runtime data; absent resources remain UNKNOWN](../../media/studio-source-overview.png)
 
-These screenshots are real [source-browser evidence](https://github.com/untrod/apeir/actions/runs/41308994710)
-at `5bdbadf`, using the production frontend and model-disabled Runtime. They do
-not qualify installed Windows, live-model inference or physical devices.
+Project, Overview and Proposal images were captured on 2026-11-02 from the
+[reviewed Studio source](https://github.com/untrod/apeir/commit/1b09be440019981c1d6800b77f191cd3d3d1e7f8):
+a production build in Linux Chromium connected to a real model-disabled Runtime.
+They show actual files and records, not installed Windows or live-model inference.
+The downloadable Windows candidate retains its separate binary source identity.
 Browser Studio initializes the original EntityStore after authenticated health;
 Work and original task summaries share the existing adapter. Missing progress or
 unknown task states do not become successful tasks or enable controls.
 
 ## Reviewing workspace changes
 
-Open a real project in **Files / Operations → Workspace**. Read the relevant
+Open a real project in **Files / Operations → Workspace**. The Project header
+shows its directory name; expand **Project details** for the full path and
+capability availability. **Inspect model input** opens recorded input details. Read the relevant
 files, edit drafts and choose **Review draft files**. The existing Proposal
 Workflow records paths, original/replacement SHA-256, exact Diff and CAS refs.
-Review them, obtain independent **Approve Once**, then resume the original
+Expand **File versions** to inspect original, replacement and current hashes.
+Review the Diff, obtain independent **Approve Once**, then resume the original
 request. **Deny** changes no files. File versions and current permissions are
 checked again before writing; changed files are not silently overwritten.
 

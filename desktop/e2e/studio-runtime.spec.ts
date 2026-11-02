@@ -816,6 +816,29 @@ test("Declarative UI extension uses public review and approval, real status, rev
   } finally { await rm(acquired, { recursive: true, force: true }); }
 });
 
+test("Empty Chat offers real setup panels without submitting work or losing a draft", async ({ page }) => {
+  const mutations: string[] = [];
+  page.on("request", request => {
+    if (request.url().includes("/api/") && !["GET", "OPTIONS"].includes(request.method())) mutations.push(request.url());
+  });
+  await open(page);
+  const chat = page.getByRole("region", { name: "AI conversation", exact: true });
+  await expect(chat.getByText("Loading conversation...", { exact: true })).toBeHidden();
+  await chat.getByRole("textbox", { name: "Message", exact: true }).fill("Keep this unsent project question");
+  await chat.getByRole("button", { name: "Connect a model", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Models", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Open Chat", exact: true }).click();
+  await chat.getByRole("button", { name: "Open project files", exact: true }).click();
+  await page.getByRole("button", { name: "example.py", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Code editor", exact: true })).toHaveValue("def add(a, b):\n    return a + b\n");
+  await page.getByRole("button", { name: "Open Chat", exact: true }).click();
+  await chat.getByRole("button", { name: "Open Workflow", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Workflow Builder", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Open Chat", exact: true }).click();
+  await expect(chat.getByRole("textbox", { name: "Message", exact: true })).toHaveValue("Keep this unsent project question");
+  expect(mutations).toEqual([]);
+});
+
 test("Studio opens the conversation workspace and manages existing windows without replay or draft loss", async ({ page }, info) => {
   const mutations: string[] = []; const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));

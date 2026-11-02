@@ -109,3 +109,10 @@ apeir --no-intelligence workflow validate workflow.json --json
 
 ![Workflow Builder with a registered pure workflow and its original Run](../../media/studio-workflow-source.png)
 
+
+The image above shows a real three-step TRANSFORM workflow at
+[Studio source `1b09be4`](https://github.com/untrod/apeir/commit/1b09be440019981c1d6800b77f191cd3d3d1e7f8),
+captured in Linux Chromium on 2026-11-02. The steps transfer recorded review
+notes; they do not perform model analysis or run project tests. Registration and
+execution each received an independent local approval. This is source-browser
+acceptance, not Windows installation acceptance.

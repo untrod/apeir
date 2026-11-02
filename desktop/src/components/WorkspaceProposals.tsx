@@ -106,7 +106,7 @@ export function WorkspaceProposals({ drafts = [], disabled = false, onApplied, o
       <p>{selected.proposal_id} · {selected.state} · Workflow {selected.workflow_state}</p>
       <p>Scope: {selected.execution_scope} · Kernel traversed: {String(selected.kernel_traversed)} · File verification: {selected.verification.verdict || "UNKNOWN"}</p>
       {selected.error && <p role="alert">{selected.error}</p>}
-      {selected.files.map(file => <details key={file.path} open><summary>{file.path} · {file.before_sha256 || "new file"} → {file.after_sha256}</summary><p>Current file: {file.current_exists === null ? "UNKNOWN" : file.current_exists ? file.current_sha256 : "absent"}</p><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 280, overflow: "auto" }}>{file.diff || "No content change."}</pre></details>)}
+      {selected.files.map(file => <details key={file.path} open><summary>{file.path}</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 280, overflow: "auto" }}>{file.diff || "No content change."}</pre><details><summary>File versions / 文件版本</summary><p style={{ overflowWrap: "anywhere" }}>Before: {file.before_sha256 || "new file"}<br />After: {file.after_sha256}<br />Current file: {file.current_exists === null ? "UNKNOWN" : file.current_exists ? file.current_sha256 : "absent"}</p></details></details>)}
       {selected.approval_required && selected.workflow_state === "waiting_approval" && <div className="developer-activity">
         <button style={btnPrimary} disabled={busy || disabled} onClick={() => void act("approve")}>Approve once and apply original</button>
         <button style={btnSecondary} disabled={busy || disabled} onClick={() => void act("deny")}>Deny original proposal</button>

@@ -16,15 +16,20 @@
 An open, local-first workspace for project files, workflows and connected
 resources—with approvals and execution records you can inspect.
 
-[**Windows Preview**](https://github.com/untrod/apeir/actions/runs/41309010299/artifacts/13085683076) ·
+[**⬇ Windows — Setup + Portable**](https://github.com/untrod/apeir/actions/runs/41309010299/artifacts/13085683076) ·
 [**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
 [**Quick Start**](docs/operations/getting-started/QUICK_START.md) ·
 [**Documentation**](docs/README.md) · [简体中文](README.zh-CN.md)
 
+**Windows:** [Install Setup](docs/operations/getting-started/INSTALL_WINDOWS.md#setup) · [Use Portable](docs/operations/getting-started/INSTALL_WINDOWS.md#portable) · [Verify SHA-256](docs/operations/getting-started/QUICK_START.md#download-metadata).
+Unsigned development bundle; GitHub sign-in required. Windows 10 installation
+acceptance is pending. No stable Release yet—keep your production hat on the hook.
+
 ![APEIR Studio showing project files, an editor and Chat](docs/media/studio-workspace-source.png)
 
-*Actual Studio Source Preview connected to a model-disabled Runtime. This is a
-browser capture, not a Windows installation or live-model demonstration.*
+*Actual Studio source build in Linux Chromium, with models disabled. The
+Windows download has its own build identity; this image is not native-install
+or live-model acceptance.*
 
 APEIR Studio puts project, conversation, Workflow, task and evidence panels in
 one configurable workspace. APEIR Runtime handles admitted operations and their

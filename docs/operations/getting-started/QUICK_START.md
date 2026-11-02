@@ -305,6 +305,10 @@ private paths. Vulnerabilities follow [SECURITY](../../../SECURITY.md).
 
 ## Native Installation
 
+For Setup, Portable, hash checks and first-launch steps, use
+[APEIR on Windows](INSTALL_WINDOWS.md). Both packages are in the same download;
+GitHub sign-in is currently required.
+
 Use the **unsigned Windows x64 test package** from the reviewed main build below.
 Windows 10 GUI, installation, upgrade, uninstall, Defender and signing remain
 unqualified. A successful build or Sidecar Smoke does not complete those Gates.
