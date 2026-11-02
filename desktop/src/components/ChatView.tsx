@@ -239,6 +239,7 @@ type ChatViewProps = {
   readOnly?: boolean;
   onProposalCreated?: (proposalId: string) => void;
   onClearWorkspaceFile?: () => void;
+  onOpenPanel?: (panel: "models" | "editor" | "workflow") => void;
 };
 
 export function ChatView(props: ChatViewProps) {
@@ -248,7 +249,7 @@ export function ChatView(props: ChatViewProps) {
 
 function ChatSession({
   conversationId, onConversationCreated, onCardClick, onTraceClick,
-  workspaceFile, readOnly = false, onClearWorkspaceFile, onProposalCreated, locale = "en",
+  workspaceFile, readOnly = false, onClearWorkspaceFile, onProposalCreated, onOpenPanel, locale = "en",
 }: ChatViewProps) {
   const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   // All state from EntityStore
@@ -505,6 +506,11 @@ function ChatSession({
           <div style={{ display: "grid", placeContent: "center", minHeight: "45%", padding: space.xl, textAlign: "center", gap: space.sm }}>
             <h2 style={{ fontSize: typo.xl, fontWeight: typo.medium, color: colors.text }}>{t("What would you like to work on?", "今天想完成什么？")}</h2>
             <p style={{ fontSize: typo.sm, color: colors.textSecondary }}>{models.length ? readOnly ? t("Ask about a saved project file.", "分析已保存的项目文件。") : t("Ask a question or describe a task.", "提出问题，或描述你的任务。") : t("Connect a model to start a conversation.", "连接模型后即可开始对话。")}</p>
+            {!readOnly && onOpenPanel && <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: space.sm }}>
+              {!models.length && <button style={btnSecondary} onClick={() => onOpenPanel("models")}>{t("Connect a model", "连接模型")}</button>}
+              <button style={btnSecondary} onClick={() => onOpenPanel("editor")}>{t("Open project files", "打开项目文件")}</button>
+              <button style={btnSecondary} onClick={() => onOpenPanel("workflow")}>{t("Open Workflow", "打开工作流")}</button>
+            </div>}
           </div>
         ) : (
           allMessages.map((msg) => (

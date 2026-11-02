@@ -65,10 +65,11 @@ const input: React.CSSProperties = {
 };
 
 export type WorkbenchDraft = { path: string; content: string; originalSha256: string };
-export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange, onDraftSnapshot, embeddedConversation = true }: {
+export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange, onDraftSnapshot, embeddedConversation = true, locale = "en" }: {
   onOpenEnvironments?: () => void; onDraftChange?: (protectedDraft: boolean) => void;
-  onDraftSnapshot?: (drafts: WorkbenchDraft[]) => void; embeddedConversation?: boolean;
+  onDraftSnapshot?: (drafts: WorkbenchDraft[]) => void; embeddedConversation?: boolean; locale?: "en" | "zh";
 }) {
+  const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   const [connection] = useState(captureRuntimeConnection);
   const active = useRef(true);
   const assertConnection = useCallback(() => {
@@ -403,26 +404,30 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange, onDraftS
     </div></details>
     <section style={{ ...panel, padding: space.md, display: "flex", justifyContent: "space-between", gap: space.md, flexWrap: "wrap" }}>
       <div>
-        <div style={{ color: colors.text, fontWeight: typo.semibold }}>Professional Workbench</div>
+        <div style={{ color: colors.text, fontWeight: typo.semibold }}>{t("Project", "项目")}</div>
         <div style={{ color: colors.textSecondary, fontSize: typo.xs, marginTop: 3 }}>
-          {listing?.workspace || "Loading workspace…"} · compare-and-swap writes · strict sandbox · canonical EventStream
+          {listing?.workspace.split(/[\\/]/).filter(Boolean).at(-1) || t("Loading workspace…", "正在读取项目…")}
         </div>
       </div>
-      <div style={{ color: colors.textSecondary, fontSize: typo.sm }}>
-        Capabilities {capabilities ? `${capabilities.summary.available}/${capabilities.summary.registered} usable` : "checking…"}
-      </div>
+      <details style={{ color: colors.textSecondary, fontSize: typo.xs, overflowWrap: "anywhere" }}>
+        <summary style={{ cursor: "pointer" }}>{t("Project details", "项目详情")}</summary>
+        <p>{listing?.workspace || t("Loading workspace…", "正在读取项目…")}</p>
+        <p>{t("Catalog availability", "能力目录可用项")}: {capabilities ? `${capabilities.summary.available}/${capabilities.summary.registered}` : t("checking…", "正在检查…")}</p>
+        <p>{t("File versions and permissions are rechecked before writes. Test execution requires its qualified sandbox.", "写入前重新检查文件版本与权限；测试执行需要合格的隔离环境。")}</p>
+      </details>
     </section>
 
     {error && <section role="alert" style={{ ...panel, padding: space.md, color: colors.danger, background: colors.dangerSoft }}>{error}</section>}
 
-    <section aria-label="Recorded model input" style={{ ...panel, padding: space.md }}>
+    <details aria-label="Recorded model input" open={contextView ? true : undefined} style={{ ...panel, padding: space.md }}>
+      <summary style={{ cursor: "pointer" }}>{t("Inspect model input", "查看模型输入")}</summary>
       <label>Inspect recorded Run <select aria-label="Recorded input Run" style={{ ...input, maxWidth: "100%" }} value={contextView?.runId || ""} onChange={event => setContextView(event.target.value ? { runId: event.target.value, controller: runController } : null)}>
         <option value="">Select a persisted Run</option>
         {contextRuns.map(item => <option key={item.run_id} value={item.run_id}>{item.run_id} · {item.state}</option>)}
       </select></label>
       <p>Recent canonical Runtime Runs. Non-model or legacy Runs may have no input manifest; missing evidence remains UNKNOWN.</p>
       {contextView && <ContextInspector {...contextView} onClose={() => setContextView(null)} />}
-    </section>
+    </details>
 
     <div className={`developer-columns ${embeddedConversation && layout.conversation ? "with-collaboration" : ""}`}>
       <aside style={{ ...panel, overflow: "hidden" }}>

@@ -18,7 +18,7 @@ export function StudioChat({ locale, inspect, open }: PanelProps) {
     </header>
     <div className="studio-chat-body">
       {history && <SessionBar activeId={conversation} onSelect={id => { setConversation(id); setHistory(false); }} onNew={newConversation} collapsed={false} onToggleCollapse={() => setHistory(false)} locale={locale} showHeader={false} />}
-      <div className="studio-chat-content"><ChatView key={generation} locale={locale} conversationId={conversation} onConversationCreated={setConversation} onCardClick={event => {
+      <div className="studio-chat-content"><ChatView key={generation} locale={locale} conversationId={conversation} onConversationCreated={setConversation} onOpenPanel={open} onCardClick={event => {
         const data = event.payload || {};
         if (data.task_id) inspect({ kind: "task", taskId: String(data.task_id) });
         else if (data.trace_id) inspect({ kind: "trace", traceId: String(data.trace_id) });
