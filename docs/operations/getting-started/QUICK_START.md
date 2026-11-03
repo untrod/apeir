@@ -22,8 +22,8 @@ identify its actual files.
 
 | Path | Requirements / tested scope | Source and expiry |
 | --- | --- | --- |
-| Source Preview | Python 3.10+ and a browser. Independently installed and exercised on Linux x64, including original project history after restart. Contains the Windows file-lock correction; native installation is separate. | Source `67186696426cad60b55fc3576dfde8b93defbb37`; [Runtime wheel](https://github.com/untrod/apeir/actions/runs/41463735828/artifacts/13150458765) + [built Studio](https://github.com/untrod/apeir/actions/runs/41463735828/artifacts/13150443615), run41463735828; expires2026-11-09 |
-| Windows Development Build | x64 target, WebView2 prerequisite; Python and Kernel sidecars included. Full build/real component Smoke passed on Windows Server2025. Includes the Artifact-lock correction; read [known limitations](INSTALL_WINDOWS.md#known-limitations). Windows10 lifecycle/Defender remain PENDING. | Source `67186696426cad60b55fc3576dfde8b93defbb37`; [Portable + NSIS bundle](https://github.com/untrod/apeir/actions/runs/41467950136/artifacts/13157732606), full-mode run41467950136; expires2026-11-16 |
+| Source Preview | Python 3.10+ and a browser. Independently installed and exercised on Linux x64, including original project history after restart. Contains the Windows lock and Relay read-error corrections; native installation is separate. | Source `2d8a044e51a39b75c2afd9a8eaccba4a72d42952`; [Runtime wheel](https://github.com/untrod/apeir/actions/runs/41543803229/artifacts/13188555656) + [built Studio](https://github.com/untrod/apeir/actions/runs/41543803229/artifacts/13188111142), run41543803229; expires2026-11-09 |
+| Windows Development Build | x64 target, WebView2 prerequisite; Python and Kernel sidecars included. Full build/real component Smoke passed on Windows Server2025. Includes Artifact-lock and Relay read-error corrections; read [known limitations](INSTALL_WINDOWS.md#known-limitations). Windows10 lifecycle/Defender remain PENDING. | Source `2d8a044e51a39b75c2afd9a8eaccba4a72d42952`; [Portable + NSIS bundle](https://github.com/untrod/apeir/actions/runs/41543803229/artifacts/13190523439), full-mode run41543803229; expires2026-11-17 |
 | Developer Setup | Python 3.10+, Git; Node.js22.19+ for Studio development. Rust/platform SDKs are only needed for native packaging. | [Source checkout](#developer-setup); use the Git revision as its identity |
 | Future Stable Release | Not available. Installation lifecycle, signing, supply-chain review and publication authorization are incomplete. | No stable download or one-line installer is offered |
 
@@ -33,9 +33,9 @@ expired artifact requires another qualified build, not a similarly named EXE.
 
 | File inside the indicated artifact | SHA-256 |
 | --- | --- |
-| `apeir_distribution-0.1.0rc1-py3-none-any.whl` | `cca52f9c0726ad233f9995360c2f7cc77a554e9400e62787c28d6a13a2880035` |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `077fc0ff0bad9621ba7a777a887a1155f13244e3bcb3a512a403eddba0452aa1` |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | `0c2a65bcfe1ac31108d7a99b03511bdc1ee9e22230fed55918e03c427bd21e18` |
+| `apeir_distribution-0.1.0rc1-py3-none-any.whl` | `7fd3018094cd26da55f66447ea4a8313d7864e27ab031971efcf3865cc82b700` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `a26741530fbd0ca8c53f8582a10b4782623b7cc99ce26ed18fc37f16b302baa9` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `0571aa01b284701436bf59ecf478143ae5cc9a01a91aa7c51eaa901f88968e88` |
 
 <details>
 <summary>Outer download ZIP hashes</summary>
@@ -45,9 +45,9 @@ hashes of the wheel or installer inside.
 
 | Download | SHA-256 |
 | --- | --- |
-| Runtime source artifact ZIP | `87186759b37a4371d104280ba5fff67f42d4b41ca8ebe7ed57acac9edcc1efdf` |
-| Studio frontend artifact ZIP | `4af925fb8e91ca80de6a384947d5bc99576d5b6dd54041a1b561ba1235b8f808` |
-| Windows native artifact ZIP | `90b303ac3222d45b525f96f790d8d3551e5e5c8d0625e7dfae2cb0b89f1ff810` |
+| Runtime source artifact ZIP | `2bab20ab03b4566fadd5dbda8a395bf2f5a67d9686189403fa5dc13a01748cec` |
+| Studio frontend artifact ZIP | `fd393f488c7690ec36fc5fe3f42e19c1d85873d377c52ae12cde723fafa12b9c` |
+| Windows native artifact ZIP | `879b745b206df9fc0c2205dc858b0d6fdd79e3f870eb5bb5cd701628766c4e44` |
 
 </details>
 
@@ -55,8 +55,9 @@ hashes of the wheel or installer inside.
 
 ### Download matching packages
 
-Open [Desktop CI](https://github.com/untrod/apeir/actions/workflows/desktop-build.yml)
-and choose a successful **main** run with passing Core, Security and Multi-Arch
+Use the reviewed pair linked below. To choose another build, open
+[Desktop CI](https://github.com/untrod/apeir/actions/workflows/desktop-build.yml)
+and select a successful **main** run with passing Core, Security and Multi-Arch
 checks. Download these two Artifacts from the **same commit**:
 
 - `apeir-python-source-preview-<commit>`: wheel, hashes and installation report.
@@ -66,17 +67,17 @@ GitHub sign-in is required. Source artifacts expire after seven days. Use a newe
 qualified run if one has expired; do not mix revisions. A repository source ZIP
 or a frontend-only PR artifact is not this complete pair.
 
-The verified Source Preview is `67186696426cad60b55fc3576dfde8b93defbb37`, the main integration of
-[PR130](https://github.com/untrod/apeir/pull/130):
-[Runtime wheel](https://github.com/untrod/apeir/actions/runs/41463735828/artifacts/13150458765)
-and [built Studio](https://github.com/untrod/apeir/actions/runs/41463735828/artifacts/13150443615).
+The verified Source Preview is `2d8a044e51a39b75c2afd9a8eaccba4a72d42952`, accepted through
+[PR132](https://github.com/untrod/apeir/pull/132) as main `edd09f224ad103dbdb3fe6db98958ad8251bd0c2`:
+[Runtime wheel](https://github.com/untrod/apeir/actions/runs/41543803229/artifacts/13188555656)
+and [built Studio](https://github.com/untrod/apeir/actions/runs/41543803229/artifacts/13188111142).
 The wheel was installed in a fresh virtual environment outside the checkout;
 the downloaded production frontend read real files and recovered the original
 Proposal, Work and three-step Workflow after Runtime restart. Model calls0;
 project test execution and native installation are not qualified by this check.
 These downloads expire on **2026-11-09**. Wheel SHA-256:
 
-`cca52f9c0726ad233f9995360c2f7cc77a554e9400e62787c28d6a13a2880035`
+`7fd3018094cd26da55f66447ea4a8313d7864e27ab031971efcf3865cc82b700`
 
 Extract into separate directories. Check that both manifests'
 `distribution_revision` values match. From each extracted directory, verify
@@ -316,12 +317,12 @@ Windows 10 GUI, installation, upgrade, uninstall, Defender and signing remain
 unqualified. Read [known limitations](INSTALL_WINDOWS.md#known-limitations). A
 successful build or Sidecar Smoke does not complete those Gates.
 
-1. Sign in to GitHub and open the [reviewed Windows build](https://github.com/untrod/apeir/actions/runs/41467950136/artifacts/13157732606).
-   Wait for **Build Windows x86_64** to succeed, then select the artifact
-   **windows-x64-native-development-build**. Retention ends **2026-11-16**.
+1. Sign in to GitHub and open the [reviewed Windows build](https://github.com/untrod/apeir/actions/runs/41543803229/artifacts/13190523439).
+   Confirm **Build Windows x86_64** succeeded, then select the artifact
+   **windows-x64-native-development-build**. Retention ends **2026-11-17**.
    The installer is inside the downloaded artifact ZIP.
 2. Extract it. Confirm `source-manifest.json` identifies
-   `67186696426cad60b55fc3576dfde8b93defbb37`. In `native-validation-report.json`,
+   `2d8a044e51a39b75c2afd9a8eaccba4a72d42952`. In `native-validation-report.json`,
    require `status=passed` and `full_validation_executed=true`; installation
    acceptance remains independent. Keep the included build/dependency records.
 3. Verify the files in PowerShell:

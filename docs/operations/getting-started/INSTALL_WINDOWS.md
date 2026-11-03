@@ -3,11 +3,11 @@
 The current **0.1.0-rc1 development bundle** contains both an installer and a
 Portable ZIP. Pick one; you do not need to install Python or Kernel separately.
 
-[**Download Setup + Portable**](https://github.com/untrod/apeir/actions/runs/41467950136/artifacts/13157732606)
+[**Download Setup + Portable**](https://github.com/untrod/apeir/actions/runs/41543803229/artifacts/13190523439)
 · [Version, hashes and source](QUICK_START.md#download-metadata)
 
 This is an **unsigned development build**, not a stable Release. GitHub sign-in
-is required; the artifact expires on **2026-11-16**. Build and real sidecar checks
+is required; the artifact expires on **2026-11-17**. Build and real sidecar checks
 passed on Windows Server 2025. Windows 10 installation, GUI, upgrade, uninstall
 and Defender acceptance are **PENDING**. There is no public Release asset yet.
 
@@ -16,15 +16,16 @@ and Defender acceptance are **PENDING**. There is no public Release asset yet.
 
 ## Known limitations
 
-This bundle includes the Windows concurrent Artifact-lock correction. Its full
-build and native component checks passed; the installer has not been exercised
+This bundle includes the Windows concurrent Artifact-lock and Relay snapshot
+read-error corrections. Its full build and native component checks passed; the installer has not been exercised
 on Windows10. GUI startup, upgrade, uninstall, Defender and old-workspace
 compatibility remain **PENDING**.
 
-A separate intermittent Windows Context persistence timeout remains under
-[investigation](https://github.com/untrod/apeir/issues/116). Exact-source CI passed
-on retry; that does not establish its root cause. After an uncertain response,
-query the original Work/Run rather than submitting the operation again.
+Historical Windows [Skill HTTP](https://github.com/untrod/apeir/issues/88) and
+[Context persistence](https://github.com/untrod/apeir/issues/116) deadlines remain
+under investigation. Current passing checks do not establish a common root cause
+or close those issues. After an uncertain response, query the original Work/Run
+rather than submitting the operation again.
 
 ## Before opening a package
 
@@ -43,7 +44,7 @@ outer ZIP hash. In PowerShell, `Get-FileHash -Algorithm SHA256 <file>` prints it
 A mismatch means **stop**. Do not run a similarly named file from another source.
 
 The bundle also contains `SHA256SUMS.txt`, manifests and native validation
-reports. Its binary source is `67186696426cad60b55fc3576dfde8b93defbb37`;
+reports. Its binary source is `2d8a044e51a39b75c2afd9a8eaccba4a72d42952`;
 a newer README or screenshot does not change that binary.
 
 ## Setup
@@ -80,11 +81,11 @@ For developers who already use authenticated `gh`, this is the exact current
 artifact. It downloads files; it does **not** start installation:
 
 ```powershell
-gh run download 41467950136 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-0.1.0-rc1
+gh run download 41543803229 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-0.1.0-rc1
 if ($LASTEXITCODE -ne 0) { throw 'Download failed; no installer was run.' }
 $apeirFiles = @{
-    'APEIR_0.1.0-rc1_x64-setup.exe' = '0c2a65bcfe1ac31108d7a99b03511bdc1ee9e22230fed55918e03c427bd21e18'
-    'APEIR-Portable-0.1.0-rc1-windows-x64.zip' = '077fc0ff0bad9621ba7a777a887a1155f13244e3bcb3a512a403eddba0452aa1'
+    'APEIR_0.1.0-rc1_x64-setup.exe' = '0571aa01b284701436bf59ecf478143ae5cc9a01a91aa7c51eaa901f88968e88'
+    'APEIR-Portable-0.1.0-rc1-windows-x64.zip' = 'a26741530fbd0ca8c53f8582a10b4782623b7cc99ce26ed18fc37f16b302baa9'
 }
 foreach ($apeirName in $apeirFiles.Keys) {
     $apeirPath = Join-Path '.\apeir-0.1.0-rc1' $apeirName

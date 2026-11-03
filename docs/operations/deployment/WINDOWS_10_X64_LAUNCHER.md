@@ -171,10 +171,46 @@ checks do not alter the reviewed Kernel hashes or remove licensing/install gates
 
 ## Current native command-qualified build
 
-The current Windows development bundle is [full-mode run41467950136](https://github.com/untrod/apeir/actions/runs/41467950136),
+The current Windows development bundle is [full-mode run41543803229](https://github.com/untrod/apeir/actions/runs/41543803229),
+source `2d8a044e51a39b75c2afd9a8eaccba4a72d42952`, accepted through PR132 as main
+`edd09f224ad103dbdb3fe6db98958ad8251bd0c2`.
+[Artifact13190523439](https://github.com/untrod/apeir/actions/runs/41543803229/artifacts/13190523439) expires on **2026-11-17** and requires GitHub sign-in.
+Later documentation commits do not change this binary identity.
+
+| File | SHA-256 |
+| --- | --- |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `0571aa01b284701436bf59ecf478143ae5cc9a01a91aa7c51eaa901f88968e88` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `a26741530fbd0ca8c53f8582a10b4782623b7cc99ce26ed18fc37f16b302baa9` |
+| Outer artifact ZIP | `879b745b206df9fc0c2205dc858b0d6fdd79e3f870eb5bb5cd701628766c4e44` |
+
+The official full launcher ran without SkipValidation or SkipSidecarSmoke.
+Independent inspection verified22 checksum entries,13 manifest entries,11 nested
+Portable files, the actual NSIS payload and both approved Kernel PE components.
+Real NKI requests1/2/3, Worker/Runtime authentication/refusal, original-work
+recovery and process cleanup passed on **Windows Server2025**. External model
+calls0; `installation_acceptance=NOT_RUN`. The installer was inspected, not executed.
+The component lock continues to declare NKI versions1/2; exercised requests do
+not extend that declaration.
+
+This bundle contains the bounded Artifact-lock correction and preserves the
+original Windows read error during strict Relay snapshot recovery. Before/after
+Windows reproduction and exact-source Core/Desktop/Multi-Arch/Security passed.
+Historical Skill HTTP and Context persistence deadlines remain open in
+[Issue88](https://github.com/untrod/apeir/issues/88) and
+[Issue116](https://github.com/untrod/apeir/issues/116); these fixes do not establish
+a common cause for all Windows timing failures. No HTTP/test deadline,
+persistence requirement or security assertion was relaxed.
+
+Windows10 installed GUI, upgrade/uninstall, Defender, real-model and signing
+qualification remain separate. See [Windows instructions](../getting-started/INSTALL_WINDOWS.md).
+An unpublished Release draft stages notes only; no public Release asset is claimed.
+
+### Previous Artifact-lock producer — 2026-11-02
+
+The preceding Windows development bundle is [full-mode run41467950136](https://github.com/untrod/apeir/actions/runs/41467950136),
 source `67186696426cad60b55fc3576dfde8b93defbb37`, the main integration of PR130.
 [Artifact13157732606](https://github.com/untrod/apeir/actions/runs/41467950136/artifacts/13157732606) expires on **2026-11-16** and requires GitHub sign-in.
-Later documentation commits do not change this binary identity.
+It predates PR132's Relay correction; its qualification remains scoped to its own bytes.
 
 | File | SHA-256 |
 | --- | --- |

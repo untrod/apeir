@@ -6202,3 +6202,39 @@ exercises the original credential-revocation recovery case. Current-source
 Windows/full-CI and a newly built native package are required before claiming
 the correction accepted. The preceding6718669 EXE does not acquire this change
 from a later document or test result; Windows10 installation remains PENDING.
+
+### Accepted Relay correction and rebuilt downloads — 2026-11-03
+
+PR132 merged normally as main `edd09f224ad103dbdb3fe6db98958ad8251bd0c2`,
+with the same tree as source `2d8a044e51a39b75c2afd9a8eaccba4a72d42952`.
+The before-fix real Windows diagnostic41541584159 reproduced the read/probe
+race:1 failed,44 passed. After-fix diagnostic41543160507 passed50 cases,
+including real OS sharing-lock recovery, access-denial refusal and the original
+credential-revocation response-loss case. Source Core41543337099,
+Desktop41543337156, Multi-Arch41543337080 and Security41543337131 all passed.
+This repairs the demonstrated classification gap; it does not close the
+independent historical Skill HTTP or Context persistence deadlines.
+
+[Full native41543803229](https://github.com/untrod/apeir/actions/runs/41543803229)
+then built that exact source without validation/smoke skip flags.
+[Artifact13190523439](https://github.com/untrod/apeir/actions/runs/41543803229/artifacts/13190523439)
+expires2026-11-17. Independent inspection checked22 checksum entries,
+13 manifest entries,11 nested Portable files, actual NSIS payloads and the
+unchanged approved Kernel component digests. Its source and current hashes are
+recorded in the [launcher reference](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build).
+
+The recorded real Kernel/Worker/Runtime Smoke passed on Windows Server2025:
+authentication refusal, original-work query after restart and owned-process
+cleanup were exercised. The initial model operation was denied; external model
+calls0. Post-restart recovery was query-only with0 operation submissions.
+Installation remained NOT_RUN; unsigned status, Windows10 GUI/lifecycle,
+Defender, signing and release qualification remain independent gates.
+
+The matching wheel/frontend were independently downloaded, checksum-verified
+and installed in a fresh Python3.12 environment outside the checkout. The real
+production frontend read project files, retained its unsent Chat draft and
+recovered original Work/Proposal/three-step Workflow records after Runtime
+restart. No navigation mutation or repeated effect was observed; all three
+owned processes exited0 and the listener closed. This is source software
+acceptance, not live-model inference, sandboxed project tests or native GUI
+installation. Earlier producer records above retain their original scope.
