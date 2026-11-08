@@ -722,6 +722,9 @@ class EnvironmentRuntime:
                 "timeout_seconds": command.timeout_seconds,
                 "max_output_bytes": command.max_output_bytes,
                 "environment_variable_names": sorted(command.env),
+                **(
+                    {"read_only_workspace": True} if command.read_only_workspace else {}
+                ),
             },
             "result": dict(result),
         }

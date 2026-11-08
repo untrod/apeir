@@ -845,3 +845,39 @@ def test_control_publication_error_emits_no_success_and_preserves_retry(
         )
 
     asyncio.run(scenario())
+
+
+def test_cancellation_before_worker_admission_never_starts_the_queued_write():
+    from concurrent.futures import ThreadPoolExecutor
+
+    async def scenario():
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(ThreadPoolExecutor(max_workers=1))
+        entered = asyncio.Event()
+        release = threading.Event()
+        calls = []
+
+        def occupy_worker():
+            loop.call_soon_threadsafe(entered.set)
+            assert release.wait(3), "controlled worker was not released"
+
+        blocker = loop.run_in_executor(None, occupy_worker)
+        await asyncio.wait_for(entered.wait(), timeout=3)
+        queued = asyncio.create_task(
+            relay._run_relay_io(lambda: calls.append("original"))
+        )
+        try:
+            await asyncio.sleep(0)
+            queued.cancel("cancel before admission")
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(asyncio.shield(queued), timeout=1)
+            assert calls == []
+        finally:
+            release.set()
+            await blocker
+            await asyncio.gather(queued, return_exceptions=True)
+        # A queued callback must not mutate state later, after its owner exits.
+        await relay._run_relay_io(lambda: calls.append("successor"))
+        assert calls == ["successor"]
+
+    asyncio.run(scenario())

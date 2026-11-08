@@ -1049,8 +1049,15 @@ class AgentLoop:
             )
             return
         if (
-            decision.tool_name in {"web_search", "web_fetch"}
-            and effect_class == "network"
+            (
+                decision.tool_name in {"web_search", "web_fetch"}
+                and effect_class == "network"
+                or decision.tool_name == "run_project_tests"
+                and effect_class == "execute"
+                and self._original_project_test_approval(
+                    snapshot, tools, decision.tool_arguments, normalized
+                )
+            )
             and not ok
             and str(normalized.get("error_code") or "") == "NOUS_APPROVAL_REQUIRED"
             and str(normalized.get("approval_request_id") or "")
@@ -1076,7 +1083,7 @@ class AgentLoop:
                 "work.waiting_approval",
                 {
                     "summary": reason,
-                    "action": "Approve the exact bound network request",
+                    "action": "Approve the exact bound operation",
                     "tool": decision.tool_name,
                     "approval_request_id": str(
                         normalized.get("approval_request_id") or ""
@@ -1128,6 +1135,55 @@ class AgentLoop:
                 "error": str(normalized.get("error") or "")[:500],
             },
         )
+
+    def _original_project_test_approval(
+        self,
+        snapshot: WorkSnapshot,
+        tools: Any,
+        arguments: Mapping[str, Any],
+        result: Mapping[str, Any],
+    ) -> bool:
+        """Recognize only an original, undispatched test request in this Work."""
+        from nous_runtime.chat.agent_tools import WorkspaceToolRuntime
+        from nous_runtime.tools.catalog import ToolCatalog
+        from nous_runtime.capability.runtime_executor import project_test_arguments
+        from nous_runtime.governance import ActionProposal
+        from nous_runtime.governance.store import GovernanceStore
+
+        owner = (
+            tools.executor_owner("run_project_tests")
+            if type(tools) is ToolCatalog
+            else tools
+        )
+        if (
+            type(owner) is not WorkspaceToolRuntime
+            or owner.root != self.harness.root
+            or owner.source_work_id != snapshot.run_id
+            or not owner.authorization_context
+        ):
+            return False
+        try:
+            store = GovernanceStore(self.harness.root / ".nous")
+            request = store.get_approval_request(str(result["approval_request_id"]))
+            proposal = store.get_proposal(str(result["proposal_hash"]))
+            return bool(
+                request
+                and proposal
+                and request.get("status") == "PENDING"
+                and request.get("proposal_hash") == result["proposal_hash"]
+                and request.get("requested_by")
+                == owner.authorization_context.get("subject_id")
+                and request.get("task_id") == "project.run_tests"
+                and proposal.get("capability_id") == "project.run_tests"
+                and proposal.get("target_workspace") == str(self.harness.root)
+                and proposal.get("deployment_channel") == owner.governance_surface
+                and proposal.get("parameter_hash")
+                == ActionProposal(params=project_test_arguments(arguments)).to_dict()[
+                    "parameter_hash"
+                ]
+            )
+        except (OSError, KeyError, TypeError, ValueError):
+            return False
 
     def _original_workspace_approval(
         self,

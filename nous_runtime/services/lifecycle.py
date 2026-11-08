@@ -33,6 +33,24 @@ def seed_capabilities() -> int:
 
     seed_default_capabilities()
     seed_composed_capabilities()
+    if get_capability("project.run_tests") is None:
+        register_capability(
+            "project.run_tests",
+            category="software",
+            provider="nous",
+            description="Run the fixed read-only project unittest profile through ProcessSandbox",
+            risk="high",
+            max_retries=0,
+            requires_auth=True,
+            executor_type="runtime",
+            side_effect_class="local_write",
+            reversibility="partially_reversible",
+            model_uncertainty=0.0,
+            idempotent=False,
+            privileged=True,
+            locality="local",
+            metadata={"service": "nous_runtime.workspace.workbench:DeveloperWorkbench"},
+        )
     # Declare this existing Runtime reader in the same registry. A capability
     # declaration is not a workspace permission or an execution grant, and an
     # existing deployment's capability metadata must not be overwritten here.

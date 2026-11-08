@@ -67,6 +67,7 @@ class WorkSupervisor:
         max_iterations: int = 32,
         submission_key: str = "",
         submission_actor: str = "",
+        authorization_context=None,
         _lookup_only: bool = False,
     ) -> WorkSnapshot | None:
         harness = WorkHarness(self.root)
@@ -89,18 +90,32 @@ class WorkSupervisor:
                 submission_key,
                 submission_actor,
                 lookup_only=_lookup_only,
+                authorization_context=authorization_context,
             )
         if _lookup_only:
             raise ValueError("Original submission identity is required")
         snapshot = harness.create(**arguments)
-        self._submit(snapshot.run_id, recovering=False)
+        self._submit(
+            snapshot.run_id,
+            recovering=False,
+            authorization_context=authorization_context,
+        )
         return harness.require(snapshot.run_id)
 
     def find_submission(self, objective: str, **options) -> WorkSnapshot | None:
         """Read an authenticated original request without creating or resuming Work."""
         return self.start(objective, **options, _lookup_only=True)
 
-    def _start_submission(self, harness, arguments, key, actor, *, lookup_only=False):
+    def _start_submission(
+        self,
+        harness,
+        arguments,
+        key,
+        actor,
+        *,
+        lookup_only=False,
+        authorization_context=None,
+    ):
         """Fence one admitted request in the existing checkpoint store.
 
         A repeated key reads the original Work only. Even an incomplete first
@@ -190,19 +205,25 @@ class WorkSupervisor:
                 },
             }
             snapshot = harness.create(**admitted, _submission_run_id=run_id)
-            self._submit(snapshot.run_id, recovering=False)
+            self._submit(
+                snapshot.run_id,
+                recovering=False,
+                authorization_context=authorization_context,
+            )
             return harness.require(snapshot.run_id)
 
-    def resume(self, run_id: str) -> WorkSnapshot:
+    def resume(self, run_id: str, *, authorization_context=None) -> WorkSnapshot:
         snapshot = WorkHarness(self.root).require(run_id)
         if snapshot.terminal:
             return snapshot
-        self._submit(run_id, recovering=True)
+        self._submit(
+            run_id, recovering=True, authorization_context=authorization_context
+        )
         return WorkHarness(self.root).require(run_id)
 
-    def recover(self, run_id: str) -> WorkSnapshot:
+    def recover(self, run_id: str, *, authorization_context=None) -> WorkSnapshot:
         """Resume through WorkHarness re-evaluation, never by replaying a call."""
-        return self.resume(run_id)
+        return self.resume(run_id, authorization_context=authorization_context)
 
     def pause(self, run_id: str, *, reason: str = "") -> WorkSnapshot:
         return WorkHarness(self.root).pause(run_id, reason=reason)
@@ -284,21 +305,32 @@ class WorkSupervisor:
             self._closed = True
         self._executor.shutdown(wait=wait, cancel_futures=False)
 
-    def _submit(self, run_id: str, *, recovering: bool) -> None:
+    def _submit(
+        self, run_id: str, *, recovering: bool, authorization_context=None
+    ) -> None:
         with self._lock:
             if self._closed:
                 raise RuntimeError("work supervisor is closed")
             current = self._futures.get(run_id)
             if current is not None and not current.done():
                 raise WorkAlreadyRunning(run_id)
-            future = self._executor.submit(self._execute, run_id, recovering)
+            future = self._executor.submit(
+                self._execute, run_id, recovering, authorization_context
+            )
             self._futures[run_id] = future
 
-    def _execute(self, run_id: str, recovering: bool) -> WorkSnapshot:
+    def _execute(
+        self, run_id: str, recovering: bool, authorization_context=None
+    ) -> WorkSnapshot:
         harness = WorkHarness(self.root)
         try:
             snapshot = harness.require(run_id)
             components = self._component_factory(self.root, snapshot)
+            from nous_runtime.work.components import bind_work_authorization
+
+            bind_work_authorization(
+                components, self.root, snapshot, authorization_context
+            )
             maximum = self._bounded_iterations(
                 snapshot.execution_options.get("max_iterations", 32)
             )

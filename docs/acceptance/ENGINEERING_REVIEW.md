@@ -1,5 +1,81 @@
 # Engineering review and research comparison
 
+## Governed project tests and passive evaluation — 2026-11-08
+
+The existing `project.run_tests` contract lacked a Runtime consumer. The fixed
+read-only `python-unittest` profile now has a consumer in the existing capability
+dispatcher, shared by Workbench and model tools. It retains original Run IDs,
+test counts, snapshot digests and CAS/Artifact references. Requests require an
+explicit authenticated context and an affirmative Governance decision, including
+in compatibility mode. Model tools cannot inherit the CLI owner's identity.
+
+A negative regression on the preceding implementation demonstrated that default
+evaluation launched a host pytest process. Evaluation now only reads original
+workspace test events; automatic host code, lint and security subprocesses are
+not part of that product path. Optional maintainer checkers remain explicit SDK
+tools. Existing test-count assertions are preserved against recorded test Runs.
+Empty, skipped, truncated or foreign-workspace evidence cannot report PASS.
+
+Qualification combined consumer `11651dcf2c910818ac2f5b98d8d0be0d804082b7`
+with Linux adapter `02c5079cf07138927dadde49fb2ddcef71aa8ca7` in an isolated,
+uncommitted source tree. This is a candidate result, not a main merge. Actual
+HTTP authentication rejected a bad token and passed the current service caller
+into the original Work; independent trusted CLI OS-user approval admitted its
+exact pending test. The model and service did not approve themselves.
+
+Original Work `work_0395c1678b464322a3b38318d026ce32` reached COMPLETED after
+one governed VM execution. Original Proposal `wfr_8e1e99dda83a44588179609e02bb4cdb`
+was queried without repeating its file effects. Test Run
+`workbench-exec-086f690b202c49b0` reported one unchanged unittest passed;
+Artifact `artifact_d20f5c86e4c04233a3529396555a5f34` and its CAS digest were
+independently read back. A separate Runtime process restored the same Work,
+Proposal, test and Artifact with zero additional tests or model requests.
+
+The earlier local-model response was reused under operator-controlled recovery;
+this is not autonomous GUI/model acceptance. The original bad recommendation,
+OOM, truncated response, boot failure and blocked plan remain historical records.
+Targeted regressions also verify current caller identity is not serialized into
+checkpoints or inherited after restart. Current-source CI and a fresh native
+candidate remain separate; cloud accounts and Windows 10 installation are pending.
+
+Further consumer checks found explicit Runtime failures wrapped as successful
+Observations, losing their original results at model-tool boundaries. Four
+negative contracts fail on the preceding source. The resolver now preserves
+the original result while propagating failure; malformed outcome values cannot
+become success. Environment UI commands can explicitly request the existing
+read-only scope, use the Runtime host's local OS default, and retain that scope
+in the run Artifact. Default write-capable requests remain unchanged.
+
+Actual source `5d116b89bfc15cea6a74970ebe2de2f9f1ef2c57` also qualified the
+existing authenticated Environment API and LocalSandboxProvider against that
+same pinned VM and approved project. Independent CLI approval admitted one
+read-only run; the existing bounded Runtime staging SDK supplied its files.
+Run `environment-run-21545011cf8d4a218cd9900248fa7aaf` exited 0 with one unchanged
+unittest passed. Artifact `artifact_0847782adf5b446cb8ab743da2848eea` retained
+the read-only command, input digest and actual result; its file hash was checked.
+Canonical state reload, stop/destroy and retained evidence passed. No model call,
+original file effect or completed Work was replayed.
+
+## Relay cancellation before worker admission — 2026-11-08
+
+A bounded reproducer occupied the existing executor, queued a Relay call and
+cancelled its asyncio task. Previously cancellation waited for the occupied
+worker, then the queued write still ran after its session owner requested stop.
+The new regression fails on that source without changing existing deadlines.
+
+The existing Relay I/O wrapper now fences admission with a per-call lock. A
+cancelled callback that has not entered the operation cannot subsequently write.
+Already admitted I/O is still drained before its owner is released. Original
+sequence durability, ordering, caller context and repeated-cancellation tests
+remain unchanged. No executor pool, reconnect policy or host execution path is
+added. Targeted Relay/protocol regression passes 50 cases on Linux.
+
+Main 1171095's Windows Multi-Arch run 42495800990 failed the original two-second
+Node Provider cleanup. Its stack does not establish whether that writer was
+queued or already started. The demonstrated queue defect is therefore distinct
+evidence; current Windows CI is required and Issue #8 remains open. This is not
+a claim that all Relay shutdown delays or slow durable writes are repaired.
+
 ## Native carrier recovery and unpublished draft preparation — 2026-11-08
 
 The original approved Kernel input artifact 12556562701 expired on November 7
@@ -45,11 +121,15 @@ recorded; no assertion was weakened. Updated related Linux regression passes
 76 cases with five existing Windows-only skips; actual Windows qualification
 must use the resulting combined source.
 
-The current Linux connection still receives HTTP 401 at Release asset upload;
-ordinary metadata/draft API access does not prove upload authority. Existing
-draft 431703163 remains unpublished. Windows 10 installed GUI, upgrade/uninstall,
-Defender, real model inference, signing and public distribution remain pending
-or blocked. A draft is not a public download channel.
+The original Linux upload identity received HTTP 401; ordinary metadata access
+had not established upload authority. That failure and empty draft 431703163
+remain retained. Later protected-main Preflight run 42496495342 used its scoped
+Actions identity, independently reverified the accepted native package and staged
+14 assets in unpublished draft 438344407. This demonstrates draft upload, not
+public release or signing. That c3aee3c package predates the current test-consumer
+corrections and is marked as an internal provenance candidate. A fresh package
+must use the final accepted software source. Windows 10 installed GUI, upgrade,
+uninstall, Defender and public release retain their separate pending gates.
 
 Review date: 2026-10-09. Read-only baseline: Distribution
 `5c9cdd987af3823d4be9e6909311af65b9be2299`; frozen Kernel

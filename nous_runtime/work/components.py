@@ -18,6 +18,31 @@ class WorkExecutionComponents:
     verifier: Callable[[WorkContext], Any] | None
 
 
+def bind_work_authorization(components, root, snapshot, authorization_context) -> None:
+    """Bind the current host-admitted caller in memory, never from a checkpoint."""
+    from nous_runtime.chat.agent_tools import WorkspaceToolRuntime
+    from nous_runtime.governance import AuthorizationContext
+    from nous_runtime.tools import ToolCatalog
+
+    if authorization_context is None:
+        return
+    if not isinstance(authorization_context, AuthorizationContext):
+        raise TypeError("Work execution requires a host-authenticated context")
+    if type(components.tools) is not ToolCatalog:
+        return
+    try:
+        owner = components.tools.executor_owner("run_project_tests")
+    except KeyError:
+        return
+    if (
+        type(owner) is not WorkspaceToolRuntime
+        or owner.root != Path(root).resolve()
+        or owner.source_work_id != snapshot.run_id
+    ):
+        raise ValueError("Work test consumer differs from its original workspace")
+    owner.authorization_context = authorization_context.to_dict()
+
+
 def build_work_components(
     root: str | Path,
     snapshot: WorkSnapshot,

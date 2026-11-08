@@ -271,8 +271,21 @@ def handle_developer_workspace_write(body: dict[str, Any]) -> dict[str, Any]:
 
 def handle_developer_workspace_run(body: dict[str, Any]) -> dict[str, Any]:
     try:
+        workbench = _workbench()
+        if body.get("profile") == "python-unittest":
+            from nous_runtime.capability.runtime_executor import (
+                execute_runtime_capability,
+            )
+
+            # The API server admits project.run_tests before invoking this route.
+            # Share the governed tool's consumer and original test evidence.
+            return ok_response(
+                execute_runtime_capability(
+                    "project.run_tests", body, workspace_root=workbench.root
+                )
+            )
         return ok_response(
-            _workbench().run_profile(
+            workbench.run_profile(
                 str(body.get("profile") or ""),
                 target=str(body.get("target") or ""),
                 timeout_seconds=int(body.get("timeout_seconds") or 60),

@@ -8,7 +8,6 @@ import contextlib
 import contextvars
 import errno
 from copy import deepcopy
-from functools import partial
 import hashlib
 import json
 import logging
@@ -2613,16 +2612,35 @@ def _relay_send_lock(owner: Any) -> asyncio.Lock:
 async def _run_relay_io(
     operation: Callable[..., Any], *args: Any, **kwargs: Any
 ) -> Any:
-    """Finish the original blocking call before cancellation releases its owner."""
+    """Drain admitted I/O; prevent cancelled, still-queued I/O from starting."""
     loop = asyncio.get_running_loop()
-    writer = loop.run_in_executor(
-        None, partial(contextvars.copy_context().run, operation, *args, **kwargs)
-    )
+    admission = threading.Lock()
+    started = False
+    abandoned = False
+    context = contextvars.copy_context()
+
+    def invoke():
+        nonlocal started
+        with admission:
+            if abandoned:
+                return None
+            started = True
+        return context.run(operation, *args, **kwargs)
+
+    writer = loop.run_in_executor(None, invoke)
     cancelled = None
     while not writer.done():
         try:
             await asyncio.shield(writer)
         except asyncio.CancelledError as exc:
+            with admission:
+                if not started:
+                    # The executor has not admitted the operation. Fence its
+                    # callback before releasing this session's owner; cancelling
+                    # an asyncio Future alone cannot fence a racing worker.
+                    abandoned = True
+                    writer.cancel()
+                    raise
             cancelled = cancelled or exc
         except Exception:
             break

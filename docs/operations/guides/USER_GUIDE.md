@@ -218,12 +218,25 @@ replacements are atomic and retain recovery copies under
 `.nous/backups/workbench/<run_id>/`.
 
 Execution uses installed fixed profiles: `python`, `python-compile`, `pytest`,
-`node` and `cargo-test`, with bounded workspace-relative targets, network denial,
+`python-unittest`, `node` and `cargo-test`, with bounded workspace-relative targets, network denial,
 time/output limits and ProcessSandbox admission. Inspect command, directory,
 stdout/stderr, exit status and original Run/EventStream. Missing strict isolation
 is BLOCKED; there is no unrestricted host-Shell fallback. Controlled Commands
 and ProcessSession logs/stdin are not a complete interactive PTY or Git Studio.
 Model-facing command/move/remove shortcuts without durable admission stay unavailable.
+
+For a standard-library Python project, select **python-unittest** and its test
+directory. This read-only profile can use the qualified Linux VM when an operator
+has provisioned it. The result distinguishes command completion from reported
+`PASS`, `FAIL` or `UNKNOWN` tests and links the original Run and Artifact. Empty or
+all-skipped suites do not pass. Model tools use the same profile after approval.
+Evaluation only inspects the recorded Run; opening a report does not run tests.
+
+In **Environment**, select **Read-only workspace / 只读工程** for the qualified
+Linux profile. It runs only the pinned interpreter against staged inputs;
+it does not enable general Linux commands or grant project writes. A local
+environment uses the Runtime host's OS, while OCI contracts keep their own
+explicit platform. The original run Artifact records the selected read-only scope.
 
 ## Interactive project execution
 

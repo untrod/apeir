@@ -120,7 +120,7 @@ describe("environment inspector", () => {
     expect(vi.mocked(createEnvironment).mock.calls[1][0]).toBe(vi.mocked(createEnvironment).mock.calls[0][0]);
   });
 
-  it("runs argv without a shell and exposes Artifact evidence", async () => {
+  it.each([false, true])("runs argv without a shell and exposes Artifact evidence (read-only=%s)", async (readOnly) => {
     vi.mocked(fetchEnvironments).mockResolvedValue({ environments: [readyEnvironment], total: 1 });
     vi.mocked(runEnvironment).mockResolvedValue({
       environment_id: readyEnvironment.environment_id,
@@ -144,6 +144,7 @@ describe("environment inspector", () => {
 
     render(<EnvironmentInspector />);
     await screen.findByRole("option", { name: /local_sandbox - ready/ });
+    if (readOnly) fireEvent.click(screen.getByRole("checkbox", { name: "Read-only workspace / 只读工程" }));
     fireEvent.click(screen.getByRole("button", { name: "Run in environment" }));
 
     expect(await screen.findByText(/artifact_environment_run/)).toBeInTheDocument();
@@ -152,6 +153,7 @@ describe("environment inspector", () => {
       readyEnvironment.environment_id,
       expect.objectContaining({ argv: ["python", "-V"] }),
     );
+    expect(vi.mocked(runEnvironment).mock.calls[0][1].read_only_workspace).toBe(readOnly ? true : undefined);
   });
   it("denies the original request without executing it", async () => {
     vi.mocked(createEnvironment).mockRejectedValueOnce(new ApiError("NOUS_APPROVAL_REQUIRED", "Approval required", { approval_request_id: "apr_denied" }));

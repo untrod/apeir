@@ -22,6 +22,7 @@ log = logging.getLogger("nous.capability.resolver")
 @dataclass
 class ResolutionResult:
     """Result of resolving a capability request to a provider."""
+
     capability_id: str
     provider_id: str = ""
     provider_name: str = ""
@@ -33,6 +34,7 @@ class ResolutionResult:
 @dataclass
 class ExecutionResult:
     """Result of executing a capability via a provider."""
+
     ok: bool
     capability_id: str
     provider_id: str
@@ -84,10 +86,14 @@ def resolve_capability(capability_id: str) -> ResolutionResult:
     # 1. Check capability exists
     try:
         from nous_runtime.compat.capability import get_capability, list_capabilities
+
         cap = get_capability(capability_id)
         if not cap:
             all_caps = list_capabilities()
-            names = [c.get("name", "?") if isinstance(c, dict) else str(c) for c in all_caps[:10]]
+            names = [
+                c.get("name", "?") if isinstance(c, dict) else str(c)
+                for c in all_caps[:10]
+            ]
             result.error = (
                 f"Capability '{capability_id}' not found. "
                 f"Available: {', '.join(names)}..."
@@ -100,6 +106,7 @@ def resolve_capability(capability_id: str) -> ResolutionResult:
     # 2. Find providers
     try:
         from nous_runtime.compat.provider import list_providers, get_provider
+
         providers = list_providers()
         candidates = []
         for entry in providers:
@@ -117,6 +124,7 @@ def resolve_capability(capability_id: str) -> ResolutionResult:
         # 2b. Platform-aware filtering (§multi-arch)
         try:
             from nous_runtime.platform import platform_service
+
             if not platform_service.can_execute(capability_id):
                 result.error = (
                     f"Capability '{capability_id}' is restricted on this platform "
@@ -150,13 +158,11 @@ def resolve_capability(capability_id: str) -> ResolutionResult:
                 result.resolved = True
             else:
                 result.error = (
-                    f"No healthy provider for '{capability_id}'. "
-                    f"Run: nous provider add"
+                    f"No healthy provider for '{capability_id}'. Run: nous provider add"
                 )
         else:
             result.error = (
-                f"No provider configured for '{capability_id}'. "
-                f"Run: nous provider add"
+                f"No provider configured for '{capability_id}'. Run: nous provider add"
             )
 
     except Exception as e:
@@ -184,6 +190,7 @@ def execute_capability_observation(
         Observation with structured data, errors, duration, and provider metadata.
     """
     import time
+
     start = time.time()
 
     # v0.2.0: executor-type dispatch — non-provider executors do not need
@@ -192,6 +199,13 @@ def execute_capability_observation(
     # executor stays provider-only by definition (no double dispatch).
     cap_meta = _get_capability_metadata(capability_id)
     executor_type = str(cap_meta.get("executor_type") or "") or "provider"
+    if capability_id == "project.run_tests" and executor_type != "runtime":
+        return Observation.failure(
+            "capability.execute",
+            ["The project test capability has no admitted Runtime binding"],
+            capability=capability_id,
+            metadata={"stage": "resolve", "error_code": "NOUS_EXECUTOR_UNSUPPORTED"},
+        )
 
     # 1. Resolve (provider executors only)
     resolution = ResolutionResult(capability_id=capability_id)
@@ -226,6 +240,7 @@ def execute_capability_observation(
         if not _workspace_root:
             try:
                 from nous_runtime.project.workspace import find_workspace
+
                 ws = find_workspace()
                 if ws:
                     workspace = str(ws)
@@ -249,17 +264,19 @@ def execute_capability_observation(
         else:
             context = _authorization_context
         context = context or AuthorizationContext(
-                subject_type="user",
-                subject_id=f"{_getpass.getuser()}@{_os.environ.get('COMPUTERNAME', 'localhost')}",
-                authn_method="cli_os_user",
-                authn_confidence=0.8,
-                session_locality="local",
-            )
+            subject_type="user",
+            subject_id=f"{_getpass.getuser()}@{_os.environ.get('COMPUTERNAME', 'localhost')}",
+            authn_method="cli_os_user",
+            authn_confidence=0.8,
+            session_locality="local",
+        )
 
         gate = get_gate()
         decision = gate.evaluate(proposal, context)
 
-        fail_closed = should_fail_closed(surface=_governance_surface)
+        fail_closed = capability_id == "project.run_tests" or should_fail_closed(
+            surface=_governance_surface
+        )
         if decision.action_mode == "DENY":
             if fail_closed or decision.rule_class == "NON_OVERRIDABLE":
                 return Observation.failure(
@@ -284,10 +301,12 @@ def execute_capability_observation(
                 approval_request_id = ""
                 try:
                     from nous_runtime.governance.broker import get_broker
+
                     broker = get_broker()
                     pending = next(
                         (
-                            item for item in broker.get_pending()
+                            item
+                            for item in broker.get_pending()
                             if item.get("proposal_hash") == proposal.proposal_hash
                             and item.get("requested_by") == context.subject_id
                         ),
@@ -295,7 +314,8 @@ def execute_capability_observation(
                     )
                     if pending is None:
                         request = broker.request_approval(
-                            run_id=context.request_id or f"capability-{decision.decision_id}",
+                            run_id=context.request_id
+                            or f"capability-{decision.decision_id}",
                             task_id=capability_id,
                             proposal=proposal,
                             context=context,
@@ -306,7 +326,10 @@ def execute_capability_observation(
                     else:
                         approval_request_id = str(pending.get("request_id") or "")
                 except Exception as approval_error:
-                    log.warning("Could not create capability approval request: %s", approval_error)
+                    log.warning(
+                        "Could not create capability approval request: %s",
+                        approval_error,
+                    )
                 return Observation.failure(
                     "capability.execute",
                     [f"Approval required: {decision.reason_message}"],
@@ -322,7 +345,9 @@ def execute_capability_observation(
                         "proposal_hash": proposal.proposal_hash,
                     },
                 )
-            log.warning("Governance approval required but compatibility execution continues")
+            log.warning(
+                "Governance approval required but compatibility execution continues"
+            )
         elif decision.action_mode == "ESCALATE":
             if fail_closed:
                 return Observation.failure(
@@ -337,14 +362,28 @@ def execute_capability_observation(
                         "gate_decision_id": decision.decision_id,
                     },
                 )
-            log.warning("Governance escalation recorded but compatibility execution continues")
-        # EXECUTE, RECOMMEND, or compatibility continuation: proceed
+            log.warning(
+                "Governance escalation recorded but compatibility execution continues"
+            )
+        if capability_id == "project.run_tests" and decision.action_mode != "EXECUTE":
+            return Observation.failure(
+                "capability.execute",
+                ["An affirmative execution grant is required"],
+                capability=capability_id,
+                metadata={"stage": "authorization", "error_code": "NOUS_UNAUTHORIZED"},
+            )
+        # Legacy capabilities retain their established compatibility handling.
     except Exception as e:
         import logging
         from nous_runtime.governance.runtime_mode import should_fail_closed
+
         _log = logging.getLogger("nous.capability.resolver")
-        if should_fail_closed(surface=_governance_surface):
-            _log.error("Gate evaluation failed; strict governance blocks execution: %s", e)
+        if capability_id == "project.run_tests" or should_fail_closed(
+            surface=_governance_surface
+        ):
+            _log.error(
+                "Gate evaluation failed; strict governance blocks execution: %s", e
+            )
             return Observation.failure(
                 "capability.execute",
                 [f"Governance gate unavailable: {e}"],
@@ -370,15 +409,22 @@ def execute_capability_observation(
         )
     if executor_type == "runtime":
         try:
-            from nous_runtime.capability.runtime_executor import execute_runtime_capability
+            from nous_runtime.capability.runtime_executor import (
+                execute_runtime_capability,
+            )
+
             result = execute_runtime_capability(
                 capability_id,
                 params,
                 workspace_root=workspace,
             )
-            return Observation.success(
-                "capability.execute",
-                {"result": result},
+            outcome = result.get("ok", True)
+            succeeded = type(outcome) is bool and outcome
+            return Observation(
+                tool="capability.execute",
+                status="success" if succeeded else "failed",
+                data={"result": result},
+                errors=[] if succeeded else ["Runtime consumer did not report success"],
                 capability=capability_id,
                 duration_ms=(time.time() - start) * 1000,
                 metadata={
@@ -388,6 +434,11 @@ def execute_capability_observation(
                     "execution_scope": "runtime-service",
                     "kernel_traversed": False,
                     "stage": "execute",
+                    **(
+                        {"error_code": "NOUS_RUNTIME_RESULT_FAILED"}
+                        if not succeeded
+                        else {}
+                    ),
                 },
             )
         except Exception as exc:
@@ -422,7 +473,10 @@ def execute_capability_observation(
 
     # 3. Execute via provider
     try:
-        from nous_runtime.intelligence.reliability.executor import execute_provider_observation
+        from nous_runtime.intelligence.reliability.executor import (
+            execute_provider_observation,
+        )
+
         provider_obs = execute_provider_observation(
             resolution.provider_id,
             capability_id,
@@ -526,8 +580,10 @@ def _execute_subprocess(
         command = [metadata["executable"], *metadata.get("args", [])]
     if not isinstance(command, list) or not command:
         return _fail(
-            [f"Capability '{capability_id}' declares executor_type=subprocess "
-             "but no 'command' (or 'executable') in its metadata"],
+            [
+                f"Capability '{capability_id}' declares executor_type=subprocess "
+                "but no 'command' (or 'executable') in its metadata"
+            ],
             "NOUS_SUBPROCESS_MISCONFIGURED",
         )
 
@@ -675,7 +731,11 @@ def _infer_side_effect(capability_id: str) -> str:
         return _SIDE_EFFECT_BY_CATEGORY[category]
 
     # 4. Conservative keyword fallback (no prefix magic)
-    if "file_read" in capability_id or "read" in capability_id or "search" in capability_id:
+    if (
+        "file_read" in capability_id
+        or "read" in capability_id
+        or "search" in capability_id
+    ):
         return "read_only"
     return "unknown"
 

@@ -234,7 +234,9 @@ def handle_tasks_list(
         return err("TASKS_LIST_ERROR", str(e))
 
 
-def handle_tasks_action(body: dict[str, Any]) -> dict[str, Any]:
+def handle_tasks_action(
+    body: dict[str, Any], *, authorization_context=None
+) -> dict[str, Any]:
     """Perform an action on a task."""
     try:
         action = str(body.get("action", "")).lower()
@@ -260,7 +262,9 @@ def handle_tasks_action(body: dict[str, Any]) -> dict[str, Any]:
             elif action == "pause":
                 snapshot = supervisor.pause(task_id, reason="paused from Desktop")
             elif action in {"resume", "recover"}:
-                snapshot = supervisor.resume(task_id)
+                snapshot = supervisor.resume(
+                    task_id, authorization_context=authorization_context
+                )
             elif action == "steer":
                 snapshot = supervisor.steer(
                     task_id,
@@ -360,6 +364,7 @@ def _work_submission(body, *, authorization_context=None, lookup_only=False):
             preferred_model=str(body.get("preferred_model") or ""),
             read_only=bool(body.get("read_only", False)),
             max_iterations=int(body.get("max_iterations") or 32),
+            authorization_context=authorization_context,
             submission_key=submission_key,
             submission_actor=(
                 authorization_context.subject_type

@@ -852,6 +852,9 @@ export interface WorkbenchWriteResult extends WorkbenchPreview {
 
 export interface WorkbenchRunResult {
   ok: boolean;
+  test_outcome?: "PASS" | "FAIL" | "UNKNOWN";
+  artifact_id?: string;
+  artifact_digest?: string;
   run_id: string;
   profile: string;
   target: string;
@@ -1601,6 +1604,7 @@ export interface EnvironmentRecord extends EnvironmentCreateRequest {
 
 export interface EnvironmentCommandRequest {
   argv: string[];
+  read_only_workspace?: boolean;
   cwd?: string;
   timeout_seconds?: number;
   max_output_bytes?: number;

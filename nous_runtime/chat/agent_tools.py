@@ -27,6 +27,7 @@ _MAX_COMMAND_OUTPUT = 65_536
 _SENSITIVE_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
 
 _RUNTIME_TOOL_CAPABILITIES = {
+    "run_project_tests": "project.run_tests",
     "create_document": "document.create",
     "render_document": "document.render",
     "create_environment": "environment.create",
@@ -175,6 +176,16 @@ def _runtime_tool_specifications() -> list[dict[str, Any]]:
                 "body_ref": {"type": "string"},
             },
             required=("url",),
+        ),
+        _tool(
+            "run_project_tests",
+            "Run approved read-only unittest tests in the qualified sandbox; inspect the original Run and reported test counts.",
+            {
+                "profile": {"type": "string", "enum": ["python-unittest"]},
+                "target": {"type": "string"},
+                "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 300},
+            },
+            required=("target",),
         ),
         _tool(
             "search_web",
@@ -496,6 +507,23 @@ class WorkspaceToolRuntime:
     def _execute_runtime_capability(
         self, name: str, arguments: dict[str, Any]
     ) -> dict[str, Any]:
+        if name == "run_project_tests" and not self.authorization_context:
+            return {
+                "ok": False,
+                "error_code": "NOUS_AUTHENTICATION_REQUIRED",
+                "error": "Project test execution needs the original authenticated Runtime identity.",
+            }
+        if name == "run_project_tests":
+            from nous_runtime.capability.runtime_executor import project_test_arguments
+
+            try:
+                arguments = project_test_arguments(arguments)
+            except (TypeError, ValueError) as exc:
+                return {
+                    "ok": False,
+                    "error_code": "NOUS_INVALID_REQUEST",
+                    "error": str(exc),
+                }
         from nous_runtime.capability.resolver import execute_capability_observation
 
         capability_id = _RUNTIME_TOOL_CAPABILITIES[name]
@@ -515,7 +543,12 @@ class WorkspaceToolRuntime:
             **arguments,
         )
         metadata = dict(observation.metadata or {})
-        if observation.status != "success":
+        data = dict(observation.data or {})
+        result = data.get("result", data)
+        reported_outcome = (
+            isinstance(result, Mapping) and type(result.get("ok")) is bool
+        )
+        if observation.status != "success" and not reported_outcome:
             return {
                 "ok": False,
                 "capability_id": capability_id,
@@ -525,14 +558,35 @@ class WorkspaceToolRuntime:
                 ),
                 "approval_required": bool(metadata.get("approval_required")),
                 "approval_request_id": str(metadata.get("approval_request_id") or ""),
+                "proposal_hash": str(metadata.get("proposal_hash") or ""),
                 "execution_scope": str(
                     metadata.get("execution_scope") or "runtime-service"
                 ),
                 "kernel_traversed": False,
+                **(
+                    {"recovery_required": True}
+                    if name == "run_project_tests"
+                    and metadata.get("stage") not in {"authorization", "resolve"}
+                    else {}
+                ),
             }
-        data = dict(observation.data or {})
+        if name == "run_project_tests":
+            if not isinstance(result, Mapping) or type(result.get("ok")) is not bool:
+                return {
+                    "ok": False,
+                    "error": "Project test result is unavailable.",
+                    "recovery_required": True,
+                }
+            return {
+                **dict(result),
+                "ok": observation.status == "success" and result["ok"],
+                "capability_id": capability_id,
+                "execution_scope": "runtime-service",
+                "kernel_traversed": False,
+            }
         return {
-            "ok": True,
+            "ok": observation.status == "success"
+            and (result["ok"] if reported_outcome else True),
             "capability_id": capability_id,
             "result": data.get("result", data),
             "execution_scope": str(
