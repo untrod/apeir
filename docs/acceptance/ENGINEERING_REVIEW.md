@@ -8,6 +8,42 @@ This record distinguishes reproduced defects, inspected risks and unqualified
 external dependencies. It is not an exhaustive proof that the repository is
 bug-free, a physical acceptance, or production certification.
 
+## Governance schema reopening — 2026-11-08
+
+Baseline main `dbeceb5d1295d9b4ea37182cac34634b5dc73c58` has a deterministic
+initialization conflict: reopening an already initialized GovernanceStore while
+an original WAL writer holds an uncommitted audit record attempts another
+`BEGIN IMMEDIATE`. The added regression fails on that source with
+`sqlite3.OperationalError: database is locked` after 5.14 seconds. This establishes
+one avoidable writer-lock acquisition; it does not establish the complete cause
+of the historical Windows HTTP deadlines in Issues #88 and #116.
+
+The fix reads SQLite's own published table/index names and journal mode through
+the existing read-only connection lifecycle. It skips only completed
+`CREATE ... IF NOT EXISTS` no-ops. First initialization, missing objects and
+non-WAL databases retain the original atomic writer path. Future non-CREATE
+migrations cannot take this shortcut. No permission decision, connection or
+schema result is cached. An original transaction keeps its ownership and readers
+see only committed data. WAL, foreign keys, commit/rollback/close, the five-second
+SQLite busy budget and HTTP deadlines are unchanged.
+
+Linux CPython 3.12 verification: lifecycle 32 passed; Governance, Control Plane
+and Context regression 999 passed, 16 existing skips; Workflow model-host,
+result-binding and data-contract regression 78 passed. Negative checks retain
+unique-consumption refusal, atomic schema repair, WAL restoration and future
+migration handling. Windows qualification and resulting-main CI are separate
+requirements. Issues #88/#116 remain open; neither a Linux reproduction nor a
+later green run proves that every historical Windows timeout is repaired.
+
+RC1 audit disposition: **REUSE** the existing Workflow model host, typed bindings,
+Studio Proposal/approval, original Work recovery and approved native components;
+**FIX** this reproduced initialization conflict; **EXTEND** the existing native
+artifact admission and draft distribution preparation if their expired-input and
+upload blockers can be addressed without bypassing provenance; **BLOCKED** for
+live cloud inference without account/budget authorization, a qualified Linux
+strong-execution backend, and Windows 10 installation without a target machine.
+An unsigned Server 2025 build is not Windows 10 installed-product acceptance.
+
 ## Public documentation consolidation — 2026-10-29
 
 The user-facing index now routes installation to Quick Start, usage to Developer
