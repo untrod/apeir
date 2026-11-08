@@ -253,3 +253,108 @@ def test_original_governance_approval_is_required_before_dispatch(
         result["execution_scope"] == "runtime-service"
         and result["kernel_traversed"] is False
     )
+
+
+def test_work_restores_the_original_test_approval_before_one_execution(
+    tmp_path, monkeypatch, command_receipt
+):
+    from nous_runtime.governance import (
+        AuthorizationContext,
+        ExecutionAuthorizationGate,
+        GovernanceStore,
+    )
+    from nous_runtime.governance.broker import ApprovalBroker
+    from nous_runtime.governance.cli import _build_context
+    from nous_runtime.services.lifecycle import seed_capabilities
+    from nous_runtime.tools import ToolCatalog
+    from nous_runtime.work import WorkHarness
+
+    monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(tmp_path))
+    seed_capabilities()
+    gate = ExecutionAuthorizationGate(store=GovernanceStore(tmp_path / ".nous"))
+    broker = ApprovalBroker(store=gate.store)
+    monkeypatch.setattr("nous_runtime.governance.gate._gate_instance", gate)
+    monkeypatch.setattr("nous_runtime.governance.broker._broker", broker)
+    harness = WorkHarness(tmp_path)
+    created = harness.create("Run project tests using the approved test capability")
+    context = AuthorizationContext(
+        subject_type="service",
+        subject_id="project-test-work-fixture",
+        authn_method="opaque_token",
+        authn_confidence=0.9,
+        session_locality="local",
+        request_id=created.run_id,
+    )
+    runtime = WorkspaceToolRuntime(
+        str(tmp_path),
+        allow_mutations=True,
+        source_work_id=created.run_id,
+        authorization_context=context.to_dict(),
+    )
+    tools = ToolCatalog()
+    tools.register_runtime(runtime)
+    steps = iter(
+        [
+            {
+                "status": "continue",
+                "summary": "Discover fixed test tools",
+                "tool_name": "catalog_expand",
+                "tool_arguments": {"category": "shell"},
+            },
+            {
+                "status": "continue",
+                "summary": "Request the approved project test",
+                "tool_name": "run_project_tests",
+                "tool_arguments": {"target": "tests"},
+            },
+        ]
+    )
+    waiting = harness.run(
+        created.run_id, deliberator=lambda _: next(steps), tools=tools
+    )
+    assert waiting.state is RunState.WAITING_FOR_APPROVAL, waiting.error
+    assert command_receipt == []
+    request_id = waiting.pending_action["approval_request_id"]
+    assert waiting.pending_action["recovery_policy"] == "approval_then_retry"
+    from nous_runtime.work.loop import AgentLoop
+
+    approval_result = {
+        "approval_request_id": request_id,
+        "proposal_hash": waiting.pending_action["proposal_hash"],
+    }
+    loop = AgentLoop(harness)
+    assert loop._original_project_test_approval(
+        waiting, tools, {"target": "tests"}, approval_result
+    )
+    assert not loop._original_project_test_approval(
+        waiting, tools, {"target": "other-tests"}, approval_result
+    )
+    assert not loop._original_project_test_approval(
+        waiting,
+        tools,
+        {"target": "tests"},
+        {**approval_result, "approval_request_id": "unrelated-request"},
+    )
+    # Restarting before approval only queries the persisted request.
+    pending = WorkHarness(tmp_path).resume(
+        created.run_id,
+        deliberator=lambda _: pytest.fail("approval is still pending"),
+        tools=tools,
+    )
+    assert pending.state is RunState.WAITING_FOR_APPROVAL and command_receipt == []
+    broker.respond_legacy(request_id, "approve", _build_context(), gate=gate)
+    resumed = WorkHarness(tmp_path).resume(
+        created.run_id,
+        deliberator=lambda _: {
+            "status": "blocked",
+            "summary": "Inspect original test receipt",
+        },
+        tools=tools,
+    )
+    assert len(command_receipt) == 1
+    assert not resumed.pending_action
+    assert any(
+        item.get("tool") == "run_project_tests" and item.get("ok")
+        for item in resumed.observations
+    )
+    assert resumed.artifacts

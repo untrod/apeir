@@ -553,6 +553,7 @@ class WorkspaceToolRuntime:
                 ),
                 "approval_required": bool(metadata.get("approval_required")),
                 "approval_request_id": str(metadata.get("approval_request_id") or ""),
+                "proposal_hash": str(metadata.get("proposal_hash") or ""),
                 "execution_scope": str(
                     metadata.get("execution_scope") or "runtime-service"
                 ),
