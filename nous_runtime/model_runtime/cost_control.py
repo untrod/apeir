@@ -965,12 +965,14 @@ class CostController:
                         (reservation.reservation_id,),
                     )
                 else:
+                    # A completed response can leave price or counters unknown.
+                    # This is not the uncertain dispatch recorded by fail().
                     connection.execute(
                         """UPDATE usage_reservations
                            SET estimated_tokens=?, estimated_cost_usd=?,
                                cost_measurement=CASE WHEN ? IS NOT NULL THEN 'estimated'
                                    WHEN ? THEN 'unknown' ELSE cost_measurement END,
-                               status='uncertain'
+                               status='usage_unknown'
                            WHERE reservation_id=?""",
                         (
                             0

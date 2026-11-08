@@ -1,5 +1,6 @@
 """The original Governance SQLite owner closes every admitted connection."""
 
+from contextlib import contextmanager
 import sqlite3
 import importlib
 import subprocess
@@ -10,6 +11,146 @@ from types import SimpleNamespace
 import pytest
 
 from nous_runtime.governance import store
+
+
+def test_operation_commit_retains_durable_wal_without_checkpoint_configuration(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delattr(
+        store.sqlite3, "SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE", raising=False
+    )
+    original = store.GovernanceStore(tmp_path)
+    with original.operation_transaction() as writer:
+        assert writer.execute("PRAGMA synchronous").fetchone()[0] == 2
+        assert writer.execute("PRAGMA wal_autocheckpoint").fetchone()[0] == 1000
+        original.append_operation_audit(writer, "original.committed", {"value": 1})
+    # Commit must not require a redundant last-writer checkpoint/deletion cycle.
+    assert Path(original.db_path + "-wal").is_file()
+    reopened = store.GovernanceStore(tmp_path)
+    assert [row["event_type"] for row in reopened.operation_audit()] == [
+        "original.committed"
+    ]
+
+
+def test_older_python_operation_handles_close_on_original_rollback(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delattr(
+        store.sqlite3, "SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE", raising=False
+    )
+    original = store.GovernanceStore(tmp_path)
+    connect = store._db_connect
+    active = []
+
+    @contextmanager
+    def observed(path, readonly=False):
+        with connect(path, readonly) as connection:
+            active.append((connection, readonly))
+            try:
+                yield connection
+            finally:
+                active.remove((connection, readonly))
+
+    monkeypatch.setattr(store, "_db_connect", observed)
+    with pytest.raises(RuntimeError, match="original failure"):
+        with original.operation_transaction() as writer:
+            assert len(active) == 2
+            reader = next(db for db, readonly in active if readonly)
+            assert not reader.in_transaction
+            original.append_operation_audit(writer, "must.rollback", {})
+            assert (
+                reader.execute("SELECT COUNT(*) FROM governance_audit").fetchone()[0]
+                == 0
+            )
+            raise RuntimeError("original failure")
+    assert active == []
+    assert original.operation_audit() == []
+    assert active == []
+
+
+def test_initialized_store_reopens_during_an_original_writer_transaction(tmp_path):
+    original = store.GovernanceStore(tmp_path)
+    with original.operation_transaction() as writer:
+        original.append_operation_audit(writer, "original.pending", {"value": 1})
+        reopened = store.GovernanceStore(tmp_path)
+        # Reopening must see the committed snapshot, not steal or complete the writer.
+        assert reopened.operation_audit() == []
+        assert writer.in_transaction
+    assert [row["event_type"] for row in reopened.operation_audit()] == [
+        "original.pending"
+    ]
+
+
+def test_reopen_restores_missing_dedup_index_without_losing_audit(tmp_path):
+    original = store.GovernanceStore(tmp_path)
+    with original.operation_transaction() as writer:
+        original.append_operation_audit(writer, "original.committed", {"value": 1})
+        writer.execute("DROP INDEX idx_consumption_dedup")
+    reopened = store.GovernanceStore(tmp_path)
+    assert reopened.operation_audit() == original.operation_audit()
+    with store._db_connect(reopened.db_path, readonly=True) as reader:
+        assert reader.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' "
+            "AND name='idx_consumption_dedup'"
+        ).fetchone()
+
+
+def test_reopen_refuses_duplicate_consumption_without_its_unique_index(tmp_path):
+    original = store.GovernanceStore(tmp_path)
+    with original.operation_transaction() as writer:
+        writer.execute("DROP INDEX idx_consumption_dedup")
+        writer.executemany(
+            "INSERT INTO governance_lease_consumption VALUES (?, ?, ?, ?, ?)",
+            [
+                ("log-one", "lease-original", "execution-original", "time", 0),
+                ("log-two", "lease-original", "execution-original", "time", 0),
+            ],
+        )
+    with pytest.raises(sqlite3.IntegrityError):
+        store.GovernanceStore(tmp_path)
+    with store._db_connect(original.db_path, readonly=True) as reader:
+        assert (
+            reader.execute(
+                "SELECT COUNT(*) FROM governance_lease_consumption"
+            ).fetchone()[0]
+            == 2
+        )
+        assert (
+            reader.execute(
+                "SELECT name FROM sqlite_master WHERE name='idx_consumption_dedup'"
+            ).fetchone()
+            is None
+        )
+
+
+def test_reopen_restores_wal_when_existing_tables_use_delete_journal(tmp_path):
+    original = store.GovernanceStore(tmp_path)
+    connection = sqlite3.connect(original.db_path)
+    try:
+        assert connection.execute("PRAGMA journal_mode=DELETE").fetchone()[0] == (
+            "delete"
+        )
+    finally:
+        connection.close()
+    store.GovernanceStore(tmp_path)
+    with store._db_connect(original.db_path, readonly=True) as reader:
+        assert reader.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+
+
+@pytest.mark.parametrize(
+    "migration",
+    [
+        "ALTER TABLE governance_audit ADD COLUMN future_value TEXT",
+        "DELETE FROM governance_audit",
+    ],
+)
+def test_readiness_does_not_skip_future_non_create_migrations(tmp_path, migration):
+    original = store.GovernanceStore(tmp_path)
+    assert not store._schema_already_initialized(
+        original.db_path,
+        "BEGIN IMMEDIATE; CREATE TABLE IF NOT EXISTS governance_audit "
+        "(audit_id TEXT PRIMARY KEY); " + migration + ";",
+    )
 
 
 @pytest.mark.skipif(

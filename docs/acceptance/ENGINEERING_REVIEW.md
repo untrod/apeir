@@ -59,6 +59,111 @@ This record distinguishes reproduced defects, inspected risks and unqualified
 external dependencies. It is not an exhaustive proof that the repository is
 bug-free, a physical acceptance, or production certification.
 
+## Governance schema reopening — 2026-11-08
+
+Baseline main `dbeceb5d1295d9b4ea37182cac34634b5dc73c58` has a deterministic
+initialization conflict: reopening an already initialized GovernanceStore while
+an original WAL writer holds an uncommitted audit record attempts another
+`BEGIN IMMEDIATE`. The added regression fails on that source with
+`sqlite3.OperationalError: database is locked` after 5.14 seconds. This establishes
+one avoidable writer-lock acquisition; it does not establish the complete cause
+of the historical Windows HTTP deadlines in Issues #88 and #116.
+
+The fix reads SQLite's own published table/index names and journal mode through
+the existing read-only connection lifecycle. It skips only completed
+`CREATE ... IF NOT EXISTS` no-ops. First initialization, missing objects and
+non-WAL databases retain the original atomic writer path. Future non-CREATE
+migrations cannot take this shortcut. No permission decision, connection or
+schema result is cached. An original transaction keeps its ownership and readers
+see only committed data. WAL, foreign keys, commit/rollback/close, the five-second
+SQLite busy budget and HTTP deadlines are unchanged.
+
+Linux CPython 3.12 verification: lifecycle 32 passed; Governance, Control Plane
+and Context regression 999 passed, 16 existing skips; Workflow model-host,
+result-binding and data-contract regression 78 passed. Negative checks retain
+unique-consumption refusal, atomic schema repair, WAL restoration and future
+migration handling. Windows qualification and resulting-main CI are separate
+requirements. Issues #88/#116 remain open; neither a Linux reproduction nor a
+later green run proves that every historical Windows timeout is repaired.
+
+The exact first candidate `e1066cfb7c428a7eecac7b70dab8fd9aa65b0c89` passed Core,
+Desktop, Security and the separate Windows Governance diagnostic (119 focused,
+two 28-case checkpoint probes, and 499 regression passes with 18 existing skips).
+Its [Multi-Arch Windows run](https://github.com/untrod/apeir/actions/runs/42470182708/job/128698891718)
+still failed the original five-second HTTP deadline in
+`test_http_original_nonce_binds_every_reviewed_remote_locator[digest]`:
+1 failed, 5730 passed, 77 skipped, 351 deselected. The changed-nonce rejection
+worked; the later original authorized installation completed before its response
+was lost. Original phases show 1280 ms nonce admission, 388 ms Governance
+admission and 2462 ms catalog installation. The server stack was in the completion
+audit's SQLite commit; commit/close warnings are preserved. This is not proof of
+a leak, an antivirus cause, or one root cause for every deadline failure.
+
+On older CPython without `NO_CKPT_ON_CLOSE`, a separate deterministic regression
+also reproduces the redundant last-writer checkpoint/delete cycle. The existing
+`operation_transaction` now holds one idle read-only handle only for that same
+operation. Its cursor is exhausted before the original writer begins; it holds
+no read transaction or permission snapshot. ExitStack closes the original writer
+and then the reader on commit, rollback or error. There is no process-level
+keeper, pool, new Store or new transaction authority. FULL synchronous commit and
+the existing 1000-frame auto-checkpoint remain unchanged. The modern CPython
+configuration path is unchanged. CPython 3.10.21 / SQLite 3.53.1 actual commit,
+WAL reopen and rollback pass; changed lifecycle regressions pass 34 cases.
+The new Windows HTTP result must be qualified before treating this as more than
+a proved lifecycle correction. No failed check is bypassed and #88/#116 stay open.
+
+RC1 audit disposition: **REUSE** the existing Workflow model host, typed bindings,
+Studio Proposal/approval, original Work recovery and approved native components;
+**FIX** this reproduced initialization conflict; **EXTEND** the existing native
+artifact admission and draft distribution preparation if their expired-input and
+upload blockers can be addressed without bypassing provenance; **BLOCKED** for
+live cloud inference without account/budget authorization, a qualified Linux
+strong-execution backend, and Windows 10 installation without a target machine.
+An unsigned Server 2025 build is not Windows 10 installed-product acceptance.
+
+## Actual local-model inference and original usage recovery — 2026-11-08
+
+The frozen Kernel source `87fd1b2ff28ef14ab1a515a58162592b452fda2e` was built
+unchanged on Linux with checksum-verified official Rust/Cargo 1.90.0,
+`cargo build --release --locked`, two build jobs and the original Cargo.lock.
+The actual ELF Kernel/Worker pass the maintained NKI probe: versions 1/2/3,
+wrong/missing authentication refusal, forbidden credentials before Provider
+spawn, and original denied-Work query after restart. Both processes exit cleanly
+and their listener closes. This is Linux source compatibility, not admission
+of those ELF files to the Windows component lock or sandbox qualification.
+
+An official Ollama 0.40.15 CPU service and Apache-2.0
+`qwen2.5-coder:0.5b` then performed one actual inference through the saved Provider,
+existing strict Gateway and real frozen Kernel/Worker. Selection was explicitly
+locked to the local model, with no cloud fallback or credentials. The scoped
+operator policy used bounded Tokens without a monetary quote; cost remains
+UNKNOWN. Provider counters are 76 input, 33 output and 109 total Tokens.
+
+This exposed a real accounting defect: a completed response with unknown price
+left its reservation marked as an uncertain dispatch, hiding independently
+reported Tokens from request history. The existing commit path now retains its
+existing `usage_unknown` state. Actual lost/unconfirmed dispatch still uses
+`uncertain`; budget checks and Provider overrun blocking are unchanged. Three
+new regressions fail against the old projection and pass after the correction;
+affected Model Runtime, Workflow model-host and Chat regression passes 415 cases.
+
+The original request `modelreq_ba0aa18cff10475ba986deec1ac8ceb1` was recovered
+after separate Kernel/Gateway process restarts using query-only reconciliation.
+Original operation
+`model-9484a1c46d0cef9a6b914bbdb3b2461516c737e428b9fd54d2db5bfe876c94a8`
+and usage receipt `usage-0a0c32ba729942a1950ce3f35456cb6d` remain unchanged.
+The independently recorded service inference count stays one; recovery submits
+zero additional inference calls. History now returns UNKNOWN cost and 109
+reported Tokens rather than hiding both. No runtime database, key, model weights
+or raw service log is committed.
+
+**Inference/recovery PASS does not mean coding quality PASS.** This small model
+identified subtraction as the bug but still suggested the wrong `a - b`
+expression in its answer. Semantic review of that recommendation is FAIL; it was
+not applied. Strict project test execution, live cloud models, an actual human
+review of a model-generated patch and Windows GUI remain separate unqualified
+gates. No complete developer-loop or all-model PASS follows from this run.
+
 ## Public documentation consolidation — 2026-10-29
 
 The user-facing index now routes installation to Quick Start, usage to Developer

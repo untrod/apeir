@@ -7,10 +7,11 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Any, Callable
 from nous_runtime.core.redaction import redact_sensitive_data
@@ -76,6 +77,48 @@ def _db_connect(db_path: str, readonly: bool = False):
                 conn.close()
 
 
+def _schema_already_initialized(db_path: str, script: str) -> bool:
+    """Skip only an existing WAL schema's CREATE IF NOT EXISTS no-ops.
+
+    This is a fresh read of SQLite's own schema, not a cached permission or a
+    schema migration mechanism. A future non-CREATE migration uses the original
+    atomic writer path. Existing tables have the same validation semantics as
+    SQLite's CREATE IF NOT EXISTS; this does not certify arbitrary database data.
+    """
+    statements = [part.strip() for part in script.split(";") if part.strip()]
+    if not statements or statements[0].upper() != "BEGIN IMMEDIATE":
+        return False
+    expected = set()
+    for statement in statements[1:]:
+        match = re.match(
+            r"CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX)\s+IF\s+NOT\s+EXISTS\s+([a-zA-Z_]\w*)\b",
+            statement,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return False
+        expected.add((match[1].lower(), match[2].casefold()))
+    if not expected or not Path(db_path).is_file():
+        return False
+    with _db_connect(db_path, readonly=True) as db:
+        rows = db.execute(
+            "SELECT type, name FROM sqlite_master WHERE type IN ('table', 'index')"
+        )
+        try:
+            first = rows.fetchone()
+            if first is None:
+                return False
+            # The unfinished cursor holds its read snapshot while checking WAL.
+            # Do not acquire a writer merely to reopen already published tables.
+            if db.execute("PRAGMA journal_mode").fetchone()[0] != "wal":
+                return False
+            actual = {(first[0], first[1].casefold())}
+            actual.update((row[0], row[1].casefold()) for row in rows)
+            return expected <= actual
+        finally:
+            rows.close()
+
+
 class GovernanceStore:
     """SQLite-backed store for governance records.
 
@@ -96,13 +139,7 @@ class GovernanceStore:
         self._ensure_tables()
 
     def _ensure_tables(self) -> None:
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        with self._lock:
-            try:
-                with _db_connect(self.db_path) as db:
-                    # executescript otherwise autocommits each DDL statement.
-                    # Keep schema publication atomic under the existing owner.
-                    db.executescript("""BEGIN IMMEDIATE;
+        schema_sql = """BEGIN IMMEDIATE;
                         CREATE TABLE IF NOT EXISTS governance_operations (
                             authorization_id TEXT PRIMARY KEY,
                             operation_id TEXT NOT NULL UNIQUE,
@@ -283,7 +320,15 @@ class GovernanceStore:
                             status TEXT NOT NULL, lease_json TEXT NOT NULL,
                             UNIQUE(authorization_id, handle_id)
                         );
-                    """)
+                    """
+        with self._lock:
+            try:
+                if _schema_already_initialized(self.db_path, schema_sql):
+                    return
+                with _db_connect(self.db_path) as db:
+                    # executescript otherwise autocommits each DDL statement.
+                    # Keep first publication/repair atomic under the same owner.
+                    db.executescript(schema_sql)
             except Exception:
                 _log.warning("Failed to initialize Governance schema")
                 raise
@@ -293,7 +338,25 @@ class GovernanceStore:
     @contextmanager
     def operation_transaction(self):
         """Serialize admission, approval and revocation across store instances."""
-        with self._lock, _db_connect(self.db_path) as db:
+        with self._lock, ExitStack() as resources:
+            if not hasattr(sqlite3.Connection, "setconfig") or not hasattr(
+                sqlite3, "SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE"
+            ):
+                # Older CPython cannot configure NO_CKPT_ON_CLOSE. An idle,
+                # read-only handle keeps this writer's close from forcing an
+                # extra checkpoint/delete cycle after its durable FULL commit.
+                # Exhaust the cursor: no snapshot, transaction or permission is
+                # retained. Close both handles in order within this operation;
+                # there is no process-level keeper or connection pool.
+                reader = resources.enter_context(
+                    _db_connect(self.db_path, readonly=True)
+                )
+                rows = reader.execute("SELECT name FROM sqlite_master LIMIT 1")
+                try:
+                    rows.fetchall()
+                finally:
+                    rows.close()
+            db = resources.enter_context(_db_connect(self.db_path))
             db.execute("BEGIN IMMEDIATE")
             yield db
 

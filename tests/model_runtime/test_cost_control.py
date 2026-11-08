@@ -263,6 +263,63 @@ def test_request_usage_preserves_all_attempts_and_open_reservations(tmp_path):
             assert any(f"{table}_request_idx" in row[3] for row in plans)
 
 
+@pytest.mark.parametrize("unknown", ["cost", "tokens"])
+def test_completed_response_keeps_independently_known_usage_after_reopen(
+    tmp_path, unknown
+):
+    database = tmp_path / "usage.sqlite3"
+    policy = CostPolicy(max_daily_cost_usd=None, max_retry_cost_usd=None)
+    controller = CostController(database, policy=policy)
+    reservation = controller.authorize(
+        _request(max_tokens=64), provider_id="local", model_id="model"
+    )
+    controller.mark_dispatched(reservation)
+    response = ModelResponse(
+        request_id=reservation.request.request_id,
+        model_id="model",
+        instance_id="local-model",
+        usage={"prompt_tokens": 76, "completion_tokens": 33, "total_tokens": 109}
+        if unknown == "cost"
+        else {"prompt_tokens": 76},
+        cost_usd=0.0 if unknown == "cost" else 0.001,
+        metadata={"cost_measurement": "unknown" if unknown == "cost" else "reported"},
+    )
+    _, original = controller.commit(reservation, response)
+    expected = (None, 109) if unknown == "cost" else (0.001, None)
+    assert controller.request_usage(response.request_id) == expected
+    reopened = CostController(database, policy=policy)
+    assert reopened.request_usage(response.request_id) == expected
+    _, recovered = reopened.commit(reservation, response)
+    assert recovered["receipt_id"] == original["receipt_id"]
+    assert reopened.request_usage(response.request_id) == expected
+    assert reopened.summary()["requests"] == 1
+
+
+def test_known_tokens_with_unknown_price_still_block_a_provider_overrun(tmp_path):
+    controller = CostController(
+        tmp_path / "usage.sqlite3",
+        policy=CostPolicy(max_daily_cost_usd=None, max_retry_cost_usd=None),
+    )
+    reservation = controller.authorize(
+        _request(max_tokens=8), provider_id="local", model_id="model"
+    )
+    controller.mark_dispatched(reservation)
+    with pytest.raises(CostLimitExceeded, match="provider response"):
+        controller.commit(
+            reservation,
+            ModelResponse(
+                request_id=reservation.request.request_id,
+                model_id="model",
+                instance_id="local-model",
+                usage={"input_tokens": 2, "output_tokens": 9},
+                metadata={"cost_measurement": "unknown"},
+            ),
+        )
+    assert controller.request_usage(reservation.request.request_id) == (None, 11)
+    with pytest.raises(CostLimitExceeded, match="spending is blocked"):
+        controller.authorize(_request(), provider_id="local", model_id="model")
+
+
 @pytest.mark.parametrize("corruption", ["json", "binding", "negative_cost", "usage"])
 def test_request_usage_rejects_corrupt_zero_effect_evidence(tmp_path, corruption):
     import json
