@@ -70,6 +70,49 @@ live cloud inference without account/budget authorization, a qualified Linux
 strong-execution backend, and Windows 10 installation without a target machine.
 An unsigned Server 2025 build is not Windows 10 installed-product acceptance.
 
+## Actual local-model inference and original usage recovery — 2026-11-08
+
+The frozen Kernel source `87fd1b2ff28ef14ab1a515a58162592b452fda2e` was built
+unchanged on Linux with checksum-verified official Rust/Cargo 1.90.0,
+`cargo build --release --locked`, two build jobs and the original Cargo.lock.
+The actual ELF Kernel/Worker pass the maintained NKI probe: versions 1/2/3,
+wrong/missing authentication refusal, forbidden credentials before Provider
+spawn, and original denied-Work query after restart. Both processes exit cleanly
+and their listener closes. This is Linux source compatibility, not admission
+of those ELF files to the Windows component lock or sandbox qualification.
+
+An official Ollama 0.40.15 CPU service and Apache-2.0
+`qwen2.5-coder:0.5b` then performed one actual inference through the saved Provider,
+existing strict Gateway and real frozen Kernel/Worker. Selection was explicitly
+locked to the local model, with no cloud fallback or credentials. The scoped
+operator policy used bounded Tokens without a monetary quote; cost remains
+UNKNOWN. Provider counters are 76 input, 33 output and 109 total Tokens.
+
+This exposed a real accounting defect: a completed response with unknown price
+left its reservation marked as an uncertain dispatch, hiding independently
+reported Tokens from request history. The existing commit path now retains its
+existing `usage_unknown` state. Actual lost/unconfirmed dispatch still uses
+`uncertain`; budget checks and Provider overrun blocking are unchanged. Three
+new regressions fail against the old projection and pass after the correction;
+affected Model Runtime, Workflow model-host and Chat regression passes 415 cases.
+
+The original request `modelreq_ba0aa18cff10475ba986deec1ac8ceb1` was recovered
+after separate Kernel/Gateway process restarts using query-only reconciliation.
+Original operation
+`model-9484a1c46d0cef9a6b914bbdb3b2461516c737e428b9fd54d2db5bfe876c94a8`
+and usage receipt `usage-0a0c32ba729942a1950ce3f35456cb6d` remain unchanged.
+The independently recorded service inference count stays one; recovery submits
+zero additional inference calls. History now returns UNKNOWN cost and 109
+reported Tokens rather than hiding both. No runtime database, key, model weights
+or raw service log is committed.
+
+**Inference/recovery PASS does not mean coding quality PASS.** This small model
+identified subtraction as the bug but still suggested the wrong `a - b`
+expression in its answer. Semantic review of that recommendation is FAIL; it was
+not applied. Strict project test execution, live cloud models, an actual human
+review of a model-generated patch and Windows GUI remain separate unqualified
+gates. No complete developer-loop or all-model PASS follows from this run.
+
 ## Public documentation consolidation — 2026-10-29
 
 The user-facing index now routes installation to Quick Start, usage to Developer
