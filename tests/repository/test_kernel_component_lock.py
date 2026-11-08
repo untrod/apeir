@@ -355,6 +355,22 @@ def test_qualified_native_build_reuses_unchanged_lock_and_original_bytes(
 
 
 @pytest.mark.parametrize(
+    "path", ["../escaped.exe", "C:/escaped.exe", "desktop\\escaped.exe", "/escaped.exe"]
+)
+def test_native_build_refuses_unsafe_raw_lock_names(full_native_bundle, path):
+    lock, output, bundle = full_native_bundle
+    document = json.loads(lock.read_text())
+    document["components"]["nous-kernel"]["artifacts"][0]["path"] = path
+    lock.write_text(json.dumps(document))
+    archive, digest = bundle()
+    with pytest.raises(ValueError, match="unsafe locked component path"):
+        admit_artifact(
+            archive, digest, output, lock, "1" * 40, artifact_format="native-build"
+        )
+    assert not output.exists()
+
+
+@pytest.mark.parametrize(
     "fault",
     [
         "source",

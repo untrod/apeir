@@ -23,6 +23,18 @@ publication, signing or tag-creation command exists. Contract tests use syntheti
 PEs and mocked GitHub transport; they do not qualify native execution or upload.
 Actual GitHub staging and a new official full-mode build remain separate checks.
 
+The first carrier candidate `54759293b0f61102488d81b716c1d76f4479142a` exposed a
+Windows path bug in [Core 42471189599](https://github.com/untrod/apeir/actions/runs/42471189599/job/128702066654):
+three new carrier/staging contracts failed with `unsafe locked component path`,
+6110 passed and 95 skipped. Validation was checking the OS-rendered Path string,
+which legitimately uses backslashes on Windows. It now validates the original
+canonical lock name before converting to a host Path. Raw backslashes, drive
+prefixes, absolute paths and traversal still fail closed. No test assertion was
+weakened. Related Linux contracts now pass 73 cases with five existing
+Windows-only skips; current-source Windows checks remain required. That run's
+separate Python 3.10 setup failure was an upstream download HTTP 504, not a test
+result. Original platform and setup logs are retained.
+
 The current Linux connection still receives HTTP 401 at Release asset upload;
 ordinary metadata/draft API access does not prove upload authority. Existing
 draft 431703163 remains unpublished. Windows 10 installed GUI, upgrade/uninstall,

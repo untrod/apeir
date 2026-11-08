@@ -528,12 +528,13 @@ def _admit_native_build(
                 if digest != checksums[entry.filename]:
                     raise ValueError("Portable member digest mismatch")
         for item in component["artifacts"]:
-            relative = Path(item["path"])
+            locked_name = str(item["path"])
+            relative = Path(locked_name)
             if (
                 relative.is_absolute()
                 or ".." in relative.parts
-                or "\\" in str(relative)
-                or ":" in str(relative)
+                or "\\" in locked_name
+                or ":" in locked_name
             ):
                 raise ValueError("unsafe locked component path")
             destination = staged / relative
