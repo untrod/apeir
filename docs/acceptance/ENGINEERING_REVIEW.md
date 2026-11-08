@@ -1,5 +1,34 @@
 # Engineering review and research comparison
 
+## Native carrier recovery and unpublished draft preparation — 2026-11-08
+
+The original approved Kernel input artifact 12556562701 expired on November 7
+and now returns 404. Its exact archive remains retained privately. The successful
+full-mode native run 41543803229, artifact 13190523439, retains the same approved
+Kernel/Worker bytes. Its outer ZIP SHA-256 is
+`879b745b206df9fc0c2205dc858b0d6fdd79e3f870eb5bb5cd701628766c4e44`;
+binary source is `2d8a044e51a39b75c2afd9a8eaccba4a72d42952`. Independent admission
+of that actual archive passes the maintained component lock, all checksums,
+Portable members, dependency/source records, full-mode report and original
+denied-model/query-only recovery. No Kernel source, component hash or historical
+artifact changes. The explicit `native-build` carrier extends the existing
+verifier and official launcher pipeline; the old candidate format remains valid.
+
+Release Preflight now prepares that same reviewed package from protected main.
+Verification is read-only by default. Explicit draft staging uses a separate
+manual job with scoped write permission and revalidates the original producer,
+accepted source ancestry and full artifact before uploading. It refuses published
+releases, existing tags, mismatched assets and unknown asset digests; no clobber,
+publication, signing or tag-creation command exists. Contract tests use synthetic
+PEs and mocked GitHub transport; they do not qualify native execution or upload.
+Actual GitHub staging and a new official full-mode build remain separate checks.
+
+The current Linux connection still receives HTTP 401 at Release asset upload;
+ordinary metadata/draft API access does not prove upload authority. Existing
+draft 431703163 remains unpublished. Windows 10 installed GUI, upgrade/uninstall,
+Defender, real model inference, signing and public distribution remain pending
+or blocked. A draft is not a public download channel.
+
 Review date: 2026-10-09. Read-only baseline: Distribution
 `5c9cdd987af3823d4be9e6909311af65b9be2299`; frozen Kernel
 `87fd1b2ff28ef14ab1a515a58162592b452fda2e`.

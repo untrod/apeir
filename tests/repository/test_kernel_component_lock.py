@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import struct
 import subprocess
@@ -17,6 +18,7 @@ from scripts.ci.verify_kernel_components import (
     report_rebuild,
     verify,
 )
+from scripts.ci import stage_native_preview
 
 
 def _write_pe(path: Path, machine: int = 0xAA64) -> None:
@@ -176,6 +178,451 @@ def test_reviewed_archive_uses_real_lock_admission_and_does_not_replace_output(
     with pytest.raises(ValueError, match="existing directory"):
         admit_artifact(archive, digest, output, lock, "1" * 40)
     assert all((output / path).read_bytes() == data for path, data in files.items())
+
+
+@pytest.fixture
+def full_native_bundle(native_bundle, tmp_path):
+    """Synthetic package contracts; these bytes never qualify a native build."""
+    lock, output, _, candidate_files = native_bundle
+    version = "0.1.0-rc1"
+    binaries = {}
+    for name in ("nousd", "nous-provider-worker"):
+        binaries["APEIR-Portable/" + name + ".exe"] = candidate_files[
+            f"desktop/src-tauri/binaries/{name}-x86_64-pc-windows-msvc.exe"
+        ]
+    binaries["APEIR-Portable/nous-runtime.exe"] = candidate_files["nous-runtime.exe"]
+    binaries["APEIR-Portable/APEIR.exe"] = candidate_files["nous-runtime.exe"]
+    setup = tmp_path / "setup.exe"
+    _write_pe(setup, machine=0x014C)
+    smoke = json.loads(candidate_files["native-smoke.json"])
+    nki = json.loads(candidate_files["nki-initial.json"])
+    nki.update(
+        wrong_and_missing_nki_credentials_rejected=True,
+        invalid_versions_rejected=True,
+        external_model_calls=0,
+        model_operation_submissions=1,
+        unauthorized_model_credential="DENIED_BEFORE_PROVIDER_SPAWN",
+        original_failure_code="PROVIDER_ERROR",
+    )
+    recovery = json.loads(candidate_files["nki-recovery.json"])
+    recovery["external_model_calls"] = 0
+    smoke.update(nki=nki, restart_original_workload=recovery)
+    smoke["version"] = version
+
+    def bundle(fault=None):
+        entries = dict(binaries)
+        nested = io.BytesIO()
+        with zipfile.ZipFile(nested, "w") as zipped:
+            for name, data in binaries.items():
+                zipped.writestr(
+                    name, data + (b"tampered" if fault == "portable" else b"")
+                )
+        entries.update(
+            {
+                f"APEIR_{version}_x64-setup.exe": setup.read_bytes(),
+                f"APEIR-Portable-{version}-windows-x64.zip": nested.getvalue(),
+            }
+        )
+        manifest = {
+            "schema_version": 1,
+            "product": "APEIR",
+            "version": version,
+            "runtime_revision": "1" * 40,
+            "kernel_revision": "abc123",
+            "target": "x86_64-pc-windows-msvc",
+            "sidecar_smoke_passed": True,
+            "frontend_embedded": True,
+            "runtime_sidecar": True,
+            "source_state": {
+                "runtime_worktree_dirty": False,
+                "kernel_worktree_dirty": False,
+            },
+            "files": [
+                {
+                    "name": name,
+                    "size_bytes": len(data),
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                }
+                for name, data in entries.items()
+            ],
+        }
+        source = {
+            "distribution_revision": "1" * 40,
+            "kernel_revision": "abc123",
+            "component_lock_sha256": hashlib.sha256(lock.read_bytes()).hexdigest(),
+            "kernel_cargo_lock_sha256": hashlib.sha256(b"kernel-lock").hexdigest(),
+            "desktop_cargo_lock_sha256": hashlib.sha256(b"desktop-lock").hexdigest(),
+        }
+        report = {
+            "schema_version": 1,
+            "status": "passed",
+            "full_validation_executed": True,
+            "target": "x86_64-pc-windows-msvc",
+            "smoke": json.loads(json.dumps(smoke)),
+        }
+        if fault == "source":
+            source["distribution_revision"] = "4" * 40
+        elif fault == "lock":
+            source["component_lock_sha256"] = "0" * 64
+        elif fault == "cargo":
+            source["kernel_cargo_lock_sha256"] = "0" * 64
+        elif fault == "skipped":
+            report["full_validation_executed"] = False
+        elif fault == "cleanup":
+            report["smoke"]["process_tree_closed"] = False
+        elif fault == "auth":
+            report["smoke"]["nki"]["wrong_and_missing_nki_credentials_rejected"] = False
+        elif fault == "replay":
+            report["smoke"]["restart_original_workload"][
+                "model_operation_submissions"
+            ] = 1
+        elif fault == "identity":
+            report["smoke"]["restart_original_workload"]["original_workload_id"] = (
+                "other"
+            )
+        elif fault == "dirty":
+            manifest["source_state"]["runtime_worktree_dirty"] = True
+        entries.update(
+            {
+                name: json.dumps(value).encode()
+                for name, value in {
+                    "release-manifest.json": manifest,
+                    f"APEIR-{version}-windows-x64.manifest.json": manifest,
+                    "source-manifest.json": source,
+                    "native-validation-report.json": report,
+                }.items()
+            }
+        )
+        entries.update(
+            {
+                "kernel-Cargo.lock": b"kernel-lock",
+                "desktop-Cargo.lock": b"desktop-lock",
+                "native-dependencies.json": b"{}",
+                "platform-support.txt": b"contract fixture, not an installed product",
+                "python-build-environment.cdx.json": b'{"bomFormat":"CycloneDX"}',
+            }
+        )
+        if fault == "missing-sbom":
+            entries.pop("python-build-environment.cdx.json")
+        checksum = "".join(
+            f"{hashlib.sha256(data).hexdigest()}  {name}\n"
+            for name, data in entries.items()
+        ).encode()
+        entries.update({"SHA256SUMS.txt": checksum, "SHA256SUMS-x64.txt": checksum})
+        if fault == "tamper":
+            entries["APEIR-Portable/nousd.exe"] += b"changed"
+        elif fault == "path":
+            entries["../escape.exe"] = b"refused"
+        elif fault == "coverage":
+            entries["unlisted.json"] = b"{}"
+        elif fault == "checksum-alias":
+            entries["SHA256SUMS-x64.txt"] += b"changed"
+        archive = tmp_path / "full-native.zip"
+        with zipfile.ZipFile(archive, "w") as zipped:
+            for name, data in entries.items():
+                if fault == "symlink" and name == "APEIR-Portable/nousd.exe":
+                    info = zipfile.ZipInfo(name)
+                    info.create_system = 3
+                    info.external_attr = (stat.S_IFLNK | 0o777) << 16
+                    zipped.writestr(info, data)
+                else:
+                    zipped.writestr(name, data)
+        return archive, hashlib.sha256(archive.read_bytes()).hexdigest()
+
+    return lock, output, bundle
+
+
+def test_qualified_native_build_reuses_unchanged_lock_and_original_bytes(
+    full_native_bundle,
+):
+    lock, output, bundle = full_native_bundle
+    original_lock = lock.read_bytes()
+    archive, digest = bundle()
+    result = admit_artifact(
+        archive, digest, output, lock, "1" * 40, artifact_format="native-build"
+    )
+    assert result["status"] == "ok"
+    assert result["installation_acceptance"] == "NOT_RUN"
+    assert lock.read_bytes() == original_lock
+    for item in result["artifacts"]:
+        assert (output / item["path"]).read_bytes() == (
+            output / "APEIR-Portable" / (item["name"] + ".exe")
+        ).read_bytes()
+    with pytest.raises(ValueError, match="existing directory"):
+        admit_artifact(
+            archive, digest, output, lock, "1" * 40, artifact_format="native-build"
+        )
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "source",
+        "lock",
+        "cargo",
+        "missing-sbom",
+        "skipped",
+        "cleanup",
+        "auth",
+        "replay",
+        "identity",
+        "dirty",
+        "portable",
+        "tamper",
+        "path",
+        "coverage",
+        "checksum-alias",
+        "symlink",
+    ],
+)
+def test_native_build_carrier_refuses_incomplete_or_tampered_inputs(
+    full_native_bundle, fault
+):
+    lock, output, bundle = full_native_bundle
+    archive, digest = bundle(fault)
+    with pytest.raises(ValueError):
+        admit_artifact(
+            archive, digest, output, lock, "1" * 40, artifact_format="native-build"
+        )
+    assert not output.exists()
+
+
+def _producer_and_artifact():
+    return (
+        {
+            "id": 10,
+            "head_sha": "1" * 40,
+            "head_repository": {"full_name": "untrod/apeir"},
+            "path": ".github/workflows/desktop-build.yml",
+            "event": "workflow_dispatch",
+            "status": "completed",
+            "conclusion": "success",
+        },
+        {
+            "id": 20,
+            "workflow_run": {"id": 10, "head_sha": "1" * 40},
+            "name": "windows-x64-native-development-build",
+            "expired": False,
+            "size_in_bytes": 100,
+            "digest": "sha256:" + "a" * 64,
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("conclusion", "failure"),
+        ("event", "pull_request"),
+        ("head_sha", "invalid"),
+        ("path", ".github/workflows/other.yml"),
+        ("head_repository", {"full_name": "untrusted/fork"}),
+    ],
+)
+def test_draft_staging_refuses_wrong_producer(field, value):
+    producer, artifact = _producer_and_artifact()
+    producer[field] = value
+    with pytest.raises(ValueError):
+        stage_native_preview.validate_producer(producer, artifact, 10, 20, "a" * 64)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("expired", True),
+        ("digest", "sha256:" + "b" * 64),
+        ("name", "unrelated.zip"),
+        ("workflow_run", {"id": 11, "head_sha": "1" * 40}),
+        ("size_in_bytes", 257 * 1024 * 1024),
+    ],
+)
+def test_draft_staging_refuses_wrong_artifact(field, value):
+    producer, artifact = _producer_and_artifact()
+    artifact[field] = value
+    with pytest.raises(ValueError):
+        stage_native_preview.validate_producer(producer, artifact, 10, 20, "a" * 64)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("draft", False),
+        ("prerelease", False),
+        ("target_commitish", "other"),
+        ("tag_name", "other"),
+    ],
+)
+def test_staging_cannot_modify_published_or_unrelated_release(field, value):
+    draft = {
+        "draft": True,
+        "prerelease": True,
+        "target_commitish": "1" * 40,
+        "tag_name": "tag",
+    }
+    draft[field] = value
+    with pytest.raises(ValueError):
+        stage_native_preview.check_draft(draft, "tag", "1" * 40)
+
+
+def test_staging_refuses_unknown_or_changed_existing_assets(tmp_path):
+    path = tmp_path / "artifact.zip"
+    path.write_bytes(b"original")
+    assets = [
+        {
+            "name": path.name,
+            "digest": "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest(),
+            "size": path.stat().st_size,
+        }
+    ]
+    assert stage_native_preview.check_existing_assets(
+        {"assets": assets}, {path.name: path}
+    ) == {path.name}
+    with pytest.raises(ValueError):
+        stage_native_preview.check_existing_assets({"assets": assets}, {})
+    assets[0]["digest"] = "sha256:" + "0" * 64
+    with pytest.raises(ValueError):
+        stage_native_preview.check_existing_assets(
+            {"assets": assets}, {path.name: path}
+        )
+    assert path.read_bytes() == b"original"
+
+
+@pytest.mark.parametrize("stage", [False, True])
+def test_preflight_uses_real_admission_and_only_stages_an_unpublished_draft(
+    full_native_bundle, tmp_path, monkeypatch, stage
+):
+    lock, _, bundle = full_native_bundle
+    archive, digest = bundle()
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "runtime-components.lock.json").write_bytes(lock.read_bytes())
+    for key, value in {
+        "GITHUB_REPOSITORY": "untrod/apeir",
+        "GITHUB_EVENT_NAME": "workflow_dispatch",
+        "GITHUB_REF": "refs/heads/main",
+    }.items():
+        monkeypatch.setenv(key, value)
+    producer, artifact = _producer_and_artifact()
+    artifact["digest"] = "sha256:" + digest
+    task = tmp_path / "task"
+    draft = {
+        "id": 30,
+        "draft": True,
+        "prerelease": True,
+        "target_commitish": "1" * 40,
+        "tag_name": "v0.1.0-rc1-windows-preview." + "1" * 12,
+        "assets": [],
+    }
+    created, uploaded = [], []
+
+    def api(path, payload=None):
+        if path == "actions/runs/10":
+            return producer
+        if path == "actions/artifacts/20":
+            return artifact
+        if path == "releases?per_page=100":
+            return []
+        if path == "releases":
+            assert payload["draft"] is True and payload["prerelease"] is True
+            assert payload["target_commitish"] == "1" * 40
+            created.append(payload)
+            return draft
+        assert path == "releases/30"
+        return draft
+
+    def run(argv, **kwargs):
+        if argv[:2] == ["git", "merge-base"]:
+            return subprocess.CompletedProcess(argv, 0)
+        if argv[:2] == ["git", "ls-remote"]:
+            return subprocess.CompletedProcess(argv, 2)
+        if argv[:2] == ["gh", "api"]:
+            assert argv[-1].endswith("actions/artifacts/20/zip")
+            kwargs["stdout"].write(archive.read_bytes())
+            return subprocess.CompletedProcess(argv, 0)
+        assert argv[:3] == ["gh", "release", "upload"]
+        assert "--clobber" not in argv
+        path = Path(argv[4])
+        uploaded.append(path.name)
+        draft["assets"].append(
+            {
+                "name": path.name,
+                "digest": "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest(),
+                "size": path.stat().st_size,
+            }
+        )
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(stage_native_preview, "_api", api)
+    monkeypatch.setattr(stage_native_preview.subprocess, "run", run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "preflight",
+            "--run-id",
+            "10",
+            "--artifact-id",
+            "20",
+            "--zip-sha256",
+            digest,
+            "--workdir",
+            str(task),
+        ]
+        + (["--stage-draft"] if stage else []),
+    )
+    assert stage_native_preview.main() == 0
+    assert json.loads((task / "admission.json").read_text())["status"] == "ok"
+    assert bool(created) is stage
+    assert bool(uploaded) is stage
+    if stage:
+        assert (
+            json.loads((task / "draft-staging.json").read_text())["published"] is False
+        )
+    else:
+        assert not (task / "draft-staging.json").exists()
+
+
+def test_release_preflight_retains_manual_main_and_publication_boundary():
+    import yaml
+
+    path = Path(__file__).parents[2] / ".github/workflows/release.yml"
+    workflow = yaml.safe_load(path.read_text())
+    events = workflow.get("on", workflow.get(True))
+    assert set(events) == {"workflow_dispatch"}
+    assert events["workflow_dispatch"]["inputs"]["stage_draft"]["default"] is False
+    assert workflow["permissions"] == {"contents": "read", "actions": "read"}
+    staging = workflow["jobs"]["stage-unpublished-draft"]
+    assert staging["needs"] == "native-integrity"
+    assert "github.ref == 'refs/heads/main'" in staging["if"]
+    assert "inputs.stage_draft == true" in staging["if"]
+    assert staging["permissions"] == {"contents": "write", "actions": "read"}
+    assert "persist-credentials: false" in path.read_text()
+    assert "--draft=false" not in path.read_text()
+
+
+def test_preflight_rejects_non_main_before_github_or_disk_changes(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("GITHUB_REPOSITORY", "untrod/apeir")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/untrusted")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "preflight",
+            "--run-id",
+            "10",
+            "--artifact-id",
+            "20",
+            "--zip-sha256",
+            "a" * 64,
+            "--workdir",
+            str(tmp_path / "task"),
+        ],
+    )
+    with pytest.raises(ValueError, match="protected-main"):
+        stage_native_preview.main()
+    assert not (tmp_path / "task").exists()
 
 
 @pytest.mark.parametrize(

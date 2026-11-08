@@ -36,6 +36,11 @@ on:
         description: 'Maintainer-reviewed artifact ZIP SHA-256; cannot override the component lock'
         type: string
         default: ''
+      approved_kernel_artifact_format:
+        description: 'Reviewed carrier; native-build recovers the same locked PE files from an accepted full-mode package'
+        type: choice
+        default: candidate
+        options: [candidate, native-build]
 
 concurrency:
   # PR validation must not cancel an explicitly requested full Native build of
@@ -549,6 +554,7 @@ jobs:
           APPROVED_RUN_ID: ${{ inputs.approved_kernel_run_id }}
           APPROVED_ARTIFACT_ID: ${{ inputs.approved_kernel_artifact_id }}
           APPROVED_ZIP_SHA256: ${{ inputs.approved_kernel_zip_sha256 }}
+          APPROVED_ARTIFACT_FORMAT: ${{ inputs.approved_kernel_artifact_format }}
         run: |
           import hashlib, json, os, re, subprocess
           from pathlib import Path
@@ -563,13 +569,17 @@ jobs:
           artifact = api("actions/artifacts/" + artifact_id)
           assert producer["head_repository"]["full_name"] == "untrod/apeir"
           assert producer["path"] == ".github/workflows/desktop-build.yml" and producer["event"] == "workflow_dispatch"
+          carrier = os.environ["APPROVED_ARTIFACT_FORMAT"]
+          assert carrier in ("candidate", "native-build")
           assert producer["status"] == "completed" and producer["conclusion"] in ("success", "failure")
+          if carrier == "native-build":
+              assert producer["conclusion"] == "success"
           revision = producer["head_sha"]
           assert re.fullmatch(r"[0-9a-f]{40}", revision)
           subprocess.run(["git", "-C", "distribution", "merge-base", "--is-ancestor", revision, "HEAD"], check=True)
           assert artifact["workflow_run"]["id"] == int(run_id) and artifact["workflow_run"]["head_sha"] == revision
           assert not artifact["expired"] and artifact["size_in_bytes"] <= 256 * 1024 * 1024
-          assert re.fullmatch(r"unapproved-kernel-candidate-windows-x64-[12]", artifact["name"])
+          assert (carrier == "candidate" and re.fullmatch(r"unapproved-kernel-candidate-windows-x64-[12]", artifact["name"])) or (carrier == "native-build" and artifact["name"] == "windows-x64-native-development-build")
           assert artifact.get("digest", "").lower() == "sha256:" + expected.lower()
           archive = Path(os.environ["RUNNER_TEMP"]) / "reviewed-kernel.zip"
           with archive.open("wb") as stream:
@@ -579,13 +589,14 @@ jobs:
           assert hashlib.sha256(archive.read_bytes()).hexdigest() == expected.lower()
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
               output.write("APPROVED_PRODUCER_REVISION=" + revision + "\n")
-          Path(os.environ["RUNNER_TEMP"], "reviewed-input-provenance.json").write_text(json.dumps({"producer_revision": revision, "producer_run": int(run_id), "artifact_id": int(artifact_id), "archive_sha256": expected.lower()}, indent=2))
+          Path(os.environ["RUNNER_TEMP"], "reviewed-input-provenance.json").write_text(json.dumps({"producer_revision": revision, "producer_run": int(run_id), "artifact_id": int(artifact_id), "archive_sha256": expected.lower(), "artifact_format": carrier}, indent=2))
       - name: Admit the downloaded bytes through the unchanged maintained lock
         shell: pwsh
         env:
           APPROVED_ZIP_SHA256: ${{ inputs.approved_kernel_zip_sha256 }}
+          APPROVED_ARTIFACT_FORMAT: ${{ inputs.approved_kernel_artifact_format }}
         run: |
-          python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-native-source --artifact-zip "$env:RUNNER_TEMP/reviewed-kernel.zip" --artifact-sha256 $env:APPROVED_ZIP_SHA256 --artifact-source-revision $env:APPROVED_PRODUCER_REVISION --artifact-output "$env:RUNNER_TEMP/approved-native-inputs"
+          python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-native-source --artifact-zip "$env:RUNNER_TEMP/reviewed-kernel.zip" --artifact-sha256 $env:APPROVED_ZIP_SHA256 --artifact-source-revision $env:APPROVED_PRODUCER_REVISION --artifact-output "$env:RUNNER_TEMP/approved-native-inputs" --artifact-format $env:APPROVED_ARTIFACT_FORMAT
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install existing full validation and installer build dependencies
         working-directory: distribution

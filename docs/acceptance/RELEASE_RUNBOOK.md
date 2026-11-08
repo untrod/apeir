@@ -139,6 +139,35 @@ report, and provenance/attestation where supported, and reproducible build input
 
 ## 6. Sign and publish
 
+### Prepare an unpublished native preview
+
+The existing **Release Preflight** workflow can verify an exact accepted native
+run/artifact/outer ZIP digest. Run it from protected `main`; its default is
+read-only verification. Set `stage_draft=true` only to stage reviewed unsigned
+files in an **unpublished prerelease draft**. The staging job alone receives
+`contents: write`; producer/download jobs remain read-only. It rechecks source
+ancestry, actual package checksums, locked PE bytes, full-mode validation and
+original NKI/Work recovery before uploading. Neither mode signs, publishes or
+creates a Git tag. Source is the actual binary producer SHA, not a later docs SHA.
+
+```bash
+gh workflow run release.yml --ref main -f native_run_id=<reviewed-native-run> -f native_artifact_id=<exact-artifact-id> -f native_zip_sha256=<reviewed-outer-zip-sha256>
+```
+
+Append `-f stage_draft=true` for authorized internal draft staging. A failed
+upload leaves an unpublished draft; an identical existing asset is retained only
+when its GitHub-reported digest and size match. Missing digests, changed assets,
+published releases, existing tags and unrelated drafts fail closed. No asset is
+deleted or uploaded with `--clobber`. Resolve an identity/permission failure at
+the credential/workflow boundary; do not weaken repository protection or publish
+the draft to work around it. Draft assets are not public download links.
+
+This preparation does not satisfy Windows 10 installation, Defender, complete
+supply-chain qualification, signing or publication authorization. Keep their
+actual pending/blocking states and follow the release gate below.
+
+### Publish after qualification
+
 After maintainer approval, sign the installer, executable, checksums, and
 provenance with the project's release identity. Create the annotated tag and
 GitHub release only after signature verification succeeds.
