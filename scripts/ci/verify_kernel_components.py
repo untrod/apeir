@@ -75,7 +75,7 @@ def verify(
     results: list[dict[str, Any]] = []
     for artifact in component["artifacts"]:
         relative = Path(str(artifact["path"]))
-        if relative.is_absolute() or ".." in relative.parts:
+        if relative.anchor or ".." in relative.parts:
             raise ValueError(f"unsafe component path: {relative}")
         path = repo_root / relative
         if not path.is_file():
@@ -210,7 +210,7 @@ def admit_artifact(
     native_paths = {str(item["path"]) for item in component["artifacts"]}
     for relative in native_paths:
         if (
-            Path(relative).is_absolute()
+            Path(relative).anchor
             or ".." in Path(relative).parts
             or "\\" in relative
             or ":" in relative
@@ -531,7 +531,7 @@ def _admit_native_build(
             locked_name = str(item["path"])
             relative = Path(locked_name)
             if (
-                relative.is_absolute()
+                relative.anchor
                 or ".." in relative.parts
                 or "\\" in locked_name
                 or ":" in locked_name

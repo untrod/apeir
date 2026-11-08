@@ -355,7 +355,16 @@ def test_qualified_native_build_reuses_unchanged_lock_and_original_bytes(
 
 
 @pytest.mark.parametrize(
-    "path", ["../escaped.exe", "C:/escaped.exe", "desktop\\escaped.exe", "/escaped.exe"]
+    "path",
+    [
+        "../escaped.exe",
+        "C:/escaped.exe",
+        "desktop\\escaped.exe",
+        "/escaped.exe",
+        "C:escaped.exe",
+        "\\escaped.exe",
+        "\\\\server\\share\\escaped.exe",
+    ],
 )
 def test_native_build_refuses_unsafe_raw_lock_names(full_native_bundle, path):
     lock, output, bundle = full_native_bundle

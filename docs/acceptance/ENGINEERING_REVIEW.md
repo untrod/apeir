@@ -35,6 +35,16 @@ Windows-only skips; current-source Windows checks remain required. That run's
 separate Python 3.10 setup failure was an upstream download HTTP 504, not a test
 result. Original platform and setup logs are retained.
 
+The next Windows run on `7637fdaa12b2f12908b6e508d5a2229df23e038d` caught a
+separate rooted-path case: `/escaped.exe` has a Windows root but no drive and
+therefore is not `Path.is_absolute()`. That negative contract failed; 6116 other
+cases passed with 95 skips. All existing verifier modes now reject a nonempty
+Path anchor, preserving relative canonical component names while also rejecting
+rooted paths, drive-relative names and UNC roots. Original failures remain
+recorded; no assertion was weakened. Updated related Linux regression passes
+76 cases with five existing Windows-only skips; actual Windows qualification
+must use the resulting combined source.
+
 The current Linux connection still receives HTTP 401 at Release asset upload;
 ordinary metadata/draft API access does not prove upload authority. Existing
 draft 431703163 remains unpublished. Windows 10 installed GUI, upgrade/uninstall,
