@@ -530,10 +530,29 @@ def handle_list_artifacts(
             # generic route path parameters. Resolve them through this query.
             return handle_get_artifact(artifact_id)
         maximum = max(1, min(int(limit), 500))
+        work_refs: set[str] = set()
+        if re.fullmatch(r"work_[0-9a-f]{32}", task_id):
+            from nous_runtime.work import WorkHarness
+
+            root = Path(os.environ.get("NOUS_WORKSPACE_ROOT", ".")).resolve()
+            if (root / ".nous" / "checkpoints.db").is_file():
+                try:
+                    work = WorkHarness(root).require(task_id)
+                except KeyError:
+                    pass
+                else:
+                    if work.workspace_root == str(root):
+                        work_refs = {
+                            ref for ref in work.artifacts if isinstance(ref, str)
+                        }
         artifacts = [
             item.to_dict()
             for item in _workspace_artifact_records()
-            if (not task_id or item.metadata.get("task_id") == task_id)
+            if (
+                not task_id
+                or item.metadata.get("task_id") == task_id
+                or item.id in work_refs
+            )
             and (
                 not environment_id
                 or item.metadata.get("environment_id") == environment_id
@@ -546,6 +565,8 @@ def handle_list_artifacts(
                 for item in store.list()
                 if (
                     not task_id
+                    or item.digest in work_refs
+                    or item.artifact_id in work_refs
                     or task_id
                     in (
                         item.produced_by,
@@ -1270,15 +1291,12 @@ def handle_evaluation_run(body: dict | None = None) -> dict[str, Any]:
     """Run a new evaluation."""
     try:
         from nous_runtime.evaluation.evaluator import EvaluationEngine
-        from nous_runtime.evaluation.validators.test_validator import TestValidator
 
         ws = _get_eval_workspace()
         body = body or {}
         target_type = body.get("target_type", "project")
         target_id = body.get("target_id", "current")
-        engine = EvaluationEngine(
-            workspace=ws, validators=[TestValidator(workspace=ws)]
-        )
+        engine = EvaluationEngine(workspace=ws)
         record = engine.evaluate(
             target_type=target_type,
             target_id=target_id,

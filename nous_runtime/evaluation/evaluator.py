@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import replace
 from typing import Any
 
 from nous_runtime.evaluation.history import EvaluationHistory
@@ -56,6 +57,7 @@ class EvaluationEngine:
         history: EvaluationHistory | None = None,
     ):
         self._workspace = workspace
+        self._inspection_only = validators is None
         self._validators = (
             validators if validators is not None else _default_validators(workspace)
         )
@@ -111,6 +113,26 @@ class EvaluationEngine:
                 **ctx.get("metadata", {}),
             },
         )
+
+        if self._inspection_only:
+            failed = any(
+                item.detail.get("test_outcome") == "FAIL" for item in all_evidence
+            )
+            record = replace(
+                record,
+                status="fail" if failed else "human_review",
+                recommendation="review_evidence",
+                metadata={
+                    **record.metadata,
+                    "scope": "recorded-test-inspection",
+                    "execution_performed": False,
+                },
+                warnings=(
+                    *record.warnings,
+                    "Recorded tests do not qualify unmeasured quality dimensions; "
+                    "this report never requests automatic re-execution.",
+                ),
+            )
 
         # Phase 3 — Persist
         if persist:

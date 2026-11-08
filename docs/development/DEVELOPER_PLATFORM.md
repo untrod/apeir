@@ -104,6 +104,10 @@ Evaluation reads those original records; it does not launch project code.
 a Run in the active workspace. An exit code or pasted success message is not a
 receipt. 先审批、再执行、最后检查原始记录。测试未运行时，绿色勾不会自己长出来。
 
+The test verdict is separate from the wider quality report. Default evaluation
+leaves unmeasured quality dimensions for review and never recommends replaying
+an operation merely to fill missing evidence.
+
 ## Interactive project execution
 
 See [Interactive project execution](../operations/guides/USER_GUIDE.md#interactive-project-execution) for the current task guide.

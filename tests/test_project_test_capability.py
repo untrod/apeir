@@ -91,6 +91,23 @@ def test_dispatcher_consumes_existing_profile_and_registers_actual_receipt(
     ]
     assert result["ok"] and result["test_outcome"] == "PASS"
     assert result["test_counts"] == {"run": 1, "passed": 1}
+    from nous_runtime.evaluation.evaluator import EvaluationEngine
+
+    inspected = EvaluationEngine(workspace=str(tmp_path)).evaluate(
+        target_type="project",
+        target_id="fixture",
+        persist=False,
+        context={"test_run_id": result["run_id"]},
+    )
+    assert inspected.status == "human_review"
+    assert inspected.recommendation == "review_evidence"
+    assert inspected.metadata["execution_performed"] is False
+    assert any(
+        item.passed and item.detail["test_outcome"] == "PASS"
+        for dimension in inspected.dimensions
+        for item in dimension.evidence
+    )
+    assert len(command_receipt) == 1
     from nous_runtime.artifact import ArtifactRegistry, ContentAddressedArtifactStore
 
     assert ArtifactRegistry(tmp_path / ".nous/artifacts.jsonl").get(
@@ -358,3 +375,12 @@ def test_work_restores_the_original_test_approval_before_one_execution(
         for item in resumed.observations
     )
     assert resumed.artifacts
+    from nous_runtime.api.routes import handle_list_artifacts
+
+    related = handle_list_artifacts(task_id=created.run_id)
+    assert related["ok"] and related["data"]["count"] == 2
+    assert any(
+        item.get("id") in resumed.artifacts for item in related["data"]["artifacts"]
+    )
+    unrelated = WorkHarness(tmp_path).create("Inspect an unrelated result")
+    assert handle_list_artifacts(task_id=unrelated.run_id)["data"]["artifacts"] == []
