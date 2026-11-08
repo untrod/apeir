@@ -130,6 +130,7 @@ class SandboxResult:
     enforced_controls: tuple[str, ...] = ()
     unenforced_controls: tuple[str, ...] = ()
     sandbox_id: str = field(default_factory=lambda: make_id(prefix="sbx"))
+    input_snapshot_sha256: str = ""
     executed_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -320,6 +321,7 @@ def run_process_strict(
     cwd: str = "",
     timeout_seconds: int = 30,
     max_output_bytes: int = 1_000_000,
+    read_only_workspace: bool = False,
 ) -> SandboxResult:
     """Run an authorized argv array through ProcessSandbox without a shell."""
     if not argv or not str(argv[0]).strip():
@@ -343,7 +345,7 @@ def run_process_strict(
         max_output_bytes=max(1, int(max_output_bytes)),
         timeout_seconds=max(1, int(timeout_seconds)),
         read_allowed_paths=[workspace],
-        write_allowed_paths=[workspace],
+        write_allowed_paths=[] if read_only_workspace else [workspace],
         network_allowed=False,
         isolation_level="strict",
         require_strong_isolation=True,
@@ -367,6 +369,8 @@ def run_process_strict(
         security_grade=result.security_grade,
         enforced_controls=result.enforced_controls,
         unenforced_controls=result.unenforced_controls,
+        input_snapshot_sha256=getattr(result, "input_snapshot_sha256", ""),
+        **({"sandbox_id": result.audit_id} if result.audit_id else {}),
     )
 
 

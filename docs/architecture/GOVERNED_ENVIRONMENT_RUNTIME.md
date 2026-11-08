@@ -47,15 +47,29 @@ Default policy is:
 
 ### LocalSandboxProvider
 
-The local provider reuses the existing Windows `ProcessSandbox` and Job Object
-integration. Each environment receives a dedicated scratch directory below
-`.nous/environments/workdirs`. Host workspace mounts and HTTP allow-list claims
-are rejected because this provider cannot provide a filesystem namespace or a
-hard network namespace on the current Windows 10 host.
+The local provider delegates to `ProcessSandbox`; it has no ordinary host
+process fallback. Each environment receives a scratch directory below
+`.nous/environments/workdirs`. Host mounts, device/GPU passthrough and HTTP
+allowlists remain rejected.
 
-Its evidence level is `integrated-host`, not container isolation. The API and
-Desktop report `hard_network_isolation=false` and
-`filesystem_namespace_isolation=false` instead of overstating containment.
+Windows requires its existing disposable Windows Sandbox backend. An optional
+Linux x86-64 adapter accepts an operator-provisioned, digest-pinned QEMU profile
+and the exact Python interpreter in that profile. It copies one authorized
+project into a read-only guest snapshot, provides no network device or live
+host mount, and runs the child as UID 1000 with bounded resources. Authenticated
+guest messages belong to one invocation; they are process receipts, not
+independent business-effect verification.
+
+Linux commands must explicitly select `read_only_workspace: true`. The default
+write-capable command remains unchanged and fails closed on this read-only
+backend. Other executables, guest stdin, third-party Python packages and general
+write-back are outside this profile. Provider probes expose that scope; a
+configured environment alone is not a successful command.
+
+The [Linux provisioning instructions](../operations/deployment/DEPLOYMENT.md#read-only-python-test-vm)
+describe trusted inputs and the real-process probe. No profile is downloaded or
+enabled by a model, layout, extension or API request. The APEIR Rust Kernel and
+its component lock are unchanged.
 
 ### OCIContainerProvider
 
@@ -67,9 +81,9 @@ privileged mode, host PID/network, container-engine sockets, implicit host
 volumes, devices, or GPU access.
 
 Explicit mounts remain bounded by the contract. HTTP allowlists fail closed
-until a governed egress proxy exists. On the current reference host neither
-Docker nor Podman is installed, so OCI evidence is static contract/security
-evidence only; no Linux-container execution claim is made.
+until a governed egress proxy exists. An installed Docker/Podman CLI alone does
+not qualify an execution backend; current probe evidence must establish its
+isolation. The Linux VM qualification does not certify ordinary containers.
 
 ## Lifecycle and evidence
 
@@ -99,9 +113,7 @@ for partial local isolation and an unavailable OCI engine.
 
 ## Acceptance boundary
 
-P18 Environment Runtime foundation has passed its focused tests, full
-Runtime/Desktop/Tauri regression, security scan, packaged Windows build, and
-native API approval/lifecycle replay for the Windows 10 x64 integrated-host
-scope. Linux-container acceptance remains open until Docker or Podman is
-explicitly installed/configured and a real isolated container is exercised on
-this host.
+Historical P18 foundation evidence remains in Engineering Review; it does not
+qualify a current native installer. The Linux read-only VM has separate dated
+execution and rejection evidence. Broader process profiles, native Windows 10
+installation and physical-device effects retain their own gates.

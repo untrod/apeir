@@ -64,6 +64,10 @@ SHELL_BOUNDARY_PATHS = {
         "nous_runtime/update/manager.py",
         # The sole host-side launcher for the disposable VM strong backend.
         "nous_runtime/kernel/windows_sandbox.py",
+        # ProcessSandbox's Linux host VM adapter and its image-only controller.
+        # They hold no Work/permission state; caller ownership is checked below.
+        "nous_runtime/kernel/linux_vm.py",
+        "nous_runtime/kernel/linux_vm_guest.py",
         # The sole detached host for reconnectable governed ProcessSessions.
         "nous_runtime/kernel/process_session_host.py",
     )
@@ -316,3 +320,27 @@ class TestArchitectureBypassPrevention:
             pytest.fail(
                 f"Found {len(all_violations)} shell execution violations:\n{violation_msg}"
             )
+
+
+def test_linux_vm_backend_remains_owned_by_process_sandbox():
+    """The new boundary exemption must not become a Runtime execution shortcut."""
+    permitted = os.path.normpath(
+        os.path.join(PROJECT_ROOT, "nous_runtime/kernel/sandbox.py")
+    )
+    for root, _, files in os.walk(os.path.join(PROJECT_ROOT, "nous_runtime")):
+        for name in files:
+            if not name.endswith(".py"):
+                continue
+            path = os.path.join(root, name)
+            with open(path, encoding="utf-8-sig") as handle:
+                tree = ast.parse(handle.read())
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module in {
+                    "nous_runtime.kernel.linux_vm",
+                    "nous_runtime.kernel.linux_vm_guest",
+                }:
+                    if any(
+                        alias.name in {"run", "main", "supported"}
+                        for alias in node.names
+                    ):
+                        assert os.path.normpath(path) == permitted, path

@@ -29,6 +29,7 @@ log = logging.getLogger("nous.kernel.sandbox")
 # Sandbox configuration
 # ────────────────────────────────────────────────────────────
 
+
 @dataclass
 class SandboxPolicy:
     """Defines what a sandboxed process is allowed to do.
@@ -37,17 +38,17 @@ class SandboxPolicy:
     """
 
     # ── Execution ──
-    executable: str = ""                 # Absolute path to binary
+    executable: str = ""  # Absolute path to binary
     args: list[str] = field(default_factory=list)
-    working_dir: str = ""                # Default: system temp
+    working_dir: str = ""  # Default: system temp
     env: dict[str, str] = field(default_factory=dict)
 
     # ── Resource limits ──
-    max_memory_bytes: int = 256 * 1024 * 1024   # 256 MB default
-    max_cpu_time_seconds: int = 60               # 60 seconds default
-    max_processes: int = 1                        # No fork bombs
-    max_output_bytes: int = 10 * 1024 * 1024     # 10 MB stdout+stderr
-    max_staging_bytes: int = 512 * 1024 * 1024   # Immutable input snapshot
+    max_memory_bytes: int = 256 * 1024 * 1024  # 256 MB default
+    max_cpu_time_seconds: int = 60  # 60 seconds default
+    max_processes: int = 1  # No fork bombs
+    max_output_bytes: int = 10 * 1024 * 1024  # 10 MB stdout+stderr
+    max_staging_bytes: int = 512 * 1024 * 1024  # Immutable input snapshot
     max_staging_files: int = 100_000
 
     # ── Filesystem ──
@@ -56,15 +57,15 @@ class SandboxPolicy:
     deny_paths: list[str] = field(default_factory=list)
 
     # ── Network ──
-    network_allowed: bool = False         # Network disabled by default
+    network_allowed: bool = False  # Network disabled by default
     allowed_hosts: list[str] = field(default_factory=list)
     allowed_ports: list[int] = field(default_factory=list)
 
     # ── Behavior ──
     timeout_seconds: float = 30.0
-    kill_timeout_seconds: float = 5.0     # SIGTERM → SIGKILL escalation
+    kill_timeout_seconds: float = 5.0  # SIGTERM → SIGKILL escalation
     audit: bool = True
-    isolation_level: str = "strict"       # "strict" | "relaxed" | "none"
+    isolation_level: str = "strict"  # "strict" | "relaxed" | "none"
     require_strong_isolation: bool = True
     # Host-side cancellation marker; never relies on a live guest workspace mapping.
     cancel_file: str = ""
@@ -93,6 +94,7 @@ class SandboxPolicy:
 # Execution result
 # ────────────────────────────────────────────────────────────
 
+
 @dataclass
 class SandboxResult:
     """Result of a sandboxed execution."""
@@ -110,6 +112,7 @@ class SandboxResult:
     output_truncated: bool = False
     killed_by_signal: int = 0
     audit_id: str = ""
+    input_snapshot_sha256: str = ""
     availability_state: str = "available"
     security_grade: str = "unknown"
     enforced_controls: tuple[str, ...] = ()
@@ -123,6 +126,7 @@ class SandboxResult:
 # ────────────────────────────────────────────────────────────
 # Process Sandbox
 # ────────────────────────────────────────────────────────────
+
 
 class ProcessSandbox:
     """Execute a process under resource constraints and security policy.
@@ -200,6 +204,38 @@ class ProcessSandbox:
         """Return conservative capabilities for the backend usable right now."""
 
         enforced = ["exec_array", "timeout", "captured_output", "output_limit"]
+        if sys.platform == "linux":
+            from nous_runtime.kernel.linux_vm import supported
+
+            if supported(self.policy):
+                return {
+                    "grade": "strong_vm",
+                    "strong": True,
+                    "enforced_controls": tuple(
+                        enforced
+                        + [
+                            "ephemeral_vm",
+                            "filesystem_scope",
+                            "readonly_project",
+                            "network_disabled",
+                            "host_environment_secrecy",
+                            "process_boundary",
+                            "job_memory_budget",
+                            "job_cpu_budget",
+                            "job_process_limit",
+                            "process_tree_kill",
+                            "staged_filesystem",
+                            "authenticated_guest_result",
+                        ]
+                    ),
+                    "unenforced_controls": (),
+                    "supported_scope": "pinned_python_readonly_project",
+                    "trust_assumptions": (
+                        "host_os_and_local_user_trusted",
+                        "operator_provisioned_digest_pinned_vm_inputs",
+                        "business_result_requires_independent_verifier",
+                    ),
+                }
         if sys.platform == "win32" and self.policy.isolation_level == "strict":
             from nous_runtime.kernel.windows_sandbox import executable_path
 
@@ -252,7 +288,9 @@ class ProcessSandbox:
     def _build_environment(self) -> dict[str, str]:
         env = os.environ.copy()
         for key in list(env.keys()):
-            if key.startswith(("NOUS_SECRET", "NOUS_TOKEN", "NOUS_KEY", "NOUS_CREDENTIAL")):
+            if key.startswith(
+                ("NOUS_SECRET", "NOUS_TOKEN", "NOUS_KEY", "NOUS_CREDENTIAL")
+            ):
                 env.pop(key, None)
         env.update(self.policy.env)
         env.pop("LD_PRELOAD", None)
@@ -262,9 +300,7 @@ class ProcessSandbox:
             env.pop("DYLD_LIBRARY_PATH", None)
         if self.policy.read_allowed_paths:
             extra_ld = ":".join(
-                path
-                for path in self.policy.read_allowed_paths
-                if os.path.isdir(path)
+                path for path in self.policy.read_allowed_paths if os.path.isdir(path)
             )
             if extra_ld and "LD_LIBRARY_PATH" not in env:
                 env["LD_LIBRARY_PATH"] = extra_ld
@@ -273,6 +309,10 @@ class ProcessSandbox:
     def _execute_strong_backend(
         self, input_bytes: bytes | None, started: float
     ) -> SandboxResult:
+        if sys.platform == "linux":
+            from nous_runtime.kernel.linux_vm import run as run_linux_vm
+
+            return run_linux_vm(self.policy, input_bytes)
         if sys.platform != "win32":
             return SandboxResult(
                 exit_code=-1,
@@ -332,7 +372,11 @@ class ProcessSandbox:
 
         # Monitor process with timeout
         result = _wait_with_timeout(
-            proc, self.policy, input_bytes, started, popen_kwargs.get("stdout"),
+            proc,
+            self.policy,
+            input_bytes,
+            started,
+            popen_kwargs.get("stdout"),
         )
         _cleanup_cgroup(cgroup_path)
         return result
@@ -353,7 +397,10 @@ class ProcessSandbox:
             )
 
         # Try to assign to a Job Object
-        if self.policy.isolation_level == "strict" and not _current_process_in_job_windows():
+        if (
+            self.policy.isolation_level == "strict"
+            and not _current_process_in_job_windows()
+        ):
             _assign_job_object_windows(proc, self.policy)
         elif self.policy.isolation_level == "strict":
             log.debug(
@@ -362,7 +409,11 @@ class ProcessSandbox:
             )
 
         result = _wait_with_timeout(
-            proc, self.policy, input_bytes, started, popen_kwargs.get("stdout"),
+            proc,
+            self.policy,
+            input_bytes,
+            started,
+            popen_kwargs.get("stdout"),
         )
         return result
 
@@ -386,7 +437,11 @@ class ProcessSandbox:
                 wall_time_seconds=time.monotonic() - started,
             )
         return _wait_with_timeout(
-            proc, self.policy, input_bytes, started, popen_kwargs.get("stdout"),
+            proc,
+            self.policy,
+            input_bytes,
+            started,
+            popen_kwargs.get("stdout"),
         )
 
     def _build_popen_kwargs(self, env: dict | None = None) -> dict:
@@ -438,6 +493,7 @@ class ProcessSandbox:
 # Linux cgroups v2 helpers
 # ────────────────────────────────────────────────────────────
 
+
 def _setup_cgroup_v2(policy: SandboxPolicy) -> Optional[str]:
     """Create a cgroup v2 for the sandbox. Returns cgroup path or None."""
     cgroup_root = "/sys/fs/cgroup"
@@ -445,6 +501,7 @@ def _setup_cgroup_v2(policy: SandboxPolicy) -> Optional[str]:
         return None
 
     import uuid
+
     cgroup_name = f"nous-sandbox-{uuid.uuid4().hex[:12]}"
     cgroup_path = os.path.join(cgroup_root, "nous.slice", cgroup_name)
     if not os.path.exists(os.path.join(cgroup_root, "nous.slice")):
@@ -491,6 +548,7 @@ def _cleanup_cgroup(cgroup_path: Optional[str]) -> None:
 # ────────────────────────────────────────────────────────────
 # Windows Job Object helpers
 # ────────────────────────────────────────────────────────────
+
 
 def _current_process_in_job_windows() -> bool:
     if sys.platform != "win32":
@@ -608,7 +666,9 @@ def _assign_job_object_windows(proc: subprocess.Popen, policy: SandboxPolicy) ->
             ctypes.c_uint32(proc.pid),
         )
         if not proc_handle:
-            log.debug("OpenProcess failed for pid %d: %s", proc.pid, ctypes.get_last_error())
+            log.debug(
+                "OpenProcess failed for pid %d: %s", proc.pid, ctypes.get_last_error()
+            )
             kernel32.CloseHandle(ctypes.c_void_p(job_handle))
             return
 
@@ -620,7 +680,8 @@ def _assign_job_object_windows(proc: subprocess.Popen, policy: SandboxPolicy) ->
             log.debug(
                 "AssignProcessToJobObject failed for pid %d: %s. "
                 "Process may already be in a Job Object.",
-                proc.pid, ctypes.get_last_error(),
+                proc.pid,
+                ctypes.get_last_error(),
             )
 
         kernel32.CloseHandle(ctypes.c_void_p(proc_handle))
@@ -634,6 +695,7 @@ def _assign_job_object_windows(proc: subprocess.Popen, policy: SandboxPolicy) ->
 # ────────────────────────────────────────────────────────────
 # Timeout & output handling
 # ────────────────────────────────────────────────────────────
+
 
 def _wait_with_timeout(
     proc: subprocess.Popen,
@@ -667,11 +729,11 @@ def _wait_with_timeout(
     output_truncated = False
 
     if stdout_bytes > policy.max_output_bytes:
-        out = out[:policy.max_output_bytes]
+        out = out[: policy.max_output_bytes]
         stdout_bytes = policy.max_output_bytes
         output_truncated = True
     if stderr_bytes > policy.max_output_bytes:
-        err = err[:policy.max_output_bytes]
+        err = err[: policy.max_output_bytes]
         stderr_bytes = policy.max_output_bytes
         output_truncated = True
 
@@ -684,7 +746,9 @@ def _wait_with_timeout(
         wall_time_seconds=time.monotonic() - started,
         timed_out=timed_out,
         output_truncated=output_truncated,
-        killed_by_signal=proc.returncode if proc.returncode and proc.returncode < 0 else 0,
+        killed_by_signal=proc.returncode
+        if proc.returncode and proc.returncode < 0
+        else 0,
     )
 
 

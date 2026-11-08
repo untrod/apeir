@@ -38,6 +38,7 @@ class ProviderExecutionResult:
     security_grade: str = "unknown"
     enforced_controls: tuple[str, ...] = ()
     unenforced_controls: tuple[str, ...] = ()
+    input_snapshot_sha256: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -53,6 +54,11 @@ class ProviderExecutionResult:
             "security_grade": self.security_grade,
             "enforced_controls": list(self.enforced_controls),
             "unenforced_controls": list(self.unenforced_controls),
+            **(
+                {"input_snapshot_sha256": self.input_snapshot_sha256}
+                if self.input_snapshot_sha256
+                else {}
+            ),
         }
 
 
@@ -71,6 +77,7 @@ def _default_runner(
     memory_limit_mb: int = 512,
     max_processes: int = 64,
     cancel_file: str = "",
+    read_only_workspace: bool = False,
 ) -> ProviderExecutionResult:
     executable = str(argv[0]) if argv else ""
     if executable and not os.path.isabs(executable):
@@ -89,7 +96,7 @@ def _default_runner(
         max_processes=max(1, min(int(max_processes), 64)),
         max_output_bytes=max(1024, int(max_output_bytes)),
         read_allowed_paths=[str(Path(cwd).resolve())],
-        write_allowed_paths=[str(Path(cwd).resolve())],
+        write_allowed_paths=[] if read_only_workspace else [str(Path(cwd).resolve())],
         network_allowed=False,
         timeout_seconds=max(1, int(timeout_seconds)),
         isolation_level="strict",
@@ -109,6 +116,7 @@ def _default_runner(
         security_grade=result.security_grade,
         enforced_controls=result.enforced_controls,
         unenforced_controls=result.unenforced_controls,
+        input_snapshot_sha256=getattr(result, "input_snapshot_sha256", ""),
     )
 
 
@@ -151,8 +159,18 @@ class LocalSandboxProvider:
             "resource_isolation": str(security["grade"]),
             "enforced_controls": list(security["enforced_controls"]),
             "unenforced_controls": list(security["unenforced_controls"]),
+            "supported_scope": security.get(
+                "supported_scope",
+                "platform_strict_backend" if available else "unavailable",
+            ),
             "limitations": (
-                []
+                (
+                    [
+                        "Linux VM execution requires the pinned Python runtime and read_only_workspace=true; write grants, network access and other executables remain unavailable."
+                    ]
+                    if sys.platform == "linux"
+                    else []
+                )
                 if available
                 else [
                     "No qualified strong local sandbox is available on this platform.",
@@ -250,6 +268,7 @@ class LocalSandboxProvider:
                 memory_limit_mb=environment.memory_limit_mb,
                 max_processes=64,
                 cancel_file=str(cancel_path) if cancel_path is not None else "",
+                read_only_workspace=command.read_only_workspace,
             )
         else:
             result = self._runner(

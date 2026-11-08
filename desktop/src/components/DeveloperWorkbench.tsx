@@ -357,7 +357,7 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange, onDraftS
 
   const selectProfile = (value: string) => {
     setProfile(value);
-    if (value === "pytest") setRunTarget("tests");
+    if (value === "pytest" || value === "python-unittest") setRunTarget("tests");
     else if (value === "cargo-test") setRunTarget("");
     else if (filePath) setRunTarget(filePath);
   };

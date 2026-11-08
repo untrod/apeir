@@ -633,6 +633,7 @@ class EnvironmentCommand:
     max_output_bytes: int = 1_000_000
     env: Mapping[str, str] = field(default_factory=dict)
     cancel_file: str = ""
+    read_only_workspace: bool = False
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "EnvironmentCommand":
@@ -645,11 +646,15 @@ class EnvironmentCommand:
             "max_output_bytes",
             "env",
             "cancel_file",
+            "read_only_workspace",
         }
         if unknown:
             raise EnvironmentValidationError(
                 f"unknown command fields: {sorted(unknown)}"
             )
+        read_only = value.get("read_only_workspace", False)
+        if not isinstance(read_only, bool):
+            raise EnvironmentValidationError("read_only_workspace must be a boolean")
         raw_argv = value.get("argv")
         if (
             not isinstance(raw_argv, Sequence)
@@ -708,6 +713,7 @@ class EnvironmentCommand:
             max_output_bytes=output,
             env=environment,
             cancel_file=cancel_file,
+            read_only_workspace=read_only,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -718,6 +724,7 @@ class EnvironmentCommand:
             "max_output_bytes": self.max_output_bytes,
             "env": dict(self.env),
             **({"cancel_file": self.cancel_file} if self.cancel_file else {}),
+            **({"read_only_workspace": True} if self.read_only_workspace else {}),
         }
 
 

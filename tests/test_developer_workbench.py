@@ -62,6 +62,43 @@ def test_workbench_lists_reads_and_searches_utf8_files(tmp_path):
     assert search["matches"][0]["line"] == 1
 
 
+def test_unittest_profile_requests_a_read_only_project_and_retains_snapshot_evidence(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "tests").mkdir()
+    received = {}
+
+    def execute(argv, **kwargs):
+        received.update({"argv": argv, **kwargs})
+        return SandboxResult(
+            ok=True, returncode=0, stdout="test output", input_snapshot_sha256="a" * 64
+        )
+
+    monkeypatch.setattr("nous_runtime.workspace.workbench.run_process_strict", execute)
+    result = DeveloperWorkbench(tmp_path).run_profile("python-unittest", target="tests")
+    assert received["read_only_workspace"] is True
+    assert received["argv"][1:] == ["-I", "-m", "unittest", "discover", "-s", "tests"]
+    assert result["input_snapshot_sha256"] == "a" * 64
+    from nous_runtime.events import EventStream
+
+    events = EventStream(str(tmp_path)).load_events(result["run_id"])
+    assert any(
+        event.event_type == "test.completed"
+        and event.payload["input_snapshot_sha256"] == "a" * 64
+        for event in events
+    )
+
+
+def test_unittest_profile_rejects_a_file_instead_of_a_test_directory(tmp_path):
+    (tmp_path / "test_example.py").write_text(
+        "raise AssertionError('must not execute')"
+    )
+    with pytest.raises(WorkbenchError, match="existing test directory"):
+        DeveloperWorkbench(tmp_path).run_profile(
+            "python-unittest", target="test_example.py"
+        )
+
+
 def test_workbench_preview_atomic_write_backup_and_event_ledger(tmp_path):
     target = tmp_path / "main.py"
     target.write_text("print('before')\n", encoding="utf-8")
