@@ -1604,6 +1604,7 @@ export interface EnvironmentRecord extends EnvironmentCreateRequest {
 
 export interface EnvironmentCommandRequest {
   argv: string[];
+  read_only_workspace?: boolean;
   cwd?: string;
   timeout_seconds?: number;
   max_output_bytes?: number;

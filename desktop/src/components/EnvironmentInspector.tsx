@@ -58,6 +58,7 @@ function EnvironmentPanel() {
   const [mountSource, setMountSource] = useState("project");
   const [mountTarget, setMountTarget] = useState("/model-workspace/project");
   const [argvText, setArgvText] = useState('["python", "-V"]');
+  const [readOnlyWorkspace, setReadOnlyWorkspace] = useState(false);
   const [commandResult, setCommandResult] = useState<EnvironmentRunResult | null>(null);
   const [logs, setLogs] = useState("");
   const [artifactMetadata, setArtifactMetadata] = useState<Record<string, unknown>[] | null>(null);
@@ -93,7 +94,7 @@ function EnvironmentPanel() {
     environment_type: environmentType,
     provider: environmentType === "local_sandbox" ? "local-sandbox" : "oci",
     image: environmentType === "oci_container" ? image.trim() : "",
-    os: environmentType === "oci_container" ? "linux" : "windows",
+    ...(environmentType === "oci_container" ? { os: "linux" } : {}),
     cpu_limit: cpu,
     memory_limit_mb: memory,
     gpu_policy: "none",
@@ -187,7 +188,8 @@ function EnvironmentPanel() {
     if (!Array.isArray(parsed) || !parsed.length || !parsed.every((item) => typeof item === "string")) {
       throw new Error("Command must be a non-empty JSON string array.");
     }
-    return { argv: parsed, cwd: ".", timeout_seconds: 60, max_output_bytes: 1_000_000 };
+    return { argv: parsed, cwd: ".", timeout_seconds: 60, max_output_bytes: 1_000_000,
+      ...(readOnlyWorkspace ? { read_only_workspace: true } : {}) };
   };
 
   const executeRun = async (environmentId: string, request: EnvironmentCommandRequest) => {
@@ -397,6 +399,7 @@ function EnvironmentPanel() {
                   <div style={{ borderTop: `1px solid ${colors.borderLight}`, paddingTop: space.md }}>
                     <label style={labelStyle}>Argv JSON (no shell)</label>
                     <textarea aria-label="Environment command" value={argvText} onChange={(event) => setArgvText(event.target.value)} rows={3} style={{ ...input, resize: "vertical", fontFamily: "monospace" }} />
+                    <label style={{ ...labelStyle, marginTop: space.sm }}><input type="checkbox" checked={readOnlyWorkspace} onChange={event => setReadOnlyWorkspace(event.target.checked)} /> Read-only workspace / 只读工程</label>
                     <button onClick={requestRun} disabled={busy} style={{ ...btnPrimary, marginTop: space.sm }}>Run in environment</button>
                   </div>
                 )}

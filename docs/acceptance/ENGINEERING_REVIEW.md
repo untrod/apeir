@@ -38,6 +38,14 @@ Targeted regressions also verify current caller identity is not serialized into
 checkpoints or inherited after restart. Current-source CI and a fresh native
 candidate remain separate; cloud accounts and Windows 10 installation are pending.
 
+Further consumer checks found explicit Runtime failures wrapped as successful
+Observations, losing their original results at model-tool boundaries. Four
+negative contracts fail on the preceding source. The resolver now preserves
+the original result while propagating failure; malformed outcome values cannot
+become success. Environment UI commands can explicitly request the existing
+read-only scope, use the Runtime host's local OS default, and retain that scope
+in the run Artifact. Default write-capable requests remain unchanged.
+
 ## Native carrier recovery and unpublished draft preparation — 2026-11-08
 
 The original approved Kernel input artifact 12556562701 expired on November 7

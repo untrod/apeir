@@ -418,9 +418,13 @@ def execute_capability_observation(
                 params,
                 workspace_root=workspace,
             )
-            return Observation.success(
-                "capability.execute",
-                {"result": result},
+            outcome = result.get("ok", True)
+            succeeded = type(outcome) is bool and outcome
+            return Observation(
+                tool="capability.execute",
+                status="success" if succeeded else "failed",
+                data={"result": result},
+                errors=[] if succeeded else ["Runtime consumer did not report success"],
                 capability=capability_id,
                 duration_ms=(time.time() - start) * 1000,
                 metadata={
@@ -430,6 +434,11 @@ def execute_capability_observation(
                     "execution_scope": "runtime-service",
                     "kernel_traversed": False,
                     "stage": "execute",
+                    **(
+                        {"error_code": "NOUS_RUNTIME_RESULT_FAILED"}
+                        if not succeeded
+                        else {}
+                    ),
                 },
             )
         except Exception as exc:

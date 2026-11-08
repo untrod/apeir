@@ -232,6 +232,12 @@ has provisioned it. The result distinguishes command completion from reported
 all-skipped suites do not pass. Model tools use the same profile after approval.
 Evaluation only inspects the recorded Run; opening a report does not run tests.
 
+In **Environment**, select **Read-only workspace / 只读工程** for the qualified
+Linux profile. It runs only the pinned interpreter against staged inputs;
+it does not enable general Linux commands or grant project writes. A local
+environment uses the Runtime host's OS, while OCI contracts keep their own
+explicit platform. The original run Artifact records the selected read-only scope.
+
 ## Interactive project execution
 
 The project cursor links conversation, project, original Work, Run and checkpoint.

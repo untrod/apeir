@@ -543,7 +543,12 @@ class WorkspaceToolRuntime:
             **arguments,
         )
         metadata = dict(observation.metadata or {})
-        if observation.status != "success":
+        data = dict(observation.data or {})
+        result = data.get("result", data)
+        reported_outcome = (
+            isinstance(result, Mapping) and type(result.get("ok")) is bool
+        )
+        if observation.status != "success" and not reported_outcome:
             return {
                 "ok": False,
                 "capability_id": capability_id,
@@ -565,8 +570,6 @@ class WorkspaceToolRuntime:
                     else {}
                 ),
             }
-        data = dict(observation.data or {})
-        result = data.get("result", data)
         if name == "run_project_tests":
             if not isinstance(result, Mapping) or type(result.get("ok")) is not bool:
                 return {
@@ -576,12 +579,14 @@ class WorkspaceToolRuntime:
                 }
             return {
                 **dict(result),
+                "ok": observation.status == "success" and result["ok"],
                 "capability_id": capability_id,
                 "execution_scope": "runtime-service",
                 "kernel_traversed": False,
             }
         return {
-            "ok": True,
+            "ok": observation.status == "success"
+            and (result["ok"] if reported_outcome else True),
             "capability_id": capability_id,
             "result": data.get("result", data),
             "execution_scope": str(

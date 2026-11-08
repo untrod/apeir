@@ -384,3 +384,62 @@ def test_work_restores_the_original_test_approval_before_one_execution(
     )
     unrelated = WorkHarness(tmp_path).create("Inspect an unrelated result")
     assert handle_list_artifacts(task_id=unrelated.run_id)["data"]["artifacts"] == []
+
+
+@pytest.mark.parametrize("outcome", [False, "UNKNOWN", None])
+def test_runtime_failure_preserves_original_result_without_success(
+    tmp_path, monkeypatch, outcome
+):
+    from nous_runtime.capability.resolver import (
+        execute_capability_observation,
+        ExecutionResult,
+    )
+
+    monkeypatch.setattr(
+        "nous_runtime.capability.resolver._get_capability_metadata",
+        lambda _: {"executor_type": "runtime"},
+    )
+    decision = SimpleNamespace(action_mode="EXECUTE")
+    monkeypatch.setattr(
+        "nous_runtime.governance.get_gate",
+        lambda: SimpleNamespace(evaluate=lambda *a: decision),
+    )
+    original = {
+        "ok": outcome,
+        "operation_run_id": "original-run",
+        "artifact_id": "original-artifact",
+    }
+    monkeypatch.setattr(
+        "nous_runtime.capability.runtime_executor.execute_runtime_capability",
+        lambda *a, **kw: dict(original),
+    )
+    observation = execute_capability_observation(
+        "environment.run", _workspace_root=str(tmp_path), environment_id="fixture"
+    )
+    assert observation.status == "failed"
+    assert observation.data["result"] == original
+    assert ExecutionResult.from_observation(observation).ok is False
+    assert ExecutionResult.from_observation(observation).result == original
+
+
+def test_environment_tool_cannot_turn_a_failed_result_into_success(
+    tmp_path, monkeypatch
+):
+    from nous_runtime.planner.observation import Observation
+
+    failed = {
+        "ok": False,
+        "operation_run_id": "original-run",
+        "artifact_id": "original-artifact",
+    }
+    monkeypatch.setattr(
+        "nous_runtime.capability.resolver.execute_capability_observation",
+        lambda *a, **kw: Observation(
+            tool="capability.execute", status="failed", data={"result": failed}
+        ),
+    )
+    result = WorkspaceToolRuntime(str(tmp_path), allow_mutations=True).execute(
+        "run_environment", {"environment_id": "fixture"}
+    )
+    assert result["ok"] is False
+    assert result["result"] == failed

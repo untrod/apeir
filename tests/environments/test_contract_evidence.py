@@ -126,3 +126,18 @@ def test_artifact_api_does_not_read_external_registry_symlink(tmp_path, monkeypa
         pytest.skip("file symlinks unavailable on this platform")
     monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(workspace))
     assert not handle_list_artifacts()["ok"]
+
+
+def test_run_artifact_retains_the_explicit_read_only_command(tmp_path):
+    runtime, _ = _runtime(tmp_path)
+    created = runtime.create(_spec())
+    runtime.start(created["environment_id"])
+    result = runtime.run(
+        created["environment_id"],
+        {
+            "argv": ["python", "-V"],
+            "read_only_workspace": True,
+        },
+    )
+    recorded = json.loads((tmp_path / result["artifact"]["location"]).read_text())
+    assert recorded["command"]["read_only_workspace"] is True
