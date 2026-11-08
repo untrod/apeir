@@ -6394,3 +6394,69 @@ restart. No navigation mutation or repeated effect was observed; all three
 owned processes exited0 and the listener closed. This is source software
 acceptance, not live-model inference, sandboxed project tests or native GUI
 installation. Earlier producer records above retain their original scope.
+
+## RC1 read-only Linux test execution — 2026-11-08
+
+This candidate extends the existing ProcessSandbox platform boundary for Issue
+#119. It adds no Work store, authority, shell fallback or frozen Kernel change.
+`python-unittest` uses a pinned Python runtime and standard library in a
+networkless QEMU VM, one immutable project snapshot, UID 1000, bounded resource
+budgets and authenticated per-invocation control messages. Other executables,
+write grants, guest stdin and third-party Python packages remain unsupported.
+Provisioning is an explicit operator action outside the project.
+
+Actual Linux x86-64 qualification used QEMU 10.0.13, Debian guest kernel
+6.12.115+deb13.1-cloud-amd64 with matching virtio modules, static BusyBox 1.37
+and CPython 3.12.14. The interpreter digest was
+`fa67443527ed9647f760d807e2a38f26340757123e643c4639cf273ed15d5ea7`.
+The reviewed Q35 profile digest is
+`f1507459301216ca82bcddb2d5ca06faf0895b91ad7531acdec628307bcbe83f`.
+The exact adapter/controller digests accompany the
+raw probe reports; these are Linux platform inputs, not replacements for the
+Windows Component Lock.
+
+Real guest checks covered project-write rejection, protected controller data,
+host-file/environment non-disclosure, UID elevation rejection, no network
+interface except loopback, failed egress, process/memory/output budgets,
+cancellation and a detached guest child terminated with the VM. A separate
+owned-host SIGKILL probe waited for authenticated workload startup, then
+verified parent-death SIGKILL and reaping of the VM. The qualification helper
+preserves each result as JSONL before its assertions; a failing test remains a
+failing test.
+
+Retained development failures include a missing QEMU boot ROM, serial setup,
+and microvm guests stopped in TSC calibration, including a configuration with
+RTC/PIT enabled. The final candidate uses Q35 with its reference timers and
+matching standard firmware, verified ROM/data, explicit serial descriptors and
+a virtio entropy source. The original 30-second deadline was not enlarged.
+The architecture scan initially rejected the new platform files as unknown
+shell boundaries. Their exact paths now join the existing sandbox boundary
+list, with a caller-ownership check. The guest controller rejects host
+invocation before loading a request or invoking guest reboot; the unchanged
+scan still rejects subprocess calls elsewhere.
+
+An initial parent-death probe also exposed an unavailable `/proc/.../children`
+interface in the cloud host; its corrected observer uses `ps` and checks the
+exact owned process identity. No unrelated process is terminated.
+
+The same small Python project previously inspected through the real frozen
+Kernel/Worker and Ollama path was used, rather than creating another demo.
+Its original unchanged unit test first failed on `return a - b`. A two-file,
+local-model-assisted Proposal corrected the source and saved its explanation;
+the existing independent CLI OS-user approval and file observation reported
+MATCH. The unchanged test then passed in the actual read-only VM. The early
+read-before-write rejection and the failed timer-startup test Run are retained;
+no model inference or file modification was blindly replayed.
+
+This is not GUI human-session acceptance: the model supplied an expression and
+explanation, and the operator assembled the reviewed proposal. A Work plan also
+exposed a remaining integration gap: the independently executed test receipt
+has not yet completed the original plan's execution step. That Work remains
+BLOCKED rather than being relabeled complete. Cloud accounts, Windows 10 GUI
+installation, arbitrary commands and physical effects retain separate gates.
+
+The local 1.5B inference returned 80 input and 76 output Tokens (156 total),
+unknown price, and query-only original-request recovery with no extra model
+call. The 0.5B semantic failure, 1.5B 2-GiB OOM and 64-Token truncated response
+remain failed records; they are not erased by the qualified 128-Token case.
+No cloud model, fee saving or general model-quality claim is made.
