@@ -139,7 +139,9 @@ print('parent completed; VM teardown must terminate detached guest child')
         )
         assert rejected.availability_state == "unavailable"
         assert not rejected.stdout
-        test = execute("project_unittest", ["-m", "unittest", "discover", "-s", "."])
+        test = execute(
+            "project_unittest", ["-I", "-m", "unittest", "discover", "-s", "."]
+        )
         # A failing project is valid execution evidence. Never rewrite its
         # assertions, source or result merely to obtain a green qualification.
         assert test.availability_state == "available" and test.exit_code in (0, 1), (

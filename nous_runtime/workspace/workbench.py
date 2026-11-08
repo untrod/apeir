@@ -717,7 +717,7 @@ class DeveloperWorkbench:
                     "The python-unittest profile requires Python and an existing test directory."
                 )
             return (
-                [executable, "-m", "unittest", "discover", "-s", relative],
+                [executable, "-I", "-m", "unittest", "discover", "-s", relative],
                 relative,
                 True,
             )

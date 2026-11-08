@@ -77,7 +77,7 @@ def test_unittest_profile_requests_a_read_only_project_and_retains_snapshot_evid
     monkeypatch.setattr("nous_runtime.workspace.workbench.run_process_strict", execute)
     result = DeveloperWorkbench(tmp_path).run_profile("python-unittest", target="tests")
     assert received["read_only_workspace"] is True
-    assert received["argv"][1:] == ["-m", "unittest", "discover", "-s", "tests"]
+    assert received["argv"][1:] == ["-I", "-m", "unittest", "discover", "-s", "tests"]
     assert result["input_snapshot_sha256"] == "a" * 64
     from nous_runtime.events import EventStream
 
