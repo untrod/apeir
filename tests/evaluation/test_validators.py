@@ -4,6 +4,9 @@
 from __future__ import annotations
 
 import pytest
+import subprocess
+import sys
+from uuid import uuid4
 
 from nous_runtime.evaluation.models import EvaluationEvidence
 from nous_runtime.evaluation.schema import EvaluationDimension
@@ -29,6 +32,60 @@ def validator_suite(tmp_path):
     return {"test_path": "test_example.py", "cwd": str(tmp_path), "timeout": 10}
 
 
+@pytest.fixture
+def recorded_validator_run(tmp_path, monkeypatch):
+    """Record the maintainer test fixture's real bounded pytest output.
+
+    Production TestValidator is a passive reader. This fixture executes only
+    the controlled tests above; it does not qualify an execution sandbox.
+    """
+    monkeypatch.setenv("NOUS_WORKSPACE_ROOT", str(tmp_path))
+
+    def record(spec):
+        from nous_runtime.events import EventStream, RunEvent, RunState
+
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", spec["test_path"], "-q", "--tb=line"],
+            cwd=spec["cwd"],
+            capture_output=True,
+            text=True,
+            timeout=spec["timeout"],
+            check=False,
+        )
+        events = EventStream(str(tmp_path))
+        run_id = "validator-fixture-" + uuid4().hex
+        events.create_run(run_id, task_id="fixture-tests")
+        for name, text in (("stdout", result.stdout), ("stderr", result.stderr)):
+            events.emit(
+                RunEvent(
+                    run_id=run_id,
+                    task_id="fixture-tests",
+                    event_type="command.output",
+                    actor="developer.workbench",
+                    payload={"stream": name, "text": text},
+                )
+            )
+        events.emit(
+            RunEvent(
+                run_id=run_id,
+                task_id="fixture-tests",
+                event_type="test.completed",
+                actor="developer.workbench",
+                payload={
+                    "profile": "pytest",
+                    "exit_code": result.returncode,
+                    "ok": result.returncode == 0,
+                },
+            )
+        )
+        events.emit_state_change(
+            run_id, RunState.COMPLETED if result.returncode == 0 else RunState.FAILED
+        )
+        return {"test_run_id": run_id}
+
+    return record
+
+
 class TestTestValidator:
     def test_dimension(self):
         v = TestValidator()
@@ -38,9 +95,11 @@ class TestTestValidator:
         v = TestValidator()
         assert v.source == "pytest"
 
-    def test_validate_returns_list(self, validator_suite):
+    def test_validate_returns_list(self, validator_suite, recorded_validator_run):
         v = TestValidator()
-        results = v.validate(target=None, context=validator_suite)
+        results = v.validate(
+            target=None, context=recorded_validator_run(validator_suite)
+        )
         assert isinstance(results, list)
         assert len(results) == 1
         for r in results:
@@ -51,37 +110,51 @@ class TestTestValidator:
             assert r.detail["test_count"] == 2
             assert r.summary == "pytest: PASS (2 tests)"
 
-    def test_validate_evidence_has_dimension(self, validator_suite):
+    def test_validate_evidence_has_dimension(
+        self, validator_suite, recorded_validator_run
+    ):
         v = TestValidator()
-        results = v.validate(target=None, context=validator_suite)
+        results = v.validate(
+            target=None, context=recorded_validator_run(validator_suite)
+        )
         assert results and results[0].passed
         for r in results:
             assert r.dimension == EvaluationDimension.CORRECTNESS.value
 
-    def test_failed_child_remains_failure(self, validator_suite, tmp_path):
+    def test_failed_child_remains_failure(
+        self, validator_suite, tmp_path, recorded_validator_run
+    ):
         (tmp_path / "test_example.py").write_text("def test_failure(): assert False\n")
-        result = TestValidator().validate(None, validator_suite)[0]
+        result = TestValidator().validate(
+            None, recorded_validator_run(validator_suite)
+        )[0]
         assert not result.passed
         assert result.detail["returncode"] == 1
         assert result.detail["test_counts"] == {"failed": 1}
         assert result.detail["test_count"] == 1
 
-    def test_collection_error_is_not_success(self, validator_suite, tmp_path):
+    def test_collection_error_is_not_success(
+        self, validator_suite, tmp_path, recorded_validator_run
+    ):
         (tmp_path / "test_example.py").write_text("this is not valid python\n")
-        result = TestValidator().validate(None, validator_suite)[0]
+        result = TestValidator().validate(
+            None, recorded_validator_run(validator_suite)
+        )[0]
         assert not result.passed
         assert result.detail["returncode"] != 0
         assert result.detail["test_counts"] == {"error": 1}
 
     def test_only_skipped_tests_have_no_success_evidence(
-        self, validator_suite, tmp_path
+        self, validator_suite, tmp_path, recorded_validator_run
     ):
         (tmp_path / "test_example.py").write_text(
             "import pytest\n"
             "@pytest.mark.skip(reason='controlled unavailable dependency')\n"
             "def test_not_run(): pass\n",
         )
-        result = TestValidator().validate(None, validator_suite)[0]
+        result = TestValidator().validate(
+            None, recorded_validator_run(validator_suite)
+        )[0]
         assert not result.passed
         assert result.score == 0
         assert result.detail["returncode"] == 0

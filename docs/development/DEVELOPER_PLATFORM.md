@@ -92,6 +92,18 @@ See [Reviewing workspace changes](../operations/guides/USER_GUIDE.md#reviewing-w
 
 See [Professional Workbench](../operations/guides/USER_GUIDE.md#professional-workbench) for the current task guide.
 
+The fixed `python-unittest` profile is shared by the Workbench and the governed
+`project.run_tests` capability (`run_project_tests` in the model tool catalog).
+It requires a qualified strict sandbox and a project-relative test directory.
+The model cannot supply arbitrary command arguments or approve its own request.
+Results keep the original Run ID, test counts and an inspectable Artifact.
+No tests, all skipped tests and incomplete records remain `UNKNOWN`.
+
+Evaluation reads those original records; it does not launch project code.
+`apeir evaluate project --id <project-id> --test-run-id <run-id>` inspects
+a Run in the active workspace. An exit code or pasted success message is not a
+receipt. 先审批、再执行、最后检查原始记录。测试未运行时，绿色勾不会自己长出来。
+
 ## Interactive project execution
 
 See [Interactive project execution](../operations/guides/USER_GUIDE.md#interactive-project-execution) for the current task guide.

@@ -23,6 +23,7 @@ def _echo_json(data: Any) -> None:
 def _get_workspace() -> str:
     try:
         from nous_runtime.project.workspace import find_workspace
+
         return find_workspace() or ""
     except Exception:
         return ""
@@ -31,7 +32,13 @@ def _get_workspace() -> str:
 def _print_record(record: EvaluationRecord) -> None:
     """Pretty-print an evaluation record."""
     score_pct = int(record.composite_score * 100)
-    status_icon = {"pass": "✓", "fail": "✗", "warning": "⚠", "retry_required": "↻", "human_review": "👁"}
+    status_icon = {
+        "pass": "✓",
+        "fail": "✗",
+        "warning": "⚠",
+        "retry_required": "↻",
+        "human_review": "👁",
+    }
 
     print(f"Evaluation: {record.id}")
     print(f"  Target:    {record.target_type}/{record.target_id}")
@@ -43,7 +50,9 @@ def _print_record(record: EvaluationRecord) -> None:
     print("  Dimensions:")
     for d in record.dimensions:
         icon = "✓" if d.passed else "✗"
-        print(f"    {icon} {d.dimension:20s} {int(d.score*100):3d}%  (weight={d.weight:.2f})")
+        print(
+            f"    {icon} {d.dimension:20s} {int(d.score * 100):3d}%  (weight={d.weight:.2f})"
+        )
     print()
     if record.issues:
         print("  Issues:")
@@ -53,7 +62,6 @@ def _print_record(record: EvaluationRecord) -> None:
         print("  Warnings:")
         for w in record.warnings:
             print(f"    • {w}")
-
 
 
 # Command implementations
@@ -68,7 +76,8 @@ def cmd_evaluate_task(
     ws = workspace or _get_workspace()
     engine = EvaluationEngine(workspace=ws)
     record = engine.evaluate(
-        target_type="task", target_id=task_id,
+        target_type="task",
+        target_id=task_id,
         input_summary=f"Task evaluation: {task_id}",
     )
     report = engine.report(record)
@@ -90,7 +99,8 @@ def cmd_evaluate_agent(
     ws = workspace or _get_workspace()
     engine = EvaluationEngine(workspace=ws)
     record = engine.evaluate(
-        target_type="agent", target_id=agent_id,
+        target_type="agent",
+        target_id=agent_id,
         input_summary=f"Agent evaluation: {agent_id}",
     )
     report = engine.report(record)
@@ -107,13 +117,16 @@ def cmd_evaluate_project(
     project_id: str = "",
     workspace: str = "",
     json_output: bool = False,
+    test_run_id: str = "",
 ) -> dict[str, Any] | None:
     """Evaluate a project."""
     ws = workspace or _get_workspace()
     engine = EvaluationEngine(workspace=ws)
     record = engine.evaluate(
-        target_type="project", target_id=project_id or "current",
+        target_type="project",
+        target_id=project_id or "current",
         input_summary="Project evaluation",
+        context={"test_run_id": test_run_id},
     )
     report = engine.report(record)
 
@@ -156,7 +169,10 @@ def cmd_evaluate_benchmark(
     json_output: bool = False,
 ) -> dict[str, Any] | None:
     """Run benchmark evaluation."""
-    from nous_runtime.evaluation.benchmark import BenchmarkRunner, coding_benchmark_suite
+    from nous_runtime.evaluation.benchmark import (
+        BenchmarkRunner,
+        coding_benchmark_suite,
+    )
 
     runner = BenchmarkRunner()
     runner.add_tasks(coding_benchmark_suite())
@@ -176,7 +192,9 @@ def cmd_evaluate_benchmark(
             if profile.category_results:
                 print("  Categories:")
                 for cat, stats in profile.category_results.items():
-                    print(f"    {cat}: {stats['success_rate']:.0%} success, avg score {stats['avg_score']:.2f}")
+                    print(
+                        f"    {cat}: {stats['success_rate']:.0%} success, avg score {stats['avg_score']:.2f}"
+                    )
         return data
     else:
         print("No agent specified. Available benchmark tasks:")
@@ -185,11 +203,12 @@ def cmd_evaluate_benchmark(
         return {"tasks": len(runner.list_tasks())}
 
 
-
 # Typer registration
 
 
-def register_evaluation_commands(parent_app: Any, inspect_app: Any | None = None) -> None:
+def register_evaluation_commands(
+    parent_app: Any, inspect_app: Any | None = None
+) -> None:
     """Register `nous evaluate` and `nous inspect evaluation` commands."""
     if typer is None:
         return
@@ -215,11 +234,18 @@ def register_evaluation_commands(parent_app: Any, inspect_app: Any | None = None
 
     @eval_app.command("project")
     def _project(
-        project_id: str = typer.Option("", "--id", help="Project ID (default: current)"),
+        project_id: str = typer.Option(
+            "", "--id", help="Project ID (default: current)"
+        ),
         json_out: bool = typer.Option(False, "--json", help="JSON output"),
+        test_run_id: str = typer.Option(
+            "", "--test-run-id", help="Inspect an original test Run; does not run tests"
+        ),
     ):
         """Evaluate the current project."""
-        cmd_evaluate_project(project_id=project_id, json_output=json_out)
+        cmd_evaluate_project(
+            project_id=project_id, json_output=json_out, test_run_id=test_run_id
+        )
 
     @eval_app.command("report")
     def _report(
@@ -239,7 +265,9 @@ def register_evaluation_commands(parent_app: Any, inspect_app: Any | None = None
 
     # -- Inspector --
     if inspect_app is not None:
-        eval_inspect = typer.Typer(help="Inspect evaluation runtime", invoke_without_command=True)
+        eval_inspect = typer.Typer(
+            help="Inspect evaluation runtime", invoke_without_command=True
+        )
         inspect_app.add_typer(eval_inspect, name="evaluation")
 
         @eval_inspect.callback(invoke_without_command=True)
@@ -268,7 +296,9 @@ def register_evaluation_commands(parent_app: Any, inspect_app: Any | None = None
                     status_icon = "✓" if r.passed else "✗"
                     print(f"  {status_icon} {r.id}")
                     print(f"    target: {r.target_type}/{r.target_id}")
-                    print(f"    score: {int(r.composite_score*100)}/100  status: {r.status}  rec: {r.recommendation}")
+                    print(
+                        f"    score: {int(r.composite_score * 100)}/100  status: {r.status}  rec: {r.recommendation}"
+                    )
                     print()
             else:
                 print("No evaluation records yet.")
@@ -282,7 +312,9 @@ def register_evaluation_commands(parent_app: Any, inspect_app: Any | None = None
             """Show evaluation trend over time."""
             ws = _get_workspace()
             history = EvaluationHistory(ws)
-            trend_data = history.trend(target_type=target_type, target_id=target_id, limit=limit)
+            trend_data = history.trend(
+                target_type=target_type, target_id=target_id, limit=limit
+            )
 
             if not trend_data:
                 print("No trend data available.")
@@ -292,4 +324,6 @@ def register_evaluation_commands(parent_app: Any, inspect_app: Any | None = None
             print("-" * 60)
             for t in trend_data:
                 bar = "█" * int(t["composite_score"] * 20)
-                print(f"  {t['created_at']}  {int(t['composite_score']*100):3d}% {bar}  {t['status']}")
+                print(
+                    f"  {t['created_at']}  {int(t['composite_score'] * 100):3d}% {bar}  {t['status']}"
+                )

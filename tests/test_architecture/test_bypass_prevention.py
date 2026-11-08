@@ -60,7 +60,6 @@ SHELL_BOUNDARY_PATHS = {
         "nous_runtime/ecosystem/installer.py",
         "nous_runtime/evaluation/validators/code_validator.py",
         "nous_runtime/evaluation/validators/security_validator.py",
-        "nous_runtime/evaluation/validators/test_validator.py",
         "nous_runtime/operations/release.py",
         "nous_runtime/platform/adapter.py",
         "nous_runtime/platform/detector.py",

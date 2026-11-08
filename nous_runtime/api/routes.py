@@ -1270,16 +1270,20 @@ def handle_evaluation_run(body: dict | None = None) -> dict[str, Any]:
     """Run a new evaluation."""
     try:
         from nous_runtime.evaluation.evaluator import EvaluationEngine
+        from nous_runtime.evaluation.validators.test_validator import TestValidator
 
         ws = _get_eval_workspace()
         body = body or {}
         target_type = body.get("target_type", "project")
         target_id = body.get("target_id", "current")
-        engine = EvaluationEngine(workspace=ws)
+        engine = EvaluationEngine(
+            workspace=ws, validators=[TestValidator(workspace=ws)]
+        )
         record = engine.evaluate(
             target_type=target_type,
             target_id=target_id,
             input_summary=body.get("input_summary", "API evaluation"),
+            context={"test_run_id": body.get("test_run_id")},
         )
         return ok_response(record.to_dict())
     except Exception as e:

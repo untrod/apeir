@@ -16,28 +16,18 @@ from nous_runtime.evaluation.models import EvaluationEvidence, EvaluationRecord
 from nous_runtime.evaluation.regression import RegressionEvaluator, RegressionResult
 from nous_runtime.evaluation.scorer import QualityScorer
 from nous_runtime.evaluation.validators.base import Validator
-from nous_runtime.evaluation.validators.code_validator import CodeValidator
-from nous_runtime.evaluation.validators.performance_validator import PerformanceValidator
-from nous_runtime.evaluation.validators.schema_validator import SchemaValidator
-from nous_runtime.evaluation.validators.security_validator import SecurityValidator
 from nous_runtime.evaluation.validators.test_validator import TestValidator
 
 _log = logging.getLogger("nous.evaluation.engine")
 
 
-
 # Default validators
 
 
-def _default_validators() -> list[Validator]:
-    return [
-        TestValidator(),
-        CodeValidator(),
-        SecurityValidator(),
-        PerformanceValidator(),
-        SchemaValidator(),
-    ]
-
+def _default_validators(workspace: str = "") -> list[Validator]:
+    # Product evaluation inspects original execution, never starts host checks.
+    # Optional developer checkers remain explicit SDK tools.
+    return [TestValidator(workspace=workspace)]
 
 
 # Evaluation Engine
@@ -66,11 +56,11 @@ class EvaluationEngine:
         history: EvaluationHistory | None = None,
     ):
         self._workspace = workspace
-        self._validators = validators if validators is not None else _default_validators()
+        self._validators = (
+            validators if validators is not None else _default_validators(workspace)
+        )
         self._scorer = scorer or QualityScorer()
         self._history = history or EvaluationHistory(workspace)
-
-
 
     def evaluate(
         self,
@@ -105,7 +95,9 @@ class EvaluationEngine:
                 evidence = validator.validate(target=None, context=ctx)
                 all_evidence.extend(evidence)
             except Exception as exc:
-                _log.warning("Validator %s failed: %s", getattr(validator, "source", "?"), exc)
+                _log.warning(
+                    "Validator %s failed: %s", getattr(validator, "source", "?"), exc
+                )
 
         # Phase 2 — Score
         record = self._scorer.score(
@@ -114,7 +106,10 @@ class EvaluationEngine:
             input_summary=input_summary,
             evidence=all_evidence,
             evaluated_by=evaluated_by,
-            metadata={"validator_count": len(self._validators), **ctx.get("metadata", {})},
+            metadata={
+                "validator_count": len(self._validators),
+                **ctx.get("metadata", {}),
+            },
         )
 
         # Phase 3 — Persist
@@ -124,15 +119,17 @@ class EvaluationEngine:
         elapsed = int((time.perf_counter() - t0) * 1000)
         _log.info(
             "Evaluation %s: target=%s/%s score=%.2f status=%s (%d ms)",
-            record.id, target_type, target_id,
-            record.composite_score, record.status, elapsed,
+            record.id,
+            target_type,
+            target_id,
+            record.composite_score,
+            record.status,
+            elapsed,
         )
 
         return record
 
-
     # Regression
-
 
     def evaluate_with_regression(
         self,
@@ -162,7 +159,10 @@ class EvaluationEngine:
         else:
             # Use the most recent previous evaluation for this target
             previous = self._history.list(
-                target_type=target_type, target_id=target_id, limit=2, order="DESC",
+                target_type=target_type,
+                target_id=target_id,
+                limit=2,
+                order="DESC",
             )
             baseline_record = previous[1] if len(previous) >= 2 else None
 
@@ -174,13 +174,13 @@ class EvaluationEngine:
         result = reg_eval.compare_records(baseline_record, current)
         _log.info(
             "Regression: passed=%s delta=%.3f recommendation=%s",
-            result.passed, result.delta, result.recommendation,
+            result.passed,
+            result.delta,
+            result.recommendation,
         )
         return current, result
 
-
     # Reporting
-
 
     def report(self, record: EvaluationRecord) -> dict[str, Any]:
         """Generate a human-readable report from an evaluation record."""
@@ -205,7 +205,6 @@ class EvaluationEngine:
             "warnings": list(record.warnings),
             "duration_ms": record.duration_ms,
         }
-
 
 
 # Convenience

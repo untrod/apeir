@@ -317,6 +317,7 @@ def _runtime_metadata(tool_id: str) -> dict[str, Any]:
         "create_environment": ("environment", "environment.create", "write"),
         "start_environment": ("environment", "environment.start", "execute"),
         "run_environment": ("environment", "environment.run", "execute"),
+        "run_project_tests": ("shell", "project.run_tests", "execute"),
         "stop_environment": ("environment", "environment.stop", "write"),
         "destroy_environment": ("environment", "environment.destroy", "write"),
         "git_status": ("git", "git.read", "read"),

@@ -1,5 +1,25 @@
 # Engineering review and research comparison
 
+## Governed project tests and passive evaluation — 2026-11-08
+
+The existing `project.run_tests` contract lacked a Runtime consumer. The fixed
+read-only `python-unittest` profile now has a consumer in the existing capability
+dispatcher, shared by Workbench and model tools. It retains original Run IDs,
+test counts, snapshot digests and CAS/Artifact references. Requests require an
+explicit authenticated context and an affirmative Governance decision, including
+in compatibility mode. Model tools cannot inherit the CLI owner's identity.
+
+A negative regression on the preceding implementation demonstrated that default
+evaluation launched a host pytest process. Evaluation now only reads original
+workspace test events; automatic host code, lint and security subprocesses are
+not part of that product path. Optional maintainer checkers remain explicit SDK
+tools. Existing test-count assertions are preserved against recorded test Runs.
+Empty, skipped, truncated or foreign-workspace evidence cannot report PASS.
+
+Targeted approval, refusal and evidence tests exercise this integration. The
+combined strict-VM Work recovery, current-source CI and fresh native candidate
+remain separate acceptance steps; this entry does not claim them complete.
+
 ## Native carrier recovery and unpublished draft preparation — 2026-11-08
 
 The original approved Kernel input artifact 12556562701 expired on November 7
