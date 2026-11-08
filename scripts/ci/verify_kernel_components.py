@@ -75,7 +75,7 @@ def verify(
     results: list[dict[str, Any]] = []
     for artifact in component["artifacts"]:
         relative = Path(str(artifact["path"]))
-        if relative.is_absolute() or ".." in relative.parts:
+        if relative.anchor or ".." in relative.parts:
             raise ValueError(f"unsafe component path: {relative}")
         path = repo_root / relative
         if not path.is_file():
@@ -180,6 +180,7 @@ def admit_artifact(
     lock_path: Path,
     source_revision: str,
     kernel_root: Path | None = None,
+    artifact_format: str = "candidate",
 ) -> dict[str, Any]:
     """Admit one reviewed CI ZIP through the same native hash/PE verifier.
 
@@ -187,6 +188,12 @@ def admit_artifact(
     No bytes are published to output until all files and original smoke records
     pass. This function neither changes the lock nor executes an input file.
     """
+    if artifact_format == "native-build":
+        return _admit_native_build(
+            archive, archive_sha256, output, lock_path, source_revision, kernel_root
+        )
+    if artifact_format != "candidate":
+        raise ValueError("unsupported native artifact format")
     if re.fullmatch(r"[0-9a-fA-F]{64}", archive_sha256) is None:
         raise ValueError("reviewed artifact SHA-256 is required")
     if re.fullmatch(r"[0-9a-f]{40}", source_revision) is None:
@@ -203,7 +210,7 @@ def admit_artifact(
     native_paths = {str(item["path"]) for item in component["artifacts"]}
     for relative in native_paths:
         if (
-            Path(relative).is_absolute()
+            Path(relative).anchor
             or ".." in Path(relative).parts
             or "\\" in relative
             or ":" in relative
@@ -343,6 +350,265 @@ def admit_artifact(
     }
 
 
+def _admit_native_build(
+    archive: Path,
+    archive_sha256: str,
+    output: Path,
+    lock_path: Path,
+    source_revision: str,
+    kernel_root: Path | None,
+) -> dict[str, Any]:
+    """Recover already locked components from an exact full-mode build artifact.
+
+    This is a carrier change, not a new component approval or installation claim.
+    Retain original package bytes and use the same hash/PE verifier for admission.
+    """
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", archive_sha256):
+        raise ValueError("reviewed artifact SHA-256 is required")
+    if not re.fullmatch(r"[0-9a-f]{40}", source_revision):
+        raise ValueError("reviewed producer source revision is required")
+    if archive.stat().st_size > 256 * 1024 * 1024:
+        raise ValueError("native artifact ZIP exceeds size limit")
+    if _sha256(archive) != archive_sha256.upper():
+        raise ValueError("native artifact ZIP digest mismatch")
+    if output.exists() or output.is_symlink():
+        raise ValueError("artifact output must not replace an existing directory")
+    component = _load_lock(lock_path)
+    if component.get("target") != "x86_64-pc-windows-msvc":
+        raise ValueError("native build admission supports Windows x64 only")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="native-build-", dir=output.parent) as task:
+        staged = Path(task)
+        with zipfile.ZipFile(archive) as bundle:
+            entries = bundle.infolist()
+            names = [entry.filename for entry in entries]
+            if (
+                len(entries) > 32
+                or len(names) != len({name.casefold() for name in names})
+                or sum(entry.file_size for entry in entries) > 512 * 1024 * 1024
+            ):
+                raise ValueError("native build exceeds bounded unique inventory")
+            for entry in entries:
+                name = entry.filename
+                if (
+                    not re.fullmatch(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?", name)
+                    or any(part in (".", "..") for part in name.split("/"))
+                    or ("/" in name and not name.startswith("APEIR-Portable/"))
+                    or entry.flag_bits & 1
+                    or stat.S_ISLNK(entry.external_attr >> 16)
+                    or entry.is_dir()
+                ):
+                    raise ValueError("unsafe native build member")
+                if (
+                    not name.endswith((".exe", ".dll", ".zip"))
+                    and entry.file_size > 1024 * 1024
+                ):
+                    raise ValueError("native build metadata exceeds size limit")
+                destination = staged / name
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with bundle.open(entry) as source, destination.open("xb") as target:
+                    shutil.copyfileobj(source, target, length=1024 * 1024)
+
+        def document(name: str) -> dict[str, Any]:
+            return json.loads((staged / name).read_text(encoding="utf-8-sig"))
+
+        manifest = document("release-manifest.json")
+        source = document("source-manifest.json")
+        report = document("native-validation-report.json")
+        version = manifest.get("version", "")
+        if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?", version):
+            raise ValueError("invalid native build version")
+        if (
+            manifest.get("schema_version") != 1
+            or manifest.get("product") != "APEIR"
+            or manifest.get("runtime_revision") != source_revision
+            or source.get("distribution_revision") != source_revision
+            or manifest.get("kernel_revision") != component["revision"]
+            or source.get("kernel_revision") != component["revision"]
+            or source.get("component_lock_sha256", "").upper() != _sha256(lock_path)
+            or manifest.get("source_state")
+            != {"runtime_worktree_dirty": False, "kernel_worktree_dirty": False}
+            or manifest.get("sidecar_smoke_passed") is not True
+            or manifest.get("frontend_embedded") is not True
+            or manifest.get("runtime_sidecar") is not True
+            or report.get("schema_version") != 1
+            or report.get("full_validation_executed") is not True
+            or report.get("status") != "passed"
+            or manifest.get("target") != component["target"]
+            or report.get("target") != component["target"]
+        ):
+            raise ValueError("native build source or qualification mismatch")
+        checksums = {}
+        for line in (
+            (staged / "SHA256SUMS.txt").read_text(encoding="utf-8-sig").splitlines()
+        ):
+            match = re.fullmatch(r"([0-9A-Fa-f]{64})  (.+)", line)
+            if not match or match[2] in checksums:
+                raise ValueError("invalid native build checksum manifest")
+            checksums[match[2]] = match[1].upper()
+        unchecked = {
+            "SHA256SUMS.txt",
+            "SHA256SUMS-x64.txt",
+            "reviewed-input-provenance.json",
+        }
+        if set(checksums) != set(names) - unchecked:
+            raise ValueError("native build checksum coverage is incomplete")
+        if (staged / "SHA256SUMS.txt").read_bytes() != (
+            staged / "SHA256SUMS-x64.txt"
+        ).read_bytes():
+            raise ValueError("native build checksum aliases disagree")
+        for relative, expected in checksums.items():
+            if _sha256(staged / relative) != expected:
+                raise ValueError("native build member digest mismatch")
+        files = manifest.get("files", [])
+        inventory = {item["name"]: item for item in files}
+        setup = f"APEIR_{version}_x64-setup.exe"
+        portable = f"APEIR-Portable-{version}-windows-x64.zip"
+        required_binaries = {
+            "APEIR-Portable/" + name + ".exe"
+            for name in ("APEIR", "nous-runtime", "nousd", "nous-provider-worker")
+        }
+        if (
+            len(inventory) != len(files)
+            or not {setup, portable, *required_binaries} <= inventory.keys()
+        ):
+            raise ValueError("native build package inventory is incomplete")
+        metadata = {
+            "release-manifest.json",
+            f"APEIR-{version}-windows-x64.manifest.json",
+            "source-manifest.json",
+            "native-validation-report.json",
+            "native-dependencies.json",
+            "platform-support.txt",
+            "python-build-environment.cdx.json",
+            "kernel-Cargo.lock",
+            "desktop-Cargo.lock",
+        }
+        if set(checksums) != set(inventory) | metadata:
+            raise ValueError(
+                "native build dependency or provenance inventory is incomplete"
+            )
+        for name in ("kernel", "desktop"):
+            if source.get(name + "_cargo_lock_sha256", "").upper() != _sha256(
+                staged / (name + "-Cargo.lock")
+            ):
+                raise ValueError("native build Cargo lock provenance mismatch")
+        if (
+            document("python-build-environment.cdx.json").get("bomFormat")
+            != "CycloneDX"
+        ):
+            raise ValueError("native build Python SBOM is missing")
+        for name, item in inventory.items():
+            if (
+                name not in checksums
+                or item.get("sha256", "").upper() != checksums[name]
+                or (staged / name).stat().st_size != item.get("size_bytes")
+            ):
+                raise ValueError("native build manifest member mismatch")
+        if document(f"APEIR-{version}-windows-x64.manifest.json") != manifest:
+            raise ValueError("native build manifest aliases disagree")
+        if _pe_machine(staged / setup) != "0x014C":
+            raise ValueError("native NSIS bootstrapper is not x86 PE")
+        portable_names = {
+            name for name in inventory if name.startswith("APEIR-Portable/")
+        }
+        with zipfile.ZipFile(staged / portable) as nested:
+            members = nested.infolist()
+            if (
+                len(members) != len(portable_names)
+                or {entry.filename for entry in members} != portable_names
+                or sum(entry.file_size for entry in members) > 256 * 1024 * 1024
+            ):
+                raise ValueError("Portable inventory mismatch")
+            for entry in members:
+                if entry.flag_bits & 1 or stat.S_ISLNK(entry.external_attr >> 16):
+                    raise ValueError("unsafe Portable member")
+                with nested.open(entry) as stream:
+                    digest = _stream_sha256(stream)
+                if digest != checksums[entry.filename]:
+                    raise ValueError("Portable member digest mismatch")
+        for item in component["artifacts"]:
+            locked_name = str(item["path"])
+            relative = Path(locked_name)
+            if (
+                relative.anchor
+                or ".." in relative.parts
+                or "\\" in locked_name
+                or ":" in locked_name
+            ):
+                raise ValueError("unsafe locked component path")
+            destination = staged / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(
+                staged / "APEIR-Portable" / (item["name"] + ".exe"), destination
+            )
+        results = verify(staged, lock_path, kernel_root)
+        smoke = report.get("smoke", {})
+        if (
+            smoke.get("target") != component["target"]
+            or smoke.get("version") != version
+        ):
+            raise ValueError("native smoke target or version mismatch")
+        _verify_native_smoke(smoke, component)
+        staged.replace(output)
+    return {
+        "status": "ok",
+        "archive_sha256": archive_sha256.upper(),
+        "producer_revision": source_revision,
+        "artifacts": results,
+        "installation_acceptance": "NOT_RUN",
+    }
+
+
+def _stream_sha256(stream) -> str:
+    digest = hashlib.sha256()
+    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+        digest.update(chunk)
+    return digest.hexdigest().upper()
+
+
+def _verify_native_smoke(smoke: dict[str, Any], component: dict[str, Any]) -> None:
+    for field in (
+        "kernel_ready",
+        "authenticated_status",
+        "provider_worker_health",
+        "invalid_nki_runtime_start_rejected",
+        "invalid_http_sessions_rejected",
+        "token_owner_only_dacl",
+        "process_tree_closed",
+        "kernel_process_tree_closed",
+        "final_runtime_process_closed",
+        "restarted_authenticated_status",
+    ):
+        if smoke.get(field) is not True:
+            raise ValueError("native sidecar compatibility evidence is incomplete")
+    nki, recovery = smoke.get("nki", {}), smoke.get("restart_original_workload", {})
+    if (
+        nki.get("status") != "PASS"
+        or recovery.get("status") != "PASS"
+        or nki.get("wrong_and_missing_nki_credentials_rejected") is not True
+        or nki.get("invalid_versions_rejected") is not True
+        or recovery.get("recovery_query_only") is not True
+        or recovery.get("model_operation_submissions") != 0
+        or nki.get("model_operation_submissions") != 1
+        or nki.get("unauthorized_model_credential") != "DENIED_BEFORE_PROVIDER_SPAWN"
+        or nki.get("original_failure_code") != "PROVIDER_ERROR"
+        or nki.get("external_model_calls") != 0
+        or recovery.get("external_model_calls") != 0
+        or recovery.get("original_workload_id") != nki.get("original_workload_id")
+        or recovery.get("original_profile_sha256") != nki.get("original_profile_sha256")
+        or not re.fullmatch(
+            r"native-smoke-denied-model-[0-9a-f]{32}",
+            str(nki.get("original_workload_id")),
+        )
+        or not re.fullmatch(r"[0-9a-f]{64}", str(nki.get("original_profile_sha256")))
+        or not set(component.get("nki_versions", [])).issubset(
+            nki.get("request_versions_exercised", [])
+        )
+    ):
+        raise ValueError("native original-workload recovery evidence is incomplete")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
@@ -354,6 +620,9 @@ def main() -> int:
     parser.add_argument("--artifact-sha256")
     parser.add_argument("--artifact-source-revision")
     parser.add_argument("--artifact-output", type=Path)
+    parser.add_argument(
+        "--artifact-format", choices=("candidate", "native-build"), default="candidate"
+    )
     args = parser.parse_args()
 
     repo_root = args.repo_root.resolve()
@@ -377,10 +646,16 @@ def main() -> int:
             lock_path,
             args.artifact_source_revision,
             kernel_root,
+            args.artifact_format,
         )
         print(json.dumps(admitted, indent=2))
         return 0
-    if args.artifact_sha256 or args.artifact_source_revision or args.artifact_output:
+    if (
+        args.artifact_sha256
+        or args.artifact_source_revision
+        or args.artifact_output
+        or args.artifact_format != "candidate"
+    ):
         parser.error("artifact admission options require --artifact-zip")
     if args.candidate_root is not None:
         if kernel_root is None or args.report is None:

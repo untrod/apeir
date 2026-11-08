@@ -1,5 +1,56 @@
 # Engineering review and research comparison
 
+## Native carrier recovery and unpublished draft preparation — 2026-11-08
+
+The original approved Kernel input artifact 12556562701 expired on November 7
+and now returns 404. Its exact archive remains retained privately. The successful
+full-mode native run 41543803229, artifact 13190523439, retains the same approved
+Kernel/Worker bytes. Its outer ZIP SHA-256 is
+`879b745b206df9fc0c2205dc858b0d6fdd79e3f870eb5bb5cd701628766c4e44`;
+binary source is `2d8a044e51a39b75c2afd9a8eaccba4a72d42952`. Independent admission
+of that actual archive passes the maintained component lock, all checksums,
+Portable members, dependency/source records, full-mode report and original
+denied-model/query-only recovery. No Kernel source, component hash or historical
+artifact changes. The explicit `native-build` carrier extends the existing
+verifier and official launcher pipeline; the old candidate format remains valid.
+
+Release Preflight now prepares that same reviewed package from protected main.
+Verification is read-only by default. Explicit draft staging uses a separate
+manual job with scoped write permission and revalidates the original producer,
+accepted source ancestry and full artifact before uploading. It refuses published
+releases, existing tags, mismatched assets and unknown asset digests; no clobber,
+publication, signing or tag-creation command exists. Contract tests use synthetic
+PEs and mocked GitHub transport; they do not qualify native execution or upload.
+Actual GitHub staging and a new official full-mode build remain separate checks.
+
+The first carrier candidate `54759293b0f61102488d81b716c1d76f4479142a` exposed a
+Windows path bug in [Core 42471189599](https://github.com/untrod/apeir/actions/runs/42471189599/job/128702066654):
+three new carrier/staging contracts failed with `unsafe locked component path`,
+6110 passed and 95 skipped. Validation was checking the OS-rendered Path string,
+which legitimately uses backslashes on Windows. It now validates the original
+canonical lock name before converting to a host Path. Raw backslashes, drive
+prefixes, absolute paths and traversal still fail closed. No test assertion was
+weakened. Related Linux contracts now pass 73 cases with five existing
+Windows-only skips; current-source Windows checks remain required. That run's
+separate Python 3.10 setup failure was an upstream download HTTP 504, not a test
+result. Original platform and setup logs are retained.
+
+The next Windows run on `7637fdaa12b2f12908b6e508d5a2229df23e038d` caught a
+separate rooted-path case: `/escaped.exe` has a Windows root but no drive and
+therefore is not `Path.is_absolute()`. That negative contract failed; 6116 other
+cases passed with 95 skips. All existing verifier modes now reject a nonempty
+Path anchor, preserving relative canonical component names while also rejecting
+rooted paths, drive-relative names and UNC roots. Original failures remain
+recorded; no assertion was weakened. Updated related Linux regression passes
+76 cases with five existing Windows-only skips; actual Windows qualification
+must use the resulting combined source.
+
+The current Linux connection still receives HTTP 401 at Release asset upload;
+ordinary metadata/draft API access does not prove upload authority. Existing
+draft 431703163 remains unpublished. Windows 10 installed GUI, upgrade/uninstall,
+Defender, real model inference, signing and public distribution remain pending
+or blocked. A draft is not a public download channel.
+
 Review date: 2026-10-09. Read-only baseline: Distribution
 `5c9cdd987af3823d4be9e6909311af65b9be2299`; frozen Kernel
 `87fd1b2ff28ef14ab1a515a58162592b452fda2e`.

@@ -1,23 +1,90 @@
 name: Release Preflight
 on:
   workflow_dispatch:
+    inputs:
+      native_run_id:
+        description: 'Exact reviewed successful Desktop native producer run'
+        required: true
+        type: string
+      native_artifact_id:
+        description: 'Exact reviewed Windows x64 full native artifact ID'
+        required: true
+        type: string
+      native_zip_sha256:
+        description: 'Independently reviewed outer artifact ZIP SHA-256'
+        required: true
+        type: string
+      stage_draft:
+        description: 'Stage verified unsigned assets in an unpublished draft only; never publish, sign or create a tag'
+        type: boolean
+        default: false
 permissions:
   contents: read
+  actions: read
+concurrency:
+  group: native-preview-draft-staging
+  cancel-in-progress: false
 jobs:
   native-integrity:
     name: Native integrity (release blocking)
+    if: github.repository == 'untrod/apeir' && github.ref == 'refs/heads/main'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Verify candidate versions
         run: python scripts/ci/verify_release_versions.py
-      - name: Verify actual locked binary hashes
-        run: python scripts/ci/verify_kernel_components.py --repo-root .
+      - name: Verify exact accepted native artifact, original reports and locked PE bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NATIVE_RUN_ID: ${{ inputs.native_run_id }}
+          NATIVE_ARTIFACT_ID: ${{ inputs.native_artifact_id }}
+          NATIVE_ZIP_SHA256: ${{ inputs.native_zip_sha256 }}
+        run: python -m scripts.ci.stage_native_preview --run-id "$env:NATIVE_RUN_ID" --artifact-id "$env:NATIVE_ARTIFACT_ID" --zip-sha256 "$env:NATIVE_ZIP_SHA256" --workdir "$env:RUNNER_TEMP/native-preflight"
       - name: Require subsequent maintainer qualification
         shell: pwsh
         run: |
           'Hash preflight alone does not certify a release. Follow docs/acceptance/RELEASE_RUNBOOK.md for builds, platform acceptance, checksums, SBOM and provenance.' >> $env:GITHUB_STEP_SUMMARY
-# No release publication: native staging, reproducible build and signing are not qualified.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-release-preflight-evidence
+          path: ${{ runner.temp }}/native-preflight/admission.json
+          if-no-files-found: warn
+  stage-unpublished-draft:
+    name: Stage unpublished native preview (not release qualification)
+    needs: native-integrity
+    if: github.repository == 'untrod/apeir' && github.ref == 'refs/heads/main' && inputs.stage_draft == true
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Stage exact verified bytes without publication or replacement
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NATIVE_RUN_ID: ${{ inputs.native_run_id }}
+          NATIVE_ARTIFACT_ID: ${{ inputs.native_artifact_id }}
+          NATIVE_ZIP_SHA256: ${{ inputs.native_zip_sha256 }}
+        run: python -m scripts.ci.stage_native_preview --run-id "$NATIVE_RUN_ID" --artifact-id "$NATIVE_ARTIFACT_ID" --zip-sha256 "$NATIVE_ZIP_SHA256" --workdir "$RUNNER_TEMP/native-draft" --stage-draft
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unpublished-native-draft-evidence
+          path: |
+            ${{ runner.temp }}/native-draft/admission.json
+            ${{ runner.temp }}/native-draft/draft-staging.json
+          if-no-files-found: warn
+# No release publication, signing, tag creation or Windows 10 installation claim.
