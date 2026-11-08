@@ -16,9 +16,27 @@ not part of that product path. Optional maintainer checkers remain explicit SDK
 tools. Existing test-count assertions are preserved against recorded test Runs.
 Empty, skipped, truncated or foreign-workspace evidence cannot report PASS.
 
-Targeted approval, refusal and evidence tests exercise this integration. The
-combined strict-VM Work recovery, current-source CI and fresh native candidate
-remain separate acceptance steps; this entry does not claim them complete.
+Qualification combined consumer `11651dcf2c910818ac2f5b98d8d0be0d804082b7`
+with Linux adapter `02c5079cf07138927dadde49fb2ddcef71aa8ca7` in an isolated,
+uncommitted source tree. This is a candidate result, not a main merge. Actual
+HTTP authentication rejected a bad token and passed the current service caller
+into the original Work; independent trusted CLI OS-user approval admitted its
+exact pending test. The model and service did not approve themselves.
+
+Original Work `work_0395c1678b464322a3b38318d026ce32` reached COMPLETED after
+one governed VM execution. Original Proposal `wfr_8e1e99dda83a44588179609e02bb4cdb`
+was queried without repeating its file effects. Test Run
+`workbench-exec-086f690b202c49b0` reported one unchanged unittest passed;
+Artifact `artifact_d20f5c86e4c04233a3529396555a5f34` and its CAS digest were
+independently read back. A separate Runtime process restored the same Work,
+Proposal, test and Artifact with zero additional tests or model requests.
+
+The earlier local-model response was reused under operator-controlled recovery;
+this is not autonomous GUI/model acceptance. The original bad recommendation,
+OOM, truncated response, boot failure and blocked plan remain historical records.
+Targeted regressions also verify current caller identity is not serialized into
+checkpoints or inherited after restart. Current-source CI and a fresh native
+candidate remain separate; cloud accounts and Windows 10 installation are pending.
 
 ## Native carrier recovery and unpublished draft preparation — 2026-11-08
 
