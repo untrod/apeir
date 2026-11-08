@@ -329,7 +329,7 @@ def run(policy: SandboxPolicy, input_bytes: bytes | None = None) -> SandboxResul
                 "-initrd",
                 str(initrd),
                 "-append",
-                "console=ttyS0 panic=-1",
+                "console=ttyS0 panic=-1 apeir.readonly_test_vm=1",
             ]
             environment = {
                 "PATH": "/usr/bin:/bin",

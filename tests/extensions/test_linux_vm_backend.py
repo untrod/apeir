@@ -175,3 +175,15 @@ def test_snapshot_limits_are_checked_before_full_digest_walk(tmp_path):
     policy.max_staging_bytes = 4
     with pytest.raises(ValueError, match="staging limits"):
         linux_vm._bounded_project(tmp_path, policy)
+
+
+def test_guest_controller_rejects_host_invocation_before_any_execution(monkeypatch):
+    from nous_runtime.kernel import linux_vm_guest
+
+    calls = []
+    monkeypatch.setattr(
+        linux_vm_guest.subprocess, "Popen", lambda *a, **kw: calls.append(a)
+    )
+    with pytest.raises(RuntimeError, match="isolated VM init"):
+        linux_vm_guest.main()
+    assert calls == []

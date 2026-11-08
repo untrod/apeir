@@ -6410,7 +6410,7 @@ Actual Linux x86-64 qualification used QEMU 10.0.13, Debian guest kernel
 and CPython 3.12.14. The interpreter digest was
 `fa67443527ed9647f760d807e2a38f26340757123e643c4639cf273ed15d5ea7`.
 The reviewed Q35 profile digest is
-`ad9b19483ca4460296697437f8509d7afd3732efd64ae849873df5fb38bb18d4`.
+`f1507459301216ca82bcddb2d5ca06faf0895b91ad7531acdec628307bcbe83f`.
 The exact adapter/controller digests accompany the
 raw probe reports; these are Linux platform inputs, not replacements for the
 Windows Component Lock.
@@ -6429,6 +6429,12 @@ and microvm guests stopped in TSC calibration, including a configuration with
 RTC/PIT enabled. The final candidate uses Q35 with its reference timers and
 matching standard firmware, verified ROM/data, explicit serial descriptors and
 a virtio entropy source. The original 30-second deadline was not enlarged.
+The architecture scan initially rejected the new platform files as unknown
+shell boundaries. Their exact paths now join the existing sandbox boundary
+list, with a caller-ownership check. The guest controller rejects host
+invocation before loading a request or invoking guest reboot; the unchanged
+scan still rejects subprocess calls elsewhere.
+
 An initial parent-death probe also exposed an unavailable `/proc/.../children`
 interface in the cloud host; its corrected observer uses `ps` and checks the
 exact owned process identity. No unrelated process is terminated.

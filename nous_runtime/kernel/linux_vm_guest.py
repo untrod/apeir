@@ -12,15 +12,33 @@ import hashlib
 import hmac
 import json
 import os
-import resource
 import selectors
 import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
+
+
+def _guest_environment() -> bool:
+    """Accidental host invocation must never reach execution or reboot."""
+    if (
+        sys.platform != "linux"
+        or os.getuid() != 0
+        or sys.argv[0] != "/control/runner.py"
+    ):
+        return False
+    try:
+        return "apeir.readonly_test_vm=1" in Path("/proc/cmdline").read_text().split()
+    except OSError:
+        return False
 
 
 def main() -> None:
+    if not _guest_environment():
+        raise RuntimeError("Guest controller requires the isolated VM init")
+    import resource
+
     request = json.loads(open("/control/request.json", encoding="utf-8").read())
     key = bytes.fromhex(request.pop("key"))
 
@@ -142,4 +160,6 @@ if __name__ == "__main__":
         main()
     finally:
         # Untrusted descendants cannot survive a disposable VM's shutdown.
-        subprocess.run(["/bin/busybox", "reboot", "-f"], check=False)
+        # A direct host invocation cannot reach the guest reboot syscall.
+        if _guest_environment():
+            ctypes.CDLL(None, use_errno=True).reboot(0x01234567)
