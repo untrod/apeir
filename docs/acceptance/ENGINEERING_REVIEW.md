@@ -35,6 +35,32 @@ migration handling. Windows qualification and resulting-main CI are separate
 requirements. Issues #88/#116 remain open; neither a Linux reproduction nor a
 later green run proves that every historical Windows timeout is repaired.
 
+The exact first candidate `e1066cfb7c428a7eecac7b70dab8fd9aa65b0c89` passed Core,
+Desktop, Security and the separate Windows Governance diagnostic (119 focused,
+two 28-case checkpoint probes, and 499 regression passes with 18 existing skips).
+Its [Multi-Arch Windows run](https://github.com/untrod/apeir/actions/runs/42470182708/job/128698891718)
+still failed the original five-second HTTP deadline in
+`test_http_original_nonce_binds_every_reviewed_remote_locator[digest]`:
+1 failed, 5730 passed, 77 skipped, 351 deselected. The changed-nonce rejection
+worked; the later original authorized installation completed before its response
+was lost. Original phases show 1280 ms nonce admission, 388 ms Governance
+admission and 2462 ms catalog installation. The server stack was in the completion
+audit's SQLite commit; commit/close warnings are preserved. This is not proof of
+a leak, an antivirus cause, or one root cause for every deadline failure.
+
+On older CPython without `NO_CKPT_ON_CLOSE`, a separate deterministic regression
+also reproduces the redundant last-writer checkpoint/delete cycle. The existing
+`operation_transaction` now holds one idle read-only handle only for that same
+operation. Its cursor is exhausted before the original writer begins; it holds
+no read transaction or permission snapshot. ExitStack closes the original writer
+and then the reader on commit, rollback or error. There is no process-level
+keeper, pool, new Store or new transaction authority. FULL synchronous commit and
+the existing 1000-frame auto-checkpoint remain unchanged. The modern CPython
+configuration path is unchanged. CPython 3.10.21 / SQLite 3.53.1 actual commit,
+WAL reopen and rollback pass; changed lifecycle regressions pass 34 cases.
+The new Windows HTTP result must be qualified before treating this as more than
+a proved lifecycle correction. No failed check is bypassed and #88/#116 stay open.
+
 RC1 audit disposition: **REUSE** the existing Workflow model host, typed bindings,
 Studio Proposal/approval, original Work recovery and approved native components;
 **FIX** this reproduced initialization conflict; **EXTEND** the existing native

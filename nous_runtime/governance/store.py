@@ -11,7 +11,7 @@ import re
 import sqlite3
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Any, Callable
 from nous_runtime.core.redaction import redact_sensitive_data
@@ -338,7 +338,25 @@ class GovernanceStore:
     @contextmanager
     def operation_transaction(self):
         """Serialize admission, approval and revocation across store instances."""
-        with self._lock, _db_connect(self.db_path) as db:
+        with self._lock, ExitStack() as resources:
+            if not hasattr(sqlite3.Connection, "setconfig") or not hasattr(
+                sqlite3, "SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE"
+            ):
+                # Older CPython cannot configure NO_CKPT_ON_CLOSE. An idle,
+                # read-only handle keeps this writer's close from forcing an
+                # extra checkpoint/delete cycle after its durable FULL commit.
+                # Exhaust the cursor: no snapshot, transaction or permission is
+                # retained. Close both handles in order within this operation;
+                # there is no process-level keeper or connection pool.
+                reader = resources.enter_context(
+                    _db_connect(self.db_path, readonly=True)
+                )
+                rows = reader.execute("SELECT name FROM sqlite_master LIMIT 1")
+                try:
+                    rows.fetchall()
+                finally:
+                    rows.close()
+            db = resources.enter_context(_db_connect(self.db_path))
             db.execute("BEGIN IMMEDIATE")
             yield db
 
