@@ -110,6 +110,7 @@ class SandboxResult:
     output_truncated: bool = False
     killed_by_signal: int = 0
     audit_id: str = ""
+    input_snapshot_sha256: str = ""
     availability_state: str = "available"
     security_grade: str = "unknown"
     enforced_controls: tuple[str, ...] = ()
@@ -200,6 +201,28 @@ class ProcessSandbox:
         """Return conservative capabilities for the backend usable right now."""
 
         enforced = ["exec_array", "timeout", "captured_output", "output_limit"]
+        if sys.platform == "linux":
+            from nous_runtime.kernel.linux_vm import supported
+
+            if supported(self.policy):
+                return {
+                    "grade": "strong_vm",
+                    "strong": True,
+                    "enforced_controls": tuple(enforced + [
+                        "ephemeral_vm", "filesystem_scope", "readonly_project",
+                        "network_disabled", "host_environment_secrecy",
+                        "process_boundary", "job_memory_budget", "job_cpu_budget",
+                        "job_process_limit", "process_tree_kill", "staged_filesystem",
+                        "authenticated_guest_result",
+                    ]),
+                    "unenforced_controls": (),
+                    "supported_scope": "pinned_python_readonly_project",
+                    "trust_assumptions": (
+                        "host_os_and_local_user_trusted",
+                        "operator_provisioned_digest_pinned_vm_inputs",
+                        "business_result_requires_independent_verifier",
+                    ),
+                }
         if sys.platform == "win32" and self.policy.isolation_level == "strict":
             from nous_runtime.kernel.windows_sandbox import executable_path
 
@@ -273,6 +296,10 @@ class ProcessSandbox:
     def _execute_strong_backend(
         self, input_bytes: bytes | None, started: float
     ) -> SandboxResult:
+        if sys.platform == "linux":
+            from nous_runtime.kernel.linux_vm import run as run_linux_vm
+
+            return run_linux_vm(self.policy, input_bytes)
         if sys.platform != "win32":
             return SandboxResult(
                 exit_code=-1,

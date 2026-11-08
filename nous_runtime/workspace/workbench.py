@@ -67,7 +67,14 @@ _CODE_SUFFIXES = {
     ".md",
     ".txt",
 }
-_PROFILE_NAMES = ("python", "python-compile", "pytest", "node", "cargo-test")
+_PROFILE_NAMES = (
+    "python",
+    "python-compile",
+    "pytest",
+    "python-unittest",
+    "node",
+    "cargo-test",
+)
 
 
 def _python_executable() -> str:
@@ -159,6 +166,7 @@ class DeveloperWorkbench:
             "python": _python_executable(),
             "python-compile": _python_executable(),
             "pytest": _python_executable(),
+            "python-unittest": _python_executable(),
             "node": shutil.which("node") or "",
             "cargo-test": shutil.which("cargo") or "",
         }
@@ -601,6 +609,7 @@ class DeveloperWorkbench:
                 cwd=str(self.root),
                 timeout_seconds=timeout,
                 max_output_bytes=_MAX_OUTPUT_BYTES,
+                **({"read_only_workspace": True} if name == "python-unittest" else {}),
             )
             for stream_name, text in (
                 ("stdout", result.stdout),
@@ -624,6 +633,11 @@ class DeveloperWorkbench:
                 "runtime_seconds": result.runtime_seconds,
                 "limit_exceeded": result.limit_exceeded,
                 "sandbox_id": result.sandbox_id,
+                **(
+                    {"input_snapshot_sha256": result.input_snapshot_sha256}
+                    if result.input_snapshot_sha256
+                    else {}
+                ),
                 "availability_state": result.availability_state,
                 "security_grade": result.security_grade,
                 "enforced_controls": list(result.enforced_controls),
@@ -662,8 +676,8 @@ class DeveloperWorkbench:
             raise WorkbenchError(
                 f"Unknown execution profile: {profile}. Allowed: {', '.join(_PROFILE_NAMES)}"
             )
-        if profile in {"python", "python-compile", "node", "pytest"}:
-            default = "tests" if profile == "pytest" else ""
+        if profile in {"python", "python-compile", "node", "pytest", "python-unittest"}:
+            default = "tests" if profile in {"pytest", "python-unittest"} else ""
             value = str(target or default).strip()
             if not value:
                 raise WorkbenchError(
@@ -696,6 +710,17 @@ class DeveloperWorkbench:
             if not executable:
                 raise WorkbenchError("Python is not installed or is not on PATH.")
             return [executable, "-m", "pytest", "-q", relative], relative, True
+        if profile == "python-unittest":
+            executable = _python_executable()
+            if not executable or not resolved.is_dir():
+                raise WorkbenchError(
+                    "The python-unittest profile requires Python and an existing test directory."
+                )
+            return (
+                [executable, "-m", "unittest", "discover", "-s", relative],
+                relative,
+                True,
+            )
         if profile == "node":
             executable = shutil.which("node")
             if not executable:

@@ -51,6 +51,63 @@ apeir --no-intelligence runtime-api start
 Model-free service startup does not qualify untrusted project execution.
 Missing strict isolation stays BLOCKED; there is no host Shell fallback.
 
+### Read-only Python test VM
+
+The optional Linux x86-64 `ProcessSandbox` profile runs a pinned CPython
+interpreter and its standard library in a disposable QEMU guest. It supports
+read-only project tests, not arbitrary host commands, installed third-party
+packages, networking or file write-back. The guest kernel is a platform input;
+this does not rebuild or alter APEIR Kernel.
+
+An operator must supply trusted QEMU, matching Linux kernel/modules, static
+BusyBox, firmware and QEMU data/libraries. The builder copies local inputs;
+it does not download or install them. Keep the resulting profile outside
+projects and protected from other users. It is an operator deployment input,
+not something a model, Provider configuration or layout may select.
+
+From the matching source checkout and its Python environment:
+
+```bash
+python -m scripts.ci.build_linux_vm_profile \
+  --qemu "$QEMU" --kernel "$GUEST_KERNEL" \
+  --guest-modules "$GUEST_MODULES" --busybox "$BUSYBOX" \
+  --firmware "$FIRMWARE" --qemu-data "$QEMU_DATA" \
+  --qemu-libraries "$QEMU_LIBRARIES" --output "$APEIR_VM_ROOT" \
+  > vm-profile-build.json
+```
+
+These variables are absolute paths to reviewed local inputs. `GUEST_MODULES`
+is the matching `/usr/lib/modules/<version>` directory. `APEIR_VM_ROOT` must
+not exist yet; the builder refuses to replace a reviewed profile. It uses
+the current interpreter, excludes site-packages and GUI modules, records all
+input digests, and includes a dedicated virtio entropy device. The Q35 machine
+provides reference timers for guest clock calibration; no KVM or privileged
+container is required. Use its matching standard SeaBIOS firmware rather than
+the firmware for QEMU's separate microvm machine.
+
+After reviewing `profile.json` and the build record, set the two operator
+variables to its absolute filename and exact SHA-256:
+
+```bash
+export APEIR_LINUX_VM_PROFILE="$APEIR_VM_ROOT/profile.json"
+export APEIR_LINUX_VM_PROFILE_SHA256="<reviewed profile.json SHA-256>"
+python -m scripts.ci.probe_linux_vm \
+  --workspace /absolute/project --report linux-vm-qualification.json
+```
+
+The probe executes real guest code and preserves each result in an adjacent
+JSONL file, including failed checks. It does not change the project or make a
+failed unit test pass. A different Runtime guest controller requires rebuilding
+and reviewing the profile. This builder does not provide a redistributable VM
+image or qualify other toolchains.
+
+In Developer Workbench, select the `python-unittest` profile and a directory
+containing standard-library `unittest` tests. Environment commands can opt in
+with `read_only_workspace: true`; write-capable commands retain their previous
+semantics and remain BLOCKED on this read-only backend. Existing Governance
+approval still applies. Results contain the actual exit code, bounded output
+and the tested input snapshot digest; a file SHA match is not a test result.
+
 ### Desktop (experimental)
 
 Source Studio can use a browser. Native Linux Desktop needs the
