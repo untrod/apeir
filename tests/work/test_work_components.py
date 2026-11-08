@@ -93,3 +93,51 @@ def test_work_components_disclose_bounded_write_tools(tmp_path, monkeypatch):
 
     assert "write_file" in file_tools
     assert "patch_file" in file_tools
+
+
+def test_work_test_identity_is_current_and_never_restored_from_checkpoint(tmp_path):
+    from nous_runtime.chat.agent_tools import WorkspaceToolRuntime
+    from nous_runtime.governance import AuthorizationContext
+    from nous_runtime.tools import ToolCatalog
+    from nous_runtime.work import WorkExecutionComponents, WorkSupervisor
+
+    owners = []
+
+    def factory(root, snapshot):
+        owner = WorkspaceToolRuntime(
+            str(root), allow_mutations=True, source_work_id=snapshot.run_id
+        )
+        tools = ToolCatalog()
+        tools.register_runtime(owner)
+        owners.append(owner)
+        return WorkExecutionComponents(
+            tools=tools,
+            deliberator=lambda _: {
+                "status": "blocked",
+                "summary": "Inspect current identity",
+            },
+            verifier=None,
+        )
+
+    context = AuthorizationContext(
+        subject_type="service",
+        subject_id="current-work-caller",
+        authn_method="opaque_token",
+        authn_confidence=0.9,
+    )
+    host = WorkSupervisor(tmp_path, component_factory=factory)
+    try:
+        created = host.start("Run project tests", authorization_context=context)
+        original = host.wait(created.run_id, timeout=5)
+        assert owners[-1].authorization_context == context.to_dict()
+        assert "authorization_context" not in original.execution_options
+        assert "current-work-caller" not in str(original.to_dict())
+    finally:
+        host.close()
+    restarted = WorkSupervisor(tmp_path, component_factory=factory)
+    try:
+        restarted.resume(created.run_id)
+        restarted.wait(created.run_id, timeout=5)
+        assert owners[-1].authorization_context == {}
+    finally:
+        restarted.close()

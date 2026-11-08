@@ -38,9 +38,14 @@ def _echo(value: Any, *, as_json: bool) -> None:
 
 
 def _runtime_components(root: Path, snapshot):
-    from nous_runtime.work.components import build_work_components
+    from nous_runtime.work.components import (
+        build_work_components,
+        bind_work_authorization,
+    )
+    from nous_runtime.governance.cli import _build_context
 
     components = build_work_components(root, snapshot)
+    bind_work_authorization(components, root, snapshot, _build_context())
     return components.tools, components.deliberator
 
 

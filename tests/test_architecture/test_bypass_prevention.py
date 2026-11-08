@@ -19,9 +19,7 @@ import os
 import pytest
 
 
-PROJECT_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..")
-)
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # Directories to scan
 SCAN_DIRS = [
@@ -42,7 +40,6 @@ EXCLUDED_PATHS = {
 SHELL_BOUNDARY_PATHS = {
     os.path.normpath(os.path.join(PROJECT_ROOT, path))
     for path in (
-
         "remote_terminal/brain.py",
         "remote_terminal/crypto.py",
         "remote_terminal/health_check.py",
@@ -84,16 +81,26 @@ PROVIDER_BOUNDARY_PATHS = {
 
 # Provider imports that signal a bypass
 PROVIDER_IMPORT_PATTERNS = [
-    "openai", "OpenAI", "anthropic", "Anthropic",
-    "google.generativeai", "mistralai", "cohere",
+    "openai",
+    "OpenAI",
+    "anthropic",
+    "Anthropic",
+    "google.generativeai",
+    "mistralai",
+    "cohere",
 ]
 
 # Shell execution functions
 SHELL_EXEC_PATTERNS = [
-    "subprocess.run", "subprocess.Popen", "subprocess.call",
-    "subprocess.check_output", "subprocess.check_call",
-    "os.system", "os.popen",
-    "commands.getoutput", "commands.getstatusoutput",
+    "subprocess.run",
+    "subprocess.Popen",
+    "subprocess.call",
+    "subprocess.check_output",
+    "subprocess.check_call",
+    "os.system",
+    "os.popen",
+    "commands.getoutput",
+    "commands.getstatusoutput",
 ]
 
 
@@ -127,49 +134,57 @@ class ArchitectureBypassVisitor(ast.NodeVisitor):
     def _is_provider_import(name: str) -> bool:
         lowered = name.lower()
         external_roots = (
-            "openai", "anthropic", "google.generativeai",
-            "mistralai", "cohere",
+            "openai",
+            "anthropic",
+            "google.generativeai",
+            "mistralai",
+            "cohere",
         )
-        return (
-            lowered.startswith("nous_runtime.provider.adapters.")
-            or any(lowered == root or lowered.startswith(root + ".") for root in external_roots)
+        return lowered.startswith("nous_runtime.provider.adapters.") or any(
+            lowered == root or lowered.startswith(root + ".") for root in external_roots
         )
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             if self._is_provider_import(alias.name):
-                self.violations.append({
-                    "file": self.filepath,
-                    "function": self.current_function,
-                    "line": node.lineno,
-                    "message": f"Provider import '{alias.name}' outside adapter — "
-                               f"use ModelGatewayFacade or provider.adapters",
-                })
+                self.violations.append(
+                    {
+                        "file": self.filepath,
+                        "function": self.current_function,
+                        "line": node.lineno,
+                        "message": f"Provider import '{alias.name}' outside adapter — "
+                        f"use ModelGatewayFacade or provider.adapters",
+                    }
+                )
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         module = node.module or ""
         for alias in node.names:
             full = f"{module}.{alias.name}"
             if self._is_provider_import(module) or self._is_provider_import(full):
-                self.violations.append({
-                    "file": self.filepath,
-                    "function": self.current_function,
-                    "line": node.lineno,
-                    "message": f"Provider import '{full}' outside adapter — "
-                               f"use ModelGatewayFacade or provider.adapters",
-                })
+                self.violations.append(
+                    {
+                        "file": self.filepath,
+                        "function": self.current_function,
+                        "line": node.lineno,
+                        "message": f"Provider import '{full}' outside adapter — "
+                        f"use ModelGatewayFacade or provider.adapters",
+                    }
+                )
 
     def visit_Call(self, node: ast.Call) -> None:
         # Check for shell execution outside sandbox
         call_name = self._resolve_call_name(node)
         for pattern in SHELL_EXEC_PATTERNS:
             if call_name == pattern and not self.in_sandbox:
-                self.violations.append({
-                    "file": self.filepath,
-                    "function": self.current_function,
-                    "line": node.lineno,
-                    "message": f"Shell execution '{call_name}' outside ExecutionSandbox",
-                })
+                self.violations.append(
+                    {
+                        "file": self.filepath,
+                        "function": self.current_function,
+                        "line": node.lineno,
+                        "message": f"Shell execution '{call_name}' outside ExecutionSandbox",
+                    }
+                )
 
         self.generic_visit(node)
 
@@ -199,9 +214,19 @@ def _collect_python_files(root: str) -> list[str]:
     for dirpath, dirnames, filenames in os.walk(root):
         # Skip test and build directories
         dirnames[:] = [
-            d for d in dirnames
-            if d not in ("__pycache__", ".git", ".claude", "build",
-                         "node_modules", ".venv", "venv", "env")
+            d
+            for d in dirnames
+            if d
+            not in (
+                "__pycache__",
+                ".git",
+                ".claude",
+                "build",
+                "node_modules",
+                ".venv",
+                "venv",
+                "env",
+            )
         ]
         for filename in filenames:
             if not filename.endswith(".py"):
@@ -238,7 +263,8 @@ class TestArchitectureBypassPrevention:
                 visitor = ArchitectureBypassVisitor(filepath)
                 visitor.visit(tree)
                 provider_violations = [
-                    item for item in visitor.violations
+                    item
+                    for item in visitor.violations
                     if "Provider import" in item["message"]
                 ]
                 all_violations.extend(provider_violations)
@@ -278,8 +304,7 @@ class TestArchitectureBypassPrevention:
                 visitor.visit(tree)
                 # Only count shell execution violations
                 shell_violations = [
-                    v for v in visitor.violations
-                    if "Shell execution" in v["message"]
+                    v for v in visitor.violations if "Shell execution" in v["message"]
                 ]
                 all_violations.extend(shell_violations)
 

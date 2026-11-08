@@ -26,11 +26,14 @@ def _catalog(root: Path, *, allow_mutations: bool) -> ToolCatalog:
         ProcessSessionToolRuntime,
     )
     from nous_runtime.web import WebToolRuntime
+    from nous_runtime.governance.cli import _build_context
 
     catalog = ToolCatalog()
     workspace_tools = WorkspaceToolRuntime(
         str(root.resolve()),
         allow_mutations=allow_mutations,
+        authorization_context=_build_context().to_dict(),
+        governance_surface="local_cli",
     )
     catalog.register_runtime(workspace_tools)
     if allow_mutations:
