@@ -1,5 +1,25 @@
 # Engineering review and research comparison
 
+## Relay cancellation before worker admission — 2026-11-08
+
+A bounded reproducer occupied the existing executor, queued a Relay call and
+cancelled its asyncio task. Previously cancellation waited for the occupied
+worker, then the queued write still ran after its session owner requested stop.
+The new regression fails on that source without changing existing deadlines.
+
+The existing Relay I/O wrapper now fences admission with a per-call lock. A
+cancelled callback that has not entered the operation cannot subsequently write.
+Already admitted I/O is still drained before its owner is released. Original
+sequence durability, ordering, caller context and repeated-cancellation tests
+remain unchanged. No executor pool, reconnect policy or host execution path is
+added. Targeted Relay/protocol regression passes 50 cases on Linux.
+
+Main 1171095's Windows Multi-Arch run 42495800990 failed the original two-second
+Node Provider cleanup. Its stack does not establish whether that writer was
+queued or already started. The demonstrated queue defect is therefore distinct
+evidence; current Windows CI is required and Issue #8 remains open. This is not
+a claim that all Relay shutdown delays or slow durable writes are repaired.
+
 ## Native carrier recovery and unpublished draft preparation — 2026-11-08
 
 The original approved Kernel input artifact 12556562701 expired on November 7
