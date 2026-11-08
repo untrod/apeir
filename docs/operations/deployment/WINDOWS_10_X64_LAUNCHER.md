@@ -125,10 +125,11 @@ archive against that lock, including its checksums, producer revision and real
 NKI recovery records. This is component integrity, not current installed Desktop
 qualification. Normal PR checks and merge remain required before delivery.
 
-Use producer run `40084421303`, artifact `12556562701` and the ZIP digest above.
-The exact archive is retained privately for review; its Actions copy expires on
-2026-11-07. A controlled durable distribution location still needs qualification;
-never substitute a moving download or weaken admission after expiry.
+Producer run `40084421303`, artifact `12556562701` and the ZIP digest above are
+the historical approval input. The exact archive remains retained privately;
+its Actions copy expired on 2026-11-07 and now returns 404. Do not use that expired
+ID for a new build. The full-mode carrier below retains the same locked EXE
+bytes and original source/smoke records; it does not change their approval.
 Rollback must use a reviewed lock/source rollback with the corresponding exact
 bytes. The unavailable historical EXEs cannot be reconstructed by changing their
 hashes, and no previously published artifact is replaced in place.
@@ -149,6 +150,24 @@ gated; default `native_target=none` never opts them in.
 
 ```bash
 gh workflow run desktop-build.yml --ref <approved-source-revision> -f native_target=windows-x64 -f approved_kernel_run_id=<reviewed-run-id> -f approved_kernel_artifact_id=<reviewed-artifact-id> -f approved_kernel_zip_sha256=<reviewed-zip-sha256>
+```
+
+After the original candidate artifact expires, explicitly select
+`approved_kernel_artifact_format=native-build` to recover the **same locked
+components** from a reviewed successful full-mode native package. For the
+2026-11-08 retained carrier, producer `41543803229`, artifact `13190523439`, the
+outer ZIP SHA-256 is
+`879b745b206df9fc0c2205dc858b0d6fdd79e3f870eb5bb5cd701628766c4e44`.
+Its source is `2d8a044e51a39b75c2afd9a8eaccba4a72d42952`; its Actions copy expires
+2026-11-17. The pipeline still checks accepted source ancestry, exact artifact
+identity/digest, complete checksums, Portable contents, dependency/source records,
+original NKI denial/recovery and both actual PE hashes against the maintained
+lock. A carrier is not a new build or a Windows 10 installation result. Retain
+each subsequent qualified carrier before its expiry rather than repeatedly
+rebuilding Kernel or changing its hashes.
+
+```bash
+gh workflow run desktop-build.yml --ref <approved-source-revision> -f native_target=windows-x64 -f approved_kernel_artifact_format=native-build -f approved_kernel_run_id=41543803229 -f approved_kernel_artifact_id=13190523439 -f approved_kernel_zip_sha256=879b745b206df9fc0c2205dc858b0d6fdd79e3f870eb5bb5cd701628766c4e44
 ```
 
 The integration still cannot read repository Actions variables (HTTP403).
