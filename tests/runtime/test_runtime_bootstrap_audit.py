@@ -51,8 +51,7 @@ def test_runtime_bootstrap_wires_existing_components_and_is_idempotent(
     assert runtime.components is not None
     assert runtime.components.state.get("artifacts", "registry") is not None
     assert any(
-        event.event_type == "runtime.bootstrap.ready"
-        for event in runtime.events
+        event.event_type == "runtime.bootstrap.ready" for event in runtime.events
     )
 
 
@@ -119,6 +118,52 @@ def test_runtime_audit_finds_direct_provider_and_model_http(tmp_path: Path):
 
     assert not report.passed
     assert report.direct_provider_calls == 2
-    assert {
-        item.category for item in report.findings
-    } == {"direct_model_http", "direct_provider"}
+    assert {item.category for item in report.findings} == {
+        "direct_model_http",
+        "direct_provider",
+    }
+
+
+def test_runtime_audit_does_not_treat_source_paths_as_model_calls(tmp_path):
+    source = tmp_path / "nous_runtime"
+    source.mkdir()
+    (source / "egress.py").write_text(
+        'paths = ("nous_runtime/provider/adapters/anthropic.py",\n'
+        '         "nous_runtime/provider/adapters/openai.py")\n'
+        "# Documentation: OpenAI() and provider.invoke() are not executed here.\n",
+        encoding="utf-8",
+    )
+    runtime = NousRuntime.bootstrap(
+        workspace_root=str(tmp_path), provider_loader=lambda: 0
+    )
+    report = audit_runtime(tmp_path, runtime=runtime)
+    assert report.passed
+    assert report.direct_provider_calls == 0
+    assert report.findings == ()
+
+
+@pytest.mark.parametrize(
+    "statement,category",
+    [
+        ("client = OpenAI()", "direct_openai_sdk"),
+        ("client = AsyncAnthropic()", "direct_anthropic_sdk"),
+        ("client = openai.chat.completions.create()", "direct_openai_sdk"),
+        ("result = provider.invoke('model.reason')", "direct_provider"),
+        ('result = f"{OpenAI()}"', "direct_openai_sdk"),
+        ("key = openai.api_key", "direct_openai_sdk"),
+    ],
+)
+def test_runtime_audit_retains_actual_call_and_sdk_reference_detection(
+    tmp_path, statement, category
+):
+    source = tmp_path / "nous_runtime"
+    source.mkdir()
+    (source / "feature.py").write_text(statement + "\n", encoding="utf-8")
+    runtime = NousRuntime.bootstrap(
+        workspace_root=str(tmp_path), provider_loader=lambda: 0
+    )
+    report = audit_runtime(tmp_path, runtime=runtime)
+    assert not report.passed
+    assert report.direct_provider_calls == 1
+    assert report.findings[0].category == category
+    assert report.findings[0].line == 1

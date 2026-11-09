@@ -34,8 +34,8 @@ failure, late lease completion, unload/reload and NKI readiness/connect/execute
 waits. They use controlled loaders and protocol fixtures, not paid inference or
 new native/physical acceptance. Baseline failures and exact verification results
 are retained with the PR. The changed-file CI formatting gate also requires normalization of pre-existing
-formatting in `resources.py`; the original failure is retained. Only that already
-modified module is normalized, without changing other modules or weakening the gate.
+formatting in `resources.py`; the original failure is retained. Only changed Python modules are normalized, without formatting unrelated files
+or weakening the gate.
 
 On the original main, the new regression selection failed17 cases and passed2
 controls. The candidate passed90 focused cases,906 affected model/Workflow/Work/
@@ -49,6 +49,15 @@ This is a reliability/portability review, not an all-model or all-plugin
 qualification. Pure Workflow, cloud/local selection and recovery tests exercise
 their software contracts. Live cloud accounts, deployed human sessions, complete
 GUI development and target Windows installation remain independent acceptance.
+
+The existing static Runtime audit also misclassified the egress inventory's
+quoted `adapters/openai.py` and `adapters/anthropic.py` paths as SDK invocation.
+It now examines Python call/attribute references, including executable formatted
+string expressions, without exempting the egress owner. Literal secret detection
+and existing HTTP diagnostics remain intact. The original false-positive fixture
+fails before the change; actual SDK/provider calls remain rejected in controls.
+Eleven audit/bootstrap regressions pass. This is a static diagnostic, not proof
+that arbitrary dynamic Python or every Provider deployment is safe.
 
 ## Context connection ownership and schema reopening — 2026-11-09
 

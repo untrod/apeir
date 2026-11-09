@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,9 +20,7 @@ _DIRECT_PATTERNS = (
     ),
     (
         "direct_openai_sdk",
-        re.compile(
-            r"\b(?:OpenAI|AsyncOpenAI)\s*\(|\bopenai\.(?!com\b)"
-        ),
+        re.compile(r"\b(?:OpenAI|AsyncOpenAI)\s*\(|\bopenai\.(?!com\b)"),
     ),
     (
         "direct_anthropic_sdk",
@@ -78,9 +77,13 @@ class RuntimeAuditReport:
     @property
     def gateway_percentage(self) -> float:
         total = self.gateway_calls + self.direct_provider_calls
-        return 100.0 if total == 0 else round(
-            self.gateway_calls / total * 100,
-            2,
+        return (
+            100.0
+            if total == 0
+            else round(
+                self.gateway_calls / total * 100,
+                2,
+            )
         )
 
     @property
@@ -103,9 +106,7 @@ class RuntimeAuditReport:
             },
             "direct_provider": self.direct_provider_calls,
             "deprecated": self.deprecated_calls,
-            "security": (
-                "PASS" if self.security_findings == 0 else "FAIL"
-            ),
+            "security": ("PASS" if self.security_findings == 0 else "FAIL"),
             "security_findings": self.security_findings,
             "findings": [item.to_dict() for item in self.findings],
         }
@@ -119,9 +120,7 @@ def audit_runtime(
 ) -> RuntimeAuditReport:
     """Audit source paths and current compatibility telemetry."""
     base = Path(root).resolve()
-    active_runtime = runtime or NousRuntime.bootstrap(
-        workspace_root=str(base)
-    )
+    active_runtime = runtime or NousRuntime.bootstrap(workspace_root=str(base))
     gateway = gateway_service.get(required=False)
     findings: list[RuntimeAuditFinding] = []
     gateway_calls = 0
@@ -136,20 +135,24 @@ def audit_runtime(
             gateway_calls += len(_GATEWAY_PATTERN.findall(text))
             if _allowed_protocol_path(relative):
                 continue
+            direct_matches = set()
+            for line_number, reference in _model_code_references(text):
+                for category, pattern in _DIRECT_PATTERNS:
+                    if pattern.search(reference):
+                        direct_matches.add((line_number, category))
+            for line_number, category in sorted(direct_matches):
+                findings.append(
+                    RuntimeAuditFinding(
+                        category,
+                        relative,
+                        line_number,
+                        "business code bypasses ModelGatewayFacade",
+                    )
+                )
             for line_number, line in enumerate(
                 text.splitlines(),
                 start=1,
             ):
-                for category, pattern in _DIRECT_PATTERNS:
-                    if pattern.search(line):
-                        findings.append(
-                            RuntimeAuditFinding(
-                                category,
-                                relative,
-                                line_number,
-                                "business code bypasses ModelGatewayFacade",
-                            )
-                        )
                 if _is_direct_model_http(relative, line):
                     findings.append(
                         RuntimeAuditFinding(
@@ -169,14 +172,8 @@ def audit_runtime(
                         )
                     )
 
-    direct = sum(
-        item.category != "hardcoded_secret"
-        for item in findings
-    )
-    security = sum(
-        item.category == "hardcoded_secret"
-        for item in findings
-    )
+    direct = sum(item.category != "hardcoded_secret" for item in findings)
+    security = sum(item.category == "hardcoded_secret" for item in findings)
     metrics = compatibility_metrics()
     deprecated = int(metrics.get("direct_fallbacks", 0))
     snapshot = active_runtime.snapshot()
@@ -186,11 +183,34 @@ def audit_runtime(
         direct_provider_calls=direct,
         deprecated_calls=deprecated,
         security_findings=security,
-        gateway_configured=bool(
-            gateway is not None and snapshot.gateway_configured
-        ),
+        gateway_configured=bool(gateway is not None and snapshot.gateway_configured),
         findings=tuple(findings),
     )
+
+
+def _model_code_references(text: str) -> list[tuple[int, str]]:
+    """Inspect executable references, including calls inside formatted strings."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        # Preserve conservative diagnostics for source this interpreter cannot parse.
+        return list(enumerate(text.splitlines(), start=1))
+
+    def qualified(node: ast.AST) -> str:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            parent = qualified(node.value)
+            return f"{parent}.{node.attr}" if parent else ""
+        return ""
+
+    references = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            references.append((node.lineno, qualified(node.func) + "("))
+        elif isinstance(node, ast.Attribute):
+            references.append((node.lineno, qualified(node)))
+    return references
 
 
 def _allowed_protocol_path(path: str) -> bool:
@@ -213,17 +233,11 @@ def _is_direct_model_http(path: str, line: str) -> bool:
         return False
     compact = line.replace(" ", "")
     if path == "remote_terminal/brain_llm.py":
-        return (
-            "post_json(" in compact
-            or "_no_proxy.open(" in compact
-        )
+        return "post_json(" in compact or "_no_proxy.open(" in compact
     if path == "remote_terminal/embedding.py":
         return "urlopen(" in compact
     if path == "remote_terminal/doc_engine.py":
-        return (
-            "urllib.request.Request(" in compact
-            or "no_proxy.open(" in compact
-        )
+        return "urllib.request.Request(" in compact or "no_proxy.open(" in compact
     return False
 
 
