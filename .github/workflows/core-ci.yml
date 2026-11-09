@@ -245,7 +245,9 @@ jobs:
         run: python -m pytest tests/test_automation_consumer.py -vv --tb=long --timeout=60 -rA
       - name: Exercise original Governance initialization and identity failures
         if: inputs.diagnostic == 'windows-governance'
-        run: python -m pytest -q tests/governance/test_sqlite_connection_lifecycle.py tests/control_plane/test_human_sessions.py tests/context/test_guard_admission.py --tb=short --timeout=60 -rA
+        env:
+          APEIR_CONTEXT_HTTP_DIAGNOSTIC: '1'
+        run: python -m pytest -q tests/governance/test_sqlite_connection_lifecycle.py tests/control_plane/test_human_sessions.py tests/context/test_guard_admission.py tests/context/test_sqlite_lifecycle.py tests/context/test_selected_input_integration.py --tb=short --timeout=60 -rA
       - name: Measure last-close checkpoint work and exercise original MCP deadlines
         if: inputs.diagnostic == 'windows-governance'
         run: python scripts/ci/probe_governance_checkpoint.py --report "$env:RUNNER_TEMP/governance-checkpoint-probe.json" --exercise-mcp

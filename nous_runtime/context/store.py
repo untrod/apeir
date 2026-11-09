@@ -9,8 +9,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -29,29 +31,105 @@ _log = logging.getLogger("nous.context.store")
 
 
 @contextmanager
+def _sqlite_phase(phase: str, readonly: bool):
+    """Report slow phases without exposing SQL, paths or context content."""
+    started = time.monotonic()
+    try:
+        yield
+    finally:
+        elapsed = time.monotonic() - started
+        if elapsed >= 1.0:
+            _log.warning(
+                "Slow context SQLite phase: phase=%s elapsed_ms=%.3f readonly=%s",
+                phase,
+                elapsed * 1000,
+                readonly,
+            )
+
+
+@contextmanager
 def _db_connect(db_path: str, readonly: bool = False):
     path = Path(db_path)
     validate_private_database_path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if readonly:
-        conn = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)
-    else:
-        conn = sqlite3.connect(str(path))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA busy_timeout=5000")
     if not readonly:
-        conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
+        path.parent.mkdir(parents=True, exist_ok=True)
+    conn = None
     try:
+        with _sqlite_phase("connect", readonly):
+            if readonly:
+                conn = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)
+            else:
+                conn = sqlite3.connect(str(path))
+        with _sqlite_phase("configure", readonly):
+            conn.row_factory = sqlite3.Row
+            # Reuse Governance's supported connection policy: a FULL WAL
+            # commit is durable without a redundant last-close checkpoint.
+            # Keep auto-checkpointing and close this handle in every path.
+            checkpoint_option = getattr(
+                sqlite3, "SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE", None
+            )
+            if checkpoint_option is not None and hasattr(conn, "setconfig"):
+                conn.setconfig(checkpoint_option, True)
+            conn.execute("PRAGMA busy_timeout=5000")
+            if not readonly:
+                conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
         yield conn
         if not readonly:
-            conn.commit()
+            with _sqlite_phase("commit", readonly):
+                conn.commit()
     except Exception:
-        if not readonly:
-            conn.rollback()
+        if conn is not None and not readonly:
+            with _sqlite_phase("rollback", readonly):
+                conn.rollback()
         raise
     finally:
-        conn.close()
+        if conn is not None:
+            with _sqlite_phase("close", readonly):
+                conn.close()
+
+
+def _schema_already_initialized(db_path: str, script: str) -> bool:
+    """Read the published WAL schema and marker without acquiring a writer.
+
+    Only CREATE IF NOT EXISTS statements can use this path. Any future data or
+    column migration must run through the original atomic write transaction.
+    This is a fresh database read, not cached context or authorization state.
+    """
+    statements = [part.strip() for part in script.split(";") if part.strip()]
+    if not statements or statements[0].upper() != "BEGIN IMMEDIATE":
+        return False
+    expected = set()
+    for statement in statements[1:]:
+        match = re.match(
+            r"CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX)\s+IF\s+NOT\s+EXISTS\s+([a-zA-Z_]\w*)\b",
+            statement,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return False
+        expected.add((match[1].lower(), match[2].casefold()))
+    if not expected or not Path(db_path).is_file():
+        return False
+    with _db_connect(db_path, readonly=True) as db:
+        # One read snapshot binds the journal/schema/marker checks. Closing
+        # this read-only connection releases it before any repair transaction.
+        db.execute("BEGIN")
+        if db.execute("PRAGMA journal_mode").fetchone()[0] != "wal":
+            return False
+        actual = {
+            (row[0], row[1].casefold())
+            for row in db.execute(
+                "SELECT type, name FROM sqlite_master WHERE type IN ('table', 'index')"
+            ).fetchall()
+        }
+        return (
+            expected <= actual
+            and db.execute(
+                "SELECT 1 FROM context_snapshots WHERE id='__schema__'"
+            ).fetchone()
+            is not None
+        )
 
 
 # ContextStore
@@ -88,8 +166,8 @@ class ContextStore:
     def _ensure_tables(self) -> None:
         with self._lock:
             try:
-                with _db_connect(self.db_path) as db:
-                    db.executescript("""
+                schema_sql = """
+                        BEGIN IMMEDIATE;
                         CREATE TABLE IF NOT EXISTS context_snapshots (
                             id TEXT PRIMARY KEY,
                             version INTEGER NOT NULL DEFAULT 1,
@@ -121,7 +199,11 @@ class ContextStore:
                         );
                         CREATE INDEX IF NOT EXISTS idx_audit_snapshot
                             ON context_audit(snapshot_id);
-                    """)
+                    """
+                if _schema_already_initialized(self.db_path, schema_sql):
+                    return
+                with _db_connect(self.db_path) as db:
+                    db.executescript(schema_sql)
                     # Schema version tracking
                     db.execute(
                         "INSERT OR IGNORE INTO context_snapshots(id, version, timestamp, status, "
