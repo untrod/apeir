@@ -3,7 +3,7 @@
 The current **0.1.0-rc1 development bundle** contains both an installer and a
 Portable ZIP. Pick one; you do not need to install Python or Kernel separately.
 
-[**Download Setup + Portable**](https://github.com/untrod/apeir/actions/runs/42534072393/artifacts/13640647666)
+[**Download Setup + Portable**](https://github.com/untrod/apeir/actions/runs/42568225590/artifacts/13653822826)
 · [Version, hashes and source](QUICK_START.md#download-metadata)
 
 This is an **unsigned development build**, not a stable Release. GitHub sign-in
@@ -16,8 +16,8 @@ and Defender acceptance are **PENDING**. There is no public Release asset yet.
 
 ## Known limitations
 
-This bundle includes governed project-test consumption, passive evidence
-evaluation and queued Relay cancellation, alongside the earlier Windows fixes.
+This bundle includes governed project tests, passive evidence evaluation,
+queued Relay cancellation, Context connection cleanup and WAL-aware backups.
 Its full build and native component checks passed; the installer has not been
 exercised on Windows10. GUI startup, upgrade, uninstall, Defender and old-workspace
 compatibility remain **PENDING**.
@@ -45,7 +45,7 @@ outer ZIP hash. In PowerShell, `Get-FileHash -Algorithm SHA256 <file>` prints it
 A mismatch means **stop**. Do not run a similarly named file from another source.
 
 The bundle also contains `SHA256SUMS.txt`, manifests and native validation
-reports. Its binary source is `4817e83c0cabeb879815edc5fba1c9d2f22fd628`;
+reports. Its binary source is `dfec8c9c2614a3a80ab6ecb6c91fa6568722f5d5`;
 a newer README or screenshot does not change that binary.
 
 ## Setup
@@ -82,11 +82,11 @@ For developers who already use authenticated `gh`, this is the exact current
 artifact. It downloads files; it does **not** start installation:
 
 ```powershell
-gh run download 42534072393 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-0.1.0-rc1
+gh run download 42568225590 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-0.1.0-rc1
 if ($LASTEXITCODE -ne 0) { throw 'Download failed; no installer was run.' }
 $apeirFiles = @{
-    'APEIR_0.1.0-rc1_x64-setup.exe' = '67d292a6f29f34a023011976d39ba3956c6448c5b59ec1d3c2b766238fdf6fbc'
-    'APEIR-Portable-0.1.0-rc1-windows-x64.zip' = '79c73802d34104915f40c14353e0c17a1ccc903516eb3eb9482b9811ef9356e3'
+    'APEIR_0.1.0-rc1_x64-setup.exe' = '16413ffa81a186edfd4aec36ac4ec8828e2b31fcd77a6174b74f2aa139c9dd96'
+    'APEIR-Portable-0.1.0-rc1-windows-x64.zip' = '942ea3bb2fe838e8d163c113a69e74ce2ae70a5fd79977984778efd36e476aeb'
 }
 foreach ($apeirName in $apeirFiles.Keys) {
     $apeirPath = Join-Path '.\apeir-0.1.0-rc1' $apeirName

@@ -33,6 +33,11 @@ audit failure refusal. Windows diagnostic qualification and full Core remain
 separate from these deterministic regressions. The preceding source `4817e83`
 Windows package does not contain this later Context change; an updated package
 requires a fresh full native build. No Windows 10 installation claim is added.
+Subsequent full-mode producer [42568225590](https://github.com/untrod/apeir/actions/runs/42568225590)
+includes these fixes in source `dfec8c9c2614a3a80ab6ecb6c91fa6568722f5d5`. Actual archive, locked PE, Portable and
+NSIS payload admission passed; current hashes and scope are in the
+[Windows build record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build).
+Its Windows Server build/smoke does not supply Windows10 installation evidence.
 
 The existing operator BackupManager copied only `.db` files. A real Context and
 Governance regression demonstrated missing committed audit tables when records

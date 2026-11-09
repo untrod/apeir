@@ -155,10 +155,10 @@ gh workflow run desktop-build.yml --ref <approved-source-revision> -f native_tar
 After the original candidate artifact expires, explicitly select
 `approved_kernel_artifact_format=native-build` to recover the **same locked
 components** from a reviewed successful full-mode native package. For the
-2026-11-09 retained carrier, producer `42534072393`, artifact `13640647666`, the
+2026-11-09 retained carrier, producer `42568225590`, artifact `13653822826`, the
 outer ZIP SHA-256 is
-`235b94bff1ad9ce76900afcc48dcc215ebb03a0708d4043db996b20efc577d9c`.
-Its source is `4817e83c0cabeb879815edc5fba1c9d2f22fd628`; its Actions copy expires
+`cd6592ed6a9117a9b27910d1d8bf45c27f6eaab6bc26f0ee0ad6c89d9bf50929`.
+Its source is `dfec8c9c2614a3a80ab6ecb6c91fa6568722f5d5`; its Actions copy expires
 2026-11-23. The pipeline still checks accepted source ancestry, exact artifact
 identity/digest, complete checksums, Portable contents, dependency/source records,
 original NKI denial/recovery and both actual PE hashes against the maintained
@@ -167,7 +167,7 @@ each subsequent qualified carrier before its expiry rather than repeatedly
 rebuilding Kernel or changing its hashes.
 
 ```bash
-gh workflow run desktop-build.yml --ref <approved-source-revision> -f native_target=windows-x64 -f approved_kernel_artifact_format=native-build -f approved_kernel_run_id=42534072393 -f approved_kernel_artifact_id=13640647666 -f approved_kernel_zip_sha256=235b94bff1ad9ce76900afcc48dcc215ebb03a0708d4043db996b20efc577d9c
+gh workflow run desktop-build.yml --ref <approved-source-revision> -f native_target=windows-x64 -f approved_kernel_artifact_format=native-build -f approved_kernel_run_id=42568225590 -f approved_kernel_artifact_id=13653822826 -f approved_kernel_zip_sha256=cd6592ed6a9117a9b27910d1d8bf45c27f6eaab6bc26f0ee0ad6c89d9bf50929
 ```
 
 The integration still cannot read repository Actions variables (HTTP403).
@@ -190,7 +190,42 @@ checks do not alter the reviewed Kernel hashes or remove licensing/install gates
 
 ## Current native command-qualified build
 
-The current unsigned Windows development bundle is [full-mode run42534072393](https://github.com/untrod/apeir/actions/runs/42534072393),
+The current unsigned Windows development bundle is [full-mode run42568225590](https://github.com/untrod/apeir/actions/runs/42568225590),
+source `dfec8c9c2614a3a80ab6ecb6c91fa6568722f5d5`, accepted through [PR139](https://github.com/untrod/apeir/pull/139)
+as main `df4fdceabf57a652a381a1ff72267df6f3ff5394` with the same tree.
+[Artifact13653822826](https://github.com/untrod/apeir/actions/runs/42568225590/artifacts/13653822826) expires on **2026-11-23** and requires
+GitHub sign-in. A later documentation commit is not a different binary build.
+
+| File | SHA-256 |
+| --- | --- |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `16413ffa81a186edfd4aec36ac4ec8828e2b31fcd77a6174b74f2aa139c9dd96` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `942ea3bb2fe838e8d163c113a69e74ce2ae70a5fd79977984778efd36e476aeb` |
+| Outer artifact ZIP | `cd6592ed6a9117a9b27910d1d8bf45c27f6eaab6bc26f0ee0ad6c89d9bf50929` |
+
+The official launcher completed full validation without SkipValidation or
+SkipSidecarSmoke. Independent admission verified the actual manifest, checksums,
+Portable contents and maintained Kernel/Worker hashes. Independent NSIS payload
+inspection found the expected eleven application files: ten exact Portable hash
+matches and the upstream Tauri bundle-type stamp difference in the launcher.
+Actual hashes were retained, not normalized.
+
+Real Kernel/Worker/Runtime startup, NKI1/2/3 authentication and refusal, original
+request recovery, pure Workflow CLI/restart and owned-process fault cleanup passed
+on **Windows Server2025**. Native smoke made zero external model calls.
+`installation_acceptance=NOT_RUN`: the installer was inspected, not installed.
+Graceful GUI exit, clean Windows10 installation, upgrade/uninstall and Defender
+remain **PENDING**; signing, complete supply-chain review and public release
+require their own Gates.
+
+This package includes the Context connection/schema and WAL backup fixes from
+PR140, integrated through PR139. Historical Skill/Context HTTP timing issues stay
+open; neither this build nor one passing regression establishes a universal cause.
+The qualified Linux read-only Python VM is not a Windows execution sandbox.
+See the [Windows guide](../getting-started/INSTALL_WINDOWS.md) before opening it.
+
+### Previous governed-test and Relay producer — 2026-11-09
+
+The preceding unsigned Windows development bundle is [full-mode run42534072393](https://github.com/untrod/apeir/actions/runs/42534072393),
 source `4817e83c0cabeb879815edc5fba1c9d2f22fd628`, accepted through PR137 as main
 `1dd5fc3aa1f17ebd01c5a4511eaca1de02a6d032`. [Artifact13640647666](https://github.com/untrod/apeir/actions/runs/42534072393/artifacts/13640647666) expires
 on **2026-11-23** and requires GitHub sign-in. The source manifest
