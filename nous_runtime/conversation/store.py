@@ -7,7 +7,9 @@ from collections.abc import Iterator
 
 import hashlib
 import json
+import logging
 import sqlite3
+import time
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +23,22 @@ from nous_runtime.conversation.models import (
 
 EXPORT_SCHEMA = "nous.conversation.export"
 EXPORT_VERSION = "2.0"
+_log = logging.getLogger(__name__)
+
+
+@contextmanager
+def _sqlite_phase(phase: str):
+    started = time.monotonic()
+    try:
+        yield
+    finally:
+        elapsed = time.monotonic() - started
+        if elapsed >= 1.0:
+            _log.warning(
+                "Slow conversation SQLite phase: phase=%s elapsed_ms=%.3f",
+                phase,
+                elapsed * 1000,
+            )
 
 
 class ConversationStore:
@@ -43,20 +61,37 @@ class ConversationStore:
         connection = self._connect()
         try:
             yield connection
-            connection.commit()
+            with _sqlite_phase("commit"):
+                connection.commit()
         except Exception:
-            connection.rollback()
+            with _sqlite_phase("rollback"):
+                connection.rollback()
             raise
         finally:
-            connection.close()
+            with _sqlite_phase("close"):
+                connection.close()
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=30)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=30000")
-        return connection
+        connection = None
+        try:
+            with _sqlite_phase("connect"):
+                connection = sqlite3.connect(self.path, timeout=30)
+            with _sqlite_phase("configure"):
+                connection.row_factory = sqlite3.Row
+                checkpoint_option = getattr(
+                    sqlite3, "SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE", None
+                )
+                if checkpoint_option is not None and hasattr(connection, "setconfig"):
+                    connection.setconfig(checkpoint_option, True)
+                connection.execute("PRAGMA journal_mode=WAL")
+                connection.execute("PRAGMA foreign_keys=ON")
+                connection.execute("PRAGMA busy_timeout=30000")
+            return connection
+        except Exception:
+            if connection is not None:
+                with _sqlite_phase("close"):
+                    connection.close()
+            raise
 
     def _initialize(self) -> None:
         with self._db() as connection:

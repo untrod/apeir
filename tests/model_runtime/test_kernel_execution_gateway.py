@@ -151,10 +151,12 @@ def test_kernel_async_waits_obey_original_model_deadline(monkeypatch, phase):
     import nous_runtime.model_runtime.gateway as gateway_module
 
     # Accounting setup may be slow on a busy Runner; the phase timer stays real.
-    clock = {"start": None}
+    clock = {"start": None, "expired": False}
     monotonic = gateway_module.time.monotonic
 
     def elapsed():
+        if clock["expired"]:
+            return 1.0
         return 0.0 if clock["start"] is None else monotonic() - clock["start"]
 
     monkeypatch.setattr(
@@ -163,6 +165,17 @@ def test_kernel_async_waits_obey_original_model_deadline(monkeypatch, phase):
         SimpleNamespace(monotonic=elapsed, perf_counter=elapsed),
     )
     gateway = build_gateway_from_providers([RemoteProvider()])
+
+    def observe_timeout(event):
+        # The real timer includes preparation excluded by this phase clock.
+        # Once it fires, the virtual accounting deadline must also be expired.
+        if (
+            event.event_type == "model.invoke.failed"
+            and event.payload.get("error") == "timeout"
+        ):
+            clock["expired"] = True
+
+    gateway.event_sink = observe_timeout
     client = FakeKernelClient()
     entered = asyncio.Event()
 

@@ -198,7 +198,41 @@ checks do not alter the reviewed Kernel hashes or remove licensing/install gates
 
 ## Current native command-qualified build
 
-The current unsigned Windows development bundle is [full-mode run42568225590](https://github.com/untrod/apeir/actions/runs/42568225590),
+The current unsigned Windows development bundle is [full-mode run42657287823](https://github.com/untrod/apeir/actions/runs/42657287823),
+source `c12cb97f13990287b3638e7913aa330d05b4e562`, reviewed in [PR143](https://github.com/untrod/apeir/pull/143).
+[Artifact13696179576](https://github.com/untrod/apeir/actions/runs/42657287823/artifacts/13696179576)
+expires on **2026-11-23** and requires GitHub sign-in. Subsequent test and
+documentation changes do not change this package's production or build inputs.
+
+| File | SHA-256 |
+| --- | --- |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `791a3ef42833e98bbd27a816568df8bbf4a87ac20b65a2ae330f9f707d5cbc46` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `bf26ea3002d20f334e21b3a6acdc4aa0aee15cff96fcf56a72cd546c2bdfbbb6` |
+| Outer artifact ZIP | `75b7112b4c802c417891fbff1dc0789389e6660053cefd9836d61c9cf973cab7` |
+
+The official launcher completed full validation without SkipValidation or
+SkipSidecarSmoke on **Windows Server2025 x64**, Python3.12.10, Rust1.99.1,
+MSVC14.51 and Windows SDK26100. Actual Kernel/Worker/Runtime startup, NKI1/2/3
+authentication/refusal, original-request recovery, pure Workflow restart and
+owned-process fault cleanup passed. Native smoke made zero external model calls.
+Independent admission checked the actual archive, manifests, PE architecture,
+approved component hashes, Portable contents and all eleven NSIS application
+payload files. Ten match Portable exactly; the launcher retains the upstream
+Tauri UNK/NSS bundle stamp difference. Actual hashes were not normalized.
+
+This source contains the reviewed model lifecycle/deadline, Conversation
+connection ownership and Node status projection fixes. Frozen Kernel source and
+approved component hashes are unchanged. Historical Windows timing issues stay
+open; a passing build does not establish their universal cause.
+`installation_acceptance=NOT_RUN`: NSIS was inspected, not installed. Windows10
+GUI, graceful application exit, upgrade/uninstall and Defender remain **PENDING**;
+signing, supply-chain review and public release retain their independent Gates.
+The qualified Linux Python VM is not a Windows execution sandbox. Read the
+[Windows guide](../getting-started/INSTALL_WINDOWS.md) before opening the package.
+
+### Previous Context and backup producer — 2026-11-09
+
+The preceding unsigned Windows development bundle is [full-mode run42568225590](https://github.com/untrod/apeir/actions/runs/42568225590),
 source `dfec8c9c2614a3a80ab6ecb6c91fa6568722f5d5`, accepted through [PR139](https://github.com/untrod/apeir/pull/139)
 as main `df4fdceabf57a652a381a1ff72267df6f3ff5394` with the same tree.
 [Artifact13653822826](https://github.com/untrod/apeir/actions/runs/42568225590/artifacts/13653822826) expires on **2026-11-23** and requires

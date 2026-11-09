@@ -1325,7 +1325,7 @@ def test_approved_firmware_missing_receipt_does_not_replay_even_with_valid_resou
             assert restored.node._workloads[WORK_ID]["state"] == "EXECUTING"
             assert restored.provider.execution_count(WORK_ID) == 1
             if credentials:
-                assert_no_credential_on_disk(tmp_path)
+                assert_no_credential_on_disk(tmp_path, event_bus=restored.bus)
 
     asyncio.run(scenario())
 
@@ -1493,21 +1493,88 @@ def approve_credential_firmware(sim, paused):
     return auth_id
 
 
-def assert_no_credential_on_disk(root):
-    for path in root.rglob("*"):
-        if path.is_file():
-            try:
-                content = path.read_bytes()
-            except OSError as error:
-                # An unreadable file is not a successful leakage check. Retain
-                # the owned fixture path and OS codes, never its contents.
-                raise AssertionError(
-                    f"Credential persistence scan could not read {path.relative_to(root)} "
-                    f"(errno={error.errno}, winerror={getattr(error, 'winerror', None)})"
-                ) from error
-            assert FAKE_CREDENTIAL.encode() not in content, (
-                f"Credential leaked into {path.relative_to(root)}"
+def assert_no_credential_on_disk(root, *, event_bus=None):
+    # Inspect committed persistence while its existing owner cannot write WAL/SHM.
+    # No file is excluded; an unreadable file or failed flush still fails closed.
+    guard = event_bus._lock if event_bus is not None else contextlib.nullcontext()
+    with guard:
+        if event_bus is not None:
+            assert Path(event_bus._workspace) == root.resolve(), (
+                "Wrong persistence owner"
             )
+            assert event_bus._flush_pending(), "Event persistence did not complete"
+        for path in root.rglob("*"):
+            if path.is_file():
+                try:
+                    content = path.read_bytes()
+                except OSError as error:
+                    # An unreadable file is not a successful leakage check. Retain
+                    # the owned fixture path and OS codes, never its contents.
+                    raise AssertionError(
+                        f"Credential persistence scan could not read {path.relative_to(root)} "
+                        f"(errno={error.errno}, winerror={getattr(error, 'winerror', None)})"
+                    ) from error
+                assert FAKE_CREDENTIAL.encode() not in content, (
+                    f"Credential leaked into {path.relative_to(root)}"
+                )
+
+
+def test_persistence_audit_still_rejects_unreadable_files(tmp_path, monkeypatch):
+    bus = RuntimeEventBus(str(tmp_path), persist_interval_sec=60)
+    target = tmp_path / "unreadable.bin"
+    target.write_bytes(b"not a credential")
+    original = Path.read_bytes
+
+    def unreadable(path):
+        if path == target:
+            raise PermissionError("controlled read refusal")
+        return original(path)
+
+    monkeypatch.setattr(Path, "read_bytes", unreadable)
+    try:
+        with pytest.raises(AssertionError, match="could not read unreadable.bin"):
+            assert_no_credential_on_disk(tmp_path, event_bus=bus)
+    finally:
+        bus.shutdown()
+
+
+def test_persistence_audit_flushes_and_detects_pending_raw_credential(tmp_path):
+    from nous_runtime.core.events import EventEnvelope
+
+    bus = RuntimeEventBus(str(tmp_path), persist_interval_sec=60)
+    try:
+        # Fault injection bypasses public redaction only to test the leakage audit.
+        with bus._lock:
+            bus._pending_persist.append(
+                EventEnvelope(
+                    event_type="audit.negative", payload={"unsafe": FAKE_CREDENTIAL}
+                )
+            )
+        with pytest.raises(AssertionError, match="Credential leaked into"):
+            assert_no_credential_on_disk(tmp_path, event_bus=bus)
+        assert bus._pending_persist == []
+    finally:
+        bus.shutdown()
+
+
+def test_persistence_audit_rejects_failed_flush(tmp_path, monkeypatch):
+    bus = RuntimeEventBus(str(tmp_path), persist_interval_sec=60)
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(bus, "_flush_pending", lambda: False)
+            with pytest.raises(AssertionError, match="persistence did not complete"):
+                assert_no_credential_on_disk(tmp_path, event_bus=bus)
+    finally:
+        bus.shutdown()
+
+
+def test_persistence_audit_cannot_lock_an_unrelated_owner(tmp_path):
+    bus = RuntimeEventBus(str(tmp_path / "other"), persist_interval_sec=60)
+    try:
+        with pytest.raises(AssertionError, match="Wrong persistence owner"):
+            assert_no_credential_on_disk(tmp_path, event_bus=bus)
+    finally:
+        bus.shutdown()
 
 
 def test_credential_goal_firmware_operation_receipt_observation_commit_and_leakage(
@@ -1583,7 +1650,7 @@ def test_credential_goal_firmware_operation_receipt_observation_commit_and_leaka
                 assert row[0] == auth_id and row[1] == "CLOSED"
                 assert json.loads(row[2])["node_id"] == sim.node.identity.node_id
             assert FAKE_CREDENTIAL not in json.dumps(completed.to_dict())
-            assert_no_credential_on_disk(tmp_path)
+            assert_no_credential_on_disk(tmp_path, event_bus=sim.bus)
         assert_no_credential_on_disk(tmp_path)
 
     with caplog.at_level(logging.WARNING):
@@ -1613,7 +1680,7 @@ def test_credential_provider_exception_cannot_leak_into_failed_receipt_or_events
             assert sim.work().state is DistributedWorkState.FAILED
             assert sim.provider.execution_count(WORK_ID) == 0
             assert FAKE_CREDENTIAL not in json.dumps(sim.node._workloads[WORK_ID])
-            assert_no_credential_on_disk(tmp_path)
+            assert_no_credential_on_disk(tmp_path, event_bus=sim.bus)
 
     asyncio.run(scenario())
 
@@ -1649,7 +1716,7 @@ def test_credential_lost_response_recovers_without_resolving_revoked_delivery_ag
             first.credential_broker.revoke(
                 auth_id, _build_context(), handle_id=SECRET_HANDLE
             )
-            assert_no_credential_on_disk(tmp_path)
+            assert_no_credential_on_disk(tmp_path, event_bus=first.bus)
         async with simulation(tmp_path, credentials=True) as restored:
             backend = UnavailableBackend()
             restored.credential_broker._backend = backend
@@ -1659,7 +1726,7 @@ def test_credential_lost_response_recovers_without_resolving_revoked_delivery_ag
             assert restored.work().effect_verification["verdict"] == "MATCH"
             assert restored.provider.execution_count(WORK_ID) == 1
             assert backend.calls == 0
-            assert_no_credential_on_disk(tmp_path)
+            assert_no_credential_on_disk(tmp_path, event_bus=restored.bus)
 
     asyncio.run(scenario())
 
@@ -1730,7 +1797,7 @@ def test_disconnected_node_cannot_resolve_expired_handle_after_reconnect(
             assert restored.provider.execution_count(WORK_ID) == 0
             assert restored.work().state is DistributedWorkState.FAILED
             assert resolutions == []
-            assert_no_credential_on_disk(tmp_path)
+            assert_no_credential_on_disk(tmp_path, event_bus=restored.bus)
 
     asyncio.run(scenario())
 
@@ -1768,7 +1835,7 @@ def test_credential_expires_during_device_delay_and_blocks_effect(
             assert waiting.state is AgentSessionState.WAITING
             assert sim.work().state is DistributedWorkState.FAILED
             assert sim.provider.execution_count(WORK_ID) == 0
-            assert_no_credential_on_disk(tmp_path)
+            assert_no_credential_on_disk(tmp_path, event_bus=sim.bus)
 
     asyncio.run(scenario())
 
