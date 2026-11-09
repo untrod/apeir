@@ -151,16 +151,23 @@ def test_kernel_async_waits_obey_original_model_deadline(monkeypatch, phase):
     import nous_runtime.model_runtime.gateway as gateway_module
 
     # Accounting setup may be slow on a busy Runner; the phase timer stays real.
+    clock = {"start": None}
+    monotonic = gateway_module.time.monotonic
+
+    def elapsed():
+        return 0.0 if clock["start"] is None else monotonic() - clock["start"]
+
     monkeypatch.setattr(
         gateway_module,
         "time",
-        SimpleNamespace(monotonic=lambda: 0.0, perf_counter=lambda: 0.0),
+        SimpleNamespace(monotonic=elapsed, perf_counter=elapsed),
     )
     gateway = build_gateway_from_providers([RemoteProvider()])
     client = FakeKernelClient()
     entered = asyncio.Event()
 
     async def block():
+        clock["start"] = monotonic()
         entered.set()
         await asyncio.Event().wait()
 

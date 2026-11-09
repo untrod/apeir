@@ -221,9 +221,13 @@ def test_gateway_expired_before_dispatch_never_invokes_or_leases(monkeypatch) ->
 @pytest.mark.parametrize("operation", ["invoke", "stream"])
 def test_gateway_deadline_includes_model_loading(monkeypatch, operation):
     # Measure the blocked phase with a real timer, not variable routing/setup I/O.
-    monkeypatch.setattr(
-        gateway_module, "time", SimpleNamespace(monotonic=lambda: 0.0)
-    )
+    clock = {"start": None}
+    monotonic = gateway_module.time.monotonic
+
+    def elapsed():
+        return 0.0 if clock["start"] is None else monotonic() - clock["start"]
+
+    monkeypatch.setattr(gateway_module, "time", SimpleNamespace(monotonic=elapsed))
 
     async def scenario():
         registry = ModelRuntimeRegistry()
@@ -235,6 +239,7 @@ def test_gateway_deadline_includes_model_loading(monkeypatch, operation):
         entered = asyncio.Event()
 
         async def blocked_load(_instance):
+            clock["start"] = monotonic()
             entered.set()
             await asyncio.Event().wait()
 
