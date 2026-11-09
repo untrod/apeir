@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import os
 import platform
@@ -40,6 +41,11 @@ from nous_runtime.core.redaction import redact_sensitive_data
 from nous_runtime.governance.contracts import AuthorizationContext
 
 _node_contexts: WeakValueDictionary[str, AuthorizationContext] = WeakValueDictionary()
+_log = logging.getLogger(__name__)
+
+
+class _StatusPublicationError(PermissionError):
+    """Only the local heartbeat projection failed; execution state is distinct."""
 
 
 def _node_execution_context(node_id: str, workload_id: str) -> AuthorizationContext:
@@ -1015,7 +1021,12 @@ class NodeRuntimeService:
             "watchdog": {"last_tick": _utc_now(), "healthy": True},
             "intelligence_providers": 0,
         }
-        _atomic_write_json(self.status_path, status)
+        try:
+            _atomic_write_json(self.status_path, status)
+        except PermissionError as exc:
+            raise _StatusPublicationError(
+                "Local Node heartbeat status could not be published"
+            ) from exc
         self._emit(
             "node.heartbeat",
             {
@@ -1038,7 +1049,20 @@ class NodeRuntimeService:
         self._emit("node.started", {"node_id": self.identity.node_id})
         try:
             while not self._stop.is_set():
-                self.run_once()
+                try:
+                    self.run_once()
+                except _StatusPublicationError:
+                    _log.warning(
+                        "Node heartbeat status publication refused: sequence=%s",
+                        self._sequence,
+                    )
+                    self._emit(
+                        "node.status.unavailable",
+                        {
+                            "sequence": self._sequence,
+                            "error_code": "NOUS_NODE_STATUS_UNAVAILABLE",
+                        },
+                    )
                 self._stop.wait(self.config.heartbeat_seconds)
         finally:
             self._write_stopped_status()

@@ -1,5 +1,40 @@
 # Engineering review and research comparison
 
+## Windows native validation: Conversation close and Node status — 2026-11-09
+
+Full-mode native run `42647679030`, source
+`b816bf77ba49a38f8f236dc2a302593125e7ff21`, stopped before packaging with two
+original test failures. The MCP approved submission exceeded its unchanged
+five-second HTTP limit; its captured handler was in `ConversationStore._db`
+connection close. A concurrent reader also caused `status.json.tmp` replacement
+to fail with Windows access denied, terminating the Node heartbeat thread.
+The complete log retains2 failed/6236 passed/105 existing skips. No installer
+from this run is qualified, and its failure is not hidden by the successful
+Core, Desktop, Multi-Arch and Security PR checks.
+
+The follow-up starts from merged main `7c773713`. Conversation's existing
+connection owner now closes configuration failures, records slow connect,
+configure, commit, rollback and close phases without content/paths, and reuses
+Governance/Context's supported no-last-close-checkpoint policy. WAL, default FULL
+synchronous commits, normal auto-checkpointing and the original30-second database
+wait remain unchanged. Older Python retains its existing close policy. There is
+no pool, keeper or new Store. Backups continue through the existing SQLite backup
+API, retaining committed conversation WAL and excluding pending transactions.
+
+Only a heartbeat status projection's `PermissionError` is recoverable in the
+background daemon. It emits `node.status.unavailable` and waits for the next
+normal observation tick; it does not reuse the failed ONLINE snapshot, retry an
+external Work, or suppress identity/registration/lease/workload persistence
+errors. Foreground status publication still reports failure. Stop requests end
+the loop without repeating the failed heartbeat; a failed STOPPED publication
+remains an error rather than a claimed success.
+
+Controlled regressions reproduce the connection ownership and daemon projection
+defects on the original main. They are separate from proving every historical
+Windows timeout's cause. Existing HTTP/test deadlines and assertions remain
+unchanged; fresh Windows Core and full native validation must establish their
+own results. Issues88/116 and other unresolved timing risks remain open.
+
 ## Model lifecycle and call-chain review — 2026-11-09
 
 Baseline: Distribution `c9ecfdf4a79045a558dfd7ddbc2bf21186d02ca6`;
