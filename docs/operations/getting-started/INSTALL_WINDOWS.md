@@ -3,7 +3,7 @@
 The current **0.1.0-rc1 development bundle** contains both an installer and a
 Portable ZIP. Pick one; you do not need to install Python or Kernel separately.
 
-[**Download Setup + Portable**](https://github.com/untrod/apeir/actions/runs/42568225590/artifacts/13653822826)
+[**Download Setup + Portable**](https://github.com/untrod/apeir/actions/runs/42657287823/artifacts/13696179576)
 · [Version, hashes and source](QUICK_START.md#download-metadata)
 
 This is an **unsigned development build**, not a stable Release. GitHub sign-in
@@ -45,7 +45,7 @@ outer ZIP hash. In PowerShell, `Get-FileHash -Algorithm SHA256 <file>` prints it
 A mismatch means **stop**. Do not run a similarly named file from another source.
 
 The bundle also contains `SHA256SUMS.txt`, manifests and native validation
-reports. Its binary source is `dfec8c9c2614a3a80ab6ecb6c91fa6568722f5d5`;
+reports. Its binary source is `c12cb97f13990287b3638e7913aa330d05b4e562`;
 a newer README or screenshot does not change that binary.
 
 ## Setup
@@ -82,11 +82,11 @@ For developers who already use authenticated `gh`, this is the exact current
 artifact. It downloads files; it does **not** start installation:
 
 ```powershell
-gh run download 42568225590 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-0.1.0-rc1
+gh run download 42657287823 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-0.1.0-rc1
 if ($LASTEXITCODE -ne 0) { throw 'Download failed; no installer was run.' }
 $apeirFiles = @{
-    'APEIR_0.1.0-rc1_x64-setup.exe' = '16413ffa81a186edfd4aec36ac4ec8828e2b31fcd77a6174b74f2aa139c9dd96'
-    'APEIR-Portable-0.1.0-rc1-windows-x64.zip' = '942ea3bb2fe838e8d163c113a69e74ce2ae70a5fd79977984778efd36e476aeb'
+    'APEIR_0.1.0-rc1_x64-setup.exe' = '791a3ef42833e98bbd27a816568df8bbf4a87ac20b65a2ae330f9f707d5cbc46'
+    'APEIR-Portable-0.1.0-rc1-windows-x64.zip' = 'bf26ea3002d20f334e21b3a6acdc4aa0aee15cff96fcf56a72cd546c2bdfbbb6'
 }
 foreach ($apeirName in $apeirFiles.Keys) {
     $apeirPath = Join-Path '.\apeir-0.1.0-rc1' $apeirName

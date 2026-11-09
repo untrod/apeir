@@ -35,6 +35,36 @@ Windows timeout's cause. Existing HTTP/test deadlines and assertions remain
 unchanged; fresh Windows Core and full native validation must establish their
 own results. Issues88/116 and other unresolved timing risks remain open.
 
+Full-mode follow-up [42657287823](https://github.com/untrod/apeir/actions/runs/42657287823),
+source `c12cb97f13990287b3638e7913aa330d05b4e562`, subsequently passed the actual
+Windows build and real sidecar checks. Core42657290558, Desktop42657290797,
+Multi-Arch42657290720 and Security42657290697 also passed on that exact source.
+Independent actual archive, locked PE, Portable and NSIS payload admission passed;
+[the current build record](../operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build)
+retains hashes and scope. This is Windows Server qualification, not Windows10
+installation. The matching wheel passed independent producer installation,
+authenticated public CLI/API and simulated original-effect recovery checks.
+
+Merged main `7c773713` also exposed two independent fixture failures in Core
+run42655073294; the original logs remain retained. Linux Python3.10 reached the
+real model timeout while its phase-only accounting clock had not expired. The
+regression now synchronizes its virtual deadline when the real timeout event
+arrives. Its original50ms request, real outer timer and failure assertions remain
+unchanged; production Gateway reconciliation is not bypassed.
+
+The Windows simulated-device credential scan raced the existing EventBus writer
+while reading SQLite SHM. Its audit now holds that same owner's lock and flushes
+pending events before scanning **all files**, including WAL/SHM. No filename is
+excluded and read failures still fail closed. Negative controls reject unreadable
+files, pending raw credential leakage, failed flush and an unrelated persistence
+owner. This changes the test audit, not production credential redaction or
+persistence. Issue121 remains open: this synchronization does not establish the
+cause of every historical Windows file-read or credential persistence failure.
+The original Windows result (1 failed/6237 passed/105 existing skips) and Linux
+result (1 failed/6254 passed/88 existing skips) are not relabelled as passing.
+These fixture changes and download metadata require their own new-head CI;
+they do not alter the already-built c12cb97 Runtime or packaging inputs.
+
 ## Model lifecycle and call-chain review — 2026-11-09
 
 Baseline: Distribution `c9ecfdf4a79045a558dfd7ddbc2bf21186d02ca6`;
