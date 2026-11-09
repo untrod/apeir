@@ -1,5 +1,51 @@
 # Engineering review and research comparison
 
+## Context connection ownership and schema reopening — 2026-11-09
+
+PR #139's unchanged-source Windows Core attempts failed at two distinct paths:
+run `42539541836`, job `128911173080` exceeded the original five-second Skill
+HTTP deadline during supply-chain JSON publication; job `128979725241` exceeded
+the original ten-second selected-context HTTP deadline with a live stack in
+`ContextStore._db_connect` connection close. Full original logs are retained;
+[#88](https://github.com/untrod/apeir/issues/88) and
+[#116](https://github.com/untrod/apeir/issues/116) remain open. A completed phase
+or one green repeat does not establish a shared root cause.
+
+Direct regressions on main `1dd5fc3aa1f17ebd01c5a4511eaca1de02a6d032`
+reproduced Context configuration-failure connection leaks, unnecessary writer
+contention when reopening an initialized store, and partial schema publication
+after initialization failure. The existing Context owner now closes configured
+connections on every path, publishes tables/indexes and its original marker in
+one transaction, and reads an already-published WAL schema without taking a
+writer. Missing entries still require the original write path. Future non-CREATE
+migrations cannot take this shortcut; legacy schema marker values are retained.
+
+Context also adopts Governance's supported `NO_CKPT_ON_CLOSE` connection setting,
+retaining FULL-synchronous WAL commits, normal auto-checkpointing, foreign keys,
+read-only restrictions and the unchanged five-second database wait. Older Python
+versions retain their existing checkpoint policy. No keeper, pool, new store or
+automatic retry is introduced. Slow connect/configure/commit/rollback/close
+phases report duration and read-only scope without SQL, paths or context values.
+
+Regression coverage includes original transaction ownership, failed commit and
+rollback, fresh-process recovery after abrupt exit, missing-schema repair and
+audit failure refusal. Windows diagnostic qualification and full Core remain
+separate from these deterministic regressions. The preceding source `4817e83`
+Windows package does not contain this later Context change; an updated package
+requires a fresh full native build. No Windows 10 installation claim is added.
+
+The existing operator BackupManager copied only `.db` files. A real Context and
+Governance regression demonstrated missing committed audit tables when records
+remained in WAL. Its database copies now use SQLite's backup API with a bounded
+five-second progress deadline, publish only complete snapshots, and retain the
+original writer's uncommitted records outside the backup. Database restoration
+uses SQLite's transaction rather than replacing a live database inode; failures
+report unsuccessful/partial results and preserve an active writer. Labels cannot
+escape the backup directory or silently replace a same-second backup. This is
+per-database operator backup compatibility, not an atomic multi-store snapshot,
+online application rollback or a newly exposed GUI/Agent restore capability.
+Stop Runtime before application-state restoration and test old state on a copy.
+
 ## Governed project tests and passive evaluation — 2026-11-08
 
 Final combined source `4817e83c0cabeb879815edc5fba1c9d2f22fd628` was accepted through PR137 as main
