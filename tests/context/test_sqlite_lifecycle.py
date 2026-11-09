@@ -193,6 +193,16 @@ def test_readiness_never_skips_future_non_create_migrations(tmp_path, migration)
     )
 
 
+def test_reopen_preserves_original_refusal_of_malformed_schema_marker(tmp_path):
+    original = store.ContextStore(tmp_path)
+    with store._db_connect(original.db_path) as db:
+        db.execute("ALTER TABLE context_snapshots DROP COLUMN confidence")
+    # CREATE IF NOT EXISTS would not validate columns, but the original marker
+    # INSERT did. The read-only reopening shortcut must preserve that refusal.
+    with pytest.raises(ContextStoreError, match="confidence"):
+        store.ContextStore(tmp_path)
+
+
 @pytest.mark.parametrize("failure", ["commit", "rollback"])
 def test_transaction_failure_still_releases_original_handle(
     tmp_path, monkeypatch, failure

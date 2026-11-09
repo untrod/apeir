@@ -126,7 +126,11 @@ def _schema_already_initialized(db_path: str, script: str) -> bool:
         return (
             expected <= actual
             and db.execute(
-                "SELECT 1 FROM context_snapshots WHERE id='__schema__'"
+                # Preserve the original marker INSERT's column validation;
+                # existing table/index names alone do not certify its shape.
+                "SELECT id, version, timestamp, status, schema_version, confidence, "
+                "item_count, checksum, sources_json, snapshot_json, created_at "
+                "FROM context_snapshots WHERE id='__schema__'"
             ).fetchone()
             is not None
         )
