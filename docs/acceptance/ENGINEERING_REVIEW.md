@@ -33,8 +33,9 @@ Regressions cover shared-owner versus shared-waiter cancellation, persistence
 failure, late lease completion, unload/reload and NKI readiness/connect/execute
 waits. They use controlled loaders and protocol fixtures, not paid inference or
 new native/physical acceptance. Baseline failures and exact verification results
-are retained with the PR. Existing unrelated formatting in `resources.py` is
-preserved rather than reformatting the module.
+are retained with the PR. The changed-file CI formatting gate also requires normalization of pre-existing
+formatting in `resources.py`; the original failure is retained. Only that already
+modified module is normalized, without changing other modules or weakening the gate.
 
 On the original main, the new regression selection failed17 cases and passed2
 controls. The candidate passed90 focused cases,906 affected model/Workflow/Work/
