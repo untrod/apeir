@@ -155,11 +155,11 @@ gh workflow run desktop-build.yml --ref <approved-source-revision> -f native_tar
 After the original candidate artifact expires, explicitly select
 `approved_kernel_artifact_format=native-build` to recover the **same locked
 components** from a reviewed successful full-mode native package. For the
-2026-11-08 retained carrier, producer `41543803229`, artifact `13190523439`, the
+2026-11-09 retained carrier, producer `42534072393`, artifact `13640647666`, the
 outer ZIP SHA-256 is
-`879b745b206df9fc0c2205dc858b0d6fdd79e3f870eb5bb5cd701628766c4e44`.
-Its source is `2d8a044e51a39b75c2afd9a8eaccba4a72d42952`; its Actions copy expires
-2026-11-17. The pipeline still checks accepted source ancestry, exact artifact
+`235b94bff1ad9ce76900afcc48dcc215ebb03a0708d4043db996b20efc577d9c`.
+Its source is `4817e83c0cabeb879815edc5fba1c9d2f22fd628`; its Actions copy expires
+2026-11-23. The pipeline still checks accepted source ancestry, exact artifact
 identity/digest, complete checksums, Portable contents, dependency/source records,
 original NKI denial/recovery and both actual PE hashes against the maintained
 lock. A carrier is not a new build or a Windows 10 installation result. Retain
@@ -167,7 +167,7 @@ each subsequent qualified carrier before its expiry rather than repeatedly
 rebuilding Kernel or changing its hashes.
 
 ```bash
-gh workflow run desktop-build.yml --ref <approved-source-revision> -f native_target=windows-x64 -f approved_kernel_artifact_format=native-build -f approved_kernel_run_id=41543803229 -f approved_kernel_artifact_id=13190523439 -f approved_kernel_zip_sha256=879b745b206df9fc0c2205dc858b0d6fdd79e3f870eb5bb5cd701628766c4e44
+gh workflow run desktop-build.yml --ref <approved-source-revision> -f native_target=windows-x64 -f approved_kernel_artifact_format=native-build -f approved_kernel_run_id=42534072393 -f approved_kernel_artifact_id=13640647666 -f approved_kernel_zip_sha256=235b94bff1ad9ce76900afcc48dcc215ebb03a0708d4043db996b20efc577d9c
 ```
 
 The integration still cannot read repository Actions variables (HTTP403).
@@ -190,7 +190,39 @@ checks do not alter the reviewed Kernel hashes or remove licensing/install gates
 
 ## Current native command-qualified build
 
-The current Windows development bundle is [full-mode run41543803229](https://github.com/untrod/apeir/actions/runs/41543803229),
+The current unsigned Windows development bundle is [full-mode run42534072393](https://github.com/untrod/apeir/actions/runs/42534072393),
+source `4817e83c0cabeb879815edc5fba1c9d2f22fd628`, accepted through PR137 as main
+`1dd5fc3aa1f17ebd01c5a4511eaca1de02a6d032`. [Artifact13640647666](https://github.com/untrod/apeir/actions/runs/42534072393/artifacts/13640647666) expires
+on **2026-11-23** and requires GitHub sign-in. The source manifest
+identifies the binary; later documentation does not change its qualification.
+
+| File | SHA-256 |
+| --- | --- |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `67d292a6f29f34a023011976d39ba3956c6448c5b59ec1d3c2b766238fdf6fbc` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `79c73802d34104915f40c14353e0c17a1ccc903516eb3eb9482b9811ef9356e3` |
+| Outer artifact ZIP | `235b94bff1ad9ce76900afcc48dcc215ebb03a0708d4043db996b20efc577d9c` |
+
+The official launcher ran in full mode, without SkipValidation or SkipSidecarSmoke.
+Independent admission verified the actual checksums, manifest, nested Portable,
+NSIS payload and locked Kernel/Worker bytes. Real Kernel/Worker/Runtime startup,
+NKI authentication/refusal, query-only original-work recovery and cleanup passed
+on **Windows Server2025**. No external model call was made by native smoke.
+`installation_acceptance=NOT_RUN`: the installer was inspected, not installed.
+
+This source includes the original Work test consumer, failure propagation,
+passive evaluation and queued Relay cancellation. The Linux read-only Python VM
+has its own scoped acceptance; it is not a Windows sandbox. Historical Windows
+Skill/Context timing issues remain open. A green build does not establish their
+common cause or qualify every model and plugin.
+
+An unpublished draft can retain verified files for review; no public download
+or stable Release is claimed. Windows10 GUI, install/upgrade/uninstall,
+Defender, signing and publication authorization remain separate Gates.
+Use the [Windows guide](../getting-started/INSTALL_WINDOWS.md) for preparation.
+
+### Previous Relay read-error producer — 2026-11-02
+
+The previous Windows development bundle is [full-mode run41543803229](https://github.com/untrod/apeir/actions/runs/41543803229),
 source `2d8a044e51a39b75c2afd9a8eaccba4a72d42952`, accepted through PR132 as main
 `edd09f224ad103dbdb3fe6db98958ad8251bd0c2`.
 [Artifact13190523439](https://github.com/untrod/apeir/actions/runs/41543803229/artifacts/13190523439) expires on **2026-11-17** and requires GitHub sign-in.

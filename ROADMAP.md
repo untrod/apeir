@@ -19,7 +19,7 @@ authority or execution.
 | Level | Status | Qualified scope / remaining work |
 | --- | --- | --- |
 | SOURCE_READY | PASS | Independent wheel installation, authenticated model-free API, browser Studio and simulated original-result recovery. Use the matching qualified main bundles or the explicitly identified reviewed candidate in Quick Start. |
-| PRODUCT_READY | PARTIAL | Setup, saved Provider management, reviewed file proposals, evidence and restart paths work in software. Live-model development and safely executed tests still need their separate prerequisites. |
+| PRODUCT_READY | PARTIAL | Setup, saved Provider management, reviewed file proposals, evidence and restart paths work in software. One bounded local inference and an operator-assisted approved file/test/history loop are qualified; full GUI/cloud use still needs separate acceptance. |
 | NATIVE_READY | PARTIAL | Approved components and unsigned Portable/NSIS builds exist. Current Windows 10 installed lifecycle is not qualified. |
 | NATIVE_COMPONENT_READY | PASS | PR101 admitted the approved frozen-source x64 PE files through the existing component lock. [Exact inputs](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#approved-component-lock-migration--2026-10-26). |
 | NATIVE_BUILD_READY | PASS | Approved unsigned Portable/NSIS builds and real Server2025 component/CLI smoke are established. Every download retains its own source manifest, integrity report and checksums; later documentation is not a new binary qualification. Windows 10 installation and historical timing issues remain separate. [Build identity and hashes](docs/operations/deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build). |
@@ -31,7 +31,7 @@ authority or execution.
 | Component | Status | Implemented | Remaining / evidence |
 | --- | --- | --- | --- |
 | Studio | PARTIAL | Docking, eight presets, named layouts, v1/v2 Overview presentation, UTC-day Usage/field controls, canonical progress/cache cards, themes, bilingual navigation and Controller isolation | GitHub connection and Ollama lifecycle management remain missing; executable third-party UI and live media are not qualified. [Studio guide](docs/development/DEVELOPER_PLATFORM.md#apeir-studio). |
-| Direct development | PARTIAL | Project reads, drafts, two-file Proposal review, independent approval, file readback and original history; Linux candidate adds a digest-pinned, read-only Python test VM | The original Work must consume its test evidence; GUI/cloud qualification remains separate. File MATCH is not test PASS. [Linux scope](docs/operations/deployment/DEPLOYMENT.md#read-only-python-test-vm). |
+| Direct development | PARTIAL | Project reads, drafts, two-file Proposal review, independent approval, file readback and original history; governed fixed-profile test consumption, digest-pinned read-only Python VM and original Work/Artifact recovery | Qualified scope is stdlib Python on operator-provisioned Linux x86_64. Full GUI/cloud qualification remains separate. File MATCH is not test PASS. [Linux scope](docs/operations/deployment/DEPLOYMENT.md#read-only-python-test-vm). |
 | Models | PARTIAL | Saved Provider lifecycle, credential references, explicit selection and cloud/local coexistence in software tests; actual Ollama/Qwen CPU inference and original-request recovery | Qwen 1.5B passed one bounded code-analysis case; 0.5B returned a wrong recommendation and its failure is retained. Cloud accounts, other endpoint capabilities and Windows model use need separate qualification. Frozen Worker has no Anthropic Messages backend. |
 | Chat activity | PARTIAL | Recorded model/tool events, governed search, approval/receipt references, history inspection and reconnect state | NKI returns complete responses; incremental model text is not available. Full Skill-use attribution is pending. |
 | Workflow | PARTIAL | Visual editor, typed bindings, pure handlers and approved single-turn Model/AgentSession host with original-request reconciliation | Live-model qualification and mature autonomous Agent hosts remain pending. [Builder limits](docs/development/DEVELOPER_PLATFORM.md#visual-workflow-builder). |
@@ -41,7 +41,7 @@ authority or execution.
 | Terminal / Git | PARTIAL | Governed fixed command profiles, ProcessSession records and bounded Git reads where isolation is available | Complete interactive PTY and Git write experience. No unrestricted host fallback. |
 | Nodes / Devices | PARTIAL | Signed identity, pairing, trust, resource freshness, distributed Work, evidence and reconciliation | Current connected status is required; historical registration is not online readiness. Physical writes need separate acceptance. |
 | Automation | PARTIAL | Structured simulated Workflow consumer, manual keys, one-shot due polling, history and original-trigger recovery | Recurring/background Cron, Event, Webhook and Recorder are not implemented. Free-text enabled configuration is not executable qualification. |
-| Environment / scientific | PARTIAL | Persistent contracts, governed lifecycle and numerical reference tasks | Default local execution remains BLOCKED without its required strict sandbox; libraries or a created contract do not prove execution. |
+| Environment / scientific | PARTIAL | Persistent contracts, governed lifecycle and numerical reference tasks | Read-only Linux Python execution passed through the existing Environment API and pinned VM; other local scopes remain BLOCKED without their required strict sandbox. A created contract alone does not prove execution. |
 
 The [Developer Platform](docs/development/DEVELOPER_PLATFORM.md) explains these
 paths. A catalog entry, installed package or healthy endpoint is not proof that
@@ -75,7 +75,7 @@ result to a new commit.
    integrate mature external Agent execution only through the existing owners.
 2. Qualify one cloud Provider and one local service with explicit account and
    cost authorization. Keep unsupported protocols unavailable.
-3. Run the direct developer loop's test step in a qualified strict sandbox.
+3. Qualify the complete GUI developer loop using the existing approved file, scoped VM test and recovery consumers; keep broader execution scopes blocked until qualified.
 4. Qualify the current native package on Windows 10 x64.
 5. Complete physical device acceptance only when hardware and authorized fault
    testing are available.
