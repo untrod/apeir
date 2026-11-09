@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,6 +11,7 @@ from nous_runtime.model_runtime.factory import build_gateway_from_providers
 from nous_runtime.model_runtime.gateway import ModelGateway
 from nous_runtime.model_runtime.models import ModelRequest
 from nous_runtime.model_runtime.errors import ModelProviderResponseError
+from nous_runtime.model_runtime.errors import ModelInvocationError
 from nous_runtime.provider.adapters.anthropic import AnthropicProvider
 from nous_runtime.provider.adapters.openai import OpenAIProvider
 
@@ -142,6 +144,128 @@ class FakeHealthClient:
 
     async def health_check(self, deep=False):
         return self.response
+
+
+@pytest.mark.parametrize("phase", ["readiness", "connection", "execution"])
+def test_kernel_async_waits_obey_original_model_deadline(monkeypatch, phase):
+    import nous_runtime.model_runtime.gateway as gateway_module
+
+    # Accounting setup may be slow on a busy Runner; the phase timer stays real.
+    clock = {"start": None}
+    monotonic = gateway_module.time.monotonic
+
+    def elapsed():
+        return 0.0 if clock["start"] is None else monotonic() - clock["start"]
+
+    monkeypatch.setattr(
+        gateway_module,
+        "time",
+        SimpleNamespace(monotonic=elapsed, perf_counter=elapsed),
+    )
+    gateway = build_gateway_from_providers([RemoteProvider()])
+    client = FakeKernelClient()
+    entered = asyncio.Event()
+
+    async def block():
+        clock["start"] = monotonic()
+        entered.set()
+        await asyncio.Event().wait()
+
+    async def available():
+        if phase == "readiness":
+            await block()
+        return True
+
+    async def new_client():
+        if phase == "connection":
+            await block()
+        return client
+
+    original_execute = client.execute_operation
+
+    async def execute(operation, idempotency_key=""):
+        await original_execute(operation, idempotency_key)
+        await block()
+
+    if phase == "execution":
+        monkeypatch.setattr(client, "execute_operation", execute)
+    monkeypatch.setattr(gateway, "_ensure_nki_available", available)
+    monkeypatch.setattr(gateway, "_new_nki_client", new_client)
+
+    async def scenario():
+        request = ModelRequest(task_id="bounded-wait", timeout_s=0.05)
+        with pytest.raises(ModelInvocationError, match="timed out"):
+            await asyncio.wait_for(
+                gateway.invoke(request),
+                timeout=1,
+            )
+        assert entered.is_set()
+        assert gateway.active_request_ids() == ()
+        assert gateway.scheduler.active_leases() == ()
+        assert (client.operation is not None) == (phase == "execution")
+        assert client.closed == (phase == "execution")
+        if phase == "execution":
+            assert gateway._cost_controller.request_usage(request.request_id) == (
+                None,
+                None,
+            )
+
+    asyncio.run(scenario())
+
+
+def test_kernel_wait_and_capacity_share_remaining_time_without_rebinding(monkeypatch):
+    import nous_runtime.model_runtime.gateway as gateway_module
+
+    clock = {"now": 0.0}
+    monkeypatch.setattr(
+        gateway_module,
+        "time",
+        SimpleNamespace(
+            monotonic=lambda: clock["now"], perf_counter=lambda: clock["now"]
+        ),
+    )
+    proxy = SimpleNamespace(**vars(asyncio))
+    waits = []
+
+    async def wait_for(awaitable, timeout):
+        waits.append((awaitable.cr_code.co_name, timeout))
+        return await asyncio.wait_for(awaitable, timeout)
+
+    proxy.wait_for = wait_for
+    monkeypatch.setattr(gateway_module, "asyncio", proxy)
+    gateway = build_gateway_from_providers([RemoteProvider()])
+    client = FakeKernelClient()
+    capacity_budgets = []
+
+    async def available():
+        return True
+
+    async def loaded(_instance, _adapter):
+        clock["now"] = 3.0
+
+    original_acquire = gateway.scheduler.acquire
+
+    async def acquire(**kwargs):
+        capacity_budgets.append(kwargs["timeout_s"])
+        lease = await original_acquire(**kwargs)
+        clock["now"] = 7.0
+        return lease
+
+    async def new_client():
+        return client
+
+    monkeypatch.setattr(gateway, "_ensure_nki_available", available)
+    monkeypatch.setattr(gateway, "_ensure_loaded", loaded)
+    monkeypatch.setattr(gateway.scheduler, "acquire", acquire)
+    monkeypatch.setattr(gateway, "_new_nki_client", new_client)
+    result = asyncio.run(
+        gateway.invoke(ModelRequest(task_id="one-budget", timeout_s=10))
+    )
+    assert result.content == "kernel response"
+    assert capacity_budgets == [7]
+    assert ("_nki_execute", 3) in waits
+    assert client.operation["timeout_ms"] == 10000
+    assert client.closed and gateway.scheduler.active_leases() == ()
 
 
 def test_native_anthropic_is_rejected_without_misrouting_or_dispatch(

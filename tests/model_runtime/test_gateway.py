@@ -218,6 +218,49 @@ def test_gateway_expired_before_dispatch_never_invokes_or_leases(monkeypatch) ->
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("operation", ["invoke", "stream"])
+def test_gateway_deadline_includes_model_loading(monkeypatch, operation):
+    # Measure the blocked phase with a real timer, not variable routing/setup I/O.
+    clock = {"start": None}
+    monotonic = gateway_module.time.monotonic
+
+    def elapsed():
+        return 0.0 if clock["start"] is None else monotonic() - clock["start"]
+
+    monkeypatch.setattr(gateway_module, "time", SimpleNamespace(monotonic=elapsed))
+
+    async def scenario():
+        registry = ModelRuntimeRegistry()
+        add_model(registry, "loading", "loading")
+        adapter = MockModelAdapter(content="must not execute")
+        adapter.backend_id = "loading"
+        adapters = ModelAdapterRegistry()
+        adapters.register(adapter)
+        entered = asyncio.Event()
+
+        async def blocked_load(_instance):
+            clock["start"] = monotonic()
+            entered.set()
+            await asyncio.Event().wait()
+
+        monkeypatch.setattr(adapter, "load", blocked_load)
+        gateway = ModelGateway(registry, adapters)
+        request = ModelRequest(task_id="loading-deadline", timeout_s=0.05)
+        with pytest.raises(ModelInvocationError, match="timed out"):
+            if operation == "invoke":
+                await asyncio.wait_for(gateway.invoke(request), timeout=1)
+            else:
+                await asyncio.wait_for(anext(gateway.stream(request)), timeout=1)
+        assert entered.is_set()
+        assert adapter.invocations == []
+        assert adapter.cancelled == set()
+        assert registry.get_instance("loading-0").state is ModelInstanceState.FAILED
+        assert gateway.active_request_ids() == ()
+        assert gateway.scheduler.active_leases() == ()
+
+    asyncio.run(scenario())
+
+
 def test_gateway_retries_same_model_before_fallback() -> None:
     async def scenario() -> None:
         registry = ModelRuntimeRegistry()

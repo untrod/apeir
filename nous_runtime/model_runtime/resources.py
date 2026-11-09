@@ -62,9 +62,7 @@ class ModelResourceScheduler:
         vram_capacity_mb: int = 0,
     ) -> None:
         if memory_capacity_mb < 0 or vram_capacity_mb < 0:
-            raise ModelResourceError(
-                "resource capacities must be non-negative"
-            )
+            raise ModelResourceError("resource capacities must be non-negative")
         self.registry = registry
         self.memory_capacity_mb = memory_capacity_mb
         self.vram_capacity_mb = vram_capacity_mb
@@ -113,19 +111,23 @@ class ModelResourceScheduler:
                 result = loader(instance)
                 if inspect.isawaitable(result):
                     await result
-        except Exception as exc:
             async with self._condition:
-                instance.state = ModelInstanceState.FAILED
+                instance.state = ModelInstanceState.READY
+                instance.loaded_at = utc_now()
                 self.registry.flush()
                 self._condition.notify_all()
+        except (Exception, asyncio.CancelledError) as exc:
+            async with self._condition:
+                instance.state = ModelInstanceState.FAILED
+                try:
+                    self.registry.flush()
+                finally:
+                    self._condition.notify_all()
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             raise ModelResourceError(
                 f"failed to load instance {instance.instance_id}: {exc}"
             ) from exc
-        async with self._condition:
-            instance.state = ModelInstanceState.READY
-            instance.loaded_at = utc_now()
-            self.registry.flush()
-            self._condition.notify_all()
         return instance
 
     async def acquire(
@@ -170,22 +172,16 @@ class ModelResourceScheduler:
                         ),
                         None,
                     )
-                    is_head = (
-                        instance_head is not None
-                        and instance_head[2] == ticket
-                    )
+                    is_head = instance_head is not None and instance_head[2] == ticket
                     if is_head and instance.has_capacity:
                         self._waiters = [
-                            item
-                            for item in self._waiters
-                            if item[2] != ticket
+                            item for item in self._waiters if item[2] != ticket
                         ]
                         instance.active_requests += 1
                         instance.last_used_at = utc_now()
                         instance.state = (
                             ModelInstanceState.SATURATED
-                            if instance.active_requests
-                            >= instance.max_concurrency
+                            if instance.active_requests >= instance.max_concurrency
                             else ModelInstanceState.BUSY
                         )
                         lease = ModelLease(
@@ -200,9 +196,7 @@ class ModelResourceScheduler:
                         return lease
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
-                        raise ModelResourceError(
-                            "timed out waiting for model capacity"
-                        )
+                        raise ModelResourceError("timed out waiting for model capacity")
                     try:
                         await asyncio.wait_for(
                             self._condition.wait(),
@@ -213,9 +207,7 @@ class ModelResourceScheduler:
                             "timed out waiting for model capacity"
                         ) from exc
             finally:
-                self._waiters = [
-                    item for item in self._waiters if item[2] != ticket
-                ]
+                self._waiters = [item for item in self._waiters if item[2] != ticket]
 
     async def release(self, lease: ModelLease) -> None:
         async with self._condition:
@@ -228,11 +220,16 @@ class ModelResourceScheduler:
                 instance.active_requests - 1,
             )
             instance.last_used_at = utc_now()
-            instance.state = (
-                ModelInstanceState.READY
-                if instance.active_requests == 0
-                else ModelInstanceState.BUSY
-            )
+            if instance.state in {
+                ModelInstanceState.READY,
+                ModelInstanceState.BUSY,
+                ModelInstanceState.SATURATED,
+            }:
+                instance.state = (
+                    ModelInstanceState.READY
+                    if instance.active_requests == 0
+                    else ModelInstanceState.BUSY
+                )
             self._condition.notify_all()
 
     async def unload(
@@ -244,6 +241,13 @@ class ModelResourceScheduler:
     ) -> ModelInstance:
         instance = self._require_instance(instance_id)
         async with self._condition:
+            if instance.state in {
+                ModelInstanceState.LOADING,
+                ModelInstanceState.UNLOADING,
+            }:
+                raise ModelResourceError(
+                    "cannot unload during another model lifecycle transition"
+                )
             if instance.active_requests and not force:
                 raise ModelResourceError(
                     "cannot unload an instance with active requests"
@@ -256,20 +260,29 @@ class ModelResourceScheduler:
                 result = unloader(instance)
                 if inspect.isawaitable(result):
                     await result
-        except Exception as exc:
             async with self._condition:
-                instance.state = ModelInstanceState.FAILED
+                self._active_leases = {
+                    key: lease
+                    for key, lease in self._active_leases.items()
+                    if lease.instance_id != instance_id
+                }
+                instance.active_requests = 0
+                instance.loaded_at = ""
+                instance.state = ModelInstanceState.NOT_LOADED
                 self.registry.flush()
                 self._condition.notify_all()
+        except (Exception, asyncio.CancelledError) as exc:
+            async with self._condition:
+                instance.state = ModelInstanceState.FAILED
+                try:
+                    self.registry.flush()
+                finally:
+                    self._condition.notify_all()
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             raise ModelResourceError(
                 f"failed to unload instance {instance.instance_id}: {exc}"
             ) from exc
-        async with self._condition:
-            instance.active_requests = 0
-            instance.loaded_at = ""
-            instance.state = ModelInstanceState.NOT_LOADED
-            self.registry.flush()
-            self._condition.notify_all()
         return instance
 
     async def unload_idle(
@@ -279,9 +292,7 @@ class ModelResourceScheduler:
         unloader: LoadHandler | None = None,
     ) -> list[str]:
         if idle_seconds < 0:
-            raise ModelResourceError(
-                "idle_seconds must be non-negative"
-            )
+            raise ModelResourceError("idle_seconds must be non-negative")
         now = datetime.now(timezone.utc)
         unloaded: list[str] = []
         for instance in self.registry.list_instances():
@@ -320,38 +331,28 @@ class ModelResourceScheduler:
         return {
             "memory_mb": sum(item.memory_mb for item in loaded),
             "vram_mb": sum(item.vram_mb for item in loaded),
-            "active_requests": sum(
-                item.active_requests for item in loaded
-            ),
+            "active_requests": sum(item.active_requests for item in loaded),
             "active_leases": len(self._active_leases),
         }
 
     def _require_instance(self, instance_id: str) -> ModelInstance:
         instance = self.registry.get_instance(instance_id)
         if instance is None:
-            raise ModelResourceError(
-                f"model instance not found: {instance_id}"
-            )
+            raise ModelResourceError(f"model instance not found: {instance_id}")
         return instance
 
     def _ensure_resource_capacity(self, instance: ModelInstance) -> None:
         usage = self.resource_usage()
         if (
             self.memory_capacity_mb
-            and usage["memory_mb"] + instance.memory_mb
-            > self.memory_capacity_mb
+            and usage["memory_mb"] + instance.memory_mb > self.memory_capacity_mb
         ):
-            raise ModelResourceError(
-                "insufficient memory capacity for model instance"
-            )
+            raise ModelResourceError("insufficient memory capacity for model instance")
         if (
             self.vram_capacity_mb
-            and usage["vram_mb"] + instance.vram_mb
-            > self.vram_capacity_mb
+            and usage["vram_mb"] + instance.vram_mb > self.vram_capacity_mb
         ):
-            raise ModelResourceError(
-                "insufficient VRAM capacity for model instance"
-            )
+            raise ModelResourceError("insufficient VRAM capacity for model instance")
 
 
 __all__ = ["LoadHandler", "ModelLease", "ModelResourceScheduler"]

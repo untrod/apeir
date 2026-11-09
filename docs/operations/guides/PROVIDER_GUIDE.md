@@ -123,6 +123,12 @@ before another potentially billed call. Missing response does not establish
 that the Provider did no work. Keep the original request/usage identity; do not
 repeat inference to repair telemetry.
 
+Loading, capacity queues and Kernel transport share the original request's
+remaining time. A cancelled load or unload is failed, not ready; inspect its
+resource state before an explicit recovery. Cancelling one waiting caller does
+not cancel another caller's shared load. Unloading a model does not prove that an
+already-dispatched remote request stopped or incurred no cost.
+
 ## See also
 
 [Context, Tokens and cost](CONTEXT_AND_USAGE.md) ·
