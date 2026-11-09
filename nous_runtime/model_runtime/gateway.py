@@ -207,11 +207,17 @@ class ModelGateway:
             )
         self._add_metrics(requests=1)
         started = time.monotonic()
+        deadline = started + request.timeout_s
 
         # NKI mode is fail-closed. There is no automatic provider fallback.
         use_kernel = self._use_nki
         if self._use_nki:
-            nki_available = await self._ensure_nki_available()
+            try:
+                nki_available = await asyncio.wait_for(
+                    self._ensure_nki_available(), timeout=request.timeout_s
+                )
+            except asyncio.TimeoutError:
+                raise ModelInvocationError("Kernel readiness check timed out") from None
             if not nki_available:
                 raise ModelInvocationError(
                     "APEIR Kernel is unavailable; direct provider execution is disabled"
@@ -316,29 +322,41 @@ class ModelGateway:
                     )
                     guarded_request = reservation.request
                 if use_kernel:
-                    await self._ensure_loaded(instance, adapter)
+                    remaining = self._remaining_timeout(deadline)
+                    await asyncio.wait_for(
+                        self._ensure_loaded(instance, adapter),
+                        timeout=remaining,
+                    )
                     lease = await self.scheduler.acquire(
                         request_id=request.request_id,
                         instance_id=instance.instance_id,
-                        timeout_s=remaining,
+                        timeout_s=self._remaining_timeout(deadline),
                         priority=int(request.metadata.get("priority", 50)),
                     )
                     async with lease:
-                        response = await self._nki_execute(
-                            guarded_request,
-                            descriptor,
-                            instance,
-                            adapter,
-                            before_dispatch=before_dispatch,
-                            reconcile_only=reservation is not None
-                            and reservation.replayed,
+                        remaining = self._remaining_timeout(deadline)
+                        response = await asyncio.wait_for(
+                            self._nki_execute(
+                                guarded_request,
+                                descriptor,
+                                instance,
+                                adapter,
+                                before_dispatch=before_dispatch,
+                                reconcile_only=reservation is not None
+                                and reservation.replayed,
+                            ),
+                            timeout=remaining,
                         )
                 else:
-                    await self._ensure_loaded(instance, adapter)
+                    remaining = self._remaining_timeout(deadline)
+                    await asyncio.wait_for(
+                        self._ensure_loaded(instance, adapter),
+                        timeout=remaining,
+                    )
                     lease = await self.scheduler.acquire(
                         request_id=request.request_id,
                         instance_id=instance.instance_id,
-                        timeout_s=remaining,
+                        timeout_s=self._remaining_timeout(deadline),
                         priority=int(request.metadata.get("priority", 50)),
                     )
                     async with lease:
@@ -765,22 +783,27 @@ class ModelGateway:
             )
             guarded_request = reservation.request
         started = time.monotonic()
+        deadline = started + request.timeout_s
         dispatched = False
         finished = False
         iterator = None
         failure: ModelInvocationError | None = None
         try:
-            await self._ensure_loaded(instance, adapter)
+            remaining = self._remaining_timeout(deadline)
+            await asyncio.wait_for(
+                self._ensure_loaded(instance, adapter),
+                timeout=remaining,
+            )
             lease = await self.scheduler.acquire(
                 request_id=request.request_id,
                 instance_id=instance.instance_id,
-                timeout_s=request.timeout_s,
+                timeout_s=self._remaining_timeout(deadline),
                 priority=int(request.metadata.get("priority", 50)),
             )
-            await self._emit(
-                "model.stream.started", request, {"decision": decision.to_dict()}
-            )
             async with lease:
+                await self._emit(
+                    "model.stream.started", request, {"decision": decision.to_dict()}
+                )
                 if request.timeout_s - (time.monotonic() - started) <= 0:
                     raise asyncio.TimeoutError
                 self._admit_selected_input(
@@ -1614,6 +1637,13 @@ class ModelGateway:
                     "synchronous model gateway loop is unavailable"
                 )
             return self._sync_loop
+
+    @staticmethod
+    def _remaining_timeout(deadline: float) -> float:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise asyncio.TimeoutError
+        return remaining
 
     async def _ensure_loaded(
         self,

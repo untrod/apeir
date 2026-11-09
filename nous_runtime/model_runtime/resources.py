@@ -113,19 +113,23 @@ class ModelResourceScheduler:
                 result = loader(instance)
                 if inspect.isawaitable(result):
                     await result
-        except Exception as exc:
             async with self._condition:
-                instance.state = ModelInstanceState.FAILED
+                instance.state = ModelInstanceState.READY
+                instance.loaded_at = utc_now()
                 self.registry.flush()
                 self._condition.notify_all()
+        except (Exception, asyncio.CancelledError) as exc:
+            async with self._condition:
+                instance.state = ModelInstanceState.FAILED
+                try:
+                    self.registry.flush()
+                finally:
+                    self._condition.notify_all()
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             raise ModelResourceError(
                 f"failed to load instance {instance.instance_id}: {exc}"
             ) from exc
-        async with self._condition:
-            instance.state = ModelInstanceState.READY
-            instance.loaded_at = utc_now()
-            self.registry.flush()
-            self._condition.notify_all()
         return instance
 
     async def acquire(
@@ -228,11 +232,16 @@ class ModelResourceScheduler:
                 instance.active_requests - 1,
             )
             instance.last_used_at = utc_now()
-            instance.state = (
-                ModelInstanceState.READY
-                if instance.active_requests == 0
-                else ModelInstanceState.BUSY
-            )
+            if instance.state in {
+                ModelInstanceState.READY,
+                ModelInstanceState.BUSY,
+                ModelInstanceState.SATURATED,
+            }:
+                instance.state = (
+                    ModelInstanceState.READY
+                    if instance.active_requests == 0
+                    else ModelInstanceState.BUSY
+                )
             self._condition.notify_all()
 
     async def unload(
@@ -244,6 +253,13 @@ class ModelResourceScheduler:
     ) -> ModelInstance:
         instance = self._require_instance(instance_id)
         async with self._condition:
+            if instance.state in {
+                ModelInstanceState.LOADING,
+                ModelInstanceState.UNLOADING,
+            }:
+                raise ModelResourceError(
+                    "cannot unload during another model lifecycle transition"
+                )
             if instance.active_requests and not force:
                 raise ModelResourceError(
                     "cannot unload an instance with active requests"
@@ -256,20 +272,29 @@ class ModelResourceScheduler:
                 result = unloader(instance)
                 if inspect.isawaitable(result):
                     await result
-        except Exception as exc:
             async with self._condition:
-                instance.state = ModelInstanceState.FAILED
+                self._active_leases = {
+                    key: lease
+                    for key, lease in self._active_leases.items()
+                    if lease.instance_id != instance_id
+                }
+                instance.active_requests = 0
+                instance.loaded_at = ""
+                instance.state = ModelInstanceState.NOT_LOADED
                 self.registry.flush()
                 self._condition.notify_all()
+        except (Exception, asyncio.CancelledError) as exc:
+            async with self._condition:
+                instance.state = ModelInstanceState.FAILED
+                try:
+                    self.registry.flush()
+                finally:
+                    self._condition.notify_all()
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             raise ModelResourceError(
                 f"failed to unload instance {instance.instance_id}: {exc}"
             ) from exc
-        async with self._condition:
-            instance.active_requests = 0
-            instance.loaded_at = ""
-            instance.state = ModelInstanceState.NOT_LOADED
-            self.registry.flush()
-            self._condition.notify_all()
         return instance
 
     async def unload_idle(

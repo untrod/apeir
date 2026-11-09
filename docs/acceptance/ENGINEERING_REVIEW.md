@@ -1,5 +1,54 @@
 # Engineering review and research comparison
 
+## Model lifecycle and call-chain review — 2026-11-09
+
+Baseline: Distribution `c9ecfdf4a79045a558dfd7ddbc2bf21186d02ca6`;
+Kernel and its approved Windows x64 component lock are unchanged.
+
+| Path | Decision | Review boundary |
+| --- | --- | --- |
+| Studio → API → Gateway → NKI | FIX | Shared request deadline for asynchronous readiness, loading, capacity and Kernel waits; no direct Provider fallback |
+| ModelResourceScheduler | FIX | Cancelled loads/unloads fail closed and wake waiters; late releases preserve unavailable states and cannot consume a new lease |
+| Workflow → AgentSession → Gateway | REUSE | Existing typed bindings, original request identity, human admission and reconciliation; no new executor |
+| Workspace → Proposal → Governance → files | REUSE | Existing exact-version approval, independent file readback and original journal; file MATCH is not test PASS |
+| Work / Environment → ProcessSandbox | REUSE | Qualified pinned, read-only Linux Python VM scope; other environments still need their own strict backend |
+| Skills / declarative UI → ExtensionRegistry / CAS | REUSE | Existing reviewed installation, digest checks and revocation; arbitrary executable UI remains blocked |
+| Studio → current Controller | REUSE | Existing connection-generation checks and original-state reads; presentation grants no authority |
+| Windows ARM64 native delivery | BLOCKED | Current approved PE files target x64; ARM64 metadata/build configuration does not qualify an ARM64 package or x64 emulation |
+
+The review reproduced cancellation leaving an instance permanently `LOADING`,
+blocked shared waiters, lease completion reviving an unavailable instance, and
+stale capacity release after a forced unload/reload. Loading and connecting could
+also wait beyond the request budget. The fix stays in the existing Gateway and
+resource owner. It retains cancellation propagation, refuses overlapping lifecycle
+changes and marks uncertain lifecycle completion failed rather than ready.
+
+Asynchronous execution waits consume the original remaining deadline. The bound
+NKI operation and its timeout field remain unchanged for original-request
+reconciliation. Timing out a dispatched request neither establishes cancellation
+nor clears uncertain usage. Forced model unload retires local capacity leases;
+it does not certify that a remote model request or its effects stopped.
+
+Regressions cover shared-owner versus shared-waiter cancellation, persistence
+failure, late lease completion, unload/reload and NKI readiness/connect/execute
+waits. They use controlled loaders and protocol fixtures, not paid inference or
+new native/physical acceptance. Baseline failures and exact verification results
+are retained with the PR. Existing unrelated formatting in `resources.py` is
+preserved rather than reformatting the module.
+
+On the original main, the new regression selection failed17 cases and passed2
+controls. The candidate passed90 focused cases,906 affected model/Workflow/Work/
+Environment/Workspace cases (2 existing skips), and366 repository/extension/
+coexistence contracts (7 existing skips). Full Ruff, current Markdown links,
+identity, hygiene and version checks passed. Full platform CI and native builds
+retain their own source identities and results in the PR; these local counts
+are neither Windows 10 acceptance nor a claim of model quality.
+
+This is a reliability/portability review, not an all-model or all-plugin
+qualification. Pure Workflow, cloud/local selection and recovery tests exercise
+their software contracts. Live cloud accounts, deployed human sessions, complete
+GUI development and target Windows installation remain independent acceptance.
+
 ## Context connection ownership and schema reopening — 2026-11-09
 
 PR #139's unchanged-source Windows Core attempts failed at two distinct paths:
