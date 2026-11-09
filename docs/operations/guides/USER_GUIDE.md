@@ -232,6 +232,13 @@ has provisioned it. The result distinguishes command completion from reported
 all-skipped suites do not pass. Model tools use the same profile after approval.
 Evaluation only inspects the recorded Run; opening a report does not run tests.
 
+![Installed Source Preview showing the original completed Work beside its unchanged project test file](../../media/studio-original-work-source.png)
+
+*Downloaded Runtime wheel and matching production Studio at source `4817e83c`,
+Linux Chromium, models disabled for this inspection. The original approved Work
+and test evidence were restored; this view did not rerun their effects. It is
+not a Windows installation or live Chat screenshot.*
+
 In **Environment**, select **Read-only workspace / 只读工程** for the qualified
 Linux profile. It runs only the pinned interpreter against staged inputs;
 it does not enable general Linux commands or grant project writes. A local

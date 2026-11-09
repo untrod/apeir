@@ -2,6 +2,21 @@
 
 ## Governed project tests and passive evaluation — 2026-11-08
 
+Final combined source `4817e83c0cabeb879815edc5fba1c9d2f22fd628` was accepted through PR137 as main
+`1dd5fc3aa1f17ebd01c5a4511eaca1de02a6d032`; it preserves PR138's original queued-cancellation
+commit. [Desktop42534072393](https://github.com/untrod/apeir/actions/runs/42534072393) produced
+the matching wheel, production frontend and full-mode Windows package. Fresh
+wheel installation outside the checkout, public CLI/model-free API, simulated
+single-effect recovery and actual downloaded Studio inspection passed. The browser
+read the original completed Work and unchanged test file with zero API mutations;
+both owned services exited 0 and closed their listeners. The installed public CLI
+also ran the existing typed-result example as original Run
+`wfr_ada737bb4fb646ffa22f76139bc49877`, recovered it in new processes and refused
+invalid typed input. These pure nodes made no model or command calls. Linux Chromium is not
+Windows installation evidence. See [current download metadata](../operations/getting-started/QUICK_START.md#download-metadata)
+for exact artifact IDs, expiry and independently checked hashes. Original source
+and failure records below retain their stated scope.
+
 The existing `project.run_tests` contract lacked a Runtime consumer. The fixed
 read-only `python-unittest` profile now has a consumer in the existing capability
 dispatcher, shared by Workbench and model tools. It retains original Run IDs,

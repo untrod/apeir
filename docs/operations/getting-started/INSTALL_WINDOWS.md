@@ -3,11 +3,11 @@
 The current **0.1.0-rc1 development bundle** contains both an installer and a
 Portable ZIP. Pick one; you do not need to install Python or Kernel separately.
 
-[**Download Setup + Portable**](https://github.com/untrod/apeir/actions/runs/41543803229/artifacts/13190523439)
+[**Download Setup + Portable**](https://github.com/untrod/apeir/actions/runs/42534072393/artifacts/13640647666)
 · [Version, hashes and source](QUICK_START.md#download-metadata)
 
 This is an **unsigned development build**, not a stable Release. GitHub sign-in
-is required; the artifact expires on **2026-11-17**. Build and real sidecar checks
+is required; the artifact expires on **2026-11-23**. Build and real sidecar checks
 passed on Windows Server 2025. Windows 10 installation, GUI, upgrade, uninstall
 and Defender acceptance are **PENDING**. There is no public Release asset yet.
 
@@ -16,9 +16,10 @@ and Defender acceptance are **PENDING**. There is no public Release asset yet.
 
 ## Known limitations
 
-This bundle includes the Windows concurrent Artifact-lock and Relay snapshot
-read-error corrections. Its full build and native component checks passed; the installer has not been exercised
-on Windows10. GUI startup, upgrade, uninstall, Defender and old-workspace
+This bundle includes governed project-test consumption, passive evidence
+evaluation and queued Relay cancellation, alongside the earlier Windows fixes.
+Its full build and native component checks passed; the installer has not been
+exercised on Windows10. GUI startup, upgrade, uninstall, Defender and old-workspace
 compatibility remain **PENDING**.
 
 Historical Windows [Skill HTTP](https://github.com/untrod/apeir/issues/88) and
@@ -44,7 +45,7 @@ outer ZIP hash. In PowerShell, `Get-FileHash -Algorithm SHA256 <file>` prints it
 A mismatch means **stop**. Do not run a similarly named file from another source.
 
 The bundle also contains `SHA256SUMS.txt`, manifests and native validation
-reports. Its binary source is `2d8a044e51a39b75c2afd9a8eaccba4a72d42952`;
+reports. Its binary source is `4817e83c0cabeb879815edc5fba1c9d2f22fd628`;
 a newer README or screenshot does not change that binary.
 
 ## Setup
@@ -81,11 +82,11 @@ For developers who already use authenticated `gh`, this is the exact current
 artifact. It downloads files; it does **not** start installation:
 
 ```powershell
-gh run download 41543803229 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-0.1.0-rc1
+gh run download 42534072393 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-0.1.0-rc1
 if ($LASTEXITCODE -ne 0) { throw 'Download failed; no installer was run.' }
 $apeirFiles = @{
-    'APEIR_0.1.0-rc1_x64-setup.exe' = '0571aa01b284701436bf59ecf478143ae5cc9a01a91aa7c51eaa901f88968e88'
-    'APEIR-Portable-0.1.0-rc1-windows-x64.zip' = 'a26741530fbd0ca8c53f8582a10b4782623b7cc99ce26ed18fc37f16b302baa9'
+    'APEIR_0.1.0-rc1_x64-setup.exe' = '67d292a6f29f34a023011976d39ba3956c6448c5b59ec1d3c2b766238fdf6fbc'
+    'APEIR-Portable-0.1.0-rc1-windows-x64.zip' = '79c73802d34104915f40c14353e0c17a1ccc903516eb3eb9482b9811ef9356e3'
 }
 foreach ($apeirName in $apeirFiles.Keys) {
     $apeirPath = Join-Path '.\apeir-0.1.0-rc1' $apeirName
