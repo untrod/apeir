@@ -34,6 +34,18 @@ separate from these deterministic regressions. The preceding source `4817e83`
 Windows package does not contain this later Context change; an updated package
 requires a fresh full native build. No Windows 10 installation claim is added.
 
+The existing operator BackupManager copied only `.db` files. A real Context and
+Governance regression demonstrated missing committed audit tables when records
+remained in WAL. Its database copies now use SQLite's backup API with a bounded
+five-second progress deadline, publish only complete snapshots, and retain the
+original writer's uncommitted records outside the backup. Database restoration
+uses SQLite's transaction rather than replacing a live database inode; failures
+report unsuccessful/partial results and preserve an active writer. Labels cannot
+escape the backup directory or silently replace a same-second backup. This is
+per-database operator backup compatibility, not an atomic multi-store snapshot,
+online application rollback or a newly exposed GUI/Agent restore capability.
+Stop Runtime before application-state restoration and test old state on a copy.
+
 ## Governed project tests and passive evaluation — 2026-11-08
 
 The existing `project.run_tests` contract lacked a Runtime consumer. The fixed
