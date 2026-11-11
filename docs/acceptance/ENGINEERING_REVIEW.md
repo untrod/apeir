@@ -16,6 +16,26 @@ retention cannot stage production components, approve a lock, create an installe
 or publish. Both Kernel source and the maintained component lock remain unchanged.
 Windows11 ARM64 smoke is not Windows10 tablet installation acceptance.
 
+The first real ARM64 candidate (`5c98b8b`, run43056393214) built both frozen
+components and the Runtime PE, but startup failed. A diagnostic-only follow-up
+(`dd734d2`, run43057960616) retained the actual version error:
+`ModuleNotFoundError: No module named 'cryptography'`. Existing dependency markers
+excluded cryptography, authlib and requests specifically on Windows ARM64 even
+though Runtime identity code imports cryptography unconditionally. The required
+base dependencies are now selected on ARM64 too; no security fallback is added.
+Official PyPI provides cryptography46.0.3 ARM64 ABI wheels compatible with the
+chosen CPython3.12.10. Both original failed runs and startup output are retained.
+
+The existing official Windows launcher and archive verifier now select explicitly
+approved `artifacts_by_target` from the same component lock. Default x64 fields
+remain unchanged. No ARM64 entry is written before exact candidate approval.
+Both architectures use the same full launcher, Portable/NSIS, hash/PE, NKI and
+process-cleanup gates. Historical x64 carriers remain admissible only when their
+full original lock digest is verified from the exact ancestor Git source and
+every selected component field is identical; new or changed hashes are refused.
+Archive metadata cannot approve a target or supply its authority. This is not a
+Windows10 installation or signing qualification.
+
 ## Studio extension compatibility and Workflow reads — 2026-11-11
 
 The existing v1 declarative contract gains optional required host features and

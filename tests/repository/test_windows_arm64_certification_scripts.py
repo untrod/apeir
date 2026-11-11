@@ -36,15 +36,31 @@ def test_bundle_smoke_passes_all_installed_sidecars() -> None:
 def test_arm64_workflow_enforces_component_lock_and_joint_smoke() -> None:
     workflow = _read(".github/workflows/desktop-build.yml")
 
-    assert "verify_kernel_components.py --repo-root ." in workflow
-    assert (
-        "-KernelPath ./desktop/src-tauri/binaries/nousd-aarch64-pc-windows-msvc.exe"
-        in workflow
+    import yaml
+
+    document = yaml.safe_load(workflow)
+    job = document["jobs"]["build-windows-x64"]
+    assert "inputs.native_target == 'windows-arm64'" in job["if"]
+    assert "windows-11-arm" in job["runs-on"]
+    assert "aarch64-pc-windows-msvc" in job["env"]["NATIVE_TARGET"]
+    commands = [step.get("run", "") for step in job["steps"]]
+    admission = next(i for i, c in enumerate(commands) if "--artifact-zip" in c)
+    build = next(
+        i for i, c in enumerate(commands) if "build-windows-x64-launcher.ps1" in c
     )
-    assert (
-        "-ProviderWorkerPath "
-        "./desktop/src-tauri/binaries/nous-provider-worker-aarch64-pc-windows-msvc.exe"
-        in workflow
+    assert admission < build
+    assert "--target $env:NATIVE_TARGET" in commands[admission]
+    assert "-Target $env:NATIVE_TARGET" in commands[build]
+    assert "-Skip" not in commands[build]
+    launcher = _read("scripts/build-windows-x64-launcher.ps1")
+    assert '"nousd-$Target.exe"' in launcher
+    assert '"nous-provider-worker-$Target.exe"' in launcher
+    assert "verify_windows_native_sidecars.ps1" in launcher
+    assert "tauri:build:arm64" in launcher
+    assert "build-windows-arm64" not in document["jobs"]
+    assert any(
+        step.get("with", {}).get("name") == "windows-arm64-native-development-build"
+        for step in job["steps"]
     )
 
 

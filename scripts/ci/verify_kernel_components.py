@@ -16,8 +16,11 @@ from pathlib import Path
 from typing import Any
 
 
-def _load_lock(path: Path) -> dict[str, Any]:
-    data = json.loads(path.read_text(encoding="utf-8"))
+def _load_lock(path: Path, target: str | None = None) -> dict[str, Any]:
+    return _select_component(json.loads(path.read_text(encoding="utf-8")), target)
+
+
+def _select_component(data: dict[str, Any], target: str | None) -> dict[str, Any]:
     if data.get("schema_version") != 1:
         raise ValueError("unsupported runtime component lock schema")
     component = data.get("components", {}).get("nous-kernel")
@@ -25,7 +28,86 @@ def _load_lock(path: Path) -> dict[str, Any]:
         raise ValueError("nous-kernel is missing from the component lock")
     if not component.get("revision") or not component.get("artifacts"):
         raise ValueError("nous-kernel revision or artifacts are missing")
+    if target is not None and target != component.get("target"):
+        platforms = component.get("artifacts_by_target", {})
+        artifacts = platforms.get(target) if isinstance(platforms, dict) else None
+        if not isinstance(artifacts, list) or not artifacts:
+            raise ValueError(f"target is not approved in the component lock: {target}")
+        component = {**component, "target": target, "artifacts": artifacts}
+    if target is not None:
+        _, expected_machine = _windows_profile(component)
+        if any(
+            str(item.get("pe_machine", "")).lower() != expected_machine.lower()
+            for item in component["artifacts"]
+        ):
+            raise ValueError("locked component architecture does not match its target")
     return component
+
+
+def _windows_profile(component: dict[str, Any]) -> tuple[str, str]:
+    target = component.get("target")
+    if target == "x86_64-pc-windows-msvc":
+        return "x64", "0x8664"
+    if target == "aarch64-pc-windows-msvc":
+        return "arm64", "0xAA64"
+    raise ValueError("unsupported native Windows component target")
+
+
+def _lock_provenance_matches(
+    lock_path: Path, source_revision: str, declared_digest: str, target: str | None
+) -> bool:
+    """An added platform must not invalidate an unchanged approved carrier.
+
+    The original full lock is recovered from its exact ancestor Git commit, not
+    from archive claims. Every selected component field must remain identical.
+    """
+    if not isinstance(declared_digest, str) or not re.fullmatch(
+        r"[0-9a-fA-F]{64}", declared_digest
+    ):
+        return False
+    if declared_digest.upper() == _sha256(lock_path):
+        return True
+    if not re.fullmatch(r"[0-9a-f]{40}", source_revision):
+        return False
+    try:
+        root = Path(
+            subprocess.check_output(
+                ["git", "-C", str(lock_path.parent), "rev-parse", "--show-toplevel"],
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=10,
+            ).strip()
+        ).resolve()
+        relative = lock_path.resolve().relative_to(root).as_posix()
+        ancestry = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "merge-base",
+                "--is-ancestor",
+                source_revision,
+                "HEAD",
+            ],
+            capture_output=True,
+            timeout=10,
+        )
+        if ancestry.returncode:
+            return False
+        original = subprocess.check_output(
+            ["git", "-C", str(root), "show", f"{source_revision}:{relative}"],
+            stderr=subprocess.PIPE,
+            timeout=10,
+        )
+        if hashlib.sha256(original).hexdigest().upper() != declared_digest.upper():
+            return False
+        previous = _select_component(json.loads(original), target)
+        current = _load_lock(lock_path, target)
+        return {k: v for k, v in previous.items() if k != "artifacts_by_target"} == {
+            k: v for k, v in current.items() if k != "artifacts_by_target"
+        }
+    except (OSError, ValueError, TypeError, subprocess.SubprocessError):
+        return False
 
 
 def _sha256(path: Path) -> str:
@@ -61,9 +143,12 @@ def _git_revision(kernel_root: Path) -> str:
 
 
 def verify(
-    repo_root: Path, lock_path: Path, kernel_root: Path | None
+    repo_root: Path,
+    lock_path: Path,
+    kernel_root: Path | None,
+    target: str | None = None,
 ) -> list[dict[str, Any]]:
-    component = _load_lock(lock_path)
+    component = _load_lock(lock_path, target)
     expected_revision = str(component["revision"])
     if kernel_root is not None:
         actual_revision = _git_revision(kernel_root)
@@ -108,10 +193,10 @@ def verify(
 
 
 def report_rebuild(
-    lock_path: Path, kernel_root: Path, candidate_root: Path
+    lock_path: Path, kernel_root: Path, candidate_root: Path, target: str | None = None
 ) -> dict[str, Any]:
     """Inspect rebuilt bytes without staging, running, or relocking components."""
-    component = _load_lock(lock_path)
+    component = _load_lock(lock_path, target)
     expected_revision = str(component["revision"])
     actual_revision = _git_revision(kernel_root)
     tracked_changes = subprocess.run(
@@ -181,6 +266,7 @@ def admit_artifact(
     source_revision: str,
     kernel_root: Path | None = None,
     artifact_format: str = "candidate",
+    target: str | None = None,
 ) -> dict[str, Any]:
     """Admit one reviewed CI ZIP through the same native hash/PE verifier.
 
@@ -190,7 +276,13 @@ def admit_artifact(
     """
     if artifact_format == "native-build":
         return _admit_native_build(
-            archive, archive_sha256, output, lock_path, source_revision, kernel_root
+            archive,
+            archive_sha256,
+            output,
+            lock_path,
+            source_revision,
+            kernel_root,
+            target,
         )
     if artifact_format != "candidate":
         raise ValueError("unsupported native artifact format")
@@ -204,9 +296,8 @@ def admit_artifact(
         raise ValueError("native artifact ZIP digest mismatch")
     if output.exists() or output.is_symlink():
         raise ValueError("artifact output must not replace an existing directory")
-    component = _load_lock(lock_path)
-    if component.get("target") != "x86_64-pc-windows-msvc":
-        raise ValueError("reviewed ZIP admission currently supports Windows x64 only")
+    component = _load_lock(lock_path, target)
+    arch, expected_machine = _windows_profile(component)
     native_paths = {str(item["path"]) for item in component["artifacts"]}
     for relative in native_paths:
         if (
@@ -225,8 +316,8 @@ def admit_artifact(
         "native-smoke.json",
         "nki-initial.json",
         "nki-recovery.json",
-        "nousd-x86_64-pc-windows-msvc-dependencies.txt",
-        "nous-provider-worker-x86_64-pc-windows-msvc-dependencies.txt",
+        f"nousd-{component['target']}-dependencies.txt",
+        f"nous-provider-worker-{component['target']}-dependencies.txt",
         "nous-runtime-dependencies.txt",
         "SHA256SUMS.txt",
     }
@@ -258,10 +349,13 @@ def admit_artifact(
                     raise ValueError("native artifact metadata exceeds size limit")
                 destination = staged / entry.filename
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                with bundle.open(entry) as source, destination.open("xb") as target:
-                    shutil.copyfileobj(source, target, length=1024 * 1024)
+                with (
+                    bundle.open(entry) as source,
+                    destination.open("xb") as destination_stream,
+                ):
+                    shutil.copyfileobj(source, destination_stream, length=1024 * 1024)
         # Reuse the one canonical component verifier before trusting metadata.
-        results = verify(staged, lock_path, kernel_root)
+        results = verify(staged, lock_path, kernel_root, target)
         checksums = {}
         for line in (
             (staged / "SHA256SUMS.txt").read_text(encoding="utf-8-sig").splitlines()
@@ -289,6 +383,7 @@ def admit_artifact(
             or manifest.get("github_repository") != "untrod/apeir"
             or manifest.get("source_build") != "PASS"
             or manifest.get("native_smoke") != "success"
+            or manifest.get("target", "x86_64-pc-windows-msvc") != component["target"]
         ):
             raise ValueError(
                 "native artifact provenance or compatibility is unqualified"
@@ -302,6 +397,8 @@ def admit_artifact(
         for item in files:
             if _sha256(staged / item["path"]) != str(item["sha256"]).upper():
                 raise ValueError("native artifact binary digest mismatch")
+        if _pe_machine(staged / "nous-runtime.exe") != expected_machine:
+            raise ValueError("Runtime candidate architecture mismatch")
         smoke = document("native-smoke.json")
         if smoke.get("target") != component["target"]:
             raise ValueError("native smoke target does not match the lock")
@@ -357,6 +454,7 @@ def _admit_native_build(
     lock_path: Path,
     source_revision: str,
     kernel_root: Path | None,
+    target: str | None = None,
 ) -> dict[str, Any]:
     """Recover already locked components from an exact full-mode build artifact.
 
@@ -373,9 +471,8 @@ def _admit_native_build(
         raise ValueError("native artifact ZIP digest mismatch")
     if output.exists() or output.is_symlink():
         raise ValueError("artifact output must not replace an existing directory")
-    component = _load_lock(lock_path)
-    if component.get("target") != "x86_64-pc-windows-msvc":
-        raise ValueError("native build admission supports Windows x64 only")
+    component = _load_lock(lock_path, target)
+    arch, expected_machine = _windows_profile(component)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="native-build-", dir=output.parent) as task:
         staged = Path(task)
@@ -406,8 +503,11 @@ def _admit_native_build(
                     raise ValueError("native build metadata exceeds size limit")
                 destination = staged / name
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                with bundle.open(entry) as source, destination.open("xb") as target:
-                    shutil.copyfileobj(source, target, length=1024 * 1024)
+                with (
+                    bundle.open(entry) as source,
+                    destination.open("xb") as destination_stream,
+                ):
+                    shutil.copyfileobj(source, destination_stream, length=1024 * 1024)
 
         def document(name: str) -> dict[str, Any]:
             return json.loads((staged / name).read_text(encoding="utf-8-sig"))
@@ -425,7 +525,12 @@ def _admit_native_build(
             or source.get("distribution_revision") != source_revision
             or manifest.get("kernel_revision") != component["revision"]
             or source.get("kernel_revision") != component["revision"]
-            or source.get("component_lock_sha256", "").upper() != _sha256(lock_path)
+            or not _lock_provenance_matches(
+                lock_path,
+                source_revision,
+                source.get("component_lock_sha256", ""),
+                target,
+            )
             or manifest.get("source_state")
             != {"runtime_worktree_dirty": False, "kernel_worktree_dirty": False}
             or manifest.get("sidecar_smoke_passed") is not True
@@ -448,13 +553,13 @@ def _admit_native_build(
             checksums[match[2]] = match[1].upper()
         unchecked = {
             "SHA256SUMS.txt",
-            "SHA256SUMS-x64.txt",
+            f"SHA256SUMS-{arch}.txt",
             "reviewed-input-provenance.json",
         }
         if set(checksums) != set(names) - unchecked:
             raise ValueError("native build checksum coverage is incomplete")
         if (staged / "SHA256SUMS.txt").read_bytes() != (
-            staged / "SHA256SUMS-x64.txt"
+            staged / f"SHA256SUMS-{arch}.txt"
         ).read_bytes():
             raise ValueError("native build checksum aliases disagree")
         for relative, expected in checksums.items():
@@ -462,8 +567,8 @@ def _admit_native_build(
                 raise ValueError("native build member digest mismatch")
         files = manifest.get("files", [])
         inventory = {item["name"]: item for item in files}
-        setup = f"APEIR_{version}_x64-setup.exe"
-        portable = f"APEIR-Portable-{version}-windows-x64.zip"
+        setup = f"APEIR_{version}_{arch}-setup.exe"
+        portable = f"APEIR-Portable-{version}-windows-{arch}.zip"
         required_binaries = {
             "APEIR-Portable/" + name + ".exe"
             for name in ("APEIR", "nous-runtime", "nousd", "nous-provider-worker")
@@ -475,7 +580,7 @@ def _admit_native_build(
             raise ValueError("native build package inventory is incomplete")
         metadata = {
             "release-manifest.json",
-            f"APEIR-{version}-windows-x64.manifest.json",
+            f"APEIR-{version}-windows-{arch}.manifest.json",
             "source-manifest.json",
             "native-validation-report.json",
             "native-dependencies.json",
@@ -505,7 +610,7 @@ def _admit_native_build(
                 or (staged / name).stat().st_size != item.get("size_bytes")
             ):
                 raise ValueError("native build manifest member mismatch")
-        if document(f"APEIR-{version}-windows-x64.manifest.json") != manifest:
+        if document(f"APEIR-{version}-windows-{arch}.manifest.json") != manifest:
             raise ValueError("native build manifest aliases disagree")
         if _pe_machine(staged / setup) != "0x014C":
             raise ValueError("native NSIS bootstrapper is not x86 PE")
@@ -527,6 +632,9 @@ def _admit_native_build(
                     digest = _stream_sha256(stream)
                 if digest != checksums[entry.filename]:
                     raise ValueError("Portable member digest mismatch")
+        for name in required_binaries:
+            if _pe_machine(staged / name) != expected_machine:
+                raise ValueError("native package binary architecture mismatch")
         for item in component["artifacts"]:
             locked_name = str(item["path"])
             relative = Path(locked_name)
@@ -542,7 +650,7 @@ def _admit_native_build(
             shutil.copyfile(
                 staged / "APEIR-Portable" / (item["name"] + ".exe"), destination
             )
-        results = verify(staged, lock_path, kernel_root)
+        results = verify(staged, lock_path, kernel_root, target)
         smoke = report.get("smoke", {})
         if (
             smoke.get("target") != component["target"]
@@ -614,6 +722,9 @@ def main() -> int:
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--lock", type=Path)
     parser.add_argument("--kernel-root", type=Path)
+    parser.add_argument(
+        "--target", choices=("x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc")
+    )
     parser.add_argument("--candidate-root", type=Path)
     parser.add_argument("--report", type=Path)
     parser.add_argument("--artifact-zip", type=Path)
@@ -647,6 +758,7 @@ def main() -> int:
             args.artifact_source_revision,
             kernel_root,
             args.artifact_format,
+            args.target,
         )
         print(json.dumps(admitted, indent=2))
         return 0
@@ -665,7 +777,9 @@ def main() -> int:
             parser.error(
                 "diagnostic report must not modify the lock or Kernel checkout"
             )
-        report = report_rebuild(lock_path, kernel_root, args.candidate_root.resolve())
+        report = report_rebuild(
+            lock_path, kernel_root, args.candidate_root.resolve(), args.target
+        )
         output = json.dumps(report, indent=2) + "\n"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(output, encoding="utf-8")
@@ -673,7 +787,7 @@ def main() -> int:
         return 2 if report["status"] == "BLOCKED" else 0
     if args.report is not None:
         parser.error("--report requires --candidate-root")
-    results = verify(repo_root, lock_path, kernel_root)
+    results = verify(repo_root, lock_path, kernel_root, args.target)
     print(json.dumps({"status": "ok", "artifacts": results}, indent=2))
     return 0
 

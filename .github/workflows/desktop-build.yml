@@ -30,7 +30,7 @@ on:
         default: none
         options: [none, windows-x64, windows-arm64, linux-x64, macos-arm64]
       approved_kernel_run_id:
-        description: 'Reviewed same-repository candidate producer run (Windows x64 only)'
+        description: 'Reviewed same-repository candidate producer run for the selected Windows target'
         type: string
         default: ''
       approved_kernel_artifact_id:
@@ -534,12 +534,15 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Windows x86_64 Build
+  # One official Windows builder; retain the historical job key for consumers.
   build-windows-x64:
-    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && inputs.native_target == 'windows-x64'
-    name: Build Windows x86_64
+    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && (inputs.native_target == 'windows-x64' || inputs.native_target == 'windows-arm64')
+    name: ${{ inputs.native_target == 'windows-arm64' && 'Build Windows ARM64' || 'Build Windows x86_64' }}
     needs: [frontend-tests]
-    runs-on: windows-latest
+    runs-on: ${{ inputs.native_target == 'windows-arm64' && 'windows-11-arm' || 'windows-latest' }}
+    env:
+      NATIVE_TARGET: ${{ inputs.native_target == 'windows-arm64' && 'aarch64-pc-windows-msvc' || 'x86_64-pc-windows-msvc' }}
+      NATIVE_ARCH: ${{ inputs.native_target == 'windows-arm64' && 'arm64' || 'x64' }}
     permissions:
       contents: read
       actions: read
@@ -556,13 +559,15 @@ jobs:
           path: kernel-native-source
           persist-credentials: false
       - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
+        with:
+          python-version: ${{ inputs.native_target == 'windows-arm64' && '3.12.10' || '3.12' }}
+          architecture: ${{ inputs.native_target == 'windows-arm64' && 'arm64' || 'x64' }}
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.99.1'
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ inputs.native_target == 'windows-arm64' && 'aarch64-pc-windows-msvc' || 'x86_64-pc-windows-msvc' }}
       - name: Download only the exact reviewed same-repository candidate archive
         shell: python {0}
         env:
@@ -585,6 +590,8 @@ jobs:
           artifact = api("actions/artifacts/" + artifact_id)
           assert producer["head_repository"]["full_name"] == "untrod/apeir"
           assert producer["path"] == ".github/workflows/desktop-build.yml" and producer["event"] == "workflow_dispatch"
+          arch = os.environ["NATIVE_ARCH"]
+          assert arch in ("x64", "arm64")
           carrier = os.environ["APPROVED_ARTIFACT_FORMAT"]
           assert carrier in ("candidate", "native-build")
           assert producer["status"] == "completed" and producer["conclusion"] in ("success", "failure")
@@ -595,7 +602,7 @@ jobs:
           subprocess.run(["git", "-C", "distribution", "merge-base", "--is-ancestor", revision, "HEAD"], check=True)
           assert artifact["workflow_run"]["id"] == int(run_id) and artifact["workflow_run"]["head_sha"] == revision
           assert not artifact["expired"] and artifact["size_in_bytes"] <= 256 * 1024 * 1024
-          assert (carrier == "candidate" and re.fullmatch(r"unapproved-kernel-candidate-windows-x64-[12]", artifact["name"])) or (carrier == "native-build" and artifact["name"] == "windows-x64-native-development-build")
+          assert (carrier == "candidate" and re.fullmatch(rf"unapproved-kernel-candidate-windows-{arch}-[12]", artifact["name"])) or (carrier == "native-build" and artifact["name"] == f"windows-{arch}-native-development-build")
           assert artifact.get("digest", "").lower() == "sha256:" + expected.lower()
           archive = Path(os.environ["RUNNER_TEMP"]) / "reviewed-kernel.zip"
           with archive.open("wb") as stream:
@@ -612,7 +619,7 @@ jobs:
           APPROVED_ZIP_SHA256: ${{ inputs.approved_kernel_zip_sha256 }}
           APPROVED_ARTIFACT_FORMAT: ${{ inputs.approved_kernel_artifact_format }}
         run: |
-          python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-native-source --artifact-zip "$env:RUNNER_TEMP/reviewed-kernel.zip" --artifact-sha256 $env:APPROVED_ZIP_SHA256 --artifact-source-revision $env:APPROVED_PRODUCER_REVISION --artifact-output "$env:RUNNER_TEMP/approved-native-inputs" --artifact-format $env:APPROVED_ARTIFACT_FORMAT
+          python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-native-source --target $env:NATIVE_TARGET --artifact-zip "$env:RUNNER_TEMP/reviewed-kernel.zip" --artifact-sha256 $env:APPROVED_ZIP_SHA256 --artifact-source-revision $env:APPROVED_PRODUCER_REVISION --artifact-output "$env:RUNNER_TEMP/approved-native-inputs" --artifact-format $env:APPROVED_ARTIFACT_FORMAT
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install existing full validation and installer build dependencies
         working-directory: distribution
@@ -624,102 +631,25 @@ jobs:
         shell: pwsh
         working-directory: distribution
         run: |
-          & ./scripts/build-windows-x64-launcher.ps1 -RepoRoot (Resolve-Path .).Path -KernelRoot (Resolve-Path ../kernel-native-source).Path -KernelArtifactDirectory "$env:RUNNER_TEMP/approved-native-inputs"
+          & ./scripts/build-windows-x64-launcher.ps1 -Target $env:NATIVE_TARGET -RepoRoot (Resolve-Path .).Path -KernelRoot (Resolve-Path ../kernel-native-source).Path -KernelArtifactDirectory "$env:RUNNER_TEMP/approved-native-inputs"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Copy-Item "$env:RUNNER_TEMP/reviewed-input-provenance.json" artifacts/windows-x64/
+          Copy-Item "$env:RUNNER_TEMP/reviewed-input-provenance.json" "artifacts/windows-$env:NATIVE_ARCH/"
 
       - uses: actions/upload-artifact@v4
+        if: env.NATIVE_ARCH == 'x64'
         with:
           retention-days: 14
           name: windows-x64-native-development-build
           if-no-files-found: error
           path: distribution/artifacts/windows-x64/
 
-  # Windows ARM64 release candidate build
-  build-windows-arm64:
-    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && inputs.native_target == 'windows-arm64'
-    name: Build Windows ARM64
-    needs: [frontend-tests]
-    runs-on: windows-11-arm
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
-      - uses: actions/setup-node@v4
-        with: { node-version: '22' }
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-pc-windows-msvc
-
-      - name: Verify release candidate metadata
-        run: python scripts/ci/verify_release_versions.py
-
-      - name: Verify native locked Kernel bytes before packaging
-        run: python scripts/ci/verify_kernel_components.py --repo-root .
-
-      - name: Build embedded ARM64 Runtime sidecar
-        shell: pwsh
-        run: |
-          python -m pip install ".[installer-build]"
-          python -m PyInstaller --noconfirm --clean nous-sidecar.spec
-          New-Item -ItemType Directory -Force desktop/src-tauri/binaries | Out-Null
-          Copy-Item dist/nous-runtime.exe desktop/src-tauri/binaries/nous-runtime-aarch64-pc-windows-msvc.exe
-      - name: Verify locked ARM64 Kernel sidecars are staged
-        run: python scripts/ci/verify_kernel_components.py --repo-root .
-
-      - name: Verify ARM64 Runtime and Kernel lifecycle and authentication
-        shell: pwsh
-        run: >-
-          ./scripts/ci/verify_windows_arm64_sidecar.ps1
-          -SidecarPath ./desktop/src-tauri/binaries/nous-runtime-aarch64-pc-windows-msvc.exe
-          -KernelPath ./desktop/src-tauri/binaries/nousd-aarch64-pc-windows-msvc.exe
-          -ProviderWorkerPath ./desktop/src-tauri/binaries/nous-provider-worker-aarch64-pc-windows-msvc.exe
-          -ExpectedVersion 0.1.0-rc1
-
-      - name: Install frontend dependencies
-        working-directory: desktop
-        run: npm ci
-      - name: React ESLint
-        working-directory: desktop
-        run: npm run lint
-      - name: React tests
-        working-directory: desktop
-        run: npm test
-      - name: TypeScript check
-        working-directory: desktop
-        run: npm run typecheck
-      - name: Vite production build
-        working-directory: desktop
-        run: npm run build
-
-      - name: Rust cargo check
-        working-directory: desktop/src-tauri
-        run: cargo check --locked --target aarch64-pc-windows-msvc
-      - name: Rust cargo test
-        working-directory: desktop/src-tauri
-        run: cargo test --locked --target aarch64-pc-windows-msvc
-
-      - name: Build Tauri ARM64 NSIS package
-        working-directory: desktop
-        run: npx tauri build --bundles nsis --target aarch64-pc-windows-msvc
-
-      - name: Verify installed bundle and generate SHA-256
-        shell: pwsh
-        run: >-
-          ./scripts/ci/verify_windows_arm64_bundle.ps1
-          -RepoRoot .
-          -ExpectedVersion 0.1.0-rc1
-          -ArtifactName windows-arm64-nsis
-
       - uses: actions/upload-artifact@v4
+        if: env.NATIVE_ARCH == 'arm64'
         with:
           retention-days: 14
-          name: windows-arm64-nsis
+          name: windows-arm64-native-development-build
           if-no-files-found: error
-          path: |
-            desktop/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe
-            SHA256SUMS-arm64.txt
-            RC3-ARM64-ARTIFACT.json
+          path: distribution/artifacts/windows-arm64/
 
   # Linux x86_64 Build
   build-linux-x64:

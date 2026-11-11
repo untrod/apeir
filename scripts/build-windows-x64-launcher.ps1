@@ -13,9 +13,13 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-if ($Target -ne "x86_64-pc-windows-msvc") {
-    throw "The Windows 10 launcher entry supports x86_64-pc-windows-msvc only."
+if ($Target -notin @("x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc")) {
+    throw "The Windows launcher requires an explicitly supported 64-bit MSVC target."
 }
+$architectureAlias = if ($Target -eq "aarch64-pc-windows-msvc") { "arm64" } else { "x64" }
+$manifestArchitecture = if ($architectureAlias -eq "arm64") { "aarch64" } else { "x86_64" }
+$osBaseline = if ($architectureAlias -eq "arm64") { "Windows 10 ARM64" } else { "Windows 10 X64" }
+
 
 $repo = (Resolve-Path -LiteralPath $RepoRoot).Path
 $kernel = (Resolve-Path -LiteralPath $KernelRoot).Path
@@ -25,6 +29,12 @@ $binaryRoot = Join-Path $tauriRoot "binaries"
 $lockPath = Join-Path $repo "runtime-components.lock.json"
 $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
 $component = $lock.components.'nous-kernel'
+if ($component.target -ne $Target) {
+    $platforms = $component.PSObject.Properties['artifacts_by_target']
+    $selected = if ($platforms) { $platforms.Value.PSObject.Properties[$Target] } else { $null }
+    if (-not $selected -or -not $selected.Value) { throw "Target $Target is not approved in the component lock." }
+    $component = [pscustomobject]@{ revision = $component.revision; target = $Target; artifacts = @($selected.Value) }
+}
 $actualRevision = (& git -C $kernel rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $actualRevision -ne $component.revision) {
     throw "nous-kernel must be checked out at locked revision $($component.revision)."
@@ -107,10 +117,10 @@ $redistRoot = Join-Path $preflight.visual_studio_path "VC\Redist\MSVC"
 $crtDirectory = Get-ChildItem -LiteralPath $redistRoot -Directory |
     Where-Object { $_.Name -match '^\d+(\.\d+){1,3}$' } |
     Sort-Object { [version]$_.Name } -Descending |
-    ForEach-Object { Get-ChildItem -LiteralPath (Join-Path $_.FullName 'x64') -Directory -Filter 'Microsoft.VC*.CRT' -ErrorAction SilentlyContinue } |
+    ForEach-Object { Get-ChildItem -LiteralPath (Join-Path $_.FullName $architectureAlias) -Directory -Filter 'Microsoft.VC*.CRT' -ErrorAction SilentlyContinue } |
     Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'vcruntime140.dll') } |
     Select-Object -First 1
-if (-not $crtDirectory) { throw "Trusted x64 Visual C++ redistributables are missing." }
+if (-not $crtDirectory) { throw "Trusted $architectureAlias Visual C++ redistributables are missing." }
 $resourceMap = [ordered]@{}
 $nativeDependencies = foreach ($name in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'concrt140.dll')) {
     $source = Join-Path $crtDirectory.FullName $name
@@ -132,13 +142,13 @@ $nativeDependencies = foreach ($name in @('vcruntime140.dll', 'vcruntime140_1.dl
     }
 }
 $nativeDependencies = @($nativeDependencies)
-if (-not ($nativeDependencies | Where-Object { $_.name -eq 'vcruntime140.dll' })) { throw 'Required x64 CRT was not staged.' }
-$resourceOverlay = Join-Path $binaryRoot 'windows-x64-resources.generated.json'
+if (-not ($nativeDependencies | Where-Object { $_.name -eq 'vcruntime140.dll' })) { throw "Required $architectureAlias CRT was not staged." }
+$resourceOverlay = Join-Path $binaryRoot "windows-$architectureAlias-resources.generated.json"
 @{ bundle = @{ resources = $resourceMap } } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resourceOverlay -Encoding utf8
 
 # Tests and Runtime construction can take time; recheck the actual immutable
 # inputs immediately before executing native sidecars.
-& python (Join-Path $repo "scripts\ci\verify_kernel_components.py") --repo-root $repo --kernel-root $kernel
+& python (Join-Path $repo "scripts\ci\verify_kernel_components.py") --repo-root $repo --kernel-root $kernel --target $Target
 if ($LASTEXITCODE -ne 0) { throw "Kernel components changed before native smoke." }
 foreach ($dependency in $nativeDependencies) {
     if ((Get-FileHash (Join-Path $binaryRoot $dependency.name) -Algorithm SHA256).Hash -ne $dependency.sha256) { throw 'Native runtime dependency changed before smoke.' }
@@ -160,9 +170,13 @@ $manifestPath = Join-Path $tauriRoot "Cargo.toml"
 $quotedManifest = '"' + $manifestPath + '"'
 Invoke-NousDeveloperCommand "cargo check --locked --target $Target --manifest-path $quotedManifest"
 Invoke-NousDeveloperCommand "cargo test --locked --target $Target --manifest-path $quotedManifest"
-Invoke-NousDeveloperCommand "cd /d `"$desktop`" && npm run tauri:build:x64 -- --config `"$resourceOverlay`""
+if ($architectureAlias -eq "arm64") {
+    Invoke-NousDeveloperCommand "cd /d `"$desktop`" && npm run tauri:build:arm64 -- --config `"$resourceOverlay`""
+} else {
+    Invoke-NousDeveloperCommand "cd /d `"$desktop`" && npm run tauri:build:x64 -- --config `"$resourceOverlay`""
+}
 
-& python (Join-Path $repo "scripts\ci\verify_kernel_components.py") --repo-root $repo --kernel-root $kernel
+& python (Join-Path $repo "scripts\ci\verify_kernel_components.py") --repo-root $repo --kernel-root $kernel --target $Target
 if ($LASTEXITCODE -ne 0) { throw "Kernel components changed during Desktop packaging." }
 
 $releaseRoot = Join-Path $tauriRoot "target\$Target\release"
@@ -179,7 +193,7 @@ if (-not $installer) {
 }
 
 $artifactRoot = if ([string]::IsNullOrWhiteSpace($ArtifactRoot)) {
-    Join-Path $repo "artifacts\windows-x64"
+    Join-Path $repo "artifacts\windows-$architectureAlias"
 } elseif ([System.IO.Path]::IsPathRooted($ArtifactRoot)) {
     [System.IO.Path]::GetFullPath($ArtifactRoot)
 } else {
@@ -223,7 +237,7 @@ foreach ($artifact in $component.artifacts) {
 $publishedInstaller = Join-Path $artifactRoot $installer.Name
 Copy-Item -LiteralPath $installer.FullName -Destination $publishedInstaller -Force
 
-$portableZip = Join-Path $artifactRoot "APEIR-Portable-$ExpectedVersion-windows-x64.zip"
+$portableZip = Join-Path $artifactRoot "APEIR-Portable-$ExpectedVersion-windows-$architectureAlias.zip"
 if (Test-Path -LiteralPath $portableZip) {
     Remove-Item -LiteralPath $portableZip -Force
 }
@@ -304,7 +318,7 @@ $nativeReport = [ordered]@{
     validated_at_utc = $buildTimestamp
     target = $Target
     host_os = (Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture)
-    supported_os_baseline = "Windows 10 X64"
+    supported_os_baseline = $osBaseline
     scope = "native sidecar smoke and build; not installed Desktop qualification"
     installation_acceptance = "NOT_RUN"
     full_validation_executed = -not $SkipValidation
@@ -319,8 +333,8 @@ $manifest = [ordered]@{
     product = "APEIR"
     version = $ExpectedVersion
     target = $Target
-    architecture = "x86_64"
-    os_baseline = "Windows 10 X64"
+    architecture = $manifestArchitecture
+    os_baseline = $osBaseline
     build_timestamp_utc = $buildTimestamp
     runtime_revision = $runtimeRevision
     kernel_revision = $actualRevision
@@ -335,13 +349,13 @@ $manifest = [ordered]@{
     sidecar_smoke_passed = -not $SkipSidecarSmoke
     files = @($hashes)
 }
-$artifactManifest = Join-Path $artifactRoot "APEIR-$ExpectedVersion-windows-x64.manifest.json"
+$artifactManifest = Join-Path $artifactRoot "APEIR-$ExpectedVersion-windows-$architectureAlias.manifest.json"
 $manifest | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath $artifactManifest -Encoding utf8
 $releaseManifest = Join-Path $artifactRoot "release-manifest.json"
 $manifest | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath $releaseManifest -Encoding utf8
 $dependencyReport = Join-Path $artifactRoot "native-dependencies.json"
 @{
-    source = 'Visual Studio x64 Microsoft.VC*.CRT redistributable directory'
+    source = "Visual Studio $architectureAlias Microsoft.VC*.CRT redistributable directory"
     licensing = 'Redistribution is governed by the applicable Visual Studio license and REDIST list; retain source and notices in release review.'
     dependencies = $nativeDependencies
 } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $dependencyReport -Encoding utf8
@@ -363,7 +377,7 @@ Copy-Item (Join-Path $tauriRoot 'Cargo.lock') (Join-Path $artifactRoot 'desktop-
 $platformNotes = Join-Path $artifactRoot "platform-support.txt"
 @"
 APEIR $ExpectedVersion unsigned native development build.
-Target: Windows 10 x64; actual build OS is recorded in native-validation-report.json.
+Target: $osBaseline; actual build OS is recorded in native-validation-report.json.
 Windows 10 install/upgrade/uninstall, Defender and signing acceptance: NOT_RUN by this builder.
 Python build-environment SBOM is not an assertion of complete native payload provenance.
 Use RELEASE_RUNBOOK.md before claiming NATIVE_PREVIEW_READY or publishing a Release.
@@ -381,7 +395,8 @@ $checksumLines = @(
     @($hashes) + @($evidenceHashes) |
         ForEach-Object { "$($_.sha256)  $($_.name)" }
 )
-$checksums = Join-Path $artifactRoot "SHA256SUMS-x64.txt"
+$checksumAlias = if ($architectureAlias -eq "arm64") { "SHA256SUMS-arm64.txt" } else { "SHA256SUMS-x64.txt" }
+$checksums = Join-Path $artifactRoot $checksumAlias
 $portableChecksums = Join-Path $artifactRoot "SHA256SUMS.txt"
 $checksumLines | Set-Content -LiteralPath $checksums -Encoding utf8
 $checksumLines | Set-Content -LiteralPath $portableChecksums -Encoding utf8
