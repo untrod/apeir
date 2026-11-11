@@ -128,8 +128,21 @@ Get-NativePeMachine -Path $sidecar -Name 'Runtime sidecar' -ExpectedMachine $exp
 Get-NativePeMachine -Path $kernel -Name 'Kernel daemon' -ExpectedMachine $expectedMachine -Architecture $targetArchitecture
 Get-NativePeMachine -Path $worker -Name 'Provider worker' -ExpectedMachine $expectedMachine -Architecture $targetArchitecture
 $version = (& $sidecar --version 2>&1 | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $version -notmatch [regex]::Escape($ExpectedVersion)) {
-    throw "Runtime sidecar version does not match $ExpectedVersion."
+$versionExitCode = $LASTEXITCODE
+if ($versionExitCode -ne 0 -or $version -notmatch [regex]::Escape($ExpectedVersion)) {
+    # Candidate diagnostics run in a fresh CI workspace before a session exists.
+    # Keep the original refusal and retain bounded startup output for diagnosis.
+    if (-not [string]::IsNullOrWhiteSpace($EvidenceDirectory)) {
+        New-Item -ItemType Directory -Force $EvidenceDirectory | Out-Null
+        [ordered]@{
+            phase = 'version-before-runtime-session'
+            target = $Target
+            exit_code = $versionExitCode
+            output = $version.Substring(0, [Math]::Min($version.Length, 8192))
+            installed_desktop_qualification = 'NOT_RUN'
+        } | ConvertTo-Json | Out-File (Join-Path $EvidenceDirectory 'runtime-startup-diagnostic.json')
+    }
+    throw "Runtime --version failed or does not match $ExpectedVersion (exit code $versionExitCode)."
 }
 $workerResponseJson = ('{"type":"health"}' | & $worker --stdio-once 2>&1 | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) {
