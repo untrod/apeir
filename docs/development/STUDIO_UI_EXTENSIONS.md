@@ -28,6 +28,53 @@ checkout. Read-only status and lifecycle operations worked; unauthorized,
 disabled, undeclared and conflicting-version requests were refused. No cloud
 model, Shell, physical device or arbitrary JavaScript was involved.
 
+## Host compatibility
+
+The wire schema remains `apeir.studio-ui/v1`. Existing status-only manifests and
+version-1 layouts remain readable. The host now advertises `contract` metadata
+through `GET /api/v1/studio/extensions`; the standalone client prints it with:
+
+```bash
+python monitor_client.py contract
+```
+
+| Package | Required host support | Behavior on older hosts |
+| --- | --- | --- |
+| Original System Monitor | Existing v1 status/lifecycle interface | Existing review, read and lifecycle commands remain compatible |
+| Workflow Monitor | `data.workflow.summary` | Review/install is refused when the host lacks this feature |
+| Unknown schema or required feature | Unsupported | Refused before installation; no guessed fallback |
+
+Declare new requirements as `metadata.apeir_studio.requires`, for example
+`["data.workflow.summary"]`. Feature names describe implemented wire support,
+not availability, trust or a permission grant. Installation still requires a
+review of the exact bytes and independent approval. Keep the matching source
+revision for beta SDK development; a shared `0.1.0-rc1` display version alone does
+not prove that an older native package implements a new feature.
+
+## Workflow Monitor
+
+The existing [example directory](../../examples/studio_system_monitor/README.md#workflow-monitor)
+now includes `workflow-monitor.extension.json`, using the same public client.
+Copy it outside the checkout with `monitor_client.py`; no private imports or Core
+patches are needed. It contributes a Panel and a Dashboard Widget.
+
+`workflow.summary` exposes state counts from the **latest 100 recorded runs in
+the current workspace**. It calls the original Workflow catalog and its existing
+resource admission. The actor needs current `workspace.read` permission for both
+the extension registry and `.nous/workflows.db`. Declaring
+`workflow.summary.read` does not supply either permission.
+
+Values contain counts and a sample limit. Workflow names, Run IDs, input/output
+content, approvals and credentials are excluded. `UNKNOWN` stays its own state;
+completed runs are logical outcomes, not independent effect verification. Counts
+are not lifetime totals, progress percentages or time estimates.
+
+The shared Studio projection reads this source once for all enabled subscribed
+components. It adds no per-Widget timer. A denied source is `BLOCKED`; a failed
+read is `UNAVAILABLE`, with null values. Other status widgets remain usable.
+Disable/remove prevents new reads; controller switching and Runtime restart
+continue through the existing connection guards, Registry and Workflow history.
+
 ## Declarative UI Extension SDK
 
 Studio UI contributions use the existing Native Extension IR, ExtensionRegistry,
@@ -42,7 +89,7 @@ requires no Core change or private Python import.
 | SDK capability | Public contract |
 | --- | --- |
 | Register Panel / Widget | Manifest `contributions` with `kind: panel/widget`; stable local ID, title and validated `view` |
-| Read allowed data | `GET /api/v1/studio/extensions/data` with `component_type`, `expected_digest`, `source=runtime.status` |
+| Read allowed data | `GET /api/v1/studio/extensions/data` with `component_type`, `expected_digest`, `source=runtime.status/workflow.summary` |
 | Read allowed events | `GET /api/v1/studio/extensions/events` with component/digest; bounded declared lifecycle metadata from the original bus |
 | Request governed action | `POST /api/v1/studio/extensions/action`: original component/digest, declared `workflow.run`, original `idempotency_key` |
 | Presentation settings | Existing Panel layout and Dashboard title/position/size/pause configuration; normal version-1 import/export |
@@ -66,7 +113,8 @@ unrestricted file/network/process access. The shared catalog consumer admits up 
 of presentation metadata plus record envelopes), without widening view or action
 schemas. This avoids rejecting valid multi-package catalogs at the original
 1 MiB client limit. Data is restricted to the host's sanitized
-Runtime status fields and declared lifecycle event metadata. Unavailable fields
+Runtime status fields, permission-admitted Workflow state counts and declared
+lifecycle event metadata. Unavailable fields
 remain UNKNOWN. Chart samples are transient display history, not persisted evidence.
 
 Install and enable are separate. Updates require a new immutable version and

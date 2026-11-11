@@ -72,3 +72,22 @@ The legacy Provider conformance helper requires an explicit governed execution
 probe for invocation tests; `invoke(test_mode=True)` is not a safety boundary.
 Contract certification does not prove native ABI execution, physical behavior,
 production identity, performance or recovery for an unexercised provider.
+
+## Compatibility and packaging
+
+The Provider SDK is beta (`1.0.0b2`), installed from the matching Distribution
+checkout. Its public imports forward canonical Runtime contracts; they do not
+create a separate execution service. Keep the source revision and dependency
+lock with your adapter's tests. The package's broad beta dependency range is
+not a promise that every future prerelease has an identical Python API.
+
+For Studio-only panels, use the versioned [UI contract](STUDIO_UI_EXTENSIONS.md)
+and its advertised host features. The standard-library example requires no
+Provider SDK installation. An existing v1 status widget remains compatible;
+new Workflow data requires explicit host support and original resource admission.
+
+Develop packages in their own repository. Include a manifest, license, supported
+host/profile requirements and a bounded read-only example. Validate against the
+public SDK and appropriate conformance target, then exercise the real governed
+consumer. Report installation, execution, isolation and physical verification
+separately. A package checksum or a passing metadata probe cannot replace them.

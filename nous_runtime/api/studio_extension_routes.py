@@ -46,7 +46,7 @@ def _admit(context, *, permission="workspace.read"):
     )
     if decision.action_mode != "EXECUTE" or decision.allowed is not True:
         raise PermissionError("Studio extension access was not admitted")
-    return StudioExtensionHost(workspace())
+    return StudioExtensionHost(workspace(), authorization_context=context)
 
 
 def _exact(body, required):

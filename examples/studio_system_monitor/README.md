@@ -72,3 +72,46 @@ Arbitrary executable third-party UI remains BLOCKED pending isolation qualificat
 
 The public API and versioned contribution types are described in the existing
 [Developer Platform guide](../../docs/development/DEVELOPER_PLATFORM.md#declarative-ui-extension-sdk).
+
+## Workflow Monitor
+
+Use `workflow-monitor.extension.json` for a read-only Workflow Panel and Widget.
+It shares this directory's client; copy both files outside the checkout. It
+requires a host advertising `data.workflow.summary` and the current user's
+Workflow read permission. An older native build can support System Monitor
+without supporting this newer feature. Check the host before installing.
+
+Create a pure Workflow in the Runtime's selected project using the existing
+[Hello Workflow](../hello_workflow/README.md) commands. No model, Shell or device
+operation is needed. From the copied extension directory, with the existing API
+token in `NOUS_API_TOKEN`:
+
+```bash
+python monitor_client.py contract
+python monitor_client.py review --manifest workflow-monitor.extension.json
+python monitor_client.py install --manifest workflow-monitor.extension.json
+# Independently approve the original request with the existing owner CLI.
+# Continue only that same request after approval, then separately enable it.
+python monitor_client.py enable --manifest workflow-monitor.extension.json
+python monitor_client.py read --manifest workflow-monitor.extension.json
+python monitor_client.py disable --manifest workflow-monitor.extension.json
+python monitor_client.py remove --manifest workflow-monitor.extension.json
+```
+
+Each mutation can require its own original approval. The client does not approve
+itself or retry after a lost response. `--manifest` selects the package identity;
+`read` selects its declared data source. `--extension-id` and `--source` can
+explicitly select them when needed. Supply `--endpoint` if the Runtime uses a
+different origin.
+
+In Studio, install the same reviewed manifest, enable it, then add **Workflow
+Monitor** as a Panel or **Workflow Summary** as a Dashboard Widget. The displayed
+window is the latest 100 recorded runs in this workspace. `unknown_runs` is
+separate from `completed_runs`; unavailable data is not zero. No Run IDs, names,
+inputs, results or credentials enter this projection. Completing a Workflow is
+not proof of a physical effect or a successful project test.
+
+Updates use a new immutable version and start disabled. Saved layouts keep the
+same component IDs. Restart reads the original history; merely opening a Widget
+never submits another Workflow. See the [SDK contract](../../docs/development/STUDIO_UI_EXTENSIONS.md#host-compatibility)
+for compatibility and resource-permission requirements.

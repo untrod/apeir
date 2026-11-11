@@ -1,5 +1,33 @@
 # Engineering review and research comparison
 
+## Studio extension compatibility and Workflow reads — 2026-11-11
+
+The existing v1 declarative contract gains optional required host features and
+an authenticated host-support descriptor. Original status manifests and layouts
+retain their semantics. Unknown schemas/features fail before installation; no
+compatibility declaration grants permission or executable code access.
+
+Workflow Monitor reuses the public HTTP client, ExtensionRegistry/CAS lifecycle
+and canonical Workflow catalog. Reads recheck the original Workflow resource
+permission and current workspace. The projection contains only state counts for
+the latest 100 recorded runs; it excludes IDs, names, inputs and outputs. Source
+failure returns null/unavailable, not zero. Catalog source denial is isolated so
+existing Runtime status widgets continue to work. Shared Studio reads do not add
+a timer per component. Arbitrary executable UI remains BLOCKED.
+
+The existing browser lifecycle scenario now covers both status and Workflow
+profiles. A client copied outside the checkout reads the real HTTP service.
+Review/independent approval, install, enable, source reads, layout persistence,
+version-conflict refusal, disabled updates, Controller switching, Runtime restart,
+revocation and removal are exercised without model or physical operations.
+A screenshot review additionally found that the initial example's stacked
+metrics clipped the Unknown row in a default Dashboard card. A strengthened
+viewport assertion reproduced the failure. The example now uses the existing
+compact table renderer and version 1.0.1, preserving component IDs and the
+original failure evidence. No Docking, Layout or Runtime contract changed.
+Native installation and every real model retain their separate gates. Exact
+source/CI identities and retained failures belong to the integration PR.
+
 ## Windows native validation: Conversation close and Node status — 2026-11-09
 
 Full-mode native run `42647679030`, source

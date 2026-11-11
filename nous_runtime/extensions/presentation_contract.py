@@ -22,13 +22,49 @@ FIELDS = frozenset(
         "kernel_ready",
     }
 )
-SOURCES = frozenset({"runtime.status", "runtime.lifecycle"})
+WORKFLOW_FIELDS = frozenset(
+    {"runs_sampled", "sample_limit"}
+    | {
+        f"{state}_runs"
+        for state in (
+            "pending",
+            "running",
+            "waiting_approval",
+            "completed",
+            "failed",
+            "unknown",
+            "cancelled",
+            "compensation_failed",
+        )
+    }
+)
+SOURCE_FIELDS = {"runtime.status": FIELDS, "workflow.summary": WORKFLOW_FIELDS}
+SOURCES = frozenset({*SOURCE_FIELDS, "runtime.lifecycle"})
+FEATURES = frozenset(
+    {
+        "data.runtime.status",
+        "data.workflow.summary",
+        "events.runtime.lifecycle",
+        "action.workflow.run.pure",
+    }
+)
 EVENTS = frozenset({"runtime.started", "runtime.stopped"})
 _ID = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 
 
 def component_type(extension_id: str, local_id: str) -> str:
     return f"ui:{hashlib.sha256(extension_id.encode()).hexdigest()[:32]}:{local_id}"
+
+
+def host_contract() -> dict:
+    """Supported wire features, not availability or a permission grant."""
+    return {
+        "schema": STUDIO_UI_SCHEMA_VERSION,
+        "stability": "beta",
+        "features": sorted(FEATURES),
+        "source_fields": {key: sorted(value) for key, value in SOURCE_FIELDS.items()},
+        "executable_ui": "BLOCKED",
+    }
 
 
 def _object(value: Any, allowed: set[str], required: set[str] = frozenset()) -> dict:
@@ -84,6 +120,9 @@ def _view(value: Any, subscriptions: set[str], depth: int = 0) -> None:
         _object(view, common | {"source", "field", "fields"}, {"kind", "source"})
         if view["source"] not in subscriptions:
             raise ValueError("Studio view source is not declared")
+        allowed_fields = SOURCE_FIELDS.get(view["source"])
+        if allowed_fields is None:
+            raise ValueError("Only sanitized declared data sources bind view values")
         if kind == "table":
             if (
                 "field" in view
@@ -93,13 +132,11 @@ def _view(value: Any, subscriptions: set[str], depth: int = 0) -> None:
                 raise ValueError("Studio table requires bounded fields")
             for field in view["fields"]:
                 _object(field, {"field", "label"}, {"field", "label"})
-                if field["field"] not in FIELDS:
+                if field["field"] not in allowed_fields:
                     raise ValueError("Unsupported Studio data field")
                 _text(field["label"], 64)
-        elif view.get("field") not in FIELDS or "fields" in view:
+        elif view.get("field") not in allowed_fields or "fields" in view:
             raise ValueError("Unsupported Studio data field")
-        if view["source"] != "runtime.status":
-            raise ValueError("Only sanitized Runtime status binds view values")
     elif kind == "action":
         _object(
             view, common | {"action", "params"}, {"kind", "label", "action", "params"}
@@ -138,9 +175,18 @@ def _view(value: Any, subscriptions: set[str], depth: int = 0) -> None:
 
 def validate_presentation(value: Any) -> dict:
     """Validate the public declarative profile, without code or network evaluation."""
-    data = _object(value, {"schema", "contributions"}, {"schema", "contributions"})
+    data = _object(
+        value, {"schema", "requires", "contributions"}, {"schema", "contributions"}
+    )
     if data["schema"] != STUDIO_UI_SCHEMA_VERSION:
         raise ValueError("Unsupported Studio UI schema")
+    required = data.get("requires", [])
+    if (
+        not isinstance(required, list)
+        or any(not isinstance(item, str) or item not in FEATURES for item in required)
+        or len(required) != len(set(required))
+    ):
+        raise ValueError("Unsupported or duplicate Studio host feature requirement")
     if len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode()) > 64 * 1024:
         raise ValueError("Studio contributions exceed 64 KiB")
     contributions = data["contributions"]
