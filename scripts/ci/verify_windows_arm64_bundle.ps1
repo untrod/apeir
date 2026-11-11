@@ -6,6 +6,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Silent installation/uninstallation is confined to a disposable hosted runner.
+# Tablet users should follow the normal GUI acceptance guide and back up data.
+if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') {
+    throw "Automatic installer qualification requires a disposable GitHub-hosted runner."
+}
 $repo = (Resolve-Path -LiteralPath $RepoRoot).Path
 $targetRoot = Join-Path $repo "desktop\src-tauri\target\aarch64-pc-windows-msvc\release"
 $bundleRoot = Join-Path $targetRoot "bundle\nsis"
@@ -22,7 +27,7 @@ if (-not $installer) {
     throw "ARM64 NSIS installer was not generated."
 }
 
-$desktopExe = Join-Path $targetRoot "nous-control-center.exe"
+$desktopExe = Join-Path $targetRoot "apeir-control-center.exe"
 if (-not (Test-Path -LiteralPath $desktopExe)) {
     throw "ARM64 desktop executable was not generated."
 }
@@ -57,7 +62,7 @@ try {
 
     $probeRoot = $installRoot
     $installedDesktop = Get-ChildItem -LiteralPath $probeRoot -Recurse -Filter "*.exe" |
-        Where-Object { $_.Name -notmatch "nous-runtime" } |
+        Where-Object { $_.Name -eq "apeir-control-center.exe" } |
         Sort-Object Length -Descending |
         Select-Object -First 1
     $installedSidecar = Get-ChildItem -LiteralPath $probeRoot -Recurse -Filter "*nous-runtime*.exe" |
@@ -66,22 +71,7 @@ try {
         Select-Object -First 1
     $installedWorker = Get-ChildItem -LiteralPath $probeRoot -Recurse -Filter "nous-provider-worker*.exe" |
         Select-Object -First 1
-    if (-not $installedDesktop -or -not $installedSidecar) {
-        $currentUserRoot = Join-Path $env:LOCALAPPDATA "Nous"
-        if (Test-Path -LiteralPath $currentUserRoot) {
-            $probeRoot = $currentUserRoot
-            $installedDesktop = Get-ChildItem -LiteralPath $probeRoot -Recurse -Filter "*.exe" |
-                Where-Object { $_.Name -notmatch "nous-runtime" } |
-                Sort-Object Length -Descending |
-                Select-Object -First 1
-            $installedSidecar = Get-ChildItem -LiteralPath $probeRoot -Recurse -Filter "*nous-runtime*.exe" |
-                Select-Object -First 1
-            $installedKernel = Get-ChildItem -LiteralPath $probeRoot -Recurse -Filter "nousd*.exe" |
-                Select-Object -First 1
-            $installedWorker = Get-ChildItem -LiteralPath $probeRoot -Recurse -Filter "nous-provider-worker*.exe" |
-                Select-Object -First 1
-        }
-    }
+    # Never fall back to an unrelated existing per-user installation.
     if (-not $installedDesktop) {
         throw "Installed Desktop executable was not found."
     }
@@ -112,6 +102,9 @@ try {
     "$hash  $($installer.Name)" | Set-Content -LiteralPath $checksumPath -Encoding utf8
 
     $manifest = [ordered]@{
+        host_os = (Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture)
+        scope = "disposable hosted ARM64 installer and sidecars; not Windows10 tablet GUI qualification"
+        windows10_tablet_acceptance = "NOT_RUN"
         target = "aarch64-pc-windows-msvc"
         version = $ExpectedVersion
         artifact_name = $ArtifactName
@@ -136,7 +129,8 @@ try {
         $uninstaller = Get-ChildItem -LiteralPath $installRoot -Recurse -Filter "uninstall.exe" -ErrorAction SilentlyContinue |
             Select-Object -First 1
         if ($uninstaller) {
-            Start-Process -FilePath $uninstaller.FullName -ArgumentList "/S" -Wait | Out-Null
+            $uninstall = Start-Process -FilePath $uninstaller.FullName -ArgumentList "/S" -Wait -PassThru
+            if ($uninstall.ExitCode -ne 0) { throw "NSIS uninstall failed with exit code $($uninstall.ExitCode)." }
         }
         if (Test-Path -LiteralPath $installRoot) {
             Remove-Item -LiteralPath $installRoot -Recurse -Force

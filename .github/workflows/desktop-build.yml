@@ -19,13 +19,18 @@ on:
         description: 'Run real native smoke and retain unapproved candidates for lock review; requires rebuild_locked_kernel'
         type: boolean
         default: false
+      kernel_candidate_target:
+        description: 'Frozen-source diagnostic target only; never approves components or packaging'
+        type: choice
+        default: x86_64-pc-windows-msvc
+        options: [x86_64-pc-windows-msvc, aarch64-pc-windows-msvc]
       native_target:
         description: 'Explicit native target; all binary gates and platform qualification still apply'
         type: choice
         default: none
         options: [none, windows-x64, windows-arm64, linux-x64, macos-arm64]
       approved_kernel_run_id:
-        description: 'Reviewed same-repository candidate producer run (Windows x64 only)'
+        description: 'Reviewed same-repository candidate producer run for the selected Windows target'
         type: string
         default: ''
       approved_kernel_artifact_id:
@@ -55,7 +60,7 @@ jobs:
   locked-kernel-rebuild:
     name: Locked Kernel rebuild diagnostic (not installation acceptance)
     if: github.event_name == 'workflow_dispatch' && inputs.rebuild_locked_kernel == true
-    runs-on: windows-latest
+    runs-on: ${{ inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc' && 'windows-11-arm' || 'windows-latest' }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -64,6 +69,7 @@ jobs:
     env:
       CARGO_BUILD_JOBS: '2'
       CARGO_TERM_COLOR: never
+      KERNEL_CANDIDATE_TARGET: ${{ inputs.kernel_candidate_target || 'x86_64-pc-windows-msvc' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,16 +83,19 @@ jobs:
           persist-credentials: false
           path: kernel-rebuild-source
       - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
+        with:
+          python-version: ${{ inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc' && '3.13.17' || '3.12' }}
+          architecture: ${{ inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc' && 'arm64' || 'x64' }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.99.1'
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ inputs.kernel_candidate_target || 'x86_64-pc-windows-msvc' }}
       - name: Record build environment and exact source
         shell: pwsh
         env:
           QUALIFY_CANDIDATE: ${{ inputs.qualify_kernel_candidate }}
         run: |
+          if ($env:KERNEL_CANDIDATE_TARGET -notin @('x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc')) { throw 'Unsupported candidate target' }
           $evidence = Join-Path $env:RUNNER_TEMP 'kernel-rebuild-evidence'
           New-Item -ItemType Directory -Force $evidence | Out-Null
           if ($env:QUALIFY_CANDIDATE -eq 'true') {
@@ -102,9 +111,10 @@ jobs:
           & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products '*' -format json | Out-File "$evidence/visual-studio.json"
           git -C distribution rev-parse HEAD | Out-File "$evidence/distribution-sha.txt"
           git -C kernel-rebuild-source rev-parse HEAD | Out-File "$evidence/kernel-sha.txt"
-          $preflight = & ./distribution/scripts/ci/windows_native_preflight.ps1 -Target x86_64-pc-windows-msvc
+          $preflight = & ./distribution/scripts/ci/windows_native_preflight.ps1 -Target $env:KERNEL_CANDIDATE_TARGET
           if (-not $preflight.ready) { throw 'Windows native build prerequisites unavailable' }
           $environment = [ordered]@{
+            candidate_target = $env:KERNEL_CANDIDATE_TARGET
             operating_system = (Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture)
             runner_image = $env:ImageOS
             runner_image_version = $env:ImageVersion
@@ -114,43 +124,76 @@ jobs:
             windows_sdk = $preflight.kernel32_lib
             cargo_lock_sha256 = (Get-FileHash kernel-rebuild-source/Cargo.lock -Algorithm SHA256).Hash
             component_lock_sha256 = (Get-FileHash distribution/runtime-components.lock.json -Algorithm SHA256).Hash
-            build_parameters = 'cargo +1.99.1 build --release --locked --target x86_64-pc-windows-msvc -p nousd --bin nousd -p nous-provider-worker --bin nous-provider-worker'
+            build_parameters = 'cargo +1.99.1 build --release --locked --target $env:KERNEL_CANDIDATE_TARGET -p nousd --bin nousd -p nous-provider-worker --bin nous-provider-worker'
             environment = @{ CARGO_BUILD_JOBS = $env:CARGO_BUILD_JOBS; CARGO_TERM_COLOR = $env:CARGO_TERM_COLOR; RUSTFLAGS = $env:RUSTFLAGS; SOURCE_DATE_EPOCH = $env:SOURCE_DATE_EPOCH }
           }
           $environment | ConvertTo-Json -Depth 6 | Out-File "$evidence/build-environment.json"
           Copy-Item kernel-rebuild-source/Cargo.lock "$evidence/Cargo.lock"
+      - name: Record official ARM64 dependency wheel availability
+        if: inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc'
+        shell: python {0}
+        run: |
+          import json, os, platform, sys, urllib.request
+          from pathlib import Path
+          with urllib.request.urlopen("https://pypi.org/pypi/cryptography/json", timeout=30) as response:
+              package = json.load(response)
+          versions = []
+          for version, files in package["releases"].items():
+              if not version.startswith("46."):
+                  continue
+              wheels = [{"filename": item["filename"], "sha256": item["digests"]["sha256"], "requires_python": item.get("requires_python")} for item in files if item["filename"].endswith("win_arm64.whl") and not item.get("yanked")]
+              if wheels:
+                  versions.append({"version": version, "wheels": wheels})
+          evidence = {"source": "official PyPI metadata; no dependency installed by this probe", "python": sys.version, "machine": platform.machine(), "arm64_wheels": versions}
+          Path(os.environ["RUNNER_TEMP"], "kernel-rebuild-evidence", "arm64-dependency-availability.json").write_text(json.dumps(evidence, indent=2))
       - name: Build frozen components without modifying source or lock
         id: kernel-build
         working-directory: kernel-rebuild-source
         shell: pwsh
         run: |
-          cargo +1.99.1 build --release --locked --target x86_64-pc-windows-msvc -p nousd --bin nousd -p nous-provider-worker --bin nous-provider-worker 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/kernel-rebuild-evidence/cargo-build.log"
+          cargo +1.99.1 build --release --locked --target $env:KERNEL_CANDIDATE_TARGET -p nousd --bin nousd -p nous-provider-worker --bin nous-provider-worker 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/kernel-rebuild-evidence/cargo-build.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Independently compare both PE files with unchanged component lock
         id: original-lock
         if: always() && steps.kernel.outcome == 'success'
         shell: pwsh
         run: |
-          python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-rebuild-source --candidate-root kernel-rebuild-source/target/x86_64-pc-windows-msvc/release --report "$env:RUNNER_TEMP/kernel-rebuild-evidence/component-report.json"
+          python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-rebuild-source --candidate-root kernel-rebuild-source/target/$env:KERNEL_CANDIDATE_TARGET/release --report "$env:RUNNER_TEMP/kernel-rebuild-evidence/component-report.json"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Admit only clean, frozen-source x64 candidates to compatibility tests
+      - name: Inspect clean frozen-source candidates for compatibility only; never lock admission
         id: candidate-admission
         if: always() && inputs.qualify_kernel_candidate == true && steps.kernel-build.outcome == 'success'
         shell: pwsh
         run: |
           $report = Get-Content "$env:RUNNER_TEMP/kernel-rebuild-evidence/component-report.json" -Raw | ConvertFrom-Json
           if ($report.actual_revision -ne '87fd1b2ff28ef14ab1a515a58162592b452fda2e' -or -not $report.tracked_source_clean -or $report.artifacts.Count -ne 2) { throw 'Candidate source is not the frozen clean Kernel' }
+          $expectedMachine = if ($env:KERNEL_CANDIDATE_TARGET -eq 'aarch64-pc-windows-msvc') { '0xAA64' } else { '0x8664' }
+          # The maintained x64 lock intentionally remains BLOCKED for new ARM64 bytes.
+          # Only this unapproved diagnostic may inspect a different architecture.
+          $expectedDifferences = if ($expectedMachine -eq '0xAA64') { @('hash mismatch', 'architecture mismatch') } else { @('hash mismatch') }
           foreach ($item in $report.artifacts) {
-            if ($item.pe_machine -ne '0x8664' -or -not $item.sha256 -or @($item.errors | Where-Object { $_ -ne 'hash mismatch' }).Count) { throw 'Candidate has a non-hash integrity failure' }
+            if ($item.pe_machine -ne $expectedMachine -or -not $item.sha256 -or @($item.errors | Where-Object { $_ -notin $expectedDifferences }).Count) { throw 'Candidate has an unexpected integrity failure' }
           }
           $root = "$env:RUNNER_TEMP/unapproved-kernel-candidate"
           New-Item -ItemType Directory -Force "$root/desktop/src-tauri/binaries" | Out-Null
           foreach ($name in @('nousd', 'nous-provider-worker')) {
-            Copy-Item "kernel-rebuild-source/target/x86_64-pc-windows-msvc/release/$name.exe" "$root/desktop/src-tauri/binaries/$name-x86_64-pc-windows-msvc.exe"
+            Copy-Item "kernel-rebuild-source/target/$env:KERNEL_CANDIDATE_TARGET/release/$name.exe" "$root/desktop/src-tauri/binaries/$name-$env:KERNEL_CANDIDATE_TARGET.exe"
           }
+      - uses: actions/checkout@v4
+        if: always() && inputs.qualify_kernel_candidate == true && steps.candidate-admission.outcome == 'success' && inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc'
+        with:
+          repository: microsoft/vcpkg
+          ref: 2ec0f1747d8186a5c9babe276e2ad57cd2b12d2a
+          path: arm64-dependency-tools
+          persist-credentials: false
+      - name: Prepare native ARM64 OpenSSL from pinned build inputs
+        id: arm64-dependencies
+        if: always() && inputs.qualify_kernel_candidate == true && steps.candidate-admission.outcome == 'success' && inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc'
+        shell: pwsh
+        run: ./distribution/scripts/ci/prepare_windows_arm64_dependencies.ps1 -ToolsRoot ./arm64-dependency-tools -KernelRoot ./kernel-rebuild-source -EvidenceDirectory "$env:RUNNER_TEMP/kernel-rebuild-evidence"
       - name: Build the existing Runtime sidecar for candidate compatibility only
         id: candidate-runtime
-        if: always() && inputs.qualify_kernel_candidate == true && steps.candidate-admission.outcome == 'success'
+        if: always() && inputs.qualify_kernel_candidate == true && steps.candidate-admission.outcome == 'success' && (inputs.kernel_candidate_target != 'aarch64-pc-windows-msvc' || steps.arm64-dependencies.outcome == 'success')
         working-directory: distribution
         shell: pwsh
         run: |
@@ -166,7 +209,7 @@ jobs:
         shell: pwsh
         run: |
           $root = "$env:RUNNER_TEMP/unapproved-kernel-candidate"
-          $smoke = & ./distribution/scripts/ci/verify_windows_native_sidecars.ps1 -SidecarPath "$root/nous-runtime.exe" -KernelPath "$root/desktop/src-tauri/binaries/nousd-x86_64-pc-windows-msvc.exe" -ProviderWorkerPath "$root/desktop/src-tauri/binaries/nous-provider-worker-x86_64-pc-windows-msvc.exe" -EvidenceDirectory $root
+          $smoke = & ./distribution/scripts/ci/verify_windows_native_sidecars.ps1 -SidecarPath "$root/nous-runtime.exe" -KernelPath "$root/desktop/src-tauri/binaries/nousd-$env:KERNEL_CANDIDATE_TARGET.exe" -ProviderWorkerPath "$root/desktop/src-tauri/binaries/nous-provider-worker-$env:KERNEL_CANDIDATE_TARGET.exe" -EvidenceDirectory $root -Target $env:KERNEL_CANDIDATE_TARGET
           $smoke | ConvertTo-Json -Depth 12 | Out-File "$root/native-smoke.json"
       - name: Record unapproved candidate inputs, signatures, dependencies and hashes
         id: candidate-record
@@ -180,9 +223,10 @@ jobs:
           Copy-Item "$env:RUNNER_TEMP/kernel-rebuild-evidence/component-report.json" "$root/original-lock-report.json"
           Copy-Item "$env:RUNNER_TEMP/kernel-rebuild-evidence/build-environment.json" "$root/build-environment.json"
           Copy-Item "$env:RUNNER_TEMP/kernel-rebuild-evidence/python-dependencies.txt" $root
-          $preflight = & ./distribution/scripts/ci/windows_native_preflight.ps1 -Target x86_64-pc-windows-msvc
+          if ($env:ARM64_DEPENDENCY_BUILD_REPORT) { Copy-Item $env:ARM64_DEPENDENCY_BUILD_REPORT $root }
+          $preflight = & ./distribution/scripts/ci/windows_native_preflight.ps1 -Target $env:KERNEL_CANDIDATE_TARGET
           $dumpbin = Join-Path (Split-Path $preflight.link_path) 'dumpbin.exe'
-          $files = foreach ($relative in @('desktop/src-tauri/binaries/nousd-x86_64-pc-windows-msvc.exe', 'desktop/src-tauri/binaries/nous-provider-worker-x86_64-pc-windows-msvc.exe', 'nous-runtime.exe')) {
+          $files = foreach ($relative in @("desktop/src-tauri/binaries/nousd-${env:KERNEL_CANDIDATE_TARGET}.exe", "desktop/src-tauri/binaries/nous-provider-worker-${env:KERNEL_CANDIDATE_TARGET}.exe", "nous-runtime.exe")) {
             $path = Join-Path $root $relative
             & $dumpbin /DEPENDENTS $path | Out-File "$root/$([IO.Path]::GetFileNameWithoutExtension($path))-dependencies.txt"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -190,6 +234,7 @@ jobs:
           }
           $manifest = [ordered]@{
             purpose = 'UNAPPROVED_NATIVE_CANDIDATE; not an installer or release'
+            target = $env:KERNEL_CANDIDATE_TARGET
             distribution_revision = (& git -C distribution rev-parse HEAD).Trim()
             kernel_revision = (& git -C kernel-rebuild-source rev-parse HEAD).Trim()
             source_build = 'PASS'
@@ -209,7 +254,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always() && inputs.qualify_kernel_candidate == true && steps.candidate-record.outcome == 'success'
         with:
-          name: unapproved-kernel-candidate-windows-x64-${{ matrix.attempt }}
+          name: unapproved-kernel-candidate-windows-${{ inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc' && 'arm64' || 'x64' }}-${{ matrix.attempt }}
           path: ${{ runner.temp }}/unapproved-kernel-candidate/
           retention-days: 14
           if-no-files-found: error
@@ -230,7 +275,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: unapproved-kernel-candidate-windows-x64-*
+          pattern: unapproved-kernel-candidate-windows-*
           path: candidates
       - name: Verify actual candidate bytes and compare the two recorded environments
         run: |
@@ -239,7 +284,7 @@ jobs:
           from pathlib import Path
           result = {"purpose": "two clean native candidate builds; no component-lock or release approval", "status": "FAIL"}
           try:
-              roots = sorted(Path("candidates").glob("unapproved-kernel-candidate-windows-x64-*"))
+              roots = sorted(Path("candidates").glob("unapproved-kernel-candidate-windows-*"))
               assert len(roots) == 2
               manifests, environments, native_hashes = [], [], []
               for root in roots:
@@ -259,6 +304,7 @@ jobs:
                   manifests.append(manifest)
                   environments.append(json.loads((root / "build-environment.json").read_text(encoding="utf-8-sig")))
               result.update(kernel_component_hashes=native_hashes, environments_equal=environments[0] == environments[1], kernel_bytes_equal=native_hashes[0] == native_hashes[1])
+              assert manifests[0]["target"] == manifests[1]["target"]
               assert manifests[0]["distribution_revision"] == manifests[1]["distribution_revision"]
               assert result["environments_equal"] and result["kernel_bytes_equal"]
               result["status"] = "MATCH_IN_TWO_RECORDED_ENVIRONMENTS"
@@ -286,7 +332,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Reject incomplete candidate qualification inputs
-        if: github.event_name == 'workflow_dispatch' && ((inputs.qualify_kernel_candidate == true && inputs.rebuild_locked_kernel != true) || (inputs.rebuild_locked_kernel == true && inputs.native_target != 'none'))
+        if: github.event_name == 'workflow_dispatch' && ((inputs.qualify_kernel_candidate == true && inputs.rebuild_locked_kernel != true) || (inputs.rebuild_locked_kernel == true && inputs.native_target != 'none') || (inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc' && inputs.rebuild_locked_kernel != true))
         working-directory: .
         run: |
           echo 'Candidate qualification requires rebuild_locked_kernel=true and native_target=none; native packaging is a separate approved run'
@@ -518,12 +564,15 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Windows x86_64 Build
+  # One official Windows builder; retain the historical job key for consumers.
   build-windows-x64:
-    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && inputs.native_target == 'windows-x64'
-    name: Build Windows x86_64
+    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && (inputs.native_target == 'windows-x64' || inputs.native_target == 'windows-arm64')
+    name: ${{ inputs.native_target == 'windows-arm64' && 'Build Windows ARM64' || 'Build Windows x86_64' }}
     needs: [frontend-tests]
-    runs-on: windows-latest
+    runs-on: ${{ inputs.native_target == 'windows-arm64' && 'windows-11-arm' || 'windows-latest' }}
+    env:
+      NATIVE_TARGET: ${{ inputs.native_target == 'windows-arm64' && 'aarch64-pc-windows-msvc' || 'x86_64-pc-windows-msvc' }}
+      NATIVE_ARCH: ${{ inputs.native_target == 'windows-arm64' && 'arm64' || 'x64' }}
     permissions:
       contents: read
       actions: read
@@ -540,13 +589,15 @@ jobs:
           path: kernel-native-source
           persist-credentials: false
       - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
+        with:
+          python-version: ${{ inputs.native_target == 'windows-arm64' && '3.13.17' || '3.12' }}
+          architecture: ${{ inputs.native_target == 'windows-arm64' && 'arm64' || 'x64' }}
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.99.1'
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ inputs.native_target == 'windows-arm64' && 'aarch64-pc-windows-msvc' || 'x86_64-pc-windows-msvc' }}
       - name: Download only the exact reviewed same-repository candidate archive
         shell: python {0}
         env:
@@ -569,6 +620,8 @@ jobs:
           artifact = api("actions/artifacts/" + artifact_id)
           assert producer["head_repository"]["full_name"] == "untrod/apeir"
           assert producer["path"] == ".github/workflows/desktop-build.yml" and producer["event"] == "workflow_dispatch"
+          arch = os.environ["NATIVE_ARCH"]
+          assert arch in ("x64", "arm64")
           carrier = os.environ["APPROVED_ARTIFACT_FORMAT"]
           assert carrier in ("candidate", "native-build")
           assert producer["status"] == "completed" and producer["conclusion"] in ("success", "failure")
@@ -579,7 +632,7 @@ jobs:
           subprocess.run(["git", "-C", "distribution", "merge-base", "--is-ancestor", revision, "HEAD"], check=True)
           assert artifact["workflow_run"]["id"] == int(run_id) and artifact["workflow_run"]["head_sha"] == revision
           assert not artifact["expired"] and artifact["size_in_bytes"] <= 256 * 1024 * 1024
-          assert (carrier == "candidate" and re.fullmatch(r"unapproved-kernel-candidate-windows-x64-[12]", artifact["name"])) or (carrier == "native-build" and artifact["name"] == "windows-x64-native-development-build")
+          assert (carrier == "candidate" and re.fullmatch(rf"unapproved-kernel-candidate-windows-{arch}-[12]", artifact["name"])) or (carrier == "native-build" and artifact["name"] == f"windows-{arch}-native-development-build")
           assert artifact.get("digest", "").lower() == "sha256:" + expected.lower()
           archive = Path(os.environ["RUNNER_TEMP"]) / "reviewed-kernel.zip"
           with archive.open("wb") as stream:
@@ -596,8 +649,19 @@ jobs:
           APPROVED_ZIP_SHA256: ${{ inputs.approved_kernel_zip_sha256 }}
           APPROVED_ARTIFACT_FORMAT: ${{ inputs.approved_kernel_artifact_format }}
         run: |
-          python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-native-source --artifact-zip "$env:RUNNER_TEMP/reviewed-kernel.zip" --artifact-sha256 $env:APPROVED_ZIP_SHA256 --artifact-source-revision $env:APPROVED_PRODUCER_REVISION --artifact-output "$env:RUNNER_TEMP/approved-native-inputs" --artifact-format $env:APPROVED_ARTIFACT_FORMAT
+          python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-native-source --target $env:NATIVE_TARGET --artifact-zip "$env:RUNNER_TEMP/reviewed-kernel.zip" --artifact-sha256 $env:APPROVED_ZIP_SHA256 --artifact-source-revision $env:APPROVED_PRODUCER_REVISION --artifact-output "$env:RUNNER_TEMP/approved-native-inputs" --artifact-format $env:APPROVED_ARTIFACT_FORMAT
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/checkout@v4
+        if: env.NATIVE_ARCH == 'arm64'
+        with:
+          repository: microsoft/vcpkg
+          ref: 2ec0f1747d8186a5c9babe276e2ad57cd2b12d2a
+          path: arm64-dependency-tools
+          persist-credentials: false
+      - name: Prepare the same reviewed ARM64 cryptography build dependency
+        if: env.NATIVE_ARCH == 'arm64'
+        shell: pwsh
+        run: ./distribution/scripts/ci/prepare_windows_arm64_dependencies.ps1 -ToolsRoot ./arm64-dependency-tools -KernelRoot ./kernel-native-source -EvidenceDirectory "$env:RUNNER_TEMP/arm64-dependency-evidence"
       - name: Install existing full validation and installer build dependencies
         working-directory: distribution
         run: python -m pip install ".[dev,a2a,mcp,scientific,installer-build]"
@@ -608,102 +672,39 @@ jobs:
         shell: pwsh
         working-directory: distribution
         run: |
-          & ./scripts/build-windows-x64-launcher.ps1 -RepoRoot (Resolve-Path .).Path -KernelRoot (Resolve-Path ../kernel-native-source).Path -KernelArtifactDirectory "$env:RUNNER_TEMP/approved-native-inputs"
+          & ./scripts/build-windows-x64-launcher.ps1 -Target $env:NATIVE_TARGET -RepoRoot (Resolve-Path .).Path -KernelRoot (Resolve-Path ../kernel-native-source).Path -KernelArtifactDirectory "$env:RUNNER_TEMP/approved-native-inputs"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Copy-Item "$env:RUNNER_TEMP/reviewed-input-provenance.json" artifacts/windows-x64/
+          Copy-Item "$env:RUNNER_TEMP/reviewed-input-provenance.json" "artifacts/windows-$env:NATIVE_ARCH/"
 
       - uses: actions/upload-artifact@v4
+        if: env.NATIVE_ARCH == 'x64'
         with:
           retention-days: 14
           name: windows-x64-native-development-build
           if-no-files-found: error
           path: distribution/artifacts/windows-x64/
 
-  # Windows ARM64 release candidate build
-  build-windows-arm64:
-    if: github.event_name == 'workflow_dispatch' && vars.APEIR_BINARY_RELEASE_ENABLED == 'true' && inputs.native_target == 'windows-arm64'
-    name: Build Windows ARM64
-    needs: [frontend-tests]
-    runs-on: windows-11-arm
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
-      - uses: actions/setup-node@v4
-        with: { node-version: '22' }
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-pc-windows-msvc
-
-      - name: Verify release candidate metadata
-        run: python scripts/ci/verify_release_versions.py
-
-      - name: Verify native locked Kernel bytes before packaging
-        run: python scripts/ci/verify_kernel_components.py --repo-root .
-
-      - name: Build embedded ARM64 Runtime sidecar
+      - name: Exercise ARM64 NSIS installation and installed sidecars on disposable CI
+        if: env.NATIVE_ARCH == 'arm64'
+        working-directory: distribution
         shell: pwsh
         run: |
-          python -m pip install ".[installer-build]"
-          python -m PyInstaller --noconfirm --clean nous-sidecar.spec
-          New-Item -ItemType Directory -Force desktop/src-tauri/binaries | Out-Null
-          Copy-Item dist/nous-runtime.exe desktop/src-tauri/binaries/nous-runtime-aarch64-pc-windows-msvc.exe
-      - name: Verify locked ARM64 Kernel sidecars are staged
-        run: python scripts/ci/verify_kernel_components.py --repo-root .
-
-      - name: Verify ARM64 Runtime and Kernel lifecycle and authentication
-        shell: pwsh
-        run: >-
-          ./scripts/ci/verify_windows_arm64_sidecar.ps1
-          -SidecarPath ./desktop/src-tauri/binaries/nous-runtime-aarch64-pc-windows-msvc.exe
-          -KernelPath ./desktop/src-tauri/binaries/nousd-aarch64-pc-windows-msvc.exe
-          -ProviderWorkerPath ./desktop/src-tauri/binaries/nous-provider-worker-aarch64-pc-windows-msvc.exe
-          -ExpectedVersion 0.1.0-rc1
-
-      - name: Install frontend dependencies
-        working-directory: desktop
-        run: npm ci
-      - name: React ESLint
-        working-directory: desktop
-        run: npm run lint
-      - name: React tests
-        working-directory: desktop
-        run: npm test
-      - name: TypeScript check
-        working-directory: desktop
-        run: npm run typecheck
-      - name: Vite production build
-        working-directory: desktop
-        run: npm run build
-
-      - name: Rust cargo check
-        working-directory: desktop/src-tauri
-        run: cargo check --locked --target aarch64-pc-windows-msvc
-      - name: Rust cargo test
-        working-directory: desktop/src-tauri
-        run: cargo test --locked --target aarch64-pc-windows-msvc
-
-      - name: Build Tauri ARM64 NSIS package
-        working-directory: desktop
-        run: npx tauri build --bundles nsis --target aarch64-pc-windows-msvc
-
-      - name: Verify installed bundle and generate SHA-256
-        shell: pwsh
-        run: >-
-          ./scripts/ci/verify_windows_arm64_bundle.ps1
-          -RepoRoot .
-          -ExpectedVersion 0.1.0-rc1
-          -ArtifactName windows-arm64-nsis
-
+          ./scripts/ci/verify_windows_arm64_bundle.ps1 -RepoRoot . -ExpectedVersion 0.1.0-rc1 -ArtifactName windows-arm64-native-development-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
+        if: always() && env.NATIVE_ARCH == 'arm64'
         with:
           retention-days: 14
-          name: windows-arm64-nsis
+          name: windows-arm64-ci-installed-sidecar-evidence
+          if-no-files-found: warn
+          path: distribution/RC3-ARM64-ARTIFACT.json
+      - uses: actions/upload-artifact@v4
+        if: env.NATIVE_ARCH == 'arm64'
+        with:
+          retention-days: 14
+          name: windows-arm64-native-development-build
           if-no-files-found: error
-          path: |
-            desktop/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe
-            SHA256SUMS-arm64.txt
-            RC3-ARM64-ARTIFACT.json
+          path: distribution/artifacts/windows-arm64/
 
   # Linux x86_64 Build
   build-linux-x64:

@@ -13,6 +13,12 @@ $kernel = (Resolve-Path -LiteralPath $KernelRoot).Path
 $lockPath = Join-Path $repo "runtime-components.lock.json"
 $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
 $component = $lock.components.'nous-kernel'
+if ($component.target -ne $Target) {
+    $platforms = $component.PSObject.Properties['artifacts_by_target']
+    $selected = if ($platforms) { $platforms.Value.PSObject.Properties[$Target] } else { $null }
+    if (-not $selected -or -not $selected.Value) { throw "Target $Target is not approved in the component lock." }
+    $component = [pscustomobject]@{ revision = $component.revision; target = $Target; artifacts = @($selected.Value) }
+}
 
 $actualRevision = (& git -C $kernel rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $actualRevision -ne $component.revision) {
@@ -35,7 +41,7 @@ if (-not [string]::IsNullOrWhiteSpace($ArtifactDirectory)) {
     # Admit the entire bundle with the existing verifier before replacing any
     # staged file. The immutable lock, not artifact metadata, decides acceptance.
     & python (Join-Path $repo "scripts\ci\verify_kernel_components.py") `
-        --repo-root $inputRoot --lock $lockPath --kernel-root $kernel
+        --repo-root $inputRoot --lock $lockPath --kernel-root $kernel --target $Target
     if ($LASTEXITCODE -ne 0) { throw "Input Kernel bundle failed component-lock admission." }
     foreach ($artifact in $component.artifacts) {
         $source = Join-Path $inputRoot $artifact.path
@@ -54,6 +60,7 @@ if (-not [string]::IsNullOrWhiteSpace($ArtifactDirectory)) {
 
 & python (Join-Path $repo "scripts\ci\verify_kernel_components.py") `
     --repo-root $repo `
+    --target $Target `
     --lock $lockPath `
     --kernel-root $kernel
 if ($LASTEXITCODE -ne 0) {

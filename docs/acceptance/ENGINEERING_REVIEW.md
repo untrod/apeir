@@ -1,5 +1,57 @@
 # Engineering review and research comparison
 
+## Windows ARM64 candidate preparation — 2026-11-11
+
+The requested Xiaomi Pad5 target is Windows ARM64, not 32-bit Windows. Starting
+main is `cf24eb55c5b4ff13f03a1226a10892cbbf93a7a3`. The maintained lock contains
+only the approved x64 components. The old ARM64 packaging job cannot satisfy it;
+a renamed x64 executable is not an ARM64 candidate.
+
+The existing frozen-source diagnostic can now select `aarch64-pc-windows-msvc`
+on `windows-11-arm`, with native ARM64 CPython3.12.10, pinned Rust1.99.1 and the
+same two clean-build comparison. It reuses the existing PE/hash reporter and
+full Native Sidecar Smoke, including authentication and original-history checks.
+Original x64 lock comparison remains nonzero/BLOCKED for ARM64 bytes. Candidate
+retention cannot stage production components, approve a lock, create an installer
+or publish. Both Kernel source and the maintained component lock remain unchanged.
+Windows11 ARM64 smoke is not Windows10 tablet installation acceptance.
+
+The first real ARM64 candidate (`5c98b8b`, run43056393214) built both frozen
+components and the Runtime PE, but startup failed. A diagnostic-only follow-up
+(`dd734d2`, run43057960616) retained the actual version error:
+`ModuleNotFoundError: No module named 'cryptography'`. Existing dependency markers
+excluded cryptography, authlib and requests specifically on Windows ARM64 even
+though Runtime identity code imports cryptography unconditionally. The required
+base dependencies are now selected on ARM64 too; no security fallback is added.
+Official PyPI provides cryptography46.0.3 ARM64 ABI wheels compatible with the
+chosen CPython3.12.10. Both original failed runs and startup output are retained.
+
+The first required-dependency rebuild (c3ddd19, run43059401198) then selected
+cryptography46.0.7 source under ARM64 CPython3.12.10 and failed to locate OpenSSL.
+Its original build log is retained. The revised native profile uses official
+ARM64 CPython3.13.17, with recorded PyPI wheel availability and the same unchanged
+Kernel source. This is an interpreter compatibility qualification, not a crypto
+fallback, dependency downgrade or increased timeout. Its actual smoke result is
+required before component approval.
+
+Python3.13 alone did not resolve that source-build requirement (run43060738090);
+the original error and official ARM64 wheel metadata are retained. The native
+profile now supplies ARM64 static OpenSSL through Microsoft vcpkg commit
+`2ec0f1747d8186a5c9babe276e2ad57cd2b12d2a`, recording source, triplet, version,
+license and library hashes. It does not remove cryptography or choose an older
+patch release. This build-only dependency is not a user installation requirement;
+its real compile and native smoke still need to pass.
+
+The existing official Windows launcher and archive verifier now select explicitly
+approved `artifacts_by_target` from the same component lock. Default x64 fields
+remain unchanged. No ARM64 entry is written before exact candidate approval.
+Both architectures use the same full launcher, Portable/NSIS, hash/PE, NKI and
+process-cleanup gates. Historical x64 carriers remain admissible only when their
+full original lock digest is verified from the exact ancestor Git source and
+every selected component field is identical; new or changed hashes are refused.
+Archive metadata cannot approve a target or supply its authority. This is not a
+Windows10 installation or signing qualification.
+
 ## Studio extension compatibility and Workflow reads — 2026-11-11
 
 The existing v1 declarative contract gains optional required host features and

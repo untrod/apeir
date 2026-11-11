@@ -912,3 +912,221 @@ def test_rebuild_cli_cannot_overwrite_component_lock(
         main()
     assert error.value.code == 2
     assert lock.read_bytes() == original
+
+
+def test_new_arm64_bytes_never_satisfy_the_maintained_x64_lock(
+    rebuilt_candidate, tmp_path
+) -> None:
+    lock, kernel, candidates = rebuilt_candidate
+    document = json.loads(lock.read_text())
+    component = document["components"]["nous-kernel"]
+    component["target"] = "x86_64-pc-windows-msvc"
+    package = tmp_path / "package"
+    for artifact in component["artifacts"]:
+        # Even a matching digest cannot approve a different PE architecture.
+        artifact["pe_machine"] = "0x8664"
+        target = package / artifact["path"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((candidates / (artifact["name"] + ".exe")).read_bytes())
+    lock.write_text(json.dumps(document))
+    before = lock.read_bytes()
+    report = report_rebuild(lock, kernel, candidates)
+    assert report["status"] == "BLOCKED"
+    assert all(item["pe_machine"] == "0xAA64" for item in report["artifacts"])
+    assert all(
+        item["errors"] == ["architecture mismatch"] for item in report["artifacts"]
+    )
+    with pytest.raises(ValueError, match="architecture mismatch"):
+        verify(package, lock, kernel)
+    assert lock.read_bytes() == before
+
+
+def test_unapproved_platform_cannot_be_selected_by_archive_metadata(native_bundle):
+    lock, output, bundle, _ = native_bundle
+    archive, digest = bundle()
+    before = lock.read_bytes()
+    with pytest.raises(ValueError, match="target is not approved"):
+        admit_artifact(
+            archive, digest, output, lock, "1" * 40, target="aarch64-pc-windows-msvc"
+        )
+    assert not output.exists()
+    assert lock.read_bytes() == before
+
+
+@pytest.fixture
+def arm64_candidate_bundle(native_bundle, tmp_path):
+    """Synthetic dual-platform admission contracts, never native qualification."""
+    lock, output, bundle, files = native_bundle
+    old_target = "x86_64-pc-windows-msvc"
+    target = "aarch64-pc-windows-msvc"
+    pe = tmp_path / "arm64.exe"
+    _write_pe(pe, machine=0xAA64)
+    data = pe.read_bytes()
+    arm_paths = [
+        f"desktop/src-tauri/binaries/{name}-{target}.exe"
+        for name in ("nousd", "nous-provider-worker")
+    ]
+    for name in list(files):
+        if name.endswith(".exe"):
+            files.pop(name)
+    for name in [*arm_paths, "nous-runtime.exe"]:
+        files[name] = data
+    manifest = json.loads(files["candidate-manifest.json"])
+    manifest.update(
+        target=target,
+        files=[
+            {"path": name, "sha256": hashlib.sha256(data).hexdigest()}
+            for name in [*arm_paths, "nous-runtime.exe"]
+        ],
+    )
+    files["candidate-manifest.json"] = json.dumps(manifest).encode()
+    smoke = json.loads(files["native-smoke.json"])
+    smoke["target"] = target
+    files["native-smoke.json"] = json.dumps(smoke).encode()
+    document = json.loads(lock.read_text())
+    component = document["components"]["nous-kernel"]
+    assert component["target"] == old_target
+    component["artifacts_by_target"] = {
+        target: [
+            {
+                "name": name,
+                "path": path,
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "pe_machine": "0xAA64",
+            }
+            for name, path in zip(("nousd", "nous-provider-worker"), arm_paths)
+        ]
+    }
+    lock.write_text(json.dumps(document))
+    return lock, output, bundle, files
+
+
+def test_explicit_reviewed_arm64_selection_preserves_x64_defaults(
+    arm64_candidate_bundle,
+):
+    lock, output, bundle, _ = arm64_candidate_bundle
+    archive, digest = bundle()
+    before = lock.read_bytes()
+    with pytest.raises(ValueError, match="unexpected"):
+        admit_artifact(archive, digest, output, lock, "1" * 40)
+    assert not output.exists()
+    result = admit_artifact(
+        archive, digest, output, lock, "1" * 40, target="aarch64-pc-windows-msvc"
+    )
+    assert {item["pe_machine"] for item in result["artifacts"]} == {"0xAA64"}
+    assert result["installation_acceptance"] == "NOT_RUN"
+    assert lock.read_bytes() == before
+    assert (
+        json.loads(before)["components"]["nous-kernel"]["target"]
+        == "x86_64-pc-windows-msvc"
+    )
+
+
+@pytest.mark.parametrize(
+    "fault", ["runtime-architecture", "smoke-target", "manifest-target", "lock-machine"]
+)
+def test_arm64_metadata_never_overrides_actual_target_admission(
+    arm64_candidate_bundle, fault
+):
+    lock, output, bundle, files = arm64_candidate_bundle
+    if fault == "runtime-architecture":
+        wrong = bytearray(files["nous-runtime.exe"])
+        struct.pack_into("<H", wrong, 132, 0x8664)
+        files["nous-runtime.exe"] = bytes(wrong)
+        manifest = json.loads(files["candidate-manifest.json"])
+        next(item for item in manifest["files"] if item["path"] == "nous-runtime.exe")[
+            "sha256"
+        ] = hashlib.sha256(wrong).hexdigest()
+        files["candidate-manifest.json"] = json.dumps(manifest).encode()
+    elif fault == "smoke-target":
+        value = json.loads(files["native-smoke.json"])
+        value["target"] = "x86_64-pc-windows-msvc"
+        files["native-smoke.json"] = json.dumps(value).encode()
+    elif fault == "manifest-target":
+        value = json.loads(files["candidate-manifest.json"])
+        value["target"] = "x86_64-pc-windows-msvc"
+        files["candidate-manifest.json"] = json.dumps(value).encode()
+    else:
+        value = json.loads(lock.read_text())
+        value["components"]["nous-kernel"]["artifacts_by_target"][
+            "aarch64-pc-windows-msvc"
+        ][0]["pe_machine"] = "0x8664"
+        lock.write_text(json.dumps(value))
+    before = lock.read_bytes()
+    archive, digest = bundle()
+    with pytest.raises(ValueError):
+        admit_artifact(
+            archive, digest, output, lock, "1" * 40, target="aarch64-pc-windows-msvc"
+        )
+    assert not output.exists()
+    assert lock.read_bytes() == before
+
+
+def test_new_platform_preserves_only_identical_historical_component_inputs(
+    native_bundle, tmp_path
+):
+    from scripts.ci.verify_kernel_components import _lock_provenance_matches
+
+    original_lock, _, _, _ = native_bundle
+    repo = tmp_path / "history"
+    repo.mkdir()
+    subprocess.run(
+        ["git", "init", "-b", "main", str(repo)], check=True, capture_output=True
+    )
+    lock = repo / "runtime-components.lock.json"
+    lock.write_bytes(original_lock.read_bytes())
+    old_digest = hashlib.sha256(lock.read_bytes()).hexdigest()
+
+    def commit(message):
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "runtime-components.lock.json"], check=True
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-qm",
+                message,
+            ],
+            check=True,
+        )
+        return subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
+        ).strip()
+
+    original = commit("original x64 inputs")
+    data = json.loads(lock.read_text())
+    data["components"]["nous-kernel"]["artifacts_by_target"] = {
+        "aarch64-pc-windows-msvc": [
+            {
+                "name": "nousd",
+                "path": "desktop/bin/nousd-arm64.exe",
+                "sha256": "a" * 64,
+                "pe_machine": "0xAA64",
+            }
+        ]
+    }
+    lock.write_text(json.dumps(data))
+    commit("new independent reviewed platform")
+    assert _lock_provenance_matches(
+        lock, original, old_digest, "x86_64-pc-windows-msvc"
+    )
+    assert not _lock_provenance_matches(
+        lock, original, "0" * 64, "x86_64-pc-windows-msvc"
+    )
+    assert not _lock_provenance_matches(
+        lock, original, old_digest, "aarch64-pc-windows-msvc"
+    )
+    data["components"]["nous-kernel"]["artifacts"][0]["sha256"] = "b" * 64
+    lock.write_text(json.dumps(data))
+    assert not _lock_provenance_matches(
+        lock, original, old_digest, "x86_64-pc-windows-msvc"
+    )

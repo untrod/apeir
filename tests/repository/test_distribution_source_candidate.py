@@ -83,3 +83,29 @@ def test_candidate_keeps_evidence_code_without_exporting_runtime_state(
     for relative, content in public.items():
         assert (destination / relative).read_text(encoding="utf-8") == content
     assert not any((destination / relative).exists() for relative in private)
+
+
+@pytest.mark.parametrize("machine", ["ARM64", "aarch64", "x86_64"])
+def test_windows_package_does_not_omit_required_runtime_security(machine):
+    import ast
+    from packaging.requirements import Requirement
+
+    source = (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text()
+    declaration = source.split("\ndependencies = [", 1)[1].split("\n]", 1)[0]
+    requirements = [
+        Requirement(value) for value in ast.literal_eval("[" + declaration + "]")
+    ]
+    environment = {
+        "platform_system": "Windows",
+        "platform_machine": machine,
+        "sys_platform": "win32",
+        "python_version": "3.12",
+    }
+    selected = {
+        item.name
+        for item in requirements
+        if item.marker is None or item.marker.evaluate(environment)
+    }
+    # Node identity and the authenticated Runtime import these at startup;
+    # metadata-only ARM64 checks must not remove their actual implementation.
+    assert {"cryptography", "requests", "authlib"} <= selected
