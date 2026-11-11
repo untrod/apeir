@@ -34,6 +34,14 @@ Kernel source. This is an interpreter compatibility qualification, not a crypto
 fallback, dependency downgrade or increased timeout. Its actual smoke result is
 required before component approval.
 
+Python3.13 alone did not resolve that source-build requirement (run43060738090);
+the original error and official ARM64 wheel metadata are retained. The native
+profile now supplies ARM64 static OpenSSL through Microsoft vcpkg commit
+`2ec0f1747d8186a5c9babe276e2ad57cd2b12d2a`, recording source, triplet, version,
+license and library hashes. It does not remove cryptography or choose an older
+patch release. This build-only dependency is not a user installation requirement;
+its real compile and native smoke still need to pass.
+
 The existing official Windows launcher and archive verifier now select explicitly
 approved `artifacts_by_target` from the same component lock. Default x64 fields
 remain unchanged. No ARM64 entry is written before exact candidate approval.

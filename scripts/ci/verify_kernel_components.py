@@ -312,6 +312,7 @@ def admit_artifact(
         "candidate-manifest.json",
         "original-lock-report.json",
         "build-environment.json",
+        "arm64-dependency-build.json",
         "python-dependencies.txt",
         "native-smoke.json",
         "nki-initial.json",

@@ -179,9 +179,21 @@ jobs:
           foreach ($name in @('nousd', 'nous-provider-worker')) {
             Copy-Item "kernel-rebuild-source/target/$env:KERNEL_CANDIDATE_TARGET/release/$name.exe" "$root/desktop/src-tauri/binaries/$name-$env:KERNEL_CANDIDATE_TARGET.exe"
           }
+      - uses: actions/checkout@v4
+        if: always() && inputs.qualify_kernel_candidate == true && steps.candidate-admission.outcome == 'success' && inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc'
+        with:
+          repository: microsoft/vcpkg
+          ref: 2ec0f1747d8186a5c9babe276e2ad57cd2b12d2a
+          path: arm64-dependency-tools
+          persist-credentials: false
+      - name: Prepare native ARM64 OpenSSL from pinned build inputs
+        id: arm64-dependencies
+        if: always() && inputs.qualify_kernel_candidate == true && steps.candidate-admission.outcome == 'success' && inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc'
+        shell: pwsh
+        run: ./distribution/scripts/ci/prepare_windows_arm64_dependencies.ps1 -ToolsRoot ./arm64-dependency-tools -KernelRoot ./kernel-rebuild-source -EvidenceDirectory "$env:RUNNER_TEMP/kernel-rebuild-evidence"
       - name: Build the existing Runtime sidecar for candidate compatibility only
         id: candidate-runtime
-        if: always() && inputs.qualify_kernel_candidate == true && steps.candidate-admission.outcome == 'success'
+        if: always() && inputs.qualify_kernel_candidate == true && steps.candidate-admission.outcome == 'success' && (inputs.kernel_candidate_target != 'aarch64-pc-windows-msvc' || steps.arm64-dependencies.outcome == 'success')
         working-directory: distribution
         shell: pwsh
         run: |
@@ -211,6 +223,7 @@ jobs:
           Copy-Item "$env:RUNNER_TEMP/kernel-rebuild-evidence/component-report.json" "$root/original-lock-report.json"
           Copy-Item "$env:RUNNER_TEMP/kernel-rebuild-evidence/build-environment.json" "$root/build-environment.json"
           Copy-Item "$env:RUNNER_TEMP/kernel-rebuild-evidence/python-dependencies.txt" $root
+          if ($env:ARM64_DEPENDENCY_BUILD_REPORT) { Copy-Item $env:ARM64_DEPENDENCY_BUILD_REPORT $root }
           $preflight = & ./distribution/scripts/ci/windows_native_preflight.ps1 -Target $env:KERNEL_CANDIDATE_TARGET
           $dumpbin = Join-Path (Split-Path $preflight.link_path) 'dumpbin.exe'
           $files = foreach ($relative in @("desktop/src-tauri/binaries/nousd-${env:KERNEL_CANDIDATE_TARGET}.exe", "desktop/src-tauri/binaries/nous-provider-worker-${env:KERNEL_CANDIDATE_TARGET}.exe", "nous-runtime.exe")) {
@@ -638,6 +651,17 @@ jobs:
         run: |
           python distribution/scripts/ci/verify_kernel_components.py --repo-root distribution --kernel-root kernel-native-source --target $env:NATIVE_TARGET --artifact-zip "$env:RUNNER_TEMP/reviewed-kernel.zip" --artifact-sha256 $env:APPROVED_ZIP_SHA256 --artifact-source-revision $env:APPROVED_PRODUCER_REVISION --artifact-output "$env:RUNNER_TEMP/approved-native-inputs" --artifact-format $env:APPROVED_ARTIFACT_FORMAT
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/checkout@v4
+        if: env.NATIVE_ARCH == 'arm64'
+        with:
+          repository: microsoft/vcpkg
+          ref: 2ec0f1747d8186a5c9babe276e2ad57cd2b12d2a
+          path: arm64-dependency-tools
+          persist-credentials: false
+      - name: Prepare the same reviewed ARM64 cryptography build dependency
+        if: env.NATIVE_ARCH == 'arm64'
+        shell: pwsh
+        run: ./distribution/scripts/ci/prepare_windows_arm64_dependencies.ps1 -ToolsRoot ./arm64-dependency-tools -KernelRoot ./kernel-native-source -EvidenceDirectory "$env:RUNNER_TEMP/arm64-dependency-evidence"
       - name: Install existing full validation and installer build dependencies
         working-directory: distribution
         run: python -m pip install ".[dev,a2a,mcp,scientific,installer-build]"

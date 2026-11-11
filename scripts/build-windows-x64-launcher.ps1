@@ -354,7 +354,15 @@ $manifest | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath $artifactManifest
 $releaseManifest = Join-Path $artifactRoot "release-manifest.json"
 $manifest | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath $releaseManifest -Encoding utf8
 $dependencyReport = Join-Path $artifactRoot "native-dependencies.json"
+$arm64DependencyBuild = $null
+if ($architectureAlias -eq 'arm64') {
+    if ([string]::IsNullOrWhiteSpace($env:ARM64_DEPENDENCY_BUILD_REPORT) -or -not (Test-Path -LiteralPath $env:ARM64_DEPENDENCY_BUILD_REPORT)) {
+        throw 'ARM64 dependency source/build provenance is missing.'
+    }
+    $arm64DependencyBuild = Get-Content -LiteralPath $env:ARM64_DEPENDENCY_BUILD_REPORT -Raw | ConvertFrom-Json
+}
 @{
+    arm64_cryptography_build = $arm64DependencyBuild
     source = "Visual Studio $architectureAlias Microsoft.VC*.CRT redistributable directory"
     licensing = 'Redistribution is governed by the applicable Visual Studio license and REDIST list; retain source and notices in release review.'
     dependencies = $nativeDependencies
