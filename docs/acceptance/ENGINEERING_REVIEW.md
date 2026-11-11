@@ -28,6 +28,25 @@ original failure evidence. No Docking, Layout or Runtime contract changed.
 Native installation and every real model retain their separate gates. Exact
 source/CI identities and retained failures belong to the integration PR.
 
+PR144 passed Core42978980852, Desktop42978980869, Multi-Arch42978980898 and
+Security42978980853, including all13 required contexts, before normal merge
+`c037c1fa647b852405308b5d9a7bae205fbca80e`. The earlier source70a PR Core/Multi
+runs were superseded by the demonstrated card overflow fix, not recorded as PASS.
+
+Full native producer [42977022966](https://github.com/untrod/apeir/actions/runs/42977022966)
+built source `70a5c69b1b2bd9f36f5f6725e7a1e7bdf411fd2d` with validation and real
+sidecar Smoke enabled. Windows Server2025 exercised actual Kernel/Worker/Runtime,
+NKI authentication/refusal, original-request and pure Workflow recovery, process
+cleanup and authenticated Studio contract discovery. That discovery confirms
+wire support, not a plugin permission grant. External model calls:0.
+Independent archive, component-lock, PE, Portable and NSIS payload checks passed;
+all11 application files were inspected, with10 exact matches and only the
+expected three-byte Tauri launcher bundle stamp difference. Current hashes,
+source artifacts and expiry are in [Quick Start](../operations/getting-started/QUICK_START.md#download-metadata).
+The compact example1.0.1, its browser assertion and subsequent documentation are
+outside Runtime/Desktop build inputs. Installed Windows10 GUI/lifecycle remains
+NOT_RUN; no signing, tag creation or public release is inferred.
+
 ## Windows native validation: Conversation close and Node status — 2026-11-09
 
 Full-mode native run `42647679030`, source

@@ -198,7 +198,42 @@ checks do not alter the reviewed Kernel hashes or remove licensing/install gates
 
 ## Current native command-qualified build
 
-The current unsigned Windows development bundle is [full-mode run42657287823](https://github.com/untrod/apeir/actions/runs/42657287823),
+The current unsigned Windows x64 package is [full-mode run42977022966](https://github.com/untrod/apeir/actions/runs/42977022966),
+source `70a5c69b1b2bd9f36f5f6725e7a1e7bdf411fd2d`, preserved through [PR144](https://github.com/untrod/apeir/pull/144).
+[Artifact13837634414](https://github.com/untrod/apeir/actions/runs/42977022966/artifacts/13837634414)
+requires GitHub sign-in and expires **2026-11-25**. The matching wheel/frontend
+links are in [Quick Start](../getting-started/QUICK_START.md#download-metadata).
+
+| File | SHA-256 |
+| --- | --- |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `ff3e8a56f14d048aee24367f282617a92e89f2d3397406e008b8bac7008e4b85` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `5896b513211d25dd3518fa7570c1d69bd343bf80babd756f63b5695355f863e3` |
+| Outer artifact ZIP | `47e35e52c46d18eab6fe1c22bc6850616911656882d15bd593316234d4f5a33d` |
+
+The official launcher ran full validation without either skip switch on
+**Windows Server2025 x64**, Python3.12.10, Rust1.99.1, MSVC14.51 and SDK26100.
+Actual Kernel/Worker/Runtime startup, NKI1/2/3 authentication and refusal, original
+request recovery, pure Workflow restart and owned-process fault cleanup passed.
+Authenticated feature discovery reports `data.workflow.summary` and executable
+UI `BLOCKED`; it does not grant plugin access or qualify installation.
+No external model call was made. Frozen Kernel source and approved component
+hashes are unchanged.
+
+Independent admission checked the downloaded archive, manifests, locked PE bytes,
+Portable contents and all eleven NSIS application files. Ten match Portable
+exactly; the launcher has only the upstream three-byte Tauri UNK/NSS bundle stamp
+difference. Actual hashes were retained, not normalized.
+
+The compact Workflow Monitor 1.0.1 example is installed separately. Its later
+manifest, viewport test and documentation changes leave the producer's Runtime,
+Desktop, dependencies, component lock and build inputs unchanged.
+`installation_acceptance=NOT_RUN`: inspection and Server smoke are not Windows10
+GUI installation, upgrade/uninstall or Defender acceptance. These remain
+**PENDING**; signing and public publication retain their separate gates.
+
+### Previous model lifecycle producer — 2026-11-10
+
+The preceding unsigned Windows development bundle is [full-mode run42657287823](https://github.com/untrod/apeir/actions/runs/42657287823),
 source `c12cb97f13990287b3638e7913aa330d05b4e562`, reviewed in [PR143](https://github.com/untrod/apeir/pull/143).
 [Artifact13696179576](https://github.com/untrod/apeir/actions/runs/42657287823/artifacts/13696179576)
 expires on **2026-11-23** and requires GitHub sign-in. Subsequent test and
