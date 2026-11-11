@@ -26,6 +26,14 @@ base dependencies are now selected on ARM64 too; no security fallback is added.
 Official PyPI provides cryptography46.0.3 ARM64 ABI wheels compatible with the
 chosen CPython3.12.10. Both original failed runs and startup output are retained.
 
+The first required-dependency rebuild (c3ddd19, run43059401198) then selected
+cryptography46.0.7 source under ARM64 CPython3.12.10 and failed to locate OpenSSL.
+Its original build log is retained. The revised native profile uses official
+ARM64 CPython3.13.17, with recorded PyPI wheel availability and the same unchanged
+Kernel source. This is an interpreter compatibility qualification, not a crypto
+fallback, dependency downgrade or increased timeout. Its actual smoke result is
+required before component approval.
+
 The existing official Windows launcher and archive verifier now select explicitly
 approved `artifacts_by_target` from the same component lock. Default x64 fields
 remain unchanged. No ARM64 entry is written before exact candidate approval.

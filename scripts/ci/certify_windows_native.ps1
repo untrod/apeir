@@ -28,10 +28,13 @@ $kernelTest = Join-Path $kernel "scripts\test.ps1"
 if (-not (Test-Path -LiteralPath $kernelTest)) {
     throw "Kernel test entry point is missing: $kernelTest"
 }
-& $kernelTest
+$powerShellExecutable = (Get-Process -Id $PID).Path
+& python (Join-Path $repo "scripts\ci\run_kernel_source_tests.py") --kernel-root $kernel --powershell $powerShellExecutable
+if ($LASTEXITCODE -ne 0) { throw "Frozen Kernel source tests failed." }
 
 $stage = Join-Path $repo "scripts\stage-kernel-components.ps1"
-& $stage -KernelRoot $kernel -RepoRoot $repo -Target $Target
+& $stage -KernelRoot $kernel -RepoRoot $repo -Target $Target -SkipBuild
+if ($LASTEXITCODE -ne 0) { throw "Locked Kernel staging failed." }
 
 $common = Join-Path $kernel "scripts\common.ps1"
 . $common

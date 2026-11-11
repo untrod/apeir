@@ -84,7 +84,7 @@ jobs:
           path: kernel-rebuild-source
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc' && '3.12.10' || '3.12' }}
+          python-version: ${{ inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc' && '3.13.17' || '3.12' }}
           architecture: ${{ inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc' && 'arm64' || 'x64' }}
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -129,6 +129,23 @@ jobs:
           }
           $environment | ConvertTo-Json -Depth 6 | Out-File "$evidence/build-environment.json"
           Copy-Item kernel-rebuild-source/Cargo.lock "$evidence/Cargo.lock"
+      - name: Record official ARM64 dependency wheel availability
+        if: inputs.kernel_candidate_target == 'aarch64-pc-windows-msvc'
+        shell: python {0}
+        run: |
+          import json, os, platform, sys, urllib.request
+          from pathlib import Path
+          with urllib.request.urlopen("https://pypi.org/pypi/cryptography/json", timeout=30) as response:
+              package = json.load(response)
+          versions = []
+          for version, files in package["releases"].items():
+              if not version.startswith("46."):
+                  continue
+              wheels = [{"filename": item["filename"], "sha256": item["digests"]["sha256"], "requires_python": item.get("requires_python")} for item in files if item["filename"].endswith("win_arm64.whl") and not item.get("yanked")]
+              if wheels:
+                  versions.append({"version": version, "wheels": wheels})
+          evidence = {"source": "official PyPI metadata; no dependency installed by this probe", "python": sys.version, "machine": platform.machine(), "arm64_wheels": versions}
+          Path(os.environ["RUNNER_TEMP"], "kernel-rebuild-evidence", "arm64-dependency-availability.json").write_text(json.dumps(evidence, indent=2))
       - name: Build frozen components without modifying source or lock
         id: kernel-build
         working-directory: kernel-rebuild-source
@@ -560,7 +577,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ inputs.native_target == 'windows-arm64' && '3.12.10' || '3.12' }}
+          python-version: ${{ inputs.native_target == 'windows-arm64' && '3.13.17' || '3.12' }}
           architecture: ${{ inputs.native_target == 'windows-arm64' && 'arm64' || 'x64' }}
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
@@ -643,6 +660,20 @@ jobs:
           if-no-files-found: error
           path: distribution/artifacts/windows-x64/
 
+      - name: Exercise ARM64 NSIS installation and installed sidecars on disposable CI
+        if: env.NATIVE_ARCH == 'arm64'
+        working-directory: distribution
+        shell: pwsh
+        run: |
+          ./scripts/ci/verify_windows_arm64_bundle.ps1 -RepoRoot . -ExpectedVersion 0.1.0-rc1 -ArtifactName windows-arm64-native-development-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always() && env.NATIVE_ARCH == 'arm64'
+        with:
+          retention-days: 14
+          name: windows-arm64-ci-installed-sidecar-evidence
+          if-no-files-found: warn
+          path: distribution/RC3-ARM64-ARTIFACT.json
       - uses: actions/upload-artifact@v4
         if: env.NATIVE_ARCH == 'arm64'
         with:

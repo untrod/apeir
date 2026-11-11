@@ -16,14 +16,17 @@ def test_sidecar_smoke_starts_authenticated_kernel_before_runtime() -> None:
     assert "[string]$KernelPath" in script
     assert "[string]$ProviderWorkerPath" in script
     assert "requires an ARM64 Windows host" in script
-    assert '$env:NOUS_KERNEL_ENDPOINT = "tcp://127.0.0.1:$kernelPort"' in script
-    assert "$env:NOUS_NKI_TOKEN = $kernelToken" in script
-    assert "$kernelParent = Start-Process @kernelStart" in script
-    assert "$parent = Start-Process @runtimeStart" in script
-    assert script.index("$kernelParent = Start-Process @kernelStart") < script.index(
-        "$parent = Start-Process @runtimeStart"
-    )
-    assert "kernel_process_tree_closed" in script
+    assert "verify_windows_native_sidecars.ps1" in script
+    assert '-Target "aarch64-pc-windows-msvc"' in script
+    assert "-KernelPath $KernelPath" in script
+    assert "-ProviderWorkerPath $ProviderWorkerPath" in script
+    canonical = _read("scripts/ci/verify_windows_native_sidecars.ps1")
+    assert '$env:NOUS_KERNEL_ENDPOINT = "tcp://127.0.0.1:$kernelPort"' in canonical
+    assert "$env:NOUS_NKI_TOKEN = $kernelToken" in canonical
+    assert canonical.index(
+        "$kernelParent = Start-Process @kernelStart"
+    ) < canonical.index("$parent = Start-Process @runtimeStart")
+    assert "kernel_process_tree_closed" in canonical
 
 
 def test_bundle_smoke_passes_all_installed_sidecars() -> None:
@@ -31,6 +34,12 @@ def test_bundle_smoke_passes_all_installed_sidecars() -> None:
 
     assert "-KernelPath $installedKernel.FullName" in script
     assert "-ProviderWorkerPath $installedWorker.FullName" in script
+    assert "github-hosted" in script
+    assert "apeir-control-center.exe" in script
+    assert "nous-control-center.exe" not in script
+    assert "$currentUserRoot" not in script
+    assert "if ($uninstall.ExitCode -ne 0)" in script
+    assert "windows10_tablet_acceptance" in script
 
 
 def test_arm64_workflow_enforces_component_lock_and_joint_smoke() -> None:
