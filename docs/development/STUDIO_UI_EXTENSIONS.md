@@ -75,6 +75,11 @@ read is `UNAVAILABLE`, with null values. Other status widgets remain usable.
 Disable/remove prevents new reads; controller switching and Runtime restart
 continue through the existing connection guards, Registry and Workflow history.
 
+![Workflow Monitor with visible Running, Completed and Unknown rows in a source Dashboard](../media/studio-workflow-monitor-source.png)
+
+*Actual model-disabled Runtime and public CLI in sandboxed Chromium. This shows
+read-only Workflow counts, not a Windows installation or real-model qualification.*
+
 ## Declarative UI Extension SDK
 
 Studio UI contributions use the existing Native Extension IR, ExtensionRegistry,
