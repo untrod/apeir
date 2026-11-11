@@ -694,12 +694,32 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   expect(errors).toEqual([]);
 });
 
-test("Declarative UI extension uses public review and approval, real status, revocation and retained layout", async ({ page }, info) => {
+for (const profile of [
+  { file: "nous.extension.json", panel: "System Monitor", widget: "Runtime Monitor", source: "runtime.status" },
+  { file: "workflow-monitor.extension.json", panel: "Workflow Monitor", widget: "Workflow Summary", source: "workflow.summary" },
+]) {
+test(`Declarative UI extension uses public review and approval, real status, revocation and retained layout (${profile.panel})`, async ({ page }, info) => {
   const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
   const acquired = await mkdtemp(join(tmpdir(), "apeir-external-widget-"));
   const manifestPath = join(acquired, "nous.extension.json");
-  const original = JSON.parse(await readFile(resolve("../examples/studio_system_monitor/nous.extension.json"), "utf8"));
+  const original = JSON.parse(await readFile(resolve(`../examples/studio_system_monitor/${profile.file}`), "utf8"));
   await writeFile(manifestPath, JSON.stringify(original));
+  const clientPath = join(acquired, "monitor_client.py");
+  await writeFile(clientPath, await readFile(resolve("../examples/studio_system_monitor/monitor_client.py")));
+  async function external(args: string[], directory = acquired) {
+    const child = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", args, { cwd: directory, env: { ...globalThis.process.env, NOUS_WORKSPACE_ROOT: runtimes[0].directory, NOUS_API_TOKEN: token }, stdio: ["ignore", "pipe", "pipe"] });
+    producers.push(child); let stdout = "", stderr = "";
+    child.stdout?.on("data", chunk => { stdout += String(chunk); }); child.stderr?.on("data", chunk => { stderr += String(chunk); });
+    expect(await new Promise<number | null>((resolve, reject) => { child.once("exit", resolve); child.once("error", reject); }), stderr).toBe(0);
+    return JSON.parse(stdout);
+  }
+  if (profile.source === "workflow.summary") {
+    const definition = JSON.parse(await readFile(resolve("../examples/hello_workflow/workflow.json"), "utf8"));
+    definition.workflow_id = "extension.monitor.reference";
+    const definitionPath = join(acquired, "workflow.json"); await writeFile(definitionPath, JSON.stringify(definition));
+    await external(["-m", "nous_runtime.cli.main", "--no-intelligence", "workflow", "register", definitionPath, "--json"], runtimes[0].directory);
+    await external(["-m", "nous_runtime.cli.main", "--no-intelligence", "workflow", "run", definition.workflow_id, "--idempotency-key", "monitor-once", "--json"], runtimes[0].directory);
+  }
   try {
     await open(page);
     await page.getByRole("button", { name: /Add panel/ }).click();
@@ -729,26 +749,31 @@ test("Declarative UI extension uses public review and approval, real status, rev
     const view = (await response.json()).data;
     const record = view.extensions.find((item: { extension_id: string }) => item.extension_id === original.extension_id);
     expect(record.authority).toBe("none"); expect(record.granted_capabilities).toEqual([]);
+    const contract = await external([clientPath, "contract", "--endpoint", runtimes[0].url]);
+    expect(contract.schema).toBe("apeir.studio-ui/v1");
+    const sdkRead = await external([clientPath, "read", "--manifest", manifestPath, "--endpoint", runtimes[0].url]);
+    expect(sdkRead.source).toBe(profile.source);
+    if (profile.source === "workflow.summary") { expect(sdkRead.status).toBe("READY"); expect(sdkRead.values.runs_sampled).toBeGreaterThan(0); }
     const widgetType = record.contributions.find((item: { kind: string }) => item.kind === "widget").type;
     const unauthorized = await fetch(`${runtimes[0].url}/api/v1/studio/extensions`); expect(unauthorized.status).toBe(401);
     await page.getByRole("button", { name: /Add panel/ }).click();
-    await page.getByRole("textbox", { name: "Search panels" }).fill("System Monitor");
-    await page.getByRole("button", { name: "System Monitor", exact: true }).click();
-    await expect(page.getByRole("region", { name: "System Monitor", exact: true }).getByText("ONLINE", { exact: true })).toBeVisible();
+    await page.getByRole("textbox", { name: "Search panels" }).fill(profile.panel);
+    await page.getByRole("button", { name: profile.panel, exact: true }).click();
+    await expect(page.getByRole("region", { name: profile.panel, exact: true }).getByText(profile.source === "runtime.status" ? "ONLINE" : "Recorded runs", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: /Add panel/ }).click();
     await page.getByRole("textbox", { name: "Search panels" }).fill("Dashboard");
     await page.getByRole("button", { name: "Dashboard", exact: true }).click();
     await page.getByRole("button", { name: "Edit layout", exact: true }).click();
     await page.getByRole("combobox", { name: "Widget type", exact: true }).selectOption(widgetType);
     await page.getByRole("button", { name: "Add widget", exact: true }).click();
-    await expect(page.getByRole("region", { name: "Runtime Monitor", exact: true }).getByText("ONLINE", { exact: true })).toBeAttached();
+    await expect(page.getByRole("region", { name: profile.widget, exact: true }).getByText(profile.source === "runtime.status" ? "ONLINE" : "Unknown", { exact: true })).toBeAttached();
     await workspaceMenu(page); await page.getByRole("button", { name: "Save layout", exact: true }).click();
     const layout = await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"));
     expect(layout).toContain(widgetType); expect(layout).not.toContain(record.digest); expect(layout).not.toContain(token);
     await page.screenshot({ path: info.outputPath("extension-runtime-dashboard-source-browser.png"), fullPage: true });
     await page.locator(".flexlayout__tab_button").filter({ hasText: "UI Extensions" }).first().click();
     await approveAndRetry("Disable");
-    const denied = await fetch(`${runtimes[0].url}/api/v1/studio/extensions/data?${new URLSearchParams({ component_type: widgetType, expected_digest: record.digest, source: "runtime.status" })}`, { headers: { Authorization: `Bearer ${token}` } });
+    const denied = await fetch(`${runtimes[0].url}/api/v1/studio/extensions/data?${new URLSearchParams({ component_type: widgetType, expected_digest: record.digest, source: profile.source })}`, { headers: { Authorization: `Bearer ${token}` } });
     expect((await denied.json()).ok).toBe(false);
     await page.locator(".flexlayout__tab_button").filter({ hasText: "Dashboard" }).first().click();
     await expect(page.getByRole("status").filter({ hasText: "DISABLED" })).toBeVisible();
@@ -807,14 +832,20 @@ test("Declarative UI extension uses public review and approval, real status, rev
     }, { timeout: 10000 }).toBe(true);
     await manager.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(manager.getByText(/1.1.0 · UNVERIFIED/)).toBeVisible();
+    if (profile.source === "workflow.summary") {
+      const restored = await fetch(`${runtime.url}/api/v1/studio/extensions`, { headers: { Authorization: `Bearer ${token}` } });
+      expect((await restored.json()).data.sources["workflow.summary"].values).toEqual(sdkRead.values);
+    }
     await approveAndRetry("Remove");
     await page.locator(".flexlayout__tab_button").filter({ hasText: "Dashboard" }).first().click();
     await expect(page.getByRole("status").filter({ hasText: "Missing Extension" })).toBeVisible();
-    const foreign = await fetch(`${runtimes[1].url}/api/v1/studio/extensions/data?${new URLSearchParams({ component_type: widgetType, expected_digest: record.digest, source: "runtime.status" })}`, { headers: { Authorization: `Bearer ${token}` } });
+    const foreign = await fetch(`${runtimes[1].url}/api/v1/studio/extensions/data?${new URLSearchParams({ component_type: widgetType, expected_digest: record.digest, source: profile.source })}`, { headers: { Authorization: `Bearer ${token}` } });
     expect((await foreign.json()).ok).toBe(false);
     expect(errors).toEqual([]);
   } finally { await rm(acquired, { recursive: true, force: true }); }
 });
+
+}
 
 test("Empty Chat offers real setup panels without submitting work or losing a draft", async ({ page }) => {
   const mutations: string[] = [];

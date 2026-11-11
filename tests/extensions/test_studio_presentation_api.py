@@ -103,9 +103,11 @@ def source():
     return EXAMPLE.read_text(encoding="utf-8")
 
 
-def installed(call):
+def installed(call, source_manifest=None):
     review = call(
-        "POST", "/api/v1/studio/extensions/review", {"source_manifest": source()}
+        "POST",
+        "/api/v1/studio/extensions/review",
+        {"source_manifest": source_manifest or source()},
     )
     assert review["ok"], review
     binding = review["data"]
@@ -113,7 +115,7 @@ def installed(call):
         "POST",
         "/api/v1/studio/extensions/install",
         {
-            "source_manifest": source(),
+            "source_manifest": source_manifest or source(),
             "expected_digest": binding["digest"],
             "expected_previous_digest": binding["previous_digest"],
         },
@@ -326,3 +328,179 @@ def test_declared_workflow_action_still_needs_original_gate_permission_and_lease
     )
     assert not denied["ok"]
     assert len(runtime.store.list_runs()) == 1
+
+
+def workflow_source():
+    return (EXAMPLE.parent / "workflow-monitor.extension.json").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_workflow_monitor_uses_original_runs_and_independent_resource_permission(
+    client,
+):
+    from nous_runtime.workflow.models import (
+        WorkflowDefinition,
+        WorkflowStep,
+        StepType,
+        TriggerType,
+    )
+    from nous_runtime.workflow.runtime import WorkflowRuntime
+
+    call, gate, root = client
+    runtime = WorkflowRuntime(str(root))
+    runtime.register(
+        WorkflowDefinition(
+            "private-project-name",
+            "1",
+            TriggerType.MANUAL,
+            steps=[
+                WorkflowStep(
+                    "result", StepType.TRANSFORM, params={"value": "private result"}
+                )
+            ],
+        )
+    )
+    run = runtime.start("private-project-name", "1", idempotency_key="one-original")
+    assert run.state.value == "completed"
+    from nous_runtime.workflow.models import WorkflowOutcomeUnknown
+
+    def uncertain(step, inputs):
+        raise WorkflowOutcomeUnknown("controlled uncertain result")
+
+    interrupted = WorkflowRuntime(str(root), handlers={"uncertain.fixture": uncertain})
+    interrupted.register(
+        WorkflowDefinition(
+            "uncertain-example",
+            "1",
+            TriggerType.MANUAL,
+            steps=[
+                WorkflowStep("unknown", StepType.CAPABILITY, action="uncertain.fixture")
+            ],
+        )
+    )
+    unknown = interrupted.start(
+        "uncertain-example", "1", idempotency_key="original-unknown"
+    )
+    assert unknown.state.value == "unknown"
+    record = installed(call, workflow_source())
+    assert configure(call, record)["ok"]
+    params = {
+        "component_type": record["contributions"][0]["type"],
+        "expected_digest": record["digest"],
+        "source": "workflow.summary",
+    }
+    read = call("GET", "/api/v1/studio/extensions/data", params=params)
+    assert read["ok"], read
+    summary = read["data"]
+    assert summary["status"] == "READY"
+    assert summary["values"]["runs_sampled"] == 2
+    assert summary["values"]["completed_runs"] == 1
+    assert summary["values"]["unknown_runs"] == 1
+    assert summary["window"] == "latest-100-recorded-runs"
+    assert "private" not in json.dumps(summary) and run.run_id not in json.dumps(
+        summary
+    )
+    catalog = call("GET", "/api/v1/studio/extensions")["data"]
+    assert "data.workflow.summary" in catalog["contract"]["features"]
+    assert catalog["sources"]["workflow.summary"]["values"] == summary["values"]
+    # Registry access is not permission to inspect the Workflow resource.
+    gate.permission_engine = PermissionEngine(
+        (
+            PermissionRule(
+                "api-service",
+                "workspace.read",
+                str(root / ".nous/extensions/registry.json"),
+            ),
+        )
+    )
+    assert not call("GET", "/api/v1/studio/extensions/data", params=params)["ok"]
+    catalog = call("GET", "/api/v1/studio/extensions")["data"]
+    assert catalog["sources"]["workflow.summary"]["status"] == "BLOCKED"
+    assert catalog["sources"]["workflow.summary"]["values"] is None
+    # Reading, losing permission and reloading never submits another run.
+    assert {row.run_id for row in WorkflowRuntime(str(root)).store.list_runs()} == {
+        run.run_id,
+        unknown.run_id,
+    }
+
+
+def test_workflow_source_disable_and_storage_failure_never_turn_into_zero(
+    client, monkeypatch
+):
+    from nous_runtime.api import workflow_routes
+
+    call, _, _ = client
+    record = installed(call, workflow_source())
+    assert configure(call, record)["ok"]
+    params = {
+        "component_type": record["contributions"][0]["type"],
+        "expected_digest": record["digest"],
+        "source": "workflow.summary",
+    }
+
+    def unavailable(**kwargs):
+        raise OSError("private storage path and private result")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(workflow_routes, "handle_workflow_catalog", unavailable)
+        read = call("GET", "/api/v1/studio/extensions/data", params=params)
+        assert read["data"]["status"] == "UNAVAILABLE"
+        assert read["data"]["values"] is None and "private" not in json.dumps(read)
+    assert configure(call, record, False)["ok"]
+    monkeypatch.setattr(
+        workflow_routes,
+        "handle_workflow_catalog",
+        lambda **kw: pytest.fail("Disabled package queried private workflow records"),
+    )
+    assert not call("GET", "/api/v1/studio/extensions/data", params=params)["ok"]
+    assert call("GET", "/api/v1/studio/extensions")["data"]["sources"] == {}
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("requires", ["host.shell"]),
+        ("requires", [True]),
+        ("requires", ["data.workflow.summary"] * 2),
+        ("schema", "apeir.studio-ui/v99"),
+    ],
+)
+def test_host_feature_mismatch_is_rejected_before_install(client, field, value):
+    call, _, root = client
+    document = json.loads(workflow_source())
+    document["metadata"]["apeir_studio"][field] = value
+    result = call(
+        "POST",
+        "/api/v1/studio/extensions/review",
+        {"source_manifest": json.dumps(document)},
+    )
+    assert not result["ok"]
+    assert not (root / ".nous/extensions/registry.json").exists()
+
+
+def test_workflow_denial_does_not_hide_legacy_runtime_widgets(client, monkeypatch):
+    from nous_runtime.extensions.presentation import StudioExtensionHost
+
+    call, gate, root = client
+    legacy = installed(call)
+    assert configure(call, legacy)["ok"]
+    workflow = installed(call, workflow_source())
+    assert configure(call, workflow)["ok"]
+    monkeypatch.setattr(
+        StudioExtensionHost, "_status", staticmethod(lambda: {"running": True})
+    )
+    gate.permission_engine = PermissionEngine(
+        (
+            PermissionRule(
+                "api-service",
+                "workspace.read",
+                str(root / ".nous/extensions/registry.json"),
+            ),
+        )
+    )
+    view = call("GET", "/api/v1/studio/extensions")
+    assert view["ok"] and len(view["data"]["extensions"]) == 2
+    assert view["data"]["status"]["running"] is True
+    assert view["data"]["sources"]["workflow.summary"]["status"] == "BLOCKED"
+    assert view["data"]["sources"]["workflow.summary"]["values"] is None

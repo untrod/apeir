@@ -1,0 +1,122 @@
+{
+  "schema": "nous.extension/v1",
+  "extension_id": "examples/workflow-monitor",
+  "version": "1.0.0",
+  "description": "Read-only, permission-scoped Workflow counts through the public Studio host",
+  "source_format": "nous-native-v1",
+  "compatibility_level": 2,
+  "kinds": [
+    "plugin"
+  ],
+  "license": "Apache-2.0",
+  "capabilities": [
+    {
+      "capability": "workflow.summary.read",
+      "access": "read",
+      "scope": [
+        "current-workspace"
+      ],
+      "required": true
+    }
+  ],
+  "metadata": {
+    "publisher": "APEIR SDK example (unverified claim)",
+    "apeir_studio": {
+      "schema": "apeir.studio-ui/v1",
+      "requires": [
+        "data.workflow.summary"
+      ],
+      "contributions": [
+        {
+          "id": "workflow-monitor",
+          "kind": "panel",
+          "title": "Workflow Monitor",
+          "subscriptions": [
+            "workflow.summary"
+          ],
+          "view": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "text",
+                "text": "Latest 100 recorded runs \u00b7 current workspace. Counts are not ETA or effect verification."
+              },
+              {
+                "kind": "metric",
+                "source": "workflow.summary",
+                "field": "runs_sampled",
+                "label": "Recorded runs"
+              },
+              {
+                "kind": "table",
+                "source": "workflow.summary",
+                "label": "Run states",
+                "fields": [
+                  {
+                    "field": "running_runs",
+                    "label": "Running"
+                  },
+                  {
+                    "field": "waiting_approval_runs",
+                    "label": "Approval needed"
+                  },
+                  {
+                    "field": "completed_runs",
+                    "label": "Completed"
+                  },
+                  {
+                    "field": "failed_runs",
+                    "label": "Failed"
+                  },
+                  {
+                    "field": "unknown_runs",
+                    "label": "Unknown"
+                  },
+                  {
+                    "field": "cancelled_runs",
+                    "label": "Cancelled"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "workflow-summary",
+          "kind": "widget",
+          "title": "Workflow Summary",
+          "subscriptions": [
+            "workflow.summary"
+          ],
+          "view": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "text",
+                "text": "Latest 100 recorded runs"
+              },
+              {
+                "kind": "metric",
+                "source": "workflow.summary",
+                "field": "running_runs",
+                "label": "Running"
+              },
+              {
+                "kind": "metric",
+                "source": "workflow.summary",
+                "field": "completed_runs",
+                "label": "Completed"
+              },
+              {
+                "kind": "metric",
+                "source": "workflow.summary",
+                "field": "unknown_runs",
+                "label": "Unknown"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

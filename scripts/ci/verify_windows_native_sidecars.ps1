@@ -286,6 +286,10 @@ try {
     if (-not $health.data.kernel.ready -or $health.data.kernel.state -ne "READY") {
         throw "Runtime did not report an authenticated, ready Kernel."
     }
+    $studio = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/v1/studio/extensions" -Headers $headers -TimeoutSec 5
+    if (-not $studio.ok -or $studio.data.contract.schema -ne "apeir.studio-ui/v1" -or $studio.data.contract.features -notcontains "data.workflow.summary" -or $studio.data.executable_ui -ne "BLOCKED") {
+        throw "Packaged Runtime did not expose the restricted Studio extension contract."
+    }
     Assert-HttpAuthenticationRejected -Port $port -Headers @{}
     $invalidToken = [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
     Assert-HttpAuthenticationRejected -Port $port -Headers @{ Authorization = "Bearer $invalidToken" }
@@ -310,6 +314,12 @@ try {
         runtime_pid = [int]$live.data.pid
         nki = (Get-Content -LiteralPath $nkiReport -Raw | ConvertFrom-Json)
         workflow_cli = (Get-Content -LiteralPath $workflowReport -Raw | ConvertFrom-Json)
+        studio_extension_contract = @{
+            schema = $studio.data.contract.schema
+            workflow_summary_supported = $true
+            executable_ui = "BLOCKED"
+            scope = "authenticated feature discovery; not plugin permission or installation acceptance"
+        }
         invalid_nki_runtime_start_rejected = $true
         invalid_http_sessions_rejected = $true
         shutdown_mode = "forced owned-process fault/restart test; not graceful Desktop exit"

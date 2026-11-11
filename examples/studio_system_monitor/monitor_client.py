@@ -67,11 +67,38 @@ class StudioHost:
             raise RuntimeError(json.dumps(value.get("error"), ensure_ascii=False))
         return value["data"]
 
+    def require_features(self, required):
+        """Check advertised wire support; this grants no data or execution access."""
+        if not isinstance(required, list) or any(
+            not isinstance(item, str) for item in required
+        ):
+            raise ValueError("Host requirements must be a list of feature names")
+        contract = self.request().get("contract")
+        if (
+            not isinstance(contract, dict)
+            or contract.get("schema") != "apeir.studio-ui/v1"
+        ):
+            raise ValueError("Host does not advertise this Studio UI contract")
+        supported = contract.get("features")
+        if not isinstance(supported, list) or any(
+            not isinstance(item, str) for item in supported
+        ):
+            raise ValueError("Host feature list is invalid")
+        if set(required) - set(supported):
+            raise ValueError("Host lacks required Studio features")
+        return contract
+
     def review(self, path):
         raw = Path(path).read_bytes()
         if len(raw) > 128 * 1024:
             raise ValueError("Manifest exceeds 128 KiB")
         source = raw.decode("utf-8")
+        manifest = json.loads(source)
+        required = (
+            manifest.get("metadata", {}).get("apeir_studio", {}).get("requires", [])
+        )
+        if required:
+            self.require_features(required)
         return source, self.request("/review", {"source_manifest": source})
 
     def install(self, path):
@@ -106,13 +133,15 @@ class StudioHost:
             },
         )
 
-    def read_allowed_data(self, component_type, expected_digest):
+    def read_allowed_data(
+        self, component_type, expected_digest, source="runtime.status"
+    ):
         return self.request(
             "/data",
             params={
                 "component_type": component_type,
                 "expected_digest": expected_digest,
-                "source": "runtime.status",
+                "source": source,
             },
         )
 
@@ -144,6 +173,7 @@ def main():
         "command",
         choices=[
             "list",
+            "contract",
             "review",
             "install",
             "enable",
@@ -157,21 +187,34 @@ def main():
     parser.add_argument(
         "--manifest", default=str(Path(__file__).with_name("nous.extension.json"))
     )
-    parser.add_argument("--extension-id", default="examples/studio-system-monitor")
+    parser.add_argument("--extension-id")
+    parser.add_argument(
+        "--source",
+        choices=["runtime.status", "workflow.summary"],
+        default=None,
+    )
     args = parser.parse_args()
     host = StudioHost(args.endpoint, os.environ.get("NOUS_API_TOKEN", ""))
-    if args.command == "list":
+    if args.command == "contract":
+        result = host.require_features([])
+    elif args.command == "list":
         result = host.request()
     elif args.command == "review":
         _, result = host.review(args.manifest)
     elif args.command == "install":
         result = host.install(args.manifest)
     else:
+        extension_id = (
+            args.extension_id
+            or json.loads(Path(args.manifest).read_text(encoding="utf-8"))[
+                "extension_id"
+            ]
+        )
         record = next(
             (
                 item
                 for item in host.request()["extensions"]
-                if item["extension_id"] == args.extension_id
+                if item["extension_id"] == extension_id
             ),
             None,
         )
@@ -190,7 +233,20 @@ def main():
                 if args.command == "read"
                 else host.subscribe_allowed_events
             )
-            result = reader(item["type"], record["digest"])
+            result = (
+                reader(
+                    item["type"],
+                    record["digest"],
+                    args.source
+                    or next(
+                        source
+                        for source in item.get("subscriptions", [])
+                        if source in {"runtime.status", "workflow.summary"}
+                    ),
+                )
+                if args.command == "read"
+                else reader(item["type"], record["digest"])
+            )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

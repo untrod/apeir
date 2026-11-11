@@ -356,3 +356,36 @@ def test_stale_review_cannot_overwrite_another_installer_and_dependencies_are_no
     dependent["dependencies"] = {"missing/dependency": ">=1"}
     with pytest.raises((ValueError, TypeError)):
         host.review(json.dumps(dependent))
+
+
+def test_source_specific_fields_match_public_json_schema():
+    from jsonschema import Draft202012Validator
+
+    schema = json.loads(
+        (EXAMPLE.parents[2] / "spec/extensions/v1/studio-ui.schema.json").read_text()
+    )
+    value = json.loads(
+        (EXAMPLE.parent / "workflow-monitor.extension.json").read_text()
+    )["metadata"]["apeir_studio"]
+    validator = Draft202012Validator(schema)
+    validator.validate(value)
+    validate_presentation(value)
+    value["contributions"][0]["view"]["children"][1]["field"] = "kernel_ready"
+    assert list(validator.iter_errors(value))
+    with pytest.raises(ValueError, match="field"):
+        validate_presentation(value)
+
+
+def test_workflow_projection_cannot_switch_workspace(tmp_path, monkeypatch):
+    from nous_runtime.api import workflow_routes
+
+    host = StudioExtensionHost(tmp_path)
+    monkeypatch.setattr(workflow_routes, "workspace", lambda: tmp_path / "other")
+    monkeypatch.setattr(
+        workflow_routes,
+        "handle_workflow_catalog",
+        lambda **kw: pytest.fail("Wrong workspace queried"),
+    )
+    with pytest.raises(PermissionError):
+        host._workflow_source()
+    assert host._workflow_source(allow_denied=True)["values"] is None

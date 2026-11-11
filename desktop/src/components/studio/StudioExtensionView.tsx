@@ -5,12 +5,13 @@ import { useStudioSnapshot } from "./StudioData";
 
 const display = (value: unknown) => value === null || value === undefined || value === "" ? "UNKNOWN" : String(value);
 /** Trusted React rendering of strictly validated data. No dynamic code, HTML or URLs. */
-function View({ view, status, record, contribution, locale }: { locale: "en" | "zh"; view: StudioView; status: StudioUIView["status"]; record: StudioUIExtension; contribution: StudioUIContribution }) {
-  if (view.kind === "stack") return <div className="studio-extension-stack">{view.label && <strong>{view.label}</strong>}{view.children.map((child, i) => <View key={i} view={child} status={status} record={record} contribution={contribution} locale={locale} />)}</div>;
+function View({ view, status, sources, record, contribution, locale }: { locale: "en" | "zh"; view: StudioView; status: StudioUIView["status"]; sources: StudioUIView["sources"]; record: StudioUIExtension; contribution: StudioUIContribution }) {
+  if (view.kind === "stack") return <div className="studio-extension-stack">{view.label && <strong>{view.label}</strong>}{view.children.map((child, i) => <View key={i} view={child} status={status} sources={sources} record={record} contribution={contribution} locale={locale} />)}</div>;
   if (view.kind === "text") return <div><small>{view.label}</small><p>{view.text}</p></div>;
   if (view.kind === "action") return <GovernedAction view={view} record={record} contribution={contribution} />;
-  if (view.kind === "table") return <table><caption>{view.label}</caption><tbody>{view.fields.map((field, i) => <tr key={i}><th scope="row">{field.label}</th><td>{display(status?.[field.field])}</td></tr>)}</tbody></table>;
-  const value = status?.[view.field];
+  const values = view.source === "runtime.status" ? status : contribution.subscriptions?.includes("workflow.summary") && sources?.["workflow.summary"]?.status === "READY" ? sources["workflow.summary"]!.values : null;
+  if (view.kind === "table") return <table><caption>{view.label}</caption><tbody>{view.fields.map((field, i) => <tr key={i}><th scope="row">{field.label}</th><td>{display(values?.[field.field])}</td></tr>)}</tbody></table>;
+  const value = values?.[view.field];
   if (view.kind === "chart") return <StatusChart label={view.label || view.field} value={value} locale={locale} />;
   return <div className="studio-extension-value"><small>{view.label || view.field}</small><strong className={view.kind === "status" ? "studio-status studio-status-neutral" : "studio-metric-value"}>{view.kind === "status" && typeof value === "boolean" ? view.field === "running" ? value ? "ONLINE" : "OFFLINE" : view.field === "kernel_ready" ? value ? "READY" : "NOT_READY" : String(value) : display(value)}</strong></div>;
 }
@@ -47,7 +48,8 @@ export function StudioExtensionView({ type, isVisible, locale = "en" }: { type: 
   if (!extensions.data && extensions.loading) return <section role="status">LOADING</section>;
   if (!found) return <section role="status">{t("Missing Extension", "缺失扩展")}<p>{type}</p></section>;
   if (!found.record.enabled) return <section role="status">{t("DISABLED", "已禁用")}<p>{found.contribution.title}</p></section>;
-  return <section className="studio-extension-view" aria-label={found.contribution.title}><View key={found.record.digest} view={found.contribution.view} status={found.contribution.subscriptions?.includes("runtime.status") ? extensions.data?.status || null : null} record={found.record} contribution={found.contribution} locale={locale} />
+  return <section className="studio-extension-view" aria-label={found.contribution.title}><View key={found.record.digest} view={found.contribution.view} status={found.contribution.subscriptions?.includes("runtime.status") ? extensions.data?.status || null : null} sources={extensions.data?.sources} record={found.record} contribution={found.contribution} locale={locale} />
+    {found.contribution.subscriptions?.includes("workflow.summary") && extensions.data?.sources?.["workflow.summary"]?.status !== "READY" && <p role="status">{extensions.data?.sources?.["workflow.summary"]?.status || "UNAVAILABLE"} · {t("Workflow data", "工作流数据")}</p>}
     {!!found.contribution.events?.length && <details><summary>{t("Lifecycle events", "生命周期事件")}</summary><button onClick={async () => { const captured = eventEpoch.current; try { guard(); const value = await api(`/api/v1/studio/extensions/events?component_type=${encodeURIComponent(type)}&expected_digest=${encodeURIComponent(found.record.digest)}`); guard(); if (eventEpoch.current === captured) setEvents(value); } catch (error) { if (eventEpoch.current === captured) setError(String(error)); } }}>{t("Read allowed events", "读取已声明事件")}</button>{error ? <p role="alert">{error}</p> : events !== null && <pre>{JSON.stringify(events, null, 2)}</pre>}</details>}
     <details className="studio-card-details"><summary>{t("Source", "来源")}</summary><p>{found.record.extension_id} · {found.record.version}</p><p>{found.record.digest}</p><p>runtime-service · NOT_PHYSICAL_VERIFICATION · publisher {found.record.publisher_trust}</p></details>
   </section>;

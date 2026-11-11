@@ -18,7 +18,9 @@ from nous_runtime.extensions.adapters import ExtensionInspector
 from nous_runtime.extensions.models import ExtensionManifest
 from nous_runtime.extensions.presentation_contract import (
     FIELDS,
+    WORKFLOW_FIELDS,
     component_type,
+    host_contract,
     validate_presentation,
 )
 from nous_runtime.extensions.registry import ExtensionRegistry
@@ -41,8 +43,9 @@ def _nonfinite(value):
 class StudioExtensionHost:
     """Presentation adapter; Registry/Governance/Workflow remain their owners."""
 
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, *, authorization_context=None):
         self.root = Path(root).expanduser().resolve()
+        self._authorization_context = authorization_context
         # Reuse static private-state path admission. No guarantee is made against
         # a trusted OS owner replacing paths after admission.
         for directory in (
@@ -159,6 +162,7 @@ class StudioExtensionHost:
         if set(declared) - {
             "runtime.status.read",
             "runtime.lifecycle.read",
+            "workflow.summary.read",
             "workflow.run",
         }:
             raise ValueError("Unsupported Studio permission request")
@@ -182,6 +186,7 @@ class StudioExtensionHost:
                         {
                             "runtime.status": "runtime.status.read",
                             "runtime.lifecycle": "runtime.lifecycle.read",
+                            "workflow.summary": "workflow.summary.read",
                         }[source]
                     )
                     != "read"
@@ -461,6 +466,8 @@ class StudioExtensionHost:
             _, contribution = self._contribution(component, expected_digest)
             if source not in contribution.get("subscriptions", []):
                 raise PermissionError("Data source was not declared")
+            if source == "workflow.summary":
+                return self._workflow_source()
             if source != "runtime.status":
                 raise ValueError(
                     "Use the allowed-events interface for lifecycle events"
@@ -472,6 +479,59 @@ class StudioExtensionHost:
                 "execution_scope": "runtime-service",
                 "verification": "NOT_PHYSICAL_VERIFICATION",
             }
+
+    def _workflow_summary(self):
+        from nous_runtime.api.workflow_routes import handle_workflow_catalog, workspace
+
+        if workspace() != self.root:
+            raise PermissionError("Workflow data belongs to another workspace")
+        # Reuse the original API admission and identity-checked durable records.
+        # No workflow is submitted and no inputs/results/IDs enter presentation.
+        response = handle_workflow_catalog(
+            authorization_context=self._authorization_context
+        )
+        if response.get("ok") is not True:
+            raise RuntimeError("Authoritative Workflow data is unavailable")
+        data = response["data"]
+        runs, limit = data["runs"], data["limit"]
+        if (
+            not isinstance(runs, list)
+            or type(limit) is not int
+            or limit != 100
+            or len(runs) > limit
+        ):
+            raise ValueError("Invalid Workflow summary window")
+        values = dict.fromkeys(WORKFLOW_FIELDS, 0)
+        values.update(runs_sampled=len(runs), sample_limit=limit)
+        for run in runs:
+            key = f"{run['state']}_runs"
+            if key not in WORKFLOW_FIELDS - {"runs_sampled", "sample_limit"}:
+                raise ValueError("Invalid persisted Workflow state")
+            values[key] += 1
+        return values
+
+    def _workflow_source(self, *, allow_denied=False):
+        state, values = "READY", None
+        try:
+            values = self._workflow_summary()
+        except PermissionError:
+            if not allow_denied:
+                raise
+            state = "BLOCKED"
+        except Exception:
+            # Storage and adapter failures can contain private paths/results.
+            # Missing data is never converted to a zero-count success.
+            state = "UNAVAILABLE"
+        return {
+            "source": "workflow.summary",
+            "status": state,
+            "values": values,
+            "window": "latest-100-recorded-runs",
+            "unit": "runs",
+            "received_at": datetime.now(timezone.utc).isoformat(),
+            "execution_scope": "runtime-service",
+            "verification": "NOT_PHYSICAL_VERIFICATION",
+        }
 
     def read_events(self, component, expected_digest):
         from nous_runtime.events.bus import get_event_bus
@@ -514,6 +574,19 @@ class StudioExtensionHost:
                 "extensions": records,
                 "diagnostics": diagnostics,
                 "status": status,
+                "contract": host_contract(),
+                "sources": {
+                    "workflow.summary": self._workflow_source(allow_denied=True)
+                }
+                if any(
+                    record["enabled"]
+                    and any(
+                        "workflow.summary" in item.get("subscriptions", [])
+                        for item in record["contributions"]
+                    )
+                    for record in records
+                )
+                else {},
                 "received_at": datetime.now(timezone.utc).isoformat(),
                 "executable_ui": "BLOCKED",
                 "execution_scope": "runtime-service",

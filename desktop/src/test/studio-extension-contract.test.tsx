@@ -82,3 +82,35 @@ it("admits a bounded valid multi-package catalog without accepting malformed rec
   expect(() => parseStudioUIView({ ...value, extensions: [{ ...value.extensions[0], authority: { code: "not text" } }] })).toThrow();
   expect(() => parseStudioUIView({ ...value, extensions: Array(65).fill(value.extensions[0]) })).toThrow();
 });
+
+function workflowSnapshot(state: "READY" | "BLOCKED" | "UNAVAILABLE" = "READY") {
+  const value = snapshot();
+  const values = { runs_sampled: 2, sample_limit: 100, pending_runs: 0, running_runs: 0, waiting_approval_runs: 0, completed_runs: 0, failed_runs: 1, unknown_runs: 1, cancelled_runs: 0, compensation_failed_runs: 0 };
+  return { ...value, sources: { "workflow.summary": { source: "workflow.summary", status: state, values: state === "READY" ? values : null, window: "latest-100-recorded-runs", unit: "runs", received_at: value.received_at, execution_scope: "runtime-service", verification: "NOT_PHYSICAL_VERIFICATION" } }, extensions: [{ ...value.extensions[0], contributions: [{ ...value.extensions[0].contributions[0], subscriptions: ["workflow.summary"], view: { kind: "metric", source: "workflow.summary", field: "completed_runs", label: "Completed runs" } }] }] };
+}
+it("validates per-source counts, scope, declaration and unavailable nulls", () => {
+  expect(parseStudioUIView(workflowSnapshot()).sources?.["workflow.summary"]?.values?.unknown_runs).toBe(1);
+  expect(parseStudioUIView(workflowSnapshot("BLOCKED")).sources?.["workflow.summary"]?.values).toBeNull();
+  const bad = workflowSnapshot(); bad.sources["workflow.summary"].values!.completed_runs = 99;
+  expect(() => parseStudioUIView(bad)).toThrow();
+  const undeclared = workflowSnapshot(); undeclared.extensions[0].contributions[0].subscriptions = ["runtime.status"];
+  expect(() => parseStudioUIView(undeclared)).toThrow();
+  const wrongField = workflowSnapshot(); wrongField.extensions[0].contributions[0].view.field = "kernel_ready";
+  expect(() => parseStudioUIView(wrongField)).toThrow();
+  const unavailable = workflowSnapshot("UNAVAILABLE"); unavailable.sources["workflow.summary"].values = workflowSnapshot().sources["workflow.summary"].values;
+  expect(() => parseStudioUIView(unavailable)).toThrow();
+});
+it("renders authorized Workflow counts through the shared projection", async () => {
+  vi.mocked(api).mockResolvedValue(workflowSnapshot());
+  render(<StudioSnapshot><StudioExtensionView type={component} isVisible={() => true} /></StudioSnapshot>);
+  await screen.findByText("Completed runs");
+  expect(screen.getByText("0", { exact: true })).toBeVisible();
+  expect(vi.mocked(api).mock.calls.filter(([path]) => path.endsWith("/extensions"))).toHaveLength(1);
+});
+it("displays unavailable Workflow data as UNKNOWN, without a synthetic zero", async () => {
+  vi.mocked(api).mockResolvedValue(workflowSnapshot("BLOCKED"));
+  render(<StudioSnapshot><StudioExtensionView type={component} isVisible={() => true} /></StudioSnapshot>);
+  await screen.findByText("UNKNOWN", { exact: true });
+  expect(screen.getByRole("status")).toHaveTextContent("BLOCKED");
+  expect(screen.queryByText("0", { exact: true })).toBeNull();
+});
