@@ -767,6 +767,7 @@ test(`Declarative UI extension uses public review and approval, real status, rev
     await page.getByRole("combobox", { name: "Widget type", exact: true }).selectOption(widgetType);
     await page.getByRole("button", { name: "Add widget", exact: true }).click();
     await expect(page.getByRole("region", { name: profile.widget, exact: true }).getByText(profile.source === "runtime.status" ? "ONLINE" : "Unknown", { exact: true })).toBeAttached();
+    if (profile.source === "workflow.summary") await expect(page.getByRole("region", { name: profile.widget, exact: true }).getByText("Unknown", { exact: true })).toBeInViewport();
     await workspaceMenu(page); await page.getByRole("button", { name: "Save layout", exact: true }).click();
     const layout = await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"));
     expect(layout).toContain(widgetType); expect(layout).not.toContain(record.digest); expect(layout).not.toContain(token);

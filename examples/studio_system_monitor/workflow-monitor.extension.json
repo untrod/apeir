@@ -1,7 +1,7 @@
 {
   "schema": "nous.extension/v1",
   "extension_id": "examples/workflow-monitor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Read-only, permission-scoped Workflow counts through the public Studio host",
   "source_format": "nous-native-v1",
   "compatibility_level": 2,
@@ -89,27 +89,19 @@
             "workflow.summary"
           ],
           "view": {
-            "kind": "stack",
-            "children": [
+            "kind": "table",
+            "label": "Latest 100 recorded runs",
+            "source": "workflow.summary",
+            "fields": [
               {
-                "kind": "text",
-                "text": "Latest 100 recorded runs"
-              },
-              {
-                "kind": "metric",
-                "source": "workflow.summary",
                 "field": "running_runs",
                 "label": "Running"
               },
               {
-                "kind": "metric",
-                "source": "workflow.summary",
                 "field": "completed_runs",
                 "label": "Completed"
               },
               {
-                "kind": "metric",
-                "source": "workflow.summary",
                 "field": "unknown_runs",
                 "label": "Unknown"
               }

@@ -20,6 +20,11 @@ profiles. A client copied outside the checkout reads the real HTTP service.
 Review/independent approval, install, enable, source reads, layout persistence,
 version-conflict refusal, disabled updates, Controller switching, Runtime restart,
 revocation and removal are exercised without model or physical operations.
+A screenshot review additionally found that the initial example's stacked
+metrics clipped the Unknown row in a default Dashboard card. A strengthened
+viewport assertion reproduced the failure. The example now uses the existing
+compact table renderer and version 1.0.1, preserving component IDs and the
+original failure evidence. No Docking, Layout or Runtime contract changed.
 Native installation and every real model retain their separate gates. Exact
 source/CI identities and retained failures belong to the integration PR.
 
