@@ -71,6 +71,17 @@ source-build profile for review, never post-processing EXEs or trying to recover
 old hashes by collision. Its actual second-pair results, including any remaining
 variance, belong in the lock-migration PR before approval.
 
+### Approved Windows ARM64 input profile — 2026-11-11
+
+The maintainer approved the exact ARM64 entries in the
+[ARM64 baseline record](ENGINEERING_REVIEW.md#approved-arm64-component-baseline--2026-11-11)
+and internal unsigned builds. Select `--target aarch64-pc-windows-msvc` when
+using the existing component verifier/stager; default x64 selection is retained.
+The official Windows launcher accepts the same explicit target. Source87fd1b2
+and the approved x64 components are unchanged. Candidate archive provenance and
+actual target-specific PE/hash checks remain mandatory. Windows11 ARM64 smoke,
+Windows10 tablet installation, signing and publication remain separate gates.
+
 ## 2. Verify source
 
 The 2026-10-26 maintainer approval covers the reviewed frozen-source binary

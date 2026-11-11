@@ -1,5 +1,43 @@
 # Engineering review and research comparison
 
+## Approved ARM64 component baseline — 2026-11-11
+
+The maintainer explicitly approved the reviewed ARM64 component entries and
+internal unsigned Portable/NSIS builds in this session on2026-11-11. Scope does
+not include Kernel source changes, signing, public release or Windows10 tablet
+installation acceptance. The existing default x64 fields and both original
+approved hashes remain byte-for-byte unchanged; schema1 gains only the explicit
+`artifacts_by_target.aarch64-pc-windows-msvc` entries.
+
+Producer [43062204158](https://github.com/untrod/apeir/actions/runs/43062204158),
+source `ad56470e31a319b690d7b230db047e2a3a5e0401`, produced two independent
+frozen-source ARM64 builds. Both actual Windows11 ARM64 NKI1/2/3,
+authentication/refusal, Kernel/Worker/Runtime startup, original Work and pure
+Workflow restart, and owned-process cleanup passed. External model calls:0.
+Independent downloads verified every archive member and actual PE machine0xAA64;
+both Kernel hashes and recorded environments matched. Runtime bytes are not
+claimed reproducible. The original x64 lock comparison remains BLOCKED in that
+diagnostic run; candidate compatibility and approval are separate facts.
+
+| Component | Frozen Kernel source | Approved ARM64 SHA-256 |
+| --- | --- | --- |
+| nousd | `87fd1b2ff28ef14ab1a515a58162592b452fda2e` | `9B7A82E590754FC364B004F5EC9F7FADAD4044EA0C19C85B0F9A23C62959056D` |
+| Provider Worker |same | `EAD2F27B3A0EBE0A0086DE9F870D5C153B020363FF1FBDF4D6EA44984285A65D` |
+
+The approved carrier is artifact13875071657, outer ZIP SHA-256
+`c52a8c4d6e38b40d0a8da824a7b6ef26d59a9f1e1268454407c3f71f5bdf9406`.
+The independent first carrier13874458275 has outer SHA-256
+`f04416f675cec9caf9a67d58fa9232063293a3a522de3d28ea5dffc0e88dd81f`.
+Both expire2026-11-25. Source/build dependency records include native
+CPython3.13.17, Rust1.99.1, MSVC14.51, SDK26100 and Microsoft vcpkg
+`2ec0f1747d8186a5c9babe276e2ad57cd2b12d2a` / ARM64 static OpenSSL3.6.5.
+No source or binary is fetched from an unreviewed EXE mirror.
+
+The lock now admits those exact ARM64 inputs through the existing verifier.
+The full native build, installer checks on disposable CI and Windows10 Pad5 GUI
+lifecycle still require their actual results. This approval does not make
+`NATIVE_INSTALL_READY` or `RELEASE_READY` pass.
+
 ## Windows ARM64 candidate preparation — 2026-11-11
 
 The requested Xiaomi Pad5 target is Windows ARM64, not 32-bit Windows. Starting
