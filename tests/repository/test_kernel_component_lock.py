@@ -912,3 +912,30 @@ def test_rebuild_cli_cannot_overwrite_component_lock(
         main()
     assert error.value.code == 2
     assert lock.read_bytes() == original
+
+
+def test_new_arm64_bytes_never_satisfy_the_maintained_x64_lock(
+    rebuilt_candidate, tmp_path
+) -> None:
+    lock, kernel, candidates = rebuilt_candidate
+    document = json.loads(lock.read_text())
+    component = document["components"]["nous-kernel"]
+    component["target"] = "x86_64-pc-windows-msvc"
+    package = tmp_path / "package"
+    for artifact in component["artifacts"]:
+        # Even a matching digest cannot approve a different PE architecture.
+        artifact["pe_machine"] = "0x8664"
+        target = package / artifact["path"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((candidates / (artifact["name"] + ".exe")).read_bytes())
+    lock.write_text(json.dumps(document))
+    before = lock.read_bytes()
+    report = report_rebuild(lock, kernel, candidates)
+    assert report["status"] == "BLOCKED"
+    assert all(item["pe_machine"] == "0xAA64" for item in report["artifacts"])
+    assert all(
+        item["errors"] == ["architecture mismatch"] for item in report["artifacts"]
+    )
+    with pytest.raises(ValueError, match="architecture mismatch"):
+        verify(package, lock, kernel)
+    assert lock.read_bytes() == before

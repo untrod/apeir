@@ -1,5 +1,21 @@
 # Engineering review and research comparison
 
+## Windows ARM64 candidate preparation — 2026-11-11
+
+The requested Xiaomi Pad5 target is Windows ARM64, not 32-bit Windows. Starting
+main is `cf24eb55c5b4ff13f03a1226a10892cbbf93a7a3`. The maintained lock contains
+only the approved x64 components. The old ARM64 packaging job cannot satisfy it;
+a renamed x64 executable is not an ARM64 candidate.
+
+The existing frozen-source diagnostic can now select `aarch64-pc-windows-msvc`
+on `windows-11-arm`, with native ARM64 CPython3.12.10, pinned Rust1.99.1 and the
+same two clean-build comparison. It reuses the existing PE/hash reporter and
+full Native Sidecar Smoke, including authentication and original-history checks.
+Original x64 lock comparison remains nonzero/BLOCKED for ARM64 bytes. Candidate
+retention cannot stage production components, approve a lock, create an installer
+or publish. Both Kernel source and the maintained component lock remain unchanged.
+Windows11 ARM64 smoke is not Windows10 tablet installation acceptance.
+
 ## Studio extension compatibility and Workflow reads — 2026-11-11
 
 The existing v1 declarative contract gains optional required host features and
