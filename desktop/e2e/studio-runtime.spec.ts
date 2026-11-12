@@ -1055,6 +1055,11 @@ test("Grouped Studio controls preserve bilingual Provider drafts and add real Wo
   await expect(builder.getByLabel("Transform value", { exact: true })).toBeVisible();
   await expect(builder.getByLabel("Step parameters", { exact: true })).toBeHidden();
   await builder.getByLabel("Transform value", { exact: true }).fill("readable-value");
+  await builder.locator(".react-flow__pane").click({ button: "right", position: { x: 180, y: 220 } });
+  await expect(menu).toBeFocused();
+  expect(await menu.getByRole("menuitem").evaluateAll(items => items.every(item => (item as HTMLButtonElement).disabled))).toBe(true);
+  await page.keyboard.press("Escape"); await expect(menu).toBeHidden();
+  await expect(builder.getByLabel("Transform value", { exact: true })).toHaveValue("readable-value");
   await builder.getByRole("button", { name: "Apply parameters", exact: true }).click();
   await builder.getByRole("button", { name: "Validate", exact: true }).click();
   await expect(builder.getByRole("status")).toContainText("VALID");

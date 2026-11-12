@@ -106,7 +106,8 @@ export function StudioWorkflow({
   const canvasElement = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!nodeMenu) return;
-    nodeMenuElement.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+    const menu = nodeMenuElement.current;
+    (menu?.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? menu)?.focus();
     const outside = (event: PointerEvent) => {
       if (event.target instanceof Element && !nodeMenuElement.current?.contains(event.target)) setNodeMenu(null);
     };
@@ -385,7 +386,7 @@ export function StudioWorkflow({
     data: {
       label: (
         <>
-          <strong title={item.step_id}>{stepTitle(item.step_type)}</strong>
+          <strong title={item.step_id}>{item.step_type === "agent" && !modelWorkflowStep(item) ? t("Agent", "智能体") : stepTitle(item.step_type)}</strong>
           <span>
             {modelWorkflowStep(item) ? "MODEL" : item.step_type.toUpperCase()} ·{" "}
             {(graphMatchesRun && run?.step_states[item.step_id]) ||
@@ -782,7 +783,7 @@ export function StudioWorkflow({
           </button>
           {step && (
             <>
-              <strong title={step.step_id}>{stepTitle(step.step_type)}</strong>
+              <strong title={step.step_id}>{step.step_type === "agent" && !isModel ? t("Agent", "智能体") : stepTitle(step.step_type)}</strong>
               {isModel && (
                 <fieldset disabled={!modelParams}>
                   <legend>{t("Model", "模型")}</legend>
@@ -1188,7 +1189,7 @@ export function StudioWorkflow({
           </ReactFlow>
         </div>
       </div>
-      {nodeMenu && <div ref={nodeMenuElement} className="studio-node-menu" role="menu" aria-label={t("Add workflow module", "添加工作流模块")} style={{ left: Math.max(8, Math.min(nodeMenu.x, window.innerWidth - 268)), top: Math.max(8, Math.min(nodeMenu.y, window.innerHeight - 390)) }} onKeyDown={event => {
+      {nodeMenu && <div ref={nodeMenuElement} tabIndex={-1} className="studio-node-menu" role="menu" aria-label={t("Add workflow module", "添加工作流模块")} style={{ left: Math.max(8, Math.min(nodeMenu.x, window.innerWidth - 268)), top: Math.max(8, Math.min(nodeMenu.y, window.innerHeight - 390)) }} onKeyDown={event => {
         const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
         const current = buttons.indexOf(window.document.activeElement as HTMLButtonElement);
         if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {

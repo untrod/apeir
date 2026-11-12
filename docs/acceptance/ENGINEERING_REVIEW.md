@@ -20,7 +20,8 @@ and input changes. The original Workflow test now creates a node through the
 context menu before actual registration, independently approved execution,
 CLI-compatible export and original-Run recovery after Runtime restart. A new
 1280×800 case verifies bilingual drafts, language persistence, raw-key rejection,
-keyboard menu navigation and no execution from adding modules. Validation uses
+keyboard menu navigation (including Escape when every item is disabled by an
+unapplied parameter draft) and no execution from adding modules. Validation uses
 the actual Runtime endpoint; no paid inference is made.
 
 Desktop unit checks passed (508 cases); connection-scope and Provider tests also
