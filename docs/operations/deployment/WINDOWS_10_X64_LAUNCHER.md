@@ -20,9 +20,10 @@ GUI and lifecycle acceptance remain PENDING.
 ## Host requirements
 
 The supported local target is `x86_64-pc-windows-msvc` on Windows 10 X64.
-Windows 10 ARM64, including a dual-boot tablet, is a different target. The current
-bundle has x64 Runtime, Kernel and Worker components; it is not an ARM64 native
-package. Some ARM Windows builds provide x64 emulation, but neither that runtime
+Windows 10 ARM64, including a dual-boot tablet, is a different target. The x64
+bundle below has x64 Runtime, Kernel and Worker components; it is not an ARM64
+native package. [ARM64 preparation and qualification](WINDOWS_10_ARM64_LOCAL.md)
+uses the same launcher script with an explicitly approved target profile. Some ARM Windows builds provide x64 emulation, but neither that runtime
 nor this package on it has been qualified. Record the OS build and test it as a
 separate compatibility scope; it cannot replace Windows 10 x64 installation
 acceptance. Do not relabel the binaries or alter the component lock. Source/API

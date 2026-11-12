@@ -26,6 +26,12 @@ authority or execution.
 | NATIVE_INSTALL_READY | PENDING | Requires current-version Windows 10 x64 GUI, install, upgrade, restart, uninstall and Defender checks. No such host is attached. |
 | RELEASE_READY | BLOCKED | Installed lifecycle, signing, supply-chain review and explicit publication authorization remain required. No stable Release is claimed. |
 
+Windows ARM64 now has a separate [unsigned Portable/NSIS preview](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13901748571),
+source `16308a6b5bb6f1d3049144f413bc8a9b9541561a`. Full Windows11 ARM64 build and installed-sidecar checks
+passed; Windows10 tablet GUI, drivers and installation lifecycle remain PENDING.
+Existing x64 component fields and the frozen Kernel source are unchanged.
+See the [ARM64 scope](docs/operations/deployment/WINDOWS_10_ARM64_LOCAL.md).
+
 ## Current usage boundaries
 
 | Component | Status | Implemented | Remaining / evidence |

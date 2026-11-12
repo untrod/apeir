@@ -1,8 +1,41 @@
-# Windows 10 ARM64 local development
+# Windows ARM64
 
-Use the [Quick Start](../getting-started/QUICK_START.md) for current source
-installation. This page records the ARM64 host boundary; it is not an ARM64
-installer download.
+<a name="windows-10-arm64-local-development"></a>
+
+Windows on Arm needs the **ARM64** build, including a Xiaomi Pad5 running
+Windows 10 ARM64. It does not need a 32-bit APEIR build. Android is a different
+platform. Do not rename or substitute an x64 EXE.
+
+[**Download ARM64 Setup + Portable**](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13901748571) ·
+[Hashes and source](../getting-started/QUICK_START.md#download-metadata).
+
+The unsigned 0.1.0-rc1 bundle passed the full native build, real NKI/Runtime
+smoke and installed-sidecar checks on Windows 11 ARM64. Download requires
+GitHub sign-in and expires on **2026-11-25**.
+[Quick Start](../getting-started/QUICK_START.md) remains the installation entry.
+Windows 10 tablet GUI, drivers, Defender, upgrade and uninstall acceptance are
+**PENDING**. The current build host is Windows 11 ARM64, not the tablet.
+
+## First tablet test
+
+Use the ARM64 Portable ZIP from the download above for the first check.
+Extract the outer GitHub artifact ZIP first, then verify the Portable ZIP
+against the ARM64 hash in Quick Start; stop on a mismatch.
+Extract the whole package and open `APEIR-Portable/APEIR.exe`; keep its sidecars
+and DLLs together. You can skip model configuration and inspect Files, Workflow
+and service status first. An absent model is not a successful inference test.
+
+If this device already has Nous/APEIR data, back up the workspace and
+`%LOCALAPPDATA%\Nous` before starting. Portable uses that same per-user state
+location; it is not a separate data sandbox. Use a separate Windows test account
+for a clean acceptance run, and only an isolated copy for old-data migration.
+Never upload credentials or the full application-state directory as diagnostics.
+
+Record the Windows edition/build from `winver`, available RAM, launch result,
+Runtime/Kernel status, and whether exit/restart leaves unexpected processes.
+If Windows security blocks the unsigned application, retain the exact warning
+and stop; do not disable Defender or SmartScreen. Driver, touch, high-DPI and
+WebView2 behavior on the Pad5 remain target-device checks.
 
 ## Historical host evidence
 
@@ -47,13 +80,24 @@ cannot infer, and a profile does not replace its required authenticated Kernel.
 
 ## Native ARM64 boundary
 
-The native ARM64 Visual Studio 2022 C++ toolchain requires Windows 11 on Arm.
-The Windows 10 ARM64 host above did not qualify native Tauri linking.
+Native builds use a supported Windows 11 ARM64 builder, CPython 3.13.17 and
+MSVC. Users of the completed bundle will not need Python, Rust or MSVC to open
+APEIR. WebView2 and operating-system compatibility still require target-host checks.
 
-The repository's **Windows ARM64 metadata (not native acceptance)** check does
-not produce or qualify an installed ARM64 application. A native build needs a
-supported builder, exact approved target-native components, current full-mode
-pipeline and installation evidence. No current ARM64 installer is promised here.
+Two independent builds of frozen Kernel `87fd1b2ff28ef14ab1a515a58162592b452fda2e`
+produced matching ARM64 Kernel and Worker bytes. Both real NKI/Runtime sidecar
+smokes passed on Windows 11 ARM64. The maintainer approved these exact inputs
+and internal unsigned builds on 2026-11-11; see the
+[component approval](../../acceptance/ENGINEERING_REVIEW.md#approved-arm64-component-baseline--2026-11-11).
+The existing x64 component hashes are unchanged.
+
+The required **Windows ARM64 metadata (not native acceptance)** check is still
+a metadata check. Actual Native Smoke and package checks have their own reports;
+none alone establishes Windows 10 installation or tablet-driver compatibility.
+
+ARM64 native startup does not qualify local-model GPU acceleration, every
+Provider or a strict command sandbox. Test execution stays BLOCKED without its
+qualified environment; there is no unrestricted host-Shell fallback.
 
 The available unsigned **x64** test bundle has its own
 [build record](WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build).

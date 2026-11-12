@@ -18,7 +18,7 @@ actual OS/architecture. [ROADMAP](../../../ROADMAP.md) owns current status.
 | Linux amd64 / ARM64 | Runtime/CLI and architecture CI | Every distribution, strict environment execution or physical Jetson work |
 | macOS 15 ARM64 | Runtime software CI | A qualified native Desktop installer |
 | Windows x64 hosted runner | Runtime CI; approved real Server2025 native build and sidecar Smoke | Windows 10 GUI, install/upgrade/uninstall or Defender acceptance |
-| Windows ARM64 | Current metadata check; separate historical host record | Current native application or installation acceptance |
+| Windows ARM64 | Approved frozen-source components; full Portable/NSIS build, NKI/Runtime smoke and installed-sidecar checks on Windows 11 ARM64 | Windows 10 tablet GUI, drivers and installation lifecycle; see [ARM64 scope](../deployment/WINDOWS_10_ARM64_LOCAL.md) |
 | ARMv7 Lite | Limited nonblocking CI profile | Full local-model, scientific or Desktop support |
 
 Use the [Windows x64 build record](../deployment/WINDOWS_10_X64_LAUNCHER.md#current-native-command-qualified-build),

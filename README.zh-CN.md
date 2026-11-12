@@ -14,12 +14,14 @@
 
 开放、以本地工作为起点的工程工作台：组织文件、工作流和连接资源，修改先审查，操作有审批，结果有记录。
 
-[**⬇ Windows 安装版 + Portable**](https://github.com/untrod/apeir/actions/runs/42977022966/artifacts/13837634414) ·
+[**⬇ Windows x64**](https://github.com/untrod/apeir/actions/runs/42977022966/artifacts/13837634414) ·
+[**Windows ARM64（平板等设备）**](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13901748571) ·
 [**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
 [**快速开始**](docs/operations/getting-started/QUICK_START.md) ·
 [**文档**](docs/README.md) · [English](README.md)
 
-**Windows：**[安装版](docs/operations/getting-started/INSTALL_WINDOWS.md#setup) · [Portable 用法](docs/operations/getting-started/INSTALL_WINDOWS.md#portable) · [SHA-256 校验](docs/operations/getting-started/QUICK_START.md#download-metadata)。
+**Windows：**Intel/AMD 电脑选 x64；小米平板 5 等 Windows on Arm 设备选 ARM64，不是 32 位。
+[安装版](docs/operations/getting-started/INSTALL_WINDOWS.md#setup) · [Portable 用法](docs/operations/getting-started/INSTALL_WINDOWS.md#portable) · [SHA-256 校验](docs/operations/getting-started/QUICK_START.md#download-metadata)。
 当前是未签名开发包，不是稳定版；下载需要登录 GitHub，Windows 10 安装仍待实机验收。
 正式版还没出炉，生产环境先别急着端上桌。
 
@@ -49,7 +51,7 @@ Kernel；测试命令还需要对应权限和合格沙箱。条件不足时会�
 
 - **Source Preview：**下载同源 Runtime wheel 与已构建的浏览器 Studio，需要 Python
   3.10+；使用这份前端不需要安装 Node.js 或 Rust。
-- **Windows Development Build：**GitHub Actions 工件中包含未签名的 x64 Portable
+- **Windows Development Build：**GitHub Actions 工件分别提供未签名的 x64、ARM64 Portable
   和 NSIS 安装程序，下载需要登录 GitHub。
 - **Developer Setup：**从源码开发 Runtime、调试 Studio，适合参与项目或修改代码。
 
