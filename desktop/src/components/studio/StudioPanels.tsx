@@ -22,7 +22,7 @@ export type PanelContribution = {
   type: string; en: string; zh: string; owner: string;
   render: (props: PanelProps) => React.ReactNode;
 };
-export type PanelProps = { config?: unknown; updateConfig: (config: unknown) => void; saveLayout: () => void; isVisible: () => boolean; locale: "en" | "zh"; onDraftChange: (dirty: boolean) => void; onDraftSnapshot: (drafts: WorkbenchDraft[]) => void; open: (type: string) => void; inspect: (view: DrawerView) => void };
+export type PanelProps = { config?: unknown; updateConfig: (config: unknown) => void; saveLayout: () => void; isVisible: () => boolean; locale: "en" | "zh"; onDraftChange: (dirty: boolean) => void; onDraftSnapshot: (drafts: WorkbenchDraft[]) => void; hasOtherDrafts?: () => boolean; open: (type: string) => void; inspect: (view: DrawerView) => void };
 export const PANEL_GROUPS = [
   { id: "develop", en: "Develop", zh: "开发", types: ["chat", "files", "editor", "workflow", "tasks", "terminal"] },
   { id: "resources", en: "Models & resources", zh: "模型与资源", types: ["models", "credentials", "nodes", "devices", "environment"] },
@@ -48,7 +48,7 @@ export const STUDIO_PANELS: readonly PanelContribution[] = [
   { type: "editor", en: "Workspace Editor", zh: "工作区编辑", owner: "Workspace API / Governance", render: p => <DeveloperWorkbench locale={p.locale} onDraftChange={p.onDraftChange} onDraftSnapshot={p.onDraftSnapshot} onOpenEnvironments={() => p.open("environment")} /> },
   { type: "tasks", en: "Tasks", zh: "任务", owner: "EntityStore / Task", render: p => <TaskCenter onTaskClick={taskId => p.inspect({ kind: "task", taskId })} onTraceClick={traceId => p.inspect({ kind: "trace", traceId })} /> },
   { type: "models", en: "Models", zh: "模型", owner: "Model Center / Gateway", render: p => <DeveloperPlatform modelsOnly manageProviders locale={p.locale} onDraftChange={p.onDraftChange} onOpenCredentials={() => p.open("credentials")} onOpenApprovals={() => p.open("operations")} /> },
-  { type: "credentials", en: "Credentials", zh: "凭据", owner: "Existing native credential manager", render: p => <section className="studio-projection"><h2>{p.locale === "zh" ? "安全凭据" : "Secure credentials"}</h2><CredentialSettings locale={p.locale} onDraftChange={p.onDraftChange} /></section> },
+  { type: "credentials", en: "Credentials", zh: "凭据", owner: "Existing native credential manager", render: p => <section className="studio-projection"><h2>{p.locale === "zh" ? "安全凭据" : "Secure credentials"}</h2><CredentialSettings locale={p.locale} onDraftChange={p.onDraftChange} hasOtherDrafts={p.hasOtherDrafts} /></section> },
   { type: "nodes", en: "Nodes", zh: "计算节点", owner: "Controller projection", render: () => <Projection collection="nodes" /> },
   { type: "devices", en: "Devices", zh: "设备", owner: "Reality DeviceRegistry projection", render: () => <Projection collection="devices" /> },
   { type: "workflow", en: "Workflow Builder", zh: "工作流编辑", owner: "WorkflowRuntime / Store / Governance", render: p => <Suspense fallback={<p role="status">LOADING · Workflow</p>}><StudioWorkflow {...p} /></Suspense> },

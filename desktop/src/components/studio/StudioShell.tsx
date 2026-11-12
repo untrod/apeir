@@ -260,6 +260,7 @@ function StablePanel({ node, host, dirty, onSnapshot, open, onProtectionChange, 
   const onDraftChange = useCallback((value: boolean) => { if (value) dirty.add(id); else dirty.delete(id); onProtectionChange(dirty.size > 0); }, [dirty, id, onProtectionChange]);
   const onDraftSnapshot = useCallback((value: WorkbenchDraft[]) => callbacks.current.onSnapshot(value), []);
   const openPanel = useCallback((type: string) => callbacks.current.open(type), []);
+  const hasOtherDrafts = useCallback(() => [...dirty].some(panelId => panelId !== id), [dirty, id]);
   const isVisible = useCallback(() => host.isConnected && host.getClientRects().length > 0 && getComputedStyle(host).visibility !== "hidden", [host]);
-  return createPortal(<StudioPanel config={config} locale={locale} updateConfig={updateConfig} saveLayout={saveLayout} isVisible={isVisible} type={node.getComponent() ?? "missing"} onDraftChange={onDraftChange} onDraftSnapshot={onDraftSnapshot} open={openPanel} inspect={inspect} />, host, id);
+  return createPortal(<StudioPanel config={config} locale={locale} updateConfig={updateConfig} saveLayout={saveLayout} isVisible={isVisible} type={node.getComponent() ?? "missing"} onDraftChange={onDraftChange} onDraftSnapshot={onDraftSnapshot} hasOtherDrafts={hasOtherDrafts} open={openPanel} inspect={inspect} />, host, id);
 }

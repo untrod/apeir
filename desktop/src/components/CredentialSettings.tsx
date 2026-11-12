@@ -30,7 +30,7 @@ async function invoke<T>(command: string, args?: Record<string, unknown>): Promi
   return tauri.invoke<T>(command, args);
 }
 
-export function CredentialSettings({ locale = "en", onDraftChange }: { locale?: "en" | "zh"; onDraftChange?: (dirty: boolean) => void } = {}) {
+export function CredentialSettings({ locale = "en", onDraftChange, hasOtherDrafts }: { locale?: "en" | "zh"; onDraftChange?: (dirty: boolean) => void; hasOtherDrafts?: () => boolean } = {}) {
   const version = useRuntimeConfigVersion();
   const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   const [credentials, setCredentials] = useState<CredentialStatus[]>([]);
@@ -70,6 +70,7 @@ export function CredentialSettings({ locale = "en", onDraftChange }: { locale?: 
   }, [refresh]);
 
   const save = async () => {
+    if (hasOtherDrafts?.()) { setError(t("Save or cancel drafts in other panels before restarting the local Runtime.", "请先保存或取消其他面板中的草稿，再重启本地运行时。")); return; }
     const nameError = credentialNameError(environmentName);
     const valueError = credentialSecretError(secret);
     if (nameError || valueError) {
@@ -101,6 +102,7 @@ export function CredentialSettings({ locale = "en", onDraftChange }: { locale?: 
       setMessage("Select Remove again to confirm credential revocation.");
       return;
     }
+    if (hasOtherDrafts?.()) { setError(t("Save or cancel drafts in other panels before restarting the local Runtime.", "请先保存或取消其他面板中的草稿，再重启本地运行时。")); return; }
     setBusy(true);
     setError("");
     setMessage("");
@@ -122,6 +124,7 @@ export function CredentialSettings({ locale = "en", onDraftChange }: { locale?: 
     <fieldset disabled={!ready || busy} style={{ display: "flex", flexDirection: "column", gap: space.md, border: 0, padding: 0, minWidth: 0 }}>
       <div style={{ fontSize: typo.xs, color: colors.textTertiary }}>
         {t("Keys stay in Windows Credential Manager; configuration stores references only.", "密钥保存在 Windows 凭据管理器中；配置仅保存引用。")}
+        <p>{t("Saving or removing a credential restarts the local Runtime. Save other drafts first.", "保存或移除凭据会重启本地运行时；请先保存其他草稿。")}</p>
       </div>
 
       {credentials.length > 0 ? (

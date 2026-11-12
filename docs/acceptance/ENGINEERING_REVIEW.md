@@ -10,7 +10,7 @@ component lock are unchanged. This is a presentation and connection-scope change
 | Docking, layout v1, themes, panel lifetime | REUSE | Existing owners and saved geometry retained |
 | Panel library and model configuration | EXTEND | Searchable purpose groups; common fields first; connection details and usage remain expandable; one refresh updates both Provider metadata and the registered model catalog |
 | Language preference | FIX | Visible toolbar selector; language-only changes now increment the existing save revision |
-| Native credential surface | FIX / REUSE | Existing credential manager exposed in Studio; local endpoint and connection epoch checked before showing references; stale reads discarded |
+| Native credential surface | FIX / REUSE | Existing credential manager exposed in Studio; local endpoint and connection epoch checked before showing references; stale reads discarded; the existing shared dirty-panel set prevents credential restart from discarding other drafts |
 | Workflow canvas and Runtime | EXTEND / REUSE | Context/keyboard menu uses the existing draft/undo and execution path; unsupported handlers stay disabled |
 | Real inference and Windows10 tablet lifecycle | PENDING | These UI checks do not qualify accounts, models, target drivers or installation |
 
@@ -24,7 +24,7 @@ keyboard menu navigation (including Escape when every item is disabled by an
 unapplied parameter draft) and no execution from adding modules. Validation uses
 the actual Runtime endpoint; no paid inference is made.
 
-The 508-case Desktop suite passed; the final 13 connection-scope and Provider
+The 508-case Desktop suite passed; the final 14 connection-scope and Provider
 checks also passed after consolidating both refresh operations. The production
 bundle passed the two focused real-Runtime Workflow and configuration scenarios. TypeScript, ESLint, production build, local Markdown
 links and document hygiene passed. The existing security scanner reported zero
