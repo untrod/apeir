@@ -10,6 +10,25 @@ additional account, budget, approval and Kernel prerequisites.
 Choose **Add panel → Workflow Builder**. The graph edits the same
 WorkflowDefinition used by the Compiler, WorkflowStore and public CLI.
 
+Right-click an empty part of the canvas to add a module at that position. Keyboard
+users can focus the canvas and press **Shift+F10**, then use arrows and Enter;
+Escape closes the menu. The existing step selector and **Add step** button remain
+available for touch and keyboard use. Unsupported handlers stay disabled.
+Adding a node only edits the draft; it does not register, approve or execute it.
+
+A value/transform node accepts plain text in **Value**. Choose **Apply parameters**
+to accept the change. **Advanced parameters** retains the original JSON editor
+for structured values and all existing parameters. **Inputs & history** contains
+Run inputs, registered definitions and original Run records.
+
+**中文提示：** 画布空白处右键可添加模块；触屏可使用左侧“添加节点”。常用内容
+直接填写，高级参数与数据绑定按需展开。保存草稿、注册定义和运行仍是三个独立操作。
+
+![Workflow module context menu with unsupported handlers disabled](../../media/studio-workflow-module-menu-source.png)
+
+*Actual source-browser session against a model-disabled Runtime. The enabled
+Model entry allows configuration; it does not prove inference is available.*
+
 1. Add nodes, edit parameters and connect dependency handles. Shift-select,
    duplicate/delete, arrange, zoom and undo/redo are available.
 2. **Apply parameters**, then **Validate** with the existing Compiler.
@@ -48,7 +67,7 @@ Use the [result-binding example](../../../examples/hello_workflow/result-binding
 with matching Runtime/Studio builds. Workflow catalog and CLI validation advertise
 `data_bindings_versions: [1]`; older builds do not implement these fields.
 The new UI does not run a bound definition against an older catalog.
-Choose **MODEL · APPROVAL** for a single model turn. Select the registered model
+Choose **Model** (marked **APPROVAL**) for a single model turn. Select the registered model
 ID, enter its instruction, output Token limit and USD budget, then apply the
 parameters. This uses the saved Provider and credential reference; it does not
 copy a key into the graph. Native Anthropic Messages remains unsupported by the

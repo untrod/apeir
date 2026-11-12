@@ -7,7 +7,7 @@ import { useTheme } from "../../theme";
 import { compactDashboard } from "../../lib/studioDashboard";
 import { typo } from "../../design";
 import { captureStudioLayout, createStudioLayout, discardsProtectedPanel, dockStudioTab, focusStudioTab, loadStudioLayout, MAX_LAYOUT_BYTES, parseStudioLayout, STUDIO_LAYOUT_KEY, STUDIO_TEMPLATES, studioModel, type StudioLayout } from "../../lib/studioLayout";
-import { useStudioPanels, StudioPanel, StudioSnapshot } from "./StudioPanels";
+import { useStudioPanels, StudioPanel, StudioSnapshot, PANEL_GROUPS } from "./StudioPanels";
 import type { WorkbenchDraft } from "../DeveloperWorkbench";
 import { StudioIcon } from "./StudioIcon";
 import { StudioPresentation } from "./StudioPresentation";
@@ -186,6 +186,7 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit }: { onEx
       <div className="studio-brand"><span className="studio-brand-mark" aria-hidden="true">A</span><strong>APEIR Studio</strong><span className="studio-workspace-name">{document.name}</span></div>
       <span className="studio-controller" title={getConfig().url}>{t("Runtime", "运行时")} · {getConfig().url.replace(/^https?:\/\//, "")}</span>
       <div className="studio-toolbar-actions">
+      <select aria-label="Studio language" title={t("Language", "语言")} value={locale} onChange={event => { setDocument(value => ({ ...value, locale: event.target.value as "en" | "zh" })); setRevision(value => value + 1); }}><option value="en">English</option><option value="zh">中文</option></select>
       {maximized && <button onClick={() => { model.doAction(Actions.maximizeToggle(maximized.getId())); setRevision(value => value + 1); }}><StudioIcon name="restore" />{t("Show all panels", "还原所有面板")}</button>}
       <button onClick={() => setPicker(value => !value)} aria-expanded={picker} title={t("Add panel · Ctrl/⌘ Shift P", "添加面板 · Ctrl/⌘ Shift P")}><StudioIcon name="add" />{t("Add panel", "添加面板")}</button>
       <button className="studio-edit-toggle" aria-pressed={editing} onClick={() => setEditing(value => !value)} title={t("Ctrl/⌘ Alt L", "Ctrl/⌘ Alt L")}><StudioIcon name={editing ? "check" : "edit"} />{editing ? t("Done editing", "完成编辑") : t("Edit layout", "编辑布局")}</button>
@@ -203,7 +204,6 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit }: { onEx
       <button onClick={() => { replace(createStudioLayout(template, locale)); if (menu.current) menu.current.open = false; }}>{t("Apply preset", "应用预设")}</button>
       <button onClick={() => replace(createStudioLayout("general", locale))}>{t("Reset", "重置")}</button>
       <strong>{t("Appearance", "外观")}</strong>
-      <label>{t("Language", "语言")}<select aria-label="Studio language" value={locale} onChange={event => setDocument(value => ({ ...value, locale: event.target.value as "en" | "zh" }))}><option value="en">English</option><option value="zh">中文</option></select></label>
       <label>{t("Theme", "主题")}<select aria-label="Studio theme" value={mode} onChange={event => setMode(event.target.value as "light" | "dark" | "system")}><option value="system">{t("System", "跟随系统")}</option><option value="dark">{t("Dark", "深色")}</option><option value="light">{t("Light", "浅色")}</option></select></label>
       <details className="studio-help"><summary>{t("Shortcuts & help", "快捷键与帮助")}</summary><p>{t("Drag a tab to an edge to split. Double-click its title bar to maximize or restore. Layout changes save automatically.", "拖动标签到边缘即可分屏；双击标题栏可最大化或还原。布局自动保存。")}</p><p>Ctrl/⌘ ⇧ P · {t("Panels", "面板")}<br/>Ctrl/⌘ Alt L · {t("Edit widgets", "编辑组件")}<br/>Ctrl/⌘ Alt S · {t("Save layout", "保存布局")}</p><p>{t("Layouts only change presentation. Closing a panel does not cancel its Work. Unsaved file drafts remain in memory until saved or explicitly exported.", "布局仅改变展示。关闭面板不会取消任务；未保存的文件草稿仅保留在内存中，请保存或明确导出。")}</p></details>
       </div></details></div>
@@ -212,7 +212,14 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit }: { onEx
         try { if (file.size > MAX_LAYOUT_BYTES) throw new Error("Layout exceeds 96 KiB."); const text = await file.text(); replace(parseStudioLayout(text)); } catch (error) { setMessage(String(error)); }
       }} />
     </header>
-    {picker && <section className="studio-picker" aria-label="Panel library"><label>{t("Search panels", "搜索面板")}<input autoFocus value={query} onChange={event => setQuery(event.target.value)} /></label>{panels.filter(panel => `${panel.en} ${panel.zh} ${panel.type}`.toLowerCase().includes(query.toLowerCase())).map(panel => <button title={panel.owner} key={panel.type} onClick={() => open(panel.type)}><strong>{panel[locale]}</strong></button>)}</section>}
+    {picker && <section className="studio-picker" aria-label="Panel library">
+      <header><label>{t("Search panels", "搜索面板")}<input autoFocus value={query} onChange={event => setQuery(event.target.value)} /></label><button aria-label={t("Close panel library", "关闭面板库")} onClick={() => setPicker(false)}>×</button></header>
+      {[...PANEL_GROUPS, { id: "external", en: "Installed extensions", zh: "已安装扩展", types: panels.filter(panel => panel.type.startsWith("ui:")).map(panel => panel.type) }].map(group => {
+        const matches = panels.filter(panel => (group.types as readonly string[]).includes(panel.type) && `${panel.en} ${panel.zh} ${panel.type}`.toLowerCase().includes(query.toLowerCase()));
+        return matches.length > 0 && <details key={`${group.id}:${!!query}`} open={!!query || group.id === "develop"}><summary>{group[locale]} <small>{matches.length}</small></summary><div>{matches.map(panel => <button title={panel.owner} key={panel.type} onClick={() => open(panel.type)}>{panel[locale]}</button>)}</div></details>;
+      })}
+      {!panels.some(panel => `${panel.en} ${panel.zh} ${panel.type}`.toLowerCase().includes(query.toLowerCase())) && <p role="status">{t("No matching panels", "没有匹配的面板")}</p>}
+    </section>}
     {library && <StudioLayoutLibrary locale={locale} current={() => captureStudioLayout(model.toJson(), document)} load={replace} exportLayout={layout => download(JSON.stringify(layout, null, 2), "apeir-studio-layout.json")} close={() => setLibrary(false)} />}
     {message && message !== t("Layout saved.", "布局已保存。") && <div role="status" className="studio-notice">{message}<button onClick={() => setMessage("")}>{t("Dismiss", "关闭提示")}</button></div>}
     <div className="studio-workbench">

@@ -1,5 +1,36 @@
 # Engineering review and research comparison
 
+## Studio grouped controls and Workflow module menu — 2026-11-12
+
+Starting main: `0bf7c2b11e1a28091a42a4788dc6a013da734a32`. Kernel source and
+component lock are unchanged. This is a presentation and connection-scope change.
+
+| Surface | Decision | Result |
+| --- | --- | --- |
+| Docking, layout v1, themes, panel lifetime | REUSE | Existing owners and saved geometry retained |
+| Panel library and model configuration | EXTEND | Searchable purpose groups; common fields first; connection details and usage remain expandable |
+| Language preference | FIX | Visible toolbar selector; language-only changes now increment the existing save revision |
+| Native credential surface | FIX / REUSE | Existing credential manager exposed in Studio; local endpoint and connection epoch checked before showing references; stale reads discarded |
+| Workflow canvas and Runtime | EXTEND / REUSE | Context/keyboard menu uses the existing draft/undo and execution path; unsupported handlers stay disabled |
+| Real inference and Windows10 tablet lifecycle | PENDING | These UI checks do not qualify accounts, models, target drivers or installation |
+
+Linux Chromium exercised the authenticated model-disabled Runtime: the existing
+19-case Studio suite passed, followed by focused checks after the final label
+and input changes. The original Workflow test now creates a node through the
+context menu before actual registration, independently approved execution,
+CLI-compatible export and original-Run recovery after Runtime restart. A new
+1280×800 case verifies bilingual drafts, language persistence, raw-key rejection,
+keyboard menu navigation and no execution from adding modules. Validation uses
+the actual Runtime endpoint; no paid inference is made.
+
+Desktop unit checks passed (508 cases); connection-scope and Provider tests also
+passed after final changes. TypeScript, ESLint, production build, local Markdown
+links and document hygiene passed. The existing security scanner reported zero
+HIGH findings; six pre-existing MEDIUM findings were retained. Browser screenshots
+in the Provider and Workflow guides are source-mode evidence, not Windows GUI
+or real-model qualification. Required CI and native packages retain their own
+source SHA and reports; earlier ARM64 artifacts do not contain this UI change.
+
 ## Approved ARM64 component baseline — 2026-11-11
 
 The maintainer explicitly approved the reviewed ARM64 component entries and

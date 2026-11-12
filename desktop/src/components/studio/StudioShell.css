@@ -14,9 +14,15 @@
 .studio-footer, .studio-note { color: var(--nous-text-secondary); padding: 4px 10px; font-size: 11px; }
 .studio-notice { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--nous-border); font-size: 12px; }
 .studio-notice button { margin-left: auto; }
-.studio-picker { max-height: 260px; overflow: auto; display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; border-bottom: 1px solid var(--nous-border); }
-.studio-picker label { width: 100%; }.studio-picker input { margin-left: 8px; }
-.studio-picker button { display: flex; flex-direction: column; align-items: start; min-width: 150px; }.studio-picker small { color: var(--nous-text-secondary); }
+.studio-picker { max-height:min(42vh,360px); overflow:auto; padding:10px 16px; border-bottom:1px solid var(--nous-border); background:var(--nous-surface); }
+.studio-picker header { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+.studio-picker label { display:flex; flex:1; align-items:center; gap:8px; }.studio-picker input { min-width:0; flex:1; max-width:360px; }
+.studio-picker summary { cursor:pointer; padding:6px 0; font-weight:600; }
+.studio-picker details > div { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:6px; padding:4px 0 8px; }
+.studio-picker button { text-align:left; }.studio-picker small { color:var(--nous-text-secondary); margin-left:6px; font-weight:400; }
+.studio-shell .provider-advanced { border:1px solid var(--nous-border); border-radius:4px; padding:8px; }
+.provider-advanced > label { display:block; margin-top:8px; }
+.studio-toolbar-actions > select { max-width:94px; }
 .studio-projection { padding: 12px; font-size: 12px; }.studio-projection header { display: flex; justify-content: space-between; gap: 6px; }.studio-projection pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .studio-dock { --flexlayout-color-background: var(--nous-bg); --flexlayout-color-base: var(--nous-surface); --flexlayout-font-size: 12px; --flexlayout-font-family: inherit; --flexlayout-color-icon: var(--nous-text-secondary); --flexlayout-color-focus: var(--nous-border-focus); --flexlayout-color-tab-selected: var(--nous-text); --flexlayout-color-tab-unselected: var(--nous-text-secondary); --flexlayout-color-text: var(--nous-text); --flexlayout-color-1: var(--nous-bg); --flexlayout-color-2: var(--nous-surface); --flexlayout-color-3: var(--nous-surface-active); --flexlayout-color-4: var(--nous-border); --flexlayout-color-5: var(--nous-border-focus); --flexlayout-color-6: var(--nous-surface-hover); --flexlayout-color-drag1: var(--nous-accent); --flexlayout-color-drag2: var(--nous-accent-soft); }
 .studio-dock .flexlayout__tab { background: var(--nous-surface); }.studio-dock .flexlayout__tab_button { font-size: 12px; }
@@ -61,14 +67,14 @@
 .studio-dock .flexlayout__tab_button:hover { background:var(--nous-surface-hover); }
 .studio-dock .flexlayout__splitter:hover { background:var(--nous-accent-soft); }
 .studio-picker { background:var(--nous-surface); padding:12px 16px; gap:8px; }
-.studio-picker button { padding:8px 12px; min-width:150px; text-align:left; font-weight:500; }
+.studio-picker details button { padding:8px 12px; min-width:0; text-align:left; font-weight:500; }
 .studio-picker button strong { font-weight:500; }
 .studio-notice { color:var(--nous-text-secondary); background:var(--nous-surface); }
 .studio-layout-library { background:var(--nous-surface); padding:12px 16px; }
 @media (max-width:850px) { .studio-workspace-name,.studio-controller { display:none; }.studio-toolbar { gap:8px; padding:6px 10px; } }
 @media (max-width:480px) { .studio-toolbar { flex-wrap:wrap; }.studio-brand { flex:1; }.studio-toolbar-actions { flex-wrap:wrap; justify-content:flex-end; gap:4px; }.studio-menu-content { width:min(256px,calc(100vw - 40px)); }.studio-footer span:last-child { display:none; } }
 .studio-icon { vertical-align:middle; flex-shrink:0; }.studio-toolbar button,.studio-dashboard-toolbar button { display:inline-flex; align-items:center; justify-content:center; gap:5px; }
-@media (pointer:coarse) { .studio-toolbar button,.studio-menu > summary { min-height:40px; }.dashboard-editing .studio-widget > header > button:not(.studio-widget-grip) { min-height:40px; min-width:36px; } }
+@media (pointer:coarse) { .studio-toolbar button,.studio-menu > summary,.studio-picker summary,.studio-picker button { min-height:40px; }.dashboard-editing .studio-widget > header > button:not(.studio-widget-grip) { min-height:40px; min-width:36px; } }
 
 /* Data-only extension contributions use the host theme and existing state tokens. */
 .studio-extension-view { padding: 10px; overflow: auto; min-width: 0; }
