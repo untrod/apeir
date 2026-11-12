@@ -101,6 +101,19 @@ export function StudioWorkflow({
   const [kind, setKind] = useState<WorkflowStepType>("transform"),
     [inputs, setInputs] = useState("{}"),
     [paramsText, setParamsText] = useState("{}");
+  const [nodeMenu, setNodeMenu] = useState<{ x: number; y: number; position: { x: number; y: number } } | null>(null);
+  const nodeMenuElement = useRef<HTMLDivElement>(null);
+  const canvasElement = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!nodeMenu) return;
+    const menu = nodeMenuElement.current;
+    (menu?.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? menu)?.focus();
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Element && !nodeMenuElement.current?.contains(event.target)) setNodeMenu(null);
+    };
+    window.addEventListener("pointerdown", outside);
+    return () => window.removeEventListener("pointerdown", outside);
+  }, [nodeMenu]);
   const [bindingsText, setBindingsText] = useState("");
   const [models, setModels] = useState<ModelView[]>([]);
   const [modelsError, setModelsError] = useState("");
@@ -199,6 +212,15 @@ export function StudioWorkflow({
         type.available &&
         type.actions?.includes("model.invoke"),
     ) === true;
+  const stepAvailable = (type: WorkflowStepType) =>
+    catalog?.step_types?.some(item => item.type === type && item.available) === true &&
+    (type === "agent" ? modelHostAvailable : !["capability", "connector", "command"].includes(type));
+  const stepTitle = (type: WorkflowStepType) => ({
+    agent: t("Model", "模型"), transform: t("Value / transform", "数据 / 转换"),
+    approval: t("Human approval", "人工审批"), condition: t("Condition check", "条件检查"),
+    wait: t("Wait barrier", "等待屏障"), capability: t("Capability", "能力"),
+    connector: t("Connector", "连接器"), command: t("Command", "命令"),
+  })[type];
   const needsModels = kind === "agent" || isModel;
   useEffect(() => {
     if (!needsModels) return;
@@ -291,6 +313,7 @@ export function StudioWorkflow({
   function edit(
     change: (definition: WorkflowDefinition) => WorkflowDefinition,
     applyPendingParameters = false,
+    positions?: WorkflowDraft["positions"],
   ) {
     if (pendingParameters.current && !applyPendingParameters) {
       setError(
@@ -306,8 +329,18 @@ export function StudioWorkflow({
       const definition = workflowDefinition(
         change(structuredClone(current.definition)),
       );
-      commit({ ...current, definition });
+      commit({ ...current, definition, positions: positions ?? current.positions });
     });
+  }
+  function addStep(type: WorkflowStepType, position?: { x: number; y: number }) {
+    if (!stepAvailable(type)) return;
+    const id = `step-${crypto.randomUUID().slice(0, 8)}`;
+    const added = edit(d => ({ ...d, steps: [...d.steps, {
+      step_id: id, step_type: type,
+      ...(type === "agent" ? { action: "model.invoke", approval_required: true } : {}),
+      params: type === "agent" ? { model_id: "", instruction: "", max_tokens: 512, max_cost_usd: 0.01 } : type === "transform" ? { value: "" } : {},
+    }] }), false, position ? { ...currentDraft.current.positions, [id]: position } : undefined);
+    if (added) { setSelected([id]); setKind(type); setNodeMenu(null); }
   }
   async function action(work: () => Promise<void>) {
     const check = captureRuntimeConnection();
@@ -353,7 +386,7 @@ export function StudioWorkflow({
     data: {
       label: (
         <>
-          <strong>{item.step_id}</strong>
+          <strong title={item.step_id}>{item.step_type === "agent" && !modelWorkflowStep(item) ? t("Agent", "智能体") : stepTitle(item.step_type)}</strong>
           <span>
             {modelWorkflowStep(item) ? "MODEL" : item.step_type.toUpperCase()} ·{" "}
             {(graphMatchesRun && run?.step_states[item.step_id]) ||
@@ -672,50 +705,13 @@ export function StudioWorkflow({
               <option
                 key={type}
                 value={type}
-                disabled={
-                  (type === "agent" && !modelHostAvailable) ||
-                  ["capability", "connector", "command"].includes(type)
-                }
+                disabled={!stepAvailable(type)}
               >
-                {type === "agent"
-                  ? t("MODEL · APPROVAL", "模型 · 需审批")
-                  : type.toUpperCase()}
-                {["capability", "connector", "command"].includes(type) ||
-                (type === "agent" && !modelHostAvailable)
-                  ? " · UNSUPPORTED"
-                  : ""}
+                {stepTitle(type)}{!stepAvailable(type) ? ` · ${t("UNSUPPORTED", "不支持")}` : type === "agent" ? ` · ${t("APPROVAL", "需审批")}` : ""}
               </option>
             ))}
           </select>
-          <button
-            disabled={paramsPending}
-            onClick={() =>
-              edit((d) => ({
-                ...d,
-                steps: [
-                  ...d.steps,
-                  {
-                    step_id: `step-${crypto.randomUUID().slice(0, 8)}`,
-                    step_type: kind,
-                    ...(kind === "agent"
-                      ? { action: "model.invoke", approval_required: true }
-                      : {}),
-                    params:
-                      kind === "agent"
-                        ? {
-                            model_id: "",
-                            instruction: "",
-                            max_tokens: 512,
-                            max_cost_usd: 0.01,
-                          }
-                        : kind === "transform"
-                          ? { value: null }
-                          : {},
-                  },
-                ],
-              }))
-            }
-          >
+          <button disabled={paramsPending || !stepAvailable(kind)} onClick={() => addStep(kind)}>
             {t("Add step", "添加节点")}
           </button>
           <button
@@ -787,7 +783,7 @@ export function StudioWorkflow({
           </button>
           {step && (
             <>
-              <strong>{step.step_id}</strong>
+              <strong title={step.step_id}>{step.step_type === "agent" && !isModel ? t("Agent", "智能体") : stepTitle(step.step_type)}</strong>
               {isModel && (
                 <fieldset disabled={!modelParams}>
                   <legend>{t("Model", "模型")}</legend>
@@ -862,18 +858,18 @@ export function StudioWorkflow({
                   </label>
                 </fieldset>
               )}
-              <label>
-                {t("Parameters", "参数")}
-                <textarea
-                  aria-label="Step parameters"
-                  value={paramsText}
-                  maxLength={32768}
-                  onChange={(e) => {
-                    setParamsText(e.target.value);
-                    setDirty(true);
-                  }}
-                />
-              </label>
+              {step.step_type === "transform" && typeof step.params?.value === "string" && <label>
+                {t("Value", "内容")}<textarea aria-label="Transform value" value={(() => { try { const p = JSON.parse(paramsText); return typeof p.value === "string" ? p.value : ""; } catch { return ""; } })()} onChange={event => {
+                  try { setParamsText(JSON.stringify({ ...JSON.parse(paramsText), value: event.target.value }, null, 2)); setDirty(true); }
+                  catch { setError(t("Fix the parameter JSON first.", "请先修正参数 JSON。")); }
+                }} />
+              </label>}
+              <details className="workflow-parameters">
+                <summary>{t("Advanced parameters", "高级参数")}</summary><code>{step.step_id}</code>
+                <label>{t("Parameters", "参数")}
+                  <textarea aria-label="Step parameters" value={paramsText} maxLength={32768} onChange={event => { setParamsText(event.target.value); setDirty(true); }} />
+                </label>
+              </details>
               <button
                 disabled={!paramsPending}
                 onClick={() => {
@@ -1069,6 +1065,7 @@ export function StudioWorkflow({
               </p>
             </>
           )}
+          <details className="workflow-history"><summary>{t("Inputs & history", "输入与历史")}</summary>
           <label>
             {t("Run inputs", "运行输入")}
             <textarea
@@ -1120,9 +1117,21 @@ export function StudioWorkflow({
               <small>{item.run_id}</small>
             </button>
           ))}
+          </details>
         </aside>
-        <div className="studio-workflow-canvas">
+        <div className="studio-workflow-canvas" ref={canvasElement} tabIndex={0} aria-label={t("Workflow canvas", "工作流画布")} onKeyDown={event => {
+          if (event.key === "ContextMenu" || event.shiftKey && event.key === "F10") {
+            event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect();
+            const point = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            setNodeMenu({ ...point, position: flow.current?.screenToFlowPosition(point) ?? { x: 0, y: 0 } });
+          }
+        }}>
           <ReactFlow
+            onPaneContextMenu={event => {
+              event.preventDefault(); const point = { x: event.clientX, y: event.clientY };
+              setNodeMenu({ ...point, position: flow.current?.screenToFlowPosition(point) ?? { x: 0, y: 0 } });
+            }}
+            onMoveStart={() => setNodeMenu(null)}
             onInit={(instance) => {
               flow.current = instance;
               fitCanvas();
@@ -1180,6 +1189,23 @@ export function StudioWorkflow({
           </ReactFlow>
         </div>
       </div>
+      {nodeMenu && <div ref={nodeMenuElement} tabIndex={-1} className="studio-node-menu" role="menu" aria-label={t("Add workflow module", "添加工作流模块")} style={{ left: Math.max(8, Math.min(nodeMenu.x, window.innerWidth - 268)), top: Math.max(8, Math.min(nodeMenu.y, window.innerHeight - 390)) }} onKeyDown={event => {
+        const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+        const current = buttons.indexOf(window.document.activeElement as HTMLButtonElement);
+        if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+          event.preventDefault(); buttons[event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (current + (event.key === "ArrowUp" ? -1 : 1) + buttons.length) % buttons.length]?.focus();
+        }
+        if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); setNodeMenu(null); canvasElement.current?.focus(); }
+      }}>
+        <strong>{t("Add module", "添加模块")}</strong>
+        {[
+          { title: t("Data & flow", "数据与流程"), types: ["transform", "condition", "wait", "approval"] },
+          { title: t("Models & tools", "模型与工具"), types: ["agent", "capability", "connector", "command"] },
+        ].map(group => <div role="group" aria-label={group.title} key={group.title}><small>{group.title}</small>{group.types.map(value => {
+          const type = value as WorkflowStepType;
+          return <button key={type} role="menuitem" disabled={paramsPending || !stepAvailable(type)} onClick={() => addStep(type, nodeMenu.position)}>{stepTitle(type)}{!stepAvailable(type) && <small>{t("Unsupported", "不支持")}</small>}</button>;
+        })}</div>)}
+      </div>}
       <details open={!!run} className="studio-workflow-result">
         <summary>
           {t("Execution / Evidence", "执行 / 证据")}

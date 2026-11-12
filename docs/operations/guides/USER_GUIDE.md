@@ -36,7 +36,9 @@ Current Studio opens with Chat and Files in a new General layout. Empty Chat
 offers **Connect a model**, **Open project files** and **Open Workflow**; these
 open existing panels without submitting a task. Existing saved
 layouts are kept. If you see only a Dashboard, choose **Chat** or **Files** on
-the left rail; **More / Add panel** opens the full searchable library.
+the left rail; **More / Add panel** opens a searchable library grouped into
+Develop, Models & resources, Monitor & inspect, and Tools & extensions. Expand
+a group or search in English or Chinese; installed extension panels remain available.
 **Workspace → Operations Console → Controller connection** configures the Runtime
 address and protected service session token. That token is not a Provider API key.
 
@@ -54,8 +56,12 @@ address and protected service session token. That token is not a Provider API ke
 | Dismiss a menu | Escape |
 
 Panel movement does not execute Work. Closing a panel does not cancel its
-background task. Floating OS windows remain disabled. Theme and language are in
-**Workspace** and use the existing design system.
+background task. Floating OS windows remain disabled. Choose **English / 中文**
+directly in the top toolbar; the choice saves with the existing layout. Theme
+remains in **Workspace**. Neither action resets the current editor or model form.
+
+**中文提示：** 左侧栏保留常用入口；“添加面板”按用途分组，搜索支持中英文。
+模型页默认显示常用配置，连接细节、用量和历史按需展开。布局保存不等于保存文件或提交任务。
 
 **Workspace → Layout library** saves named Global, Workspace, Template and
 Dashboard arrangements. Load, duplicate, rename, export or remove an entry there.

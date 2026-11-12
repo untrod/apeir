@@ -16,6 +16,41 @@ beforeEach(() => {
 const open = (onOpenApprovals?: () => void) => render(<ProviderSettings models={models} onChanged={changed} onOpenApprovals={onOpenApprovals} />);
 
 describe("Studio Provider configuration", () => {
+  it("resets provider-specific model and credential references when the protocol template changes", async () => {
+    open(); await screen.findByRole("button", { name: "Edit example" });
+    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "previous-model" } });
+    fireEvent.change(screen.getByLabelText("Credential reference"), { target: { value: "env:PREVIOUS_PROVIDER_KEY" } });
+    fireEvent.change(screen.getByLabelText("Protocol template"), { target: { value: "deepseek" } });
+    expect(screen.getByLabelText("Vendor model ID")).toHaveValue("");
+    expect(screen.getByLabelText("Credential reference")).toHaveValue("");
+    expect(governedStudioMutation).not.toHaveBeenCalled();
+    expect(testModel).not.toHaveBeenCalled();
+  });
+  it("refreshes both Provider metadata and the registered model catalog without inference", async () => {
+    open(); await screen.findByRole("button", { name: "Edit example" });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh Providers" }));
+    await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+    expect(api).toHaveBeenCalledTimes(2);
+    expect(governedStudioMutation).not.toHaveBeenCalled();
+    expect(testModel).not.toHaveBeenCalled();
+  });
+  it("keeps the unsaved configuration when language changes and reports close protection", async () => {
+    const protection = vi.fn();
+    const props = { models, onChanged: changed, onDraftChange: protection };
+    const view = render(<ProviderSettings {...props} locale="en" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Add Provider" }));
+    fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "my-model" } });
+    fireEvent.change(screen.getByLabelText("Credential reference"), { target: { value: "env:FAKE_OWNER_KEY" } });
+    view.rerender(<ProviderSettings {...props} locale="zh" />);
+    expect(screen.getByLabelText("厂商模型 ID")).toHaveValue("my-model");
+    expect(screen.getByLabelText("凭据引用")).toHaveValue("env:FAKE_OWNER_KEY");
+    expect(screen.getByLabelText("凭据引用")).toHaveAttribute("type", "text");
+    expect(protection).toHaveBeenLastCalledWith(true);
+    expect(governedStudioMutation).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "取消编辑" }));
+    expect(protection).toHaveBeenLastCalledWith(false);
+  });
   it("reads existing metadata without mutation, inference or browser persistence", async () => {
     open();
     expect(await screen.findByRole("button", { name: "Edit example" })).toBeEnabled();
@@ -37,6 +72,7 @@ describe("Studio Provider configuration", () => {
   it("rejects a pasted key without sending or storing it", async () => {
     open(); fireEvent.click(await screen.findByRole("button", { name: "Edit example" }));
     fireEvent.change(screen.getByLabelText("Credential reference"), { target: { value: "PRIVATE_NOT_A_REFERENCE" } });
+    expect(screen.getByLabelText("Credential reference")).toHaveAttribute("type", "password");
     fireEvent.click(screen.getByRole("button", { name: "Save Provider" }));
     expect(await screen.findByRole("alert")).not.toHaveTextContent("PRIVATE_NOT_A_REFERENCE");
     expect(governedStudioMutation).not.toHaveBeenCalled();

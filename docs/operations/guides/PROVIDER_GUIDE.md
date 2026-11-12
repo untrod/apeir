@@ -6,7 +6,10 @@ endpoint reachability, inference and tool support are separate checks.
 
 ## Configure
 
-1. Open **Models** in Studio. Select an implemented protocol and set its endpoint.
+1. Open **Models** in Studio and choose **Add Provider**. Select an implemented
+   protocol; its preset supplies the endpoint. **Connection settings** contains
+   the endpoint, display name and Provider ID; compatible custom endpoints expand
+   this section automatically.
 2. Enter the exact vendor model ID and a credential reference; the display name
    is not the backend model ID. Save the profile and select a registered model.
 3. Check the saved configuration. Choose **Test** only when a model request is
@@ -17,8 +20,22 @@ saved profiles and makes no inference. A Runtime started with
 `--no-intelligence` cannot infer after saving a profile; restart in normal mode
 with the required authenticated Kernel before a production model test.
 
-Browser Studio does not save raw keys. Native local **Settings → Credentials**
-uses the existing system credential backend; profiles retain reference names.
+Choose **Manage credentials** from Models to open the existing native credential
+manager. It requires the desktop application connected to its own local Runtime;
+a remote Controller cannot manage this computer’s keys. Native **Settings →
+Credentials** remains available. Save a key there, then enter a reference such as
+`env:DEEPSEEK_API_KEY` in the Provider form. The field shows valid references, masks invalid input,
+and rejects raw keys before any configuration request. Browser Studio does not
+save keys; remote services use their own host’s secure backend. Saving or removing
+a local credential restarts Runtime. Save or cancel drafts in other panels first;
+Studio blocks the restart while those drafts remain. Switching a new profile’s
+protocol template clears its previous model ID and credential reference; changing
+the interface language keeps the draft.
+
+**中文提示：** 先在“管理凭据”中保存密钥，再填写 `env:名称`。模型 ID 应使用
+服务商实际接受的标识，例如 `deepseek-chat`，不要填写显示名称或随意编号。
+保存配置不发起推理；“运行推理测试”是一次明确的模型调用，可能产生费用。
+“用量与性能”保留完整统计，可按需展开。
 Never put a key in layout JSON, ordinary configuration, source or a screenshot.
 
 ```bash
@@ -40,10 +57,11 @@ remote host. Pending connection/restart results belong to their original session
 including A→B→A switches. Changing Controller retires the previous identity and
 requests; do not reuse its credential or approvals.
 
-![Models panel with actual saved configuration and UNKNOWN health](../../media/studio-models-source.png)
+![Compact Provider form in Chinese with a fake credential reference](../../media/studio-model-settings-compact-source.png)
 
-*Actual model-disabled source-browser session from5bdbadf. Configuration and
-permission behavior were exercised; no external model request was made.*
+*Actual Linux Chromium source session, 1280×800 viewport. This is an unsaved
+configuration with an explicitly fake reference; no inference was requested.
+The screenshot demonstrates the form, not Provider availability.*
 
 ## Cloud and local services
 
