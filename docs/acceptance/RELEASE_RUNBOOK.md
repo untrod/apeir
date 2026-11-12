@@ -82,6 +82,15 @@ and the approved x64 components are unchanged. Candidate archive provenance and
 actual target-specific PE/hash checks remain mandatory. Windows11 ARM64 smoke,
 Windows10 tablet installation, signing and publication remain separate gates.
 
+Full-mode [ARM64 build43115765924](https://github.com/untrod/apeir/actions/runs/43115765924)
+produced the [unsigned internal bundle](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13901748571) from
+`16308a6b5bb6f1d3049144f413bc8a9b9541561a`. Actual hosted Windows11 ARM64 silent installation and
+installed-sidecar checks passed. Windows10 GUI/lifecycle remains PENDING.
+ARM64 is distributed through this reviewed Actions artifact; the existing
+Release Preflight draft-staging consumer still targets x64. Do not pass ARM64
+files to it or publish them by bypassing its target check. Signing and public
+publication retain their separate approvals.
+
 ## 2. Verify source
 
 The 2026-10-26 maintainer approval covers the reviewed frozen-source binary

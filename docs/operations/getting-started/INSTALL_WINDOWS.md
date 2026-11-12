@@ -3,13 +3,15 @@
 The current **0.1.0-rc1 development bundle** contains both an installer and a
 Portable ZIP. Pick one; you do not need to install Python or Kernel separately.
 
-[**Download Setup + Portable**](https://github.com/untrod/apeir/actions/runs/42977022966/artifacts/13837634414)
+[**Download x64 Setup + Portable**](https://github.com/untrod/apeir/actions/runs/42977022966/artifacts/13837634414)
+· [**Download ARM64 Setup + Portable**](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13901748571)
 · [Version, hashes and source](QUICK_START.md#download-metadata)
 
 This is an **unsigned development build**, not a stable Release. GitHub sign-in
 is required; the artifact expires on **2026-11-25**. Build and real sidecar checks
-passed on Windows Server 2025. Windows 10 installation, GUI, upgrade, uninstall
-and Defender acceptance are **PENDING**. There is no public Release asset yet.
+passed on Windows Server 2025 for x64. ARM64 full build, silent installation and
+installed-sidecar checks passed on Windows 11 ARM64. Windows 10 installation,
+GUI, upgrade, uninstall and Defender acceptance are **PENDING**. There is no public Release asset yet.
 
 中文速读：下载上面的工件，解压后任选安装版或 Portable。先校验，再打开；
 暂时没有 Windows 10 实机验收，不要把工作资料当测试沙盒。模型可以稍后配置。
@@ -32,8 +34,10 @@ rather than submitting the operation again.
 
 ## Before opening a package
 
-- Use **x64 Windows**. Windows 10 x64 is the intended target; this candidate has
-  not completed acceptance on it. Windows ARM64 is a separate qualification.
+- Choose the matching architecture: **x64** for Intel/AMD Windows, **ARM64** for
+  Windows on Arm, including a Xiaomi Pad5 running Windows. These are separate
+  builds, not a 32-bit app or an Android package. Windows 10 target acceptance
+  remains pending for both. See the [tablet checklist](../deployment/WINDOWS_10_ARM64_LOCAL.md#first-tablet-test).
 - The desktop needs **Microsoft Edge WebView2**. Setup uses its download
   bootstrapper when necessary, so first installation can require network access.
 - Keep the included sidecars and app-local runtime DLLs together. Their presence
@@ -47,12 +51,14 @@ outer ZIP hash. In PowerShell, `Get-FileHash -Algorithm SHA256 <file>` prints it
 A mismatch means **stop**. Do not run a similarly named file from another source.
 
 The bundle also contains `SHA256SUMS.txt`, manifests and native validation
-reports. Its binary source is `70a5c69b1b2bd9f36f5f6725e7a1e7bdf411fd2d`;
-a newer README or screenshot does not change that binary.
+reports. The x64 source is `70a5c69b1b2bd9f36f5f6725e7a1e7bdf411fd2d`;
+ARM64 is `16308a6b5bb6f1d3049144f413bc8a9b9541561a`. A newer README or screenshot does
+not change either binary. Use the correct row in Download metadata.
 
 ## Setup
 
-1. After verification, open `APEIR_0.1.0-rc1_x64-setup.exe`.
+1. After verification, open `APEIR_0.1.0-rc1_x64-setup.exe` for x64 or
+   `APEIR_0.1.0-rc1_arm64-setup.exe` for ARM64.
 2. Setup is configured for the **current user**. Do not add administrator
    elevation to work around a failure. Allow the supported WebView2 prerequisite
    installation if it is needed and acceptable on your machine.
@@ -67,7 +73,8 @@ SmartScreen or other protection to make the test pass.
 
 ## Portable
 
-1. Verify `APEIR-Portable-0.1.0-rc1-windows-x64.zip`.
+1. Verify `APEIR-Portable-0.1.0-rc1-windows-x64.zip` or
+   `APEIR-Portable-0.1.0-rc1-windows-arm64.zip` for your system.
 2. Extract the **whole ZIP** into a writable directory.
 3. Open `APEIR-Portable/APEIR.exe` from the extracted package. Do not move only
    the EXE: Kernel, Worker and Runtime sidecars are part of the application.
@@ -78,7 +85,9 @@ stays beside the EXE. The launcher uses `%LOCALAPPDATA%\Nous` for application
 configuration, logs and local service state, plus your selected workspace for
 project state. `Nous` is a retained compatibility directory name.
 
-## Download with GitHub CLI
+<a name="download-with-github-cli"></a>
+
+## Download x64 with GitHub CLI
 
 For developers who already use authenticated `gh`, this is the exact current
 artifact. It downloads files; it does **not** start installation:

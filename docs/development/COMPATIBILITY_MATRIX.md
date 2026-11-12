@@ -3,6 +3,16 @@
 This matrix separates declared support from evidence collected on the current
 release-maintenance device.
 
+## Current ARM64 native preview
+
+The [ARM64 preview](../operations/deployment/WINDOWS_10_ARM64_LOCAL.md) bundles
+CPython 3.13.17 and target-native Desktop, Runtime, Kernel and Worker. Full native
+validation and installed-sidecar smoke passed on Windows 11 ARM64 in
+[run43115765924](https://github.com/untrod/apeir/actions/runs/43115765924).
+Windows 10 Pad5 GUI, drivers, upgrade/uninstall and Defender checks remain PENDING.
+This does not qualify every Python version, Provider, local accelerator or sandbox.
+The historical maintenance-host tables below retain their original scope.
+
 ## Python
 
 | Version | Project metadata | Current local evidence |

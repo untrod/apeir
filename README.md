@@ -16,12 +16,14 @@
 An open, local-first workspace for project files, workflows and connected
 resources—with approvals and execution records you can inspect.
 
-[**⬇ Windows — Setup + Portable**](https://github.com/untrod/apeir/actions/runs/42977022966/artifacts/13837634414) ·
+[**⬇ Windows x64**](https://github.com/untrod/apeir/actions/runs/42977022966/artifacts/13837634414) ·
+[**Windows ARM64**](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13901748571) ·
 [**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
 [**Quick Start**](docs/operations/getting-started/QUICK_START.md) ·
 [**Documentation**](docs/README.md) · [简体中文](README.zh-CN.md)
 
-**Windows:** [Install Setup](docs/operations/getting-started/INSTALL_WINDOWS.md#setup) · [Use Portable](docs/operations/getting-started/INSTALL_WINDOWS.md#portable) · [Verify SHA-256](docs/operations/getting-started/QUICK_START.md#download-metadata).
+**Windows:** choose x64 for Intel/AMD PCs, ARM64 for Windows on Arm (including Pad5).
+[Install Setup](docs/operations/getting-started/INSTALL_WINDOWS.md#setup) · [Use Portable](docs/operations/getting-started/INSTALL_WINDOWS.md#portable) · [Verify SHA-256](docs/operations/getting-started/QUICK_START.md#download-metadata).
 Unsigned development bundle; GitHub sign-in required. Windows 10 installation
 acceptance is pending. No stable Release yet—keep your production hat on the hook.
 
@@ -56,7 +58,7 @@ choose your path:
 
 - **Source Preview:** matching Runtime wheel and built browser Studio; Python
   3.10+ required. No Node.js or Rust is needed for the downloaded frontend.
-- **Windows Development Build:** unsigned x64 Portable and NSIS packages inside
+- **Windows Development Build:** unsigned x64 and ARM64 Portable/NSIS packages inside
   the linked GitHub Actions artifact. GitHub sign-in is required.
 - **Developer Setup:** clone the source for editable Runtime and Studio development.
 

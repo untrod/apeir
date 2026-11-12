@@ -38,6 +38,44 @@ The full native build, installer checks on disposable CI and Windows10 Pad5 GUI
 lifecycle still require their actual results. This approval does not make
 `NATIVE_INSTALL_READY` or `RELEASE_READY` pass.
 
+## Windows ARM64 full native build — 2026-11-11
+
+[PR147](https://github.com/untrod/apeir/pull/147) merged normally as
+`1c5c3218f63cfc84caed7fbdbef1a78922443c89` after all13 required checks passed.
+Accepted source `16308a6b5bb6f1d3049144f413bc8a9b9541561a` has the same source tree as that merge.
+[Native run43115765924](https://github.com/untrod/apeir/actions/runs/43115765924)
+passed without validation or smoke skips on Windows11 Enterprise ARM64, build26200.
+Full Runtime tests:6283 passed,105 platform/dependency skips; Desktop:505
+passed; Tauri Rust:9 passed. Frozen Kernel validation ran through the existing
+isolated helper. No test assertion, HTTP deadline or frozen Kernel source changed.
+
+[Actual Portable/NSIS bundle](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13901748571), artifact13901748571,
+expires2026-11-25. Independent download, all manifest/checksum checks and the
+existing target-specific component verifier passed. Desktop and all three
+Portable sidecars are PE0xAA64. The NSIS bootstrap is legitimately x86/0x014C;
+that does not change the installed application's ARM64 architecture. NSIS
+sidecars, CRT and notices match Portable byte-for-byte. The Desktop payload
+retains the existing three-byte `UNK`→`NSS` bundle marker difference; both actual
+hashes are recorded, not normalized or described as identical files.
+
+The separate [installed-sidecar report](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13902515482)
+records a real silent NSIS install on disposable Windows11 ARM64 and successful
+Runtime/Kernel/Worker smoke from the installed directory. Its legacy filename
+`RC3-ARM64-ARTIFACT.json` is compatibility only; the reported version is0.1.0-rc1.
+The certification step, including its uninstall/cleanup path, completed successfully;
+this is not Windows10 tablet GUI, graceful app exit, upgrade, Defender or complete
+installed-lifecycle qualification. The native report retains installation_acceptance=NOT_RUN.
+
+Native smoke exercised authenticated NKI1/2/3 and refusal, original workload
+restart/query without a second model submission, pure Workflow idempotency and
+history, owned-process cleanup and authenticated Studio extension discovery.
+External model calls:0. A safe model-credential refusal is not live inference or
+strong-sandbox qualification. Formal release remains BLOCKED.
+
+Package identities and SHA-256 have one user-facing source in
+[Quick Start metadata](../operations/getting-started/QUICK_START.md#download-metadata).
+Original dependency/startup failures below remain recorded with their exact sources.
+
 ## Windows ARM64 candidate preparation — 2026-11-11
 
 The requested Xiaomi Pad5 target is Windows ARM64, not 32-bit Windows. Starting
