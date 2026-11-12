@@ -16,6 +16,14 @@ beforeEach(() => {
 const open = (onOpenApprovals?: () => void) => render(<ProviderSettings models={models} onChanged={changed} onOpenApprovals={onOpenApprovals} />);
 
 describe("Studio Provider configuration", () => {
+  it("refreshes both Provider metadata and the registered model catalog without inference", async () => {
+    open(); await screen.findByRole("button", { name: "Edit example" });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh Providers" }));
+    await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+    expect(api).toHaveBeenCalledTimes(2);
+    expect(governedStudioMutation).not.toHaveBeenCalled();
+    expect(testModel).not.toHaveBeenCalled();
+  });
   it("keeps the unsaved configuration when language changes and reports close protection", async () => {
     const protection = vi.fn();
     const props = { models, onChanged: changed, onDraftChange: protection };

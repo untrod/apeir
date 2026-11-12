@@ -123,7 +123,7 @@ export function ProviderSettings({ locale = "en", models, onChanged, onOpenAppro
   return <section aria-label={t("Provider settings", "服务商设置")} style={{ display: "grid", gap: space.sm, marginBottom: space.lg }}>
     <div style={rowStyle}><strong>{t("Providers", "服务商")}</strong>
       <button style={btnSecondary} disabled={busy || !!draft} onClick={() => newDraft("openai")}>{t("Add Provider", "添加服务商")}</button>
-      <button style={btnSecondary} disabled={busy} onClick={() => void perform(refresh)}>{t("Refresh Providers", "刷新服务商")}</button>
+      <button style={btnSecondary} disabled={busy} onClick={() => void perform(async () => { await refresh(); current(); await onChanged(); })}>{t("Refresh Providers", "刷新服务商")}</button>
       {onOpenCredentials && <button style={btnSecondary} onClick={onOpenCredentials}>{t("Manage credentials", "管理凭据")}</button>}
     </div>
     {error && <p role="alert" style={{ color: colors.danger }}>{error}</p>}
