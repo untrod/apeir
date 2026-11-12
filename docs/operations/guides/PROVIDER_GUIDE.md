@@ -28,7 +28,9 @@ Credentials** remains available. Save a key there, then enter a reference such a
 and rejects raw keys before any configuration request. Browser Studio does not
 save keys; remote services use their own host’s secure backend. Saving or removing
 a local credential restarts Runtime. Save or cancel drafts in other panels first;
-Studio blocks the restart while those drafts remain.
+Studio blocks the restart while those drafts remain. Switching a new profile’s
+protocol template clears its previous model ID and credential reference; changing
+the interface language keeps the draft.
 
 **中文提示：** 先在“管理凭据”中保存密钥，再填写 `env:名称`。模型 ID 应使用
 服务商实际接受的标识，例如 `deepseek-chat`，不要填写显示名称或随意编号。

@@ -24,13 +24,20 @@ keyboard menu navigation (including Escape when every item is disabled by an
 unapplied parameter draft) and no execution from adding modules. Validation uses
 the actual Runtime endpoint; no paid inference is made.
 
-The 508-case Desktop suite passed; the final 14 connection-scope and Provider
+The 508-case Desktop suite passed; the final 15 connection-scope and Provider
 checks also passed after consolidating both refresh operations. The production
 bundle passed the two focused real-Runtime Workflow and configuration scenarios. TypeScript, ESLint, production build, local Markdown
 links and document hygiene passed. The existing security scanner reported zero
 HIGH findings; six pre-existing MEDIUM findings were retained. Browser screenshots
 in the Provider and Workflow guides are source-mode evidence, not Windows GUI
-or real-model qualification. Required CI and native packages retain their own
+or real-model qualification. Windows Multi-Arch on `af9e4ac` retained an outer one-second watchdog failure
+in the unchanged `test_kernel_async_waits_obey_original_model_deadline[execution]`
+case ([Issue #151](https://github.com/untrod/apeir/issues/151)). Its 50 ms model
+deadline and cleanup assertions remain unchanged; three Linux variants pass,
+which does not establish a Windows root cause. Later qualification cannot close
+this issue without a demonstrated fix.
+
+Required CI and native packages retain their own
 source SHA and reports; earlier ARM64 artifacts do not contain this UI change.
 
 ## Approved ARM64 component baseline — 2026-11-11

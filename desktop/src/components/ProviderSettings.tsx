@@ -64,7 +64,7 @@ export function ProviderSettings({ locale = "en", models, onChanged, onOpenAppro
   };
   const newDraft = (id: string) => {
     const preset = PROVIDER_TEMPLATES.find(item => item.providerId === id);
-    setTemplateId(id); setDraft(previous => ({ id, name: preset?.displayName || "", endpoint: preset?.defaultBaseUrl || "", model: previous?.model || "", credential: previous?.credential || "", clearCredential: false }));
+    setTemplateId(id); setDraft({ id, name: preset?.displayName || "", endpoint: preset?.defaultBaseUrl || "", model: "", credential: "", clearCredential: false });
     setRemoving(""); setError(""); setMessage("");
   };
   const save = async () => {

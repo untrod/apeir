@@ -16,6 +16,17 @@ beforeEach(() => {
 const open = (onOpenApprovals?: () => void) => render(<ProviderSettings models={models} onChanged={changed} onOpenApprovals={onOpenApprovals} />);
 
 describe("Studio Provider configuration", () => {
+  it("resets provider-specific model and credential references when the protocol template changes", async () => {
+    open(); await screen.findByRole("button", { name: "Edit example" });
+    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "previous-model" } });
+    fireEvent.change(screen.getByLabelText("Credential reference"), { target: { value: "env:PREVIOUS_PROVIDER_KEY" } });
+    fireEvent.change(screen.getByLabelText("Protocol template"), { target: { value: "deepseek" } });
+    expect(screen.getByLabelText("Vendor model ID")).toHaveValue("");
+    expect(screen.getByLabelText("Credential reference")).toHaveValue("");
+    expect(governedStudioMutation).not.toHaveBeenCalled();
+    expect(testModel).not.toHaveBeenCalled();
+  });
   it("refreshes both Provider metadata and the registered model catalog without inference", async () => {
     open(); await screen.findByRole("button", { name: "Edit example" });
     fireEvent.click(screen.getByRole("button", { name: "Refresh Providers" }));
