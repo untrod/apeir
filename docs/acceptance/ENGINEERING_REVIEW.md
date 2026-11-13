@@ -7024,3 +7024,13 @@ Historical Windows Issues88/116/151 remain open. Exact candidate/main CI and any
 matching Native artifacts are attached to the PR; old packages retain their own
 source identity. This audit does not authorize formal publication or auto-running
 Workflows/models when a layout is restored.
+
+
+Concurrent Native dispatches exposed a packaging integration defect: x64 and
+ARM64 shared one event/ref concurrency group, so run43466640424 automatically
+cancelled x64 run43466634424. The superseded ARM64 frontend-only run was then
+explicitly cancelled before Native compilation. Original cancellation records
+remain. The existing workflow group now distinguishes native and diagnostic
+targets as well as event/ref; no integrity, authorization or test gate changes.
+Both final-source architecture builds are qualified separately through the same
+full official launcher. This is a dispatch fix, not a successful binary claim.
