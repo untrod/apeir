@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { btnPrimary, btnSecondary, colors, radius, space, typo } from "../design";
 import {
@@ -81,6 +81,13 @@ function Status({ value }: { value: string }) {
 export function DeveloperPlatform({ modelsOnly = false, manageProviders = false, locale = "en", onOpenApprovals, onOpenCredentials, onDraftChange }: { modelsOnly?: boolean; manageProviders?: boolean; locale?: "en" | "zh"; onOpenApprovals?: () => void; onOpenCredentials?: () => void; onDraftChange?: (dirty: boolean) => void } = {}) {
   const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   const [tab, setTab] = useState<PlatformTab>(modelsOnly ? "models" : "workbench");
+  const [modelSection, setModelSection] = useState("connections");
+  const modelSectionsId = useId();
+  const modelSections = [
+    { id: "connections", label: t("Connections", "连接配置") },
+    { id: "usage", label: t("Usage", "用量") },
+    { id: "evidence", label: t("Run records", "运行记录") },
+  ];
   const [overview, setOverview] = useState<DeveloperOverview | null>(null);
   const [projects, setProjects] = useState<DeveloperProject[]>([]);
   const [runs, setRuns] = useState<DeveloperRun[]>([]);
@@ -146,9 +153,11 @@ export function DeveloperPlatform({ modelsOnly = false, manageProviders = false,
   }, [usageDay, modelsOnly]);
 
   useEffect(() => {
+    let retired = false;
     setOverview(null); setProjects([]); setRuns([]); setExperiments([]); setResults([]);
-    void refresh();
-    return invalidateReads;
+    // A discarded development-mode mount does not need its own HTTP read.
+    void Promise.resolve().then(() => { if (!retired) return refresh(); });
+    return () => { retired = true; invalidateReads(); };
   }, [refresh, configurationVersion, invalidateReads]);
 
   const createProject = async () => {
@@ -241,16 +250,31 @@ export function DeveloperPlatform({ modelsOnly = false, manageProviders = false,
           baselineScores={baselineScores} candidateScores={candidateScores}
           setBaselineScores={setBaselineScores} setCandidateScores={setCandidateScores} onEvaluate={evaluateExperiment} />}
         {tab === "models" && <>
-          {manageProviders && <ProviderSettings key={configurationVersion} locale={locale} models={snapshotVersion === configurationVersion ? modelLab?.models || [] : []} onChanged={refresh} onOpenApprovals={onOpenApprovals} onOpenCredentials={onOpenCredentials} onDraftChange={onDraftChange} />}
-          <details open={!manageProviders}>
-          <summary>{t("Usage & performance", "用量与性能")}</summary>
+          {manageProviders && <>
+            <nav role="tablist" aria-label={t("Model sections", "模型分类")} style={{ display: "flex", gap: space.sm, marginBottom: space.md, flexWrap: "wrap" }}>
+              {modelSections.map((section, index) => <button key={section.id} id={`${modelSectionsId}-${section.id}`} role="tab" aria-selected={modelSection === section.id} aria-controls={`${modelSectionsId}-${section.id}-panel`} tabIndex={modelSection === section.id ? 0 : -1} style={modelSection === section.id ? btnPrimary : btnSecondary} onClick={() => setModelSection(section.id)} onKeyDown={event => {
+                if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                event.preventDefault();
+                const next = event.key === "Home" ? 0 : event.key === "End" ? modelSections.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + modelSections.length) % modelSections.length;
+                setModelSection(modelSections[next].id);
+                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
+              }}>{section.label}</button>)}
+            </nav>
+            <section role="tabpanel" id={`${modelSectionsId}-connections-panel`} aria-labelledby={`${modelSectionsId}-connections`} hidden={modelSection !== "connections"}>
+              <ProviderSettings key={configurationVersion} locale={locale} models={snapshotVersion === configurationVersion ? modelLab?.models || [] : []} modelsReady={snapshotVersion === configurationVersion && !!modelLab && !modelLabLoading} onChanged={refresh} onOpenApprovals={onOpenApprovals} onOpenCredentials={onOpenCredentials} onDraftChange={onDraftChange} />
+            </section>
+          </>}
+          <section role={manageProviders ? "tabpanel" : undefined} id={`${modelSectionsId}-usage-panel`} aria-labelledby={manageProviders ? `${modelSectionsId}-usage` : undefined} hidden={manageProviders && modelSection !== "usage"}>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: space.sm, marginBottom: space.md }}>
             <label style={{ color: colors.textSecondary, fontSize: typo.sm }}>{t("Usage day (UTC)", "用量日期（UTC）")} <input aria-label="Usage day (UTC)" type="date"
               value={usageDay || (snapshotVersion === configurationVersion ? modelLab?.usage_accounting?.day : "") || ""} onChange={event => setUsageDay(event.target.value)} style={field} /></label>
             <button onClick={() => setUsageDay("")} style={btnSecondary}>{t("Today", "今天")}</button>
           </div>
-          <ModelLab locale={locale} data={snapshotVersion === configurationVersion ? modelLab : null} loading={modelLabLoading || snapshotVersion !== configurationVersion} />
-          </details>
+          <ModelLab locale={locale} view={manageProviders ? "usage" : "all"} data={snapshotVersion === configurationVersion ? modelLab : null} loading={modelLabLoading || snapshotVersion !== configurationVersion} />
+          </section>
+          {manageProviders && <section role="tabpanel" id={`${modelSectionsId}-evidence-panel`} aria-labelledby={`${modelSectionsId}-evidence`} hidden={modelSection !== "evidence"}>
+            <ModelLab locale={locale} view="evidence" data={snapshotVersion === configurationVersion ? modelLab : null} loading={modelLabLoading || snapshotVersion !== configurationVersion} />
+          </section>}
         </>}
       </div>
     </div>
@@ -354,17 +378,17 @@ function Experiments(props: {
   </div>;
 }
 
-export function ModelLab({ data, loading = false, locale = "en" }: { data: ModelLabSnapshot | null; loading?: boolean; locale?: "en" | "zh" }) {
+export function ModelLab({ data, loading = false, locale = "en", view = "all" }: { data: ModelLabSnapshot | null; loading?: boolean; locale?: "en" | "zh"; view?: "all" | "usage" | "evidence" }) {
   const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   if (!data) return <section role={loading ? "status" : "alert"} style={panel}>{loading ? t("Loading model evidence and usage accounting…", "正在读取模型记录与用量…") : t("Model evidence and usage accounting are unavailable. Spend UNKNOWN.", "无法读取模型与用量记录，费用 UNKNOWN。")}</section>;
   const accounting = data.usage_accounting_status === "available" && isUsageAccountingSummary(data.usage_accounting)
     ? data.usage_accounting : null;
   return <div style={{ display: "grid", gap: space.md }}>
-    <section style={panel}>
+    {view !== "evidence" && <section style={panel}>
       <h2 style={{ marginTop: 0, fontSize: typo.md, color: colors.text }}>{t("Model usage and cost", "模型用量与费用")}</h2>
       {accounting ? <UsageAccounting summary={accounting} locale={locale} /> : <p role="alert">{t("Usage accounting unavailable. Spend UNKNOWN.", "用量记录不可用，费用 UNKNOWN。")}</p>}
-    </section>
-    <section style={{ ...panel, color: colors.textSecondary, fontSize: typo.sm }}>
+    </section>}
+    {view !== "usage" && <><section style={{ ...panel, color: colors.textSecondary, fontSize: typo.sm }}>
       {t("Performance evidence", "性能记录")}: <Status value={data.evidence_status} /> · {data.recent_observations.length} {t("recorded observations", "条观察记录")}
     </section>
     {data.models.length === 0 && <section style={panel}>{t("No models configured.", "尚未配置模型。")}</section>}
@@ -381,6 +405,6 @@ export function ModelLab({ data, loading = false, locale = "en" }: { data: Model
           <span>{t("Latency", "延迟")} {usageNumber(ranking.avg_latency_ms)} ms</span>
         </div> : <p style={{ color: colors.textTertiary, fontSize: typo.sm }}>{t("No performance observations for this model.", "此模型暂无性能记录。")}</p>}
       </section>;
-    })}
+    })}</>}
   </div>;
 }

@@ -267,7 +267,7 @@ function subscribeUsage(reader: UsageReader) {
   const alreadyVisible = hasVisibleUsageReader(reader.day);
   usageReaders.add(reader);
   let frame: number | undefined;
-  if (!alreadyVisible && hasVisibleUsageReader(reader.day)) void refreshCostSummary();
+  if (!alreadyVisible && hasVisibleUsageReader(reader.day)) void Promise.resolve().then(() => { if (hasVisibleUsageReader(reader.day)) void refreshCostSummary(); });
   else if (!alreadyVisible) frame = requestAnimationFrame(() => { if (usageReaders.has(reader)) void refreshCostSummary(); });
   if (usageTimer === undefined) {
     usageTimer = window.setInterval(() => { void refreshCostSummary(true); }, 5000);

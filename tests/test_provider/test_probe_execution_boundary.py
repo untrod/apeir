@@ -15,6 +15,23 @@ from nous_runtime.cli.provider_setup import (
 from nous_runtime.control_plane.routes import handle_model_test_request
 
 
+def test_provider_health_exception_does_not_expose_private_provider_details(
+    monkeypatch,
+):
+    from nous_runtime.control_plane.routes import handle_provider_test
+    from nous_runtime.provider.registry import ProviderRegistry
+
+    class FailingProvider:
+        def health(self):
+            raise RuntimeError("PRIVATE_PROVIDER_HEALTH_FIXTURE")
+
+    monkeypatch.setattr(ProviderRegistry, "get", lambda *_: FailingProvider())
+    result = handle_provider_test("fixture")
+    assert result["ok"] is True
+    assert result["data"]["healthy"] is False
+    assert "PRIVATE_PROVIDER_HEALTH_FIXTURE" not in json.dumps(result)
+
+
 class ProbeResponse:
     status = 200
 

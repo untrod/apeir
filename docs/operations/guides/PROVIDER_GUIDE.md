@@ -6,12 +6,14 @@ endpoint reachability, inference and tool support are separate checks.
 
 ## Configure
 
-1. Open **Models** in Studio and choose **Add Provider**. Select an implemented
+1. Open **Models → Connections** in Studio and choose **Add Provider**. Select an implemented
    protocol; its preset supplies the endpoint. **Connection settings** contains
    the endpoint, display name and Provider ID; compatible custom endpoints expand
    this section automatically.
-2. Enter the exact vendor model ID and a credential reference; the display name
-   is not the backend model ID. Save the profile and select a registered model.
+2. Enter the exact vendor model ID and, when required, a credential reference.
+   The display name is not the backend model ID. Save the profile, then select a
+   registered local or API model. Ollama connects to an already-running service;
+   its optional credential field lives in Connection settings.
 3. Check the saved configuration. Choose **Test** only when a model request is
    intended and its account/budget use is authorized.
 
@@ -24,7 +26,8 @@ Choose **Manage credentials** from Models to open the existing native credential
 manager. It requires the desktop application connected to its own local Runtime;
 a remote Controller cannot manage this computer’s keys. The shared **Settings →
 Models & credentials** uses the same manager. Save a key there, then enter a reference such as
-`env:DEEPSEEK_API_KEY` in the Provider form. The field shows valid references, masks invalid input,
+`env:DEEPSEEK_API_KEY` in the Provider form. Use the exact variable-name case
+configured on the Controller host. The field shows valid references, masks invalid input,
 and rejects raw keys before any configuration request. Browser Studio does not
 save keys; remote services use their own host’s secure backend. Saving or removing
 a local credential restarts Runtime. Save or cancel drafts in other panels first;
@@ -35,7 +38,7 @@ the interface language keeps the draft.
 **中文提示：** 先在“管理凭据”中保存密钥，再填写 `env:名称`。模型 ID 应使用
 服务商实际接受的标识，例如 `deepseek-chat`，不要填写显示名称或随意编号。
 保存配置不发起推理；“运行推理测试”是一次明确的模型调用，可能产生费用。
-“用量与性能”保留完整统计，可按需展开。
+“连接配置”“用量”“运行记录”分开展示，切换分类保留未保存草稿。
 Never put a key in layout JSON, ordinary configuration, source or a screenshot.
 
 ```bash
@@ -49,6 +52,12 @@ apeir --no-intelligence provider doctor
 Replace `PROVIDER_ID` with the saved identity. `provider quick` is an existing
 shortcut with process-scoped credentials; those values do not survive restart.
 
+Editing a profile blocks removal and inference tests until the edit is saved or
+cancelled. A test always uses saved configuration. Refreshing Provider metadata
+retires the old test badge; original request and usage records remain in Runtime.
+Reported Provider status is not proof of endpoint authentication or inference.
+The result names its actual tested model. Missing usage and cost stay UNKNOWN.
+
 ## Workspace and connection
 
 The native wizard selects the local workspace and can skip model setup. A remote
@@ -57,11 +66,11 @@ remote host. Pending connection/restart results belong to their original session
 including A→B→A switches. Changing Controller retires the previous identity and
 requests; do not reuse its credential or approvals.
 
-![Compact Provider form in Chinese with a fake credential reference](../../media/studio-model-settings-compact-source.png)
+![Model connections separated from usage and run records](../../media/studio-model-settings-compact-source.png)
 
-*Actual Linux Chromium source session, 1280×800 viewport. This is an unsaved
-configuration with an explicitly fake reference; no inference was requested.
-The screenshot demonstrates the form, not Provider availability.*
+*Actual Linux Chromium source session, 1600×1000 viewport; the image captures
+the Models panel. The unsaved model ID is a fixture, and no inference was
+requested. Configuration, usage and run records have separate tabs.*
 
 ## Cloud and local services
 

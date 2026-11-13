@@ -216,6 +216,36 @@ test("Chat stops waiting without claiming backend cancellation or resubmitting t
   } finally { release(); if (submissions) await routeSettled; }
 });
 
+test("Studio loads a saved hidden module on first use and preserves its configuration draft", async ({ page }, info) => {
+  const layout = { schemaVersion: 1, kind: "workspace", name: "On-demand modules", locale: "en", layout: { type: "row", id: "module-root", children: [{ type: "tabset", id: "module-group", active: true, selected: 0, children: [{ type: "tab", id: "module-chat", name: "Chat", component: "chat" }, { type: "tab", id: "module-models", name: "Models", component: "models" }] }] } };
+  await page.addInitScript(value => localStorage.setItem("apeir.studio.layout.v1", JSON.stringify(value)), layout);
+  let modelReads = 0;
+  page.on("request", request => { if (new URL(request.url()).pathname === "/api/v1/developer/model-lab") modelReads++; });
+  await open(page);
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await info.attach("hidden-module-startup-reads", { body: JSON.stringify({ model_lab_reads: modelReads, scope: "one saved hidden Models panel; source Chromium; not whole-app performance" }), contentType: "application/json" });
+  expect(modelReads).toBe(0);
+  await revealView(page, "Models");
+  const connections = page.getByRole("region", { name: "Provider settings", exact: true });
+  await expect(connections).toBeVisible();
+  await expect.poll(() => modelReads).toBe(1);
+  await connections.getByRole("button", { name: "Add Provider", exact: true }).click();
+  await connections.getByLabel("Vendor model ID", { exact: true }).fill("unsaved-review-model");
+  await page.getByRole("tab", { name: "Usage", exact: true }).click();
+  await expect(connections).toBeHidden();
+  await expect(page.getByLabel("Usage accounting", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Run records", exact: true }).click();
+  await page.getByRole("tab", { name: "Connections", exact: true }).click();
+  await expect(connections.getByLabel("Vendor model ID", { exact: true })).toHaveValue("unsaved-review-model");
+  await revealView(page, "Chat");
+  await revealView(page, "Models");
+  await expect(connections.getByLabel("Vendor model ID", { exact: true })).toHaveValue("unsaved-review-model");
+  expect(modelReads).toBe(1);
+  await info.attach("module-lifecycle-acceptance", { body: JSON.stringify({ hidden_startup_reads: 0, reads_after_first_open: modelReads, reads_after_tab_switch_and_reopen: modelReads, draft_preserved: true, external_model_calls: 0 }), contentType: "application/json" });
+  await page.locator(".studio-panel-host").filter({ has: connections }).screenshot({ path: info.outputPath("models-modular-source.png") });
+  await connections.getByRole("button", { name: "Cancel editing" }).click();
+});
+
 test("Studio configures and inspects saved Providers through the real model-disabled Runtime", async ({ page }, info) => {
   await open(page);
   await page.getByRole("button", { name: /Add panel/ }).click();

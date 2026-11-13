@@ -49,8 +49,9 @@ on:
 
 concurrency:
   # PR validation must not cancel an explicitly requested full Native build of
-  # the same branch. Superseded runs still cancel within their own event scope.
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  # the same branch. Independent native/diagnostic targets must not cancel each
+  # other; superseded runs still cancel within their own event and target scope.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ inputs.native_target || 'none' }}-${{ inputs.kernel_candidate_target || 'none' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:

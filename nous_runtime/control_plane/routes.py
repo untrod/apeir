@@ -625,9 +625,13 @@ def handle_provider_test(provider_id: str, body: dict | None = None) -> dict[str
                 "details": health,
             }
         )
-    except Exception as e:
+    except Exception:
         return ok_response(
-            {"provider_id": provider_id, "healthy": False, "error": str(e)}
+            {
+                "provider_id": provider_id,
+                "healthy": False,
+                "error": "Provider health check did not complete. Inference was not tested.",
+            }
         )
 
 

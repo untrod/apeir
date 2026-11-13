@@ -4,15 +4,15 @@ import { ApiError, api, getRuntimeConfigVersion, governedStudioMutation, testMod
 import { useRuntimeConfigVersion } from "../store";
 import { PROVIDER_TEMPLATES } from "./OnboardingWizard";
 
-const credentialReference = /^env:[A-Z_][A-Z0-9_]{0,127}$/;
+const credentialReference = /^env:[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
 type SavedConfiguration = { name: string; api_base_url: string; model: string; has_reference: boolean };
 type ProviderSummary = { id: string; name: string; health?: { status?: string }; configuration?: SavedConfiguration };
 type Draft = { id: string; name: string; endpoint: string; model: string; credential: string; clearCredential: boolean; original?: SavedConfiguration };
 
 /** Presentation over the existing Provider lifecycle; credentials remain references. */
-export function ProviderSettings({ locale = "en", models, onChanged, onOpenApprovals, onOpenCredentials, onDraftChange }: {
-  locale?: "en" | "zh"; models: ModelLabSnapshot["models"]; onChanged: () => Promise<void>; onOpenApprovals?: () => void; onOpenCredentials?: () => void; onDraftChange?: (dirty: boolean) => void;
+export function ProviderSettings({ locale = "en", models, modelsReady = true, onChanged, onOpenApprovals, onOpenCredentials, onDraftChange }: {
+  locale?: "en" | "zh"; models: ModelLabSnapshot["models"]; modelsReady?: boolean; onChanged: () => Promise<void>; onOpenApprovals?: () => void; onOpenCredentials?: () => void; onDraftChange?: (dirty: boolean) => void;
 }) {
   const version = useRuntimeConfigVersion();
   const active = useRef(false), inFlight = useRef(false), reads = useRef(0);
@@ -32,7 +32,7 @@ export function ProviderSettings({ locale = "en", models, onChanged, onOpenAppro
   }, [version]);
   const refresh = useCallback(async () => {
     const sequence = ++reads.current;
-    current(); setProviders([]);
+    current(); setProviders([]); setResult(null);
     const rows = await api<ProviderSummary[]>("/api/v1/providers");
     current();
     if (!Array.isArray(rows) || rows.some(row => !row || typeof row.id !== "string" || typeof row.name !== "string" || row.configuration && (
@@ -43,11 +43,17 @@ export function ProviderSettings({ locale = "en", models, onChanged, onOpenAppro
     if (sequence === reads.current) setProviders(rows);
   }, [current]);
   useEffect(() => {
+    let retired = false;
     active.current = true;
     inFlight.current = false; setBusy(false); setDraft(null); setResult(null); setModelId(""); setRemoving(""); setError(""); setMessage(""); setApprovalRequired(false);
-    void refresh().catch(() => { if (active.current && getRuntimeConfigVersion() === version) setError("Provider metadata is unavailable."); });
-    return () => { active.current = false; };
+    void Promise.resolve().then(() => { if (!retired) return refresh(); }).catch(() => { if (!retired && active.current && getRuntimeConfigVersion() === version) setError("Provider metadata is unavailable."); });
+    return () => { retired = true; active.current = false; };
   }, [refresh, version]);
+  useEffect(() => {
+    if (modelsReady && modelId && !models.some(model => model.model_id === modelId)) {
+      setModelId(""); setResult(null);
+    }
+  }, [models, modelsReady, modelId]);
 
   const perform = async (action: () => Promise<void>) => {
     if (inFlight.current) return;
@@ -64,6 +70,7 @@ export function ProviderSettings({ locale = "en", models, onChanged, onOpenAppro
   };
   const newDraft = (id: string) => {
     const preset = PROVIDER_TEMPLATES.find(item => item.providerId === id);
+    setResult(null);
     setTemplateId(id); setDraft({ id, name: preset?.displayName || "", endpoint: preset?.defaultBaseUrl || "", model: "", credential: "", clearCredential: false });
     setRemoving(""); setError(""); setMessage("");
   };
@@ -96,6 +103,7 @@ export function ProviderSettings({ locale = "en", models, onChanged, onOpenAppro
     });
   };
   const remove = (id: string) => {
+    if (draft) return;
     if (removing !== id) { setRemoving(id); return; }
     void perform(async () => {
       await governedStudioMutation(`/api/v1/providers/${encodeURIComponent(id)}`, {}, current, "DELETE");
@@ -105,7 +113,8 @@ export function ProviderSettings({ locale = "en", models, onChanged, onOpenAppro
     });
   };
   const test = () => void perform(async () => {
-    if (!models.some(model => model.model_id === modelId)) throw new Error("Select a currently registered model.");
+    if (draft) throw new Error(t("Save or cancel configuration changes before testing.", "请先保存或取消配置修改，再测试模型。"));
+    if (!modelsReady || !models.some(model => model.model_id === modelId)) throw new Error("Select a currently registered model.");
     setResult(null);
     try {
       const response = await testModel(modelId);
@@ -119,6 +128,12 @@ export function ProviderSettings({ locale = "en", models, onChanged, onOpenAppro
   });
   const rowStyle = { display: "flex", gap: space.sm, alignItems: "center", flexWrap: "wrap" as const };
   const measured = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : "UNKNOWN";
+  const localTemplate = !draft?.original && PROVIDER_TEMPLATES.find(item => item.providerId === templateId)?.credentialType === "none";
+  const modelGroups = [
+    { label: t("Local models", "本地模型"), values: models.filter(model => ["local_model", "local_service"].includes(model.endpoint_type)) },
+    { label: t("API models", "API 模型"), values: models.filter(model => model.endpoint_type === "cloud_api") },
+    { label: t("Other endpoints", "其他端点"), values: models.filter(model => !["local_model", "local_service", "cloud_api"].includes(model.endpoint_type)) },
+  ];
   const draftField = (key: "id" | "name" | "endpoint" | "model" | "credential", en: string, zh: string) => draft && <label key={key}>{t(en, zh)} <input aria-label={t(en, zh)} autoComplete="off" spellCheck={false} style={input} type={key === "credential" && !!draft.credential && !credentialReference.test(draft.credential) ? "password" : "text"} disabled={busy || key === "id" && !!draft.original} value={draft[key]} onChange={event => setDraft(previous => previous && ({ ...previous, [key]: event.target.value }))} placeholder={key === "credential" ? draft.original ? t("Blank keeps the existing reference", "留空保留现有引用") : `env:${templateId === "deepseek" ? "DEEPSEEK" : "OPENAI"}_API_KEY` : key === "model" && templateId === "deepseek" ? "deepseek-chat" : undefined} /></label>;
   return <section aria-label={t("Provider settings", "服务商设置")} style={{ display: "grid", gap: space.sm, marginBottom: space.lg }}>
     <div style={rowStyle}><strong>{t("Providers", "服务商")}</strong>
@@ -131,12 +146,12 @@ export function ProviderSettings({ locale = "en", models, onChanged, onOpenAppro
     {message && <p role="status">{message}</p>}
     {!providers.length && <p>{t("No registered or saved Providers reported.", "尚未发现已注册或已保存的服务商。")}</p>}
     {providers.map(provider => <div key={provider.id} style={rowStyle}>
-      <span style={{ flex: 1 }}>{provider.name} <code>{provider.id}</code> · {typeof provider.health?.status === "string" ? provider.health.status : "UNKNOWN"}</span>
+      <span style={{ flex: 1 }}>{provider.name} <code>{provider.id}</code> · {t("Reported status", "报告状态")}: {typeof provider.health?.status === "string" ? provider.health.status : "UNKNOWN"}</span>
       <button style={btnSecondary} disabled={busy || !provider.configuration || !!draft} aria-label={`${t("Edit", "编辑")} ${provider.id}`} onClick={() => {
         const config = provider.configuration!;
-        setDraft({ id: provider.id, name: config.name, endpoint: config.api_base_url, model: config.model, credential: "", clearCredential: false, original: config }); setRemoving(""); setMessage("");
+        setDraft({ id: provider.id, name: config.name, endpoint: config.api_base_url, model: config.model, credential: "", clearCredential: false, original: config }); setRemoving(""); setMessage(""); setResult(null);
       }}>{t("Edit", "编辑")}</button>
-      <button style={btnSecondary} disabled={busy || !provider.configuration} aria-label={`${removing === provider.id ? t("Confirm remove", "确认移除") : t("Remove", "移除")} ${provider.id}`} onClick={() => remove(provider.id)}>{removing === provider.id ? t("Confirm remove", "确认移除") : t("Remove", "移除")}</button>
+      <button style={btnSecondary} disabled={busy || !!draft || !provider.configuration} aria-label={`${removing === provider.id ? t("Confirm remove", "确认移除") : t("Remove", "移除")} ${provider.id}`} onClick={() => remove(provider.id)}>{removing === provider.id ? t("Confirm remove", "确认移除") : t("Remove", "移除")}</button>
       {provider.configuration && <small style={{ width: "100%" }}>{provider.configuration.model || "UNKNOWN"} · {provider.configuration.api_base_url || "UNKNOWN"} · {provider.configuration.has_reference ? t("Reference saved", "引用已保存") : t("No saved reference", "无已保存引用")}</small>}
     </div>)}
     {draft && <form onSubmit={event => { event.preventDefault(); void save(); }} style={{ display: "grid", gap: space.sm }}>
@@ -144,27 +159,29 @@ export function ProviderSettings({ locale = "en", models, onChanged, onOpenAppro
         {PROVIDER_TEMPLATES.map(preset => <option key={preset.providerId} value={preset.providerId} disabled={preset.unsupportedProtocol}>{preset.displayName}{preset.unsupportedProtocol ? " · UNSUPPORTED" : ""}</option>)}
       </select></label>}
       {draftField("model", "Vendor model ID", "厂商模型 ID")}
-      {draftField("credential", "Credential reference", "凭据引用")}
-      <small>{t("Use env:NAME from Credentials. Do not paste an API key here.", "填写凭据管理中的 env:NAME，不要在此粘贴 API Key。")}</small>
+      {!localTemplate && <>{draftField("credential", "Credential reference", "凭据引用")}<small>{t("Use env:NAME from Credentials. Do not paste an API key here.", "填写凭据管理中的 env:NAME，不要在此粘贴 API Key。")}</small></>}
+      {localTemplate && <small>{t("Connect an already-running local service using its installed model ID.", "填写已运行本地服务中的模型 ID；此操作不会下载或启动模型。")}</small>}
       <details className="provider-advanced" open={!draft.original && templateId === "openai_compatible"}>
         <summary>{t("Connection settings", "连接设置")}</summary>
         {draftField("endpoint", "Endpoint", "端点")}
         {draftField("name", "Name", "名称")}
         {draftField("id", "Provider ID", "服务商 ID")}
+        {localTemplate && draftField("credential", "Optional credential reference", "可选凭据引用")}
         {draft.original && <label><input type="checkbox" checked={draft.clearCredential} disabled={busy} onChange={event => setDraft(previous => previous && ({ ...previous, clearCredential: event.target.checked }))} />{t("Clear saved credential reference", "清除已保存的凭据引用")}</label>}
       </details>
       <div style={rowStyle}><button type="submit" disabled={busy} style={btnPrimary}>{t("Save Provider", "保存服务商")}</button><button type="button" disabled={busy} style={btnSecondary} onClick={() => setDraft(null)}>{t("Cancel editing", "取消编辑")}</button></div>
     </form>}
     <div style={rowStyle}>
-      <select aria-label={t("Model to test", "待测试模型")} value={modelId} disabled={busy} onChange={event => { setModelId(event.target.value); setResult(null); }} style={input}>
+      <select aria-label={t("Model to test", "待测试模型")} value={modelId} disabled={busy || !!draft || !modelsReady} onChange={event => { setModelId(event.target.value); setResult(null); }} style={input}>
         <option value="">{t("Select registered model", "选择已注册模型")}</option>
-        {models.map(model => <option key={model.model_id} value={model.model_id}>{model.display_name} · {model.model_id}</option>)}
+        {modelGroups.filter(group => group.values.length).map(group => <optgroup key={group.label} label={group.label}>{group.values.map(model => <option key={model.model_id} value={model.model_id}>{model.display_name} · {model.model_id}</option>)}</optgroup>)}
       </select>
-      <button disabled={busy || !models.some(model => model.model_id === modelId)} onClick={test} style={btnSecondary}>{t("Run inference test", "运行推理测试")}</button>
+      <button disabled={busy || !!draft || !modelsReady || !models.some(model => model.model_id === modelId)} onClick={test} style={btnSecondary}>{t("Run inference test", "运行推理测试")}</button>
       <small>{t("An explicit model request; Provider charges may apply.", "将提交实际模型请求，服务商可能收费。")}</small>
     </div>
     {result && <section aria-label={t("Model test result", "模型测试结果")}>
       <strong>{result.healthy ? t("Inference completed", "推理已完成") : t("Inference failed / blocked", "推理失败或受阻")}</strong>
+      <p>{t("Tested model", "已测试模型")}: <code>{result.model_id}</code></p>
       {result.error && <p role="alert">{result.error}</p>}
       <p>Tokens: {measured(result.tokens_used)} · USD: {["reported", "derived", "estimated"].includes(result.cost_measurement || "") ? measured(result.cost_usd) : "UNKNOWN"} · {result.cost_measurement || "unknown"}</p>
       <details><summary>{t("Original request", "原始请求")}</summary><p>{result.request_id || "UNKNOWN"}</p><p>{result.response_preview}</p><p>{result.execution?.path || "UNKNOWN"} · {result.execution?.operation_id || result.execution?.workload_id || "UNKNOWN"}</p></details>

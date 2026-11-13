@@ -139,6 +139,7 @@ describe("real usage and cost projection", () => {
     render(<StatusBar />);
     fireEvent.click(screen.getByText("Runtime API"));
     expect(screen.getByRole("status")).toHaveTextContent("Spend UNKNOWN");
+    await waitFor(() => expect(resolveOld).toEqual(expect.any(Function)));
     act(() => setConfig({ url: "http://other-controller:8770", token: "fake.other.service" }));
     expect(await screen.findByLabelText("Usage accounting")).toHaveTextContent("$0.500000");
     await act(async () => { resolveOld(envelope(usageFixture())); });

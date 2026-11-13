@@ -6978,3 +6978,80 @@ window, returns to the original geometry and reloads it. This is source-browser
 software qualification, not Windows 10 GUI or installation qualification.
 External model requests, Windows tablet lifecycle and formal publication remain
 separate. CI links and exact candidate/merge SHAs are attached to the associated PR.
+
+## Modular Studio and model configuration audit — 2026-11-13
+
+Base Distribution: `7c2d261e0e6205790c4b3032f189288f850607ef`.
+Frozen Kernel87fd1b2 and the approved component lock are unchanged. The audit
+followed actual Provider, Gateway/NKI, Work, Workflow, Governance, Skill,
+Extension and Studio code and existing recovery/negative contracts.
+
+| Area | Decision | Exercised scope / remaining boundary |
+| --- | --- | --- |
+| Registry, Gateway/NKI and explicit model selection | REUSE | Cloud/local identity, locked routing, configuration persistence, budgets and original-request reconciliation have software coverage. Live account/model qualification is separate. |
+| Provider editing | FIX | Unsaved changes now block deletion and testing of an older saved profile. Refresh retires stale test status. Results retain their actual model and original request. |
+| Provider health errors | FIX | Unexpected exceptions no longer become raw diagnostic response text. The check still reports failure; it does not perform or establish inference. |
+| Models workspace | EXTEND | Connections, Usage and Run records are separate bilingual tabs over the same API snapshot. Drafts and close protection survive category/language changes. |
+| Optional Studio modules | EXTEND | Existing panels use trusted build-time lazy imports. Saved visible panels load at startup; hidden panels initialize on first visit and retain their portal/instance afterwards. |
+| Skills and declarative UI extensions | REUSE | Original install/review/enable/disable/remove state and permission checks remain authoritative across restart. Instruction loading is not Tool execution. |
+| Workflow / AgentSession / Work | REUSE | Typed bindings, independent approval, original Run and recovery contracts remain. A pure Workflow run does not qualify every model/Agent handler. |
+| Workspace and test execution | REUSE | Original Proposal/SHA/readback and governed fixed-profile test consumer remain; only the separately provisioned strict Linux VM scope has actual execution qualification. |
+| Third-party executable UI | BLOCKED | Arbitrary JavaScript is not loaded into the host. No isolation claim is inferred from lazy-loading trusted built-in modules. |
+| Local deployment / cloud accounts | BLOCKED | Existing service connections are supported; Ollama installation/download/startup management is not supplied by these panels. Cloud credentials/budget and broader model qualification remain external. |
+| Windows10 and physical effects | BLOCKED | Browser/CI software evidence is not tablet GUI/lifecycle or hardware acceptance. |
+
+The old Provider form reproduced three deterministic state errors before their
+fixes. A separate health-probe fixture reproduced raw exception reflection.
+The old production frontend also initialized a saved hidden Models panel and
+read Model Lab once before it was opened; the candidate reads zero at startup,
+once on first use, and no additional reads after category switches/reopening.
+Both observations use the same Linux Chromium environment and saved layout.
+This is one HTTP-init measurement, not a whole-app CPU/memory/latency benchmark.
+
+Broad existing model/Provider/Skill/extension/Workflow/Work contracts:1226 passed,
+17 skipped before the health diagnostic change. After it, Provider/Control Plane/
+Governance:602 passed,11 skipped. Final Desktop:526 passed in65 files; typecheck,
+lint and production build pass. Actual authenticated model-disabled Runtime and
+production Chromium:21 cases pass, including original approval/run/restart,
+extension revocation, malicious layout rejection, scoped Controller changes,
+module initialization, splitter limits and protected drafts. Module splitting
+required the original Inspector test to await its actual asynchronous view;
+its original Work identity/assertions remain. No assertion or timeout is weakened.
+
+No live/paid inference ran in this audit. The retained bounded Ollama/Qwen result
+above does not qualify all local or cloud models, streaming, Tools or native GUI.
+Historical Windows Issues88/116/151 remain open. Exact candidate/main CI and any
+matching Native artifacts are attached to the PR; old packages retain their own
+source identity. This audit does not authorize formal publication or auto-running
+Workflows/models when a layout is restored.
+
+
+Concurrent Native dispatches exposed a packaging integration defect: x64 and
+ARM64 shared one event/ref concurrency group, so run43466640424 automatically
+cancelled x64 run43466634424. The superseded ARM64 frontend-only run was then
+explicitly cancelled before Native compilation. Original cancellation records
+remain. The existing workflow group now distinguishes native and diagnostic
+targets as well as event/ref; no integrity, authorization or test gate changes.
+Both final-source architecture builds are qualified separately through the same
+full official launcher. This is a dispatch fix, not a successful binary claim.
+
+
+Original Desktop run43466514894 failed two source-development browser assertions:
+Models made two initial reads instead of one, and two historical Usage widgets
+requested the same day twice. Its full original job132026978799 log is retained.
+React development-mode mount replay dispatched requests from a mount that was
+immediately retired. Models/Provider initialization now defers pure reads until
+that mount remains current; the existing shared Usage transport coalesces
+same-turn subscriptions. No second cache, polling loop or execution owner is
+added. StrictMode regression checks retain one-read assertions; late-Controller
+unit cases first establish an actual pending read before retiring it. The
+original browser assertions and timeouts remain unchanged. Development and
+production browser qualification are recorded separately in the PR.
+
+
+A configuration counterexample also found that the form rejected lower-case
+`env:` variable names which the existing Controller/NKI contract accepts. The
+form now preserves case within the same bounded variable-name grammar; it still
+rejects raw keys and does not resolve or persist secret values in the browser.
+The original failing fixture is retained. Case preservation matters on Linux;
+no new Credential store or host-environment access is introduced.
