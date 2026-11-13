@@ -18,6 +18,7 @@ const paths = {
   evidence: "M3 2h7l3 3v9H3V2ZM10 2v4h3M5 10l2 2 4-4",
   history: "M2 7a6 6 0 1 1 1 5M2 3v4h4M8 4v4l3 2",
   more: "M3 7v2M8 7v2M13 7v2",
+  extensions: "M2 2h4v3h4V2h4v4h-3v4h3v4h-4v-3H6v3H2v-4h3V6H2V2Z",
   maximize: "M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4",
   restore: "M5 2h9v9M2 5h9v9H2V5Z",
   split: "M2 2h12v12H2V2ZM8 2v12",

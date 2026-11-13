@@ -22,8 +22,8 @@ with the required authenticated Kernel before a production model test.
 
 Choose **Manage credentials** from Models to open the existing native credential
 manager. It requires the desktop application connected to its own local Runtime;
-a remote Controller cannot manage this computer’s keys. Native **Settings →
-Credentials** remains available. Save a key there, then enter a reference such as
+a remote Controller cannot manage this computer’s keys. The shared **Settings →
+Models & credentials** uses the same manager. Save a key there, then enter a reference such as
 `env:DEEPSEEK_API_KEY` in the Provider form. The field shows valid references, masks invalid input,
 and rejects raw keys before any configuration request. Browser Studio does not
 save keys; remote services use their own host’s secure backend. Saving or removing

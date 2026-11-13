@@ -1,5 +1,5 @@
 import type { IJsonModel, IJsonRowNode } from "flexlayout-react";
-import { Actions, DockLocation, GroupAction, type Action, type Model } from "flexlayout-react";
+import { Actions, DockLocation, GroupAction, type Action, type Model, type TabNode, type TabSetNode } from "flexlayout-react";
 import { compactDashboard, validateDashboard } from "./studioDashboard";
 
 export function discardsProtectedPanel(action: Action, protectedIds: ReadonlySet<string>): boolean {
@@ -63,8 +63,42 @@ export function parseStudioLayout(input: string): StudioLayout {
   return { schemaVersion: 1, kind: root.kind as LayoutKind, name: root.name, locale: root.locale, layout: node(root.layout, "root", 0) as unknown as IJsonRowNode };
 }
 
+/** Trusted host constraints; imported layout JSON cannot override these values. */
+export function studioPanelSize(type: string): { minWidth: number; minHeight: number } {
+  if (type === "workflow") return { minWidth: 420, minHeight: 240 };
+  if (["editor", "files", "terminal"].includes(type)) return { minWidth: 380, minHeight: 200 };
+  if (type === "chat") return { minWidth: 320, minHeight: 200 };
+  if (type === "dashboard") return { minWidth: 300, minHeight: 200 };
+  return { minWidth: 280, minHeight: 180 };
+}
+
 export function studioModel(layout: StudioLayout): IJsonModel {
-  return { global: { tabEnablePopout: false, tabEnableFloat: false, tabEnableDrag: true, tabSetEnableDrag: true, tabEnableClose: true, enableEdgeDock: true, enableEdgeDockIndicators: true, tabSetEnableTabStrip: true, tabEnableRenderOnDemand: false }, layout: layout.layout };
+  const sized = (node: Record<string, unknown>): Record<string, unknown> => node.type === "tab"
+    ? { ...node, ...studioPanelSize(String(node.component)) }
+    : { ...node, children: (node.children as Record<string, unknown>[]).map(sized) };
+  return { global: { tabEnablePopout: false, tabEnableFloat: false, tabEnableDrag: true, tabSetEnableDrag: true, tabEnableClose: true, enableEdgeDock: true, enableEdgeDockIndicators: true, tabSetEnableTabStrip: true, tabEnableRenderOnDemand: false, tabSetMinWidth: 280, tabSetMinHeight: 180 }, layout: sized(layout.layout as unknown as Record<string, unknown>) as unknown as IJsonRowNode };
+}
+
+export function studioMinimumSize(layout: IJsonRowNode, splitter = 8): { width: number; height: number } {
+  function measure(node: Record<string, unknown>, vertical: boolean): { width: number; height: number } {
+    const children = node.children as Record<string, unknown>[];
+    if (node.type === "tabset") {
+      const sizes = children.map(child => studioPanelSize(String(child.component)));
+      return { width: Math.max(280, ...sizes.map(size => size.minWidth)), height: Math.max(180, ...sizes.map(size => size.minHeight)) + 36 };
+    }
+    const sizes = children.map(child => measure(child, !vertical));
+    // FlexLayout includes the row's own one-pixel extent in its minimum.
+    const gap = Math.max(0, sizes.length - 1) * splitter + 1;
+    return { width: vertical ? Math.max(1, ...sizes.map(size => size.width)) : sizes.reduce((sum, size) => sum + size.width, gap), height: vertical ? sizes.reduce((sum, size) => sum + size.height, gap) : Math.max(1, ...sizes.map(size => size.height)) };
+  }
+  return measure(layout as unknown as Record<string, unknown>, false);
+}
+
+/** Legacy imports can have selected tabs without an explicitly active group. */
+export function activeStudioTab(model: Model): TabNode | undefined {
+  let selected = model.getMaximizedTabset()?.getSelectedNode() ?? model.getActiveTabset()?.getSelectedNode();
+  if (!selected) model.visitNodes(node => { if (!selected && node.getType() === "tabset") selected = (node as TabSetNode).getSelectedNode(); });
+  return selected;
 }
 
 /** Reveal the existing instance, including one hidden by a maximized sibling. */
@@ -90,10 +124,11 @@ export function dockStudioTab(model: Model, id: string, side: "left" | "right" |
 }
 
 /** Drop library-only rendering metadata, then revalidate before saving. */
-export function captureStudioLayout(model: IJsonModel, previous: StudioLayout): StudioLayout {
+export function captureStudioLayout(model: IJsonModel, previous: StudioLayout, automaticFocus?: string): StudioLayout {
   function clean(input: unknown): unknown {
     const value = record(input); const result: Record<string, unknown> = {};
     for (const key of ["type", "id", "weight", "component", "name", "selected", "active", "maximized"]) if (value[key] !== undefined) result[key] = value[key];
+    if (value.id === automaticFocus) delete result.maximized;
     if (value.config !== undefined && value.component === "dashboard") result.config = validateDashboard(value.config);
     if (Array.isArray(value.children)) result.children = value.children.map(clean);
     return result;

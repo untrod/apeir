@@ -6945,3 +6945,36 @@ unknown price, and query-only original-request recovery with no extra model
 call. The 0.5B semantic failure, 1.5B 2-GiB OOM and 64-Token truncated response
 remain failed records; they are not erased by the qualified 128-Token case.
 No cloud model, fee saving or general model-quality claim is made.
+
+## Studio navigation, settings and splitter bounds — 2026-11-13
+
+Baseline: `6874380eadc35a1b2736ac0930e6fa3eb8428c4a`. REUSE the existing
+ThemeProvider, FlexLayout, panel registry/portal hosts, native credential manager,
+Runtime projections, Workflow, Governance and original records. FIX the inherited
+one-pixel splitter minimum and the ambiguous active view after legacy imports.
+EXTEND presentation navigation into sections with contextual view shortcuts.
+No backend, dependency lock, Kernel or component-lock change is involved.
+
+Settings now share one component between the legacy route and an in-workspace
+modal. Language/Light/Dark/System preferences use the existing ThemeProvider;
+old Studio/Operations layout locales and the native wizard preference remain
+readable. An explicit application language wins over later layout imports.
+Credential fields still use the original native boundary, stay in memory and
+protect close/restart/reset. Browser and remote-Controller credential restrictions
+remain intact; no user key or paid model request is used for Cloud acceptance.
+
+Host-controlled per-panel minimums are injected into the rendering model, never
+accepted from layout imports. Temporary compact focus is omitted from exports
+and saves. Original IDs, geometry, v1 layout/configuration and draft protection
+remain. Navigation reveals existing views; Add panel explicitly creates instances.
+Unavailable space does not grant permission or cancel background Work.
+
+Acceptance uses actual authenticated model-disabled Runtime processes and Linux
+Chromium, including production-bundle checks. Existing negative layout, extension
+revocation, independent approval, original Workflow Run and restart cases remain.
+The new browser case drags the actual splitter to both limits, checks 320px Chat
+and 380px editor minimums, changes settings without losing drafts, narrows the
+window, returns to the original geometry and reloads it. This is source-browser
+software qualification, not Windows 10 GUI or installation qualification.
+External model requests, Windows tablet lifecycle and formal publication remain
+separate. CI links and exact candidate/merge SHAs are attached to the associated PR.

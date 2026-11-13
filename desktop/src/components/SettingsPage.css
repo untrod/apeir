@@ -1,0 +1,13 @@
+.app-settings { height:100%; min-height:0; display:flex; flex-direction:column; color:var(--nous-text); background:var(--nous-surface); font-size:13px; }
+.app-settings > header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--nous-border); }
+.app-settings h2 { font-size:16px; margin:0; }.app-settings h3 { font-size:14px; margin:0 0 18px; }.app-settings h4 { font-size:13px; margin:24px 0 14px; }
+.app-settings-body { display:flex; flex:1; min-height:0; }.app-settings-body > nav { width:180px; flex-shrink:0; padding:12px 8px; border-right:1px solid var(--nous-border); background:var(--nous-bg); }
+.app-settings button,.app-settings select,.app-settings input { font:inherit; color:var(--nous-text); }.app-settings button,.app-settings select { min-height:32px; padding:5px 10px; background:var(--nous-surface); border:1px solid var(--nous-border); border-radius:4px; }
+.app-settings button { cursor:pointer; }.app-settings button:hover { background:var(--nous-surface-hover); }.app-settings button:disabled { opacity:.5; cursor:not-allowed; }
+.app-settings [role=tab] { display:block; width:100%; text-align:left; border-color:transparent; background:transparent; margin-bottom:4px; }
+.app-settings [role=tab][aria-selected=true] { color:var(--nous-accent); background:var(--nous-accent-soft); }
+.app-settings :is(button,select,input):focus-visible { outline:2px solid var(--nous-border-focus); outline-offset:2px; }
+.app-settings-body > main { padding:22px; flex:1; min-width:0; overflow:auto; }.app-settings-row { display:flex; gap:16px; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:1px solid var(--nous-border); }
+.app-settings-row > span { min-width:0; }.app-settings-row small { display:block; margin-top:5px; color:var(--nous-text-secondary); font-size:12px; }
+@media (max-width:580px) { .app-settings-body { flex-direction:column; }.app-settings-body > nav { width:auto; display:flex; gap:4px; padding:8px; overflow:auto; border-right:0; border-bottom:1px solid var(--nous-border); }.app-settings [role=tab] { width:auto; white-space:nowrap; margin:0; }.app-settings-body > main { padding:16px; } }
+@media (pointer:coarse) { .app-settings button,.app-settings select { min-height:40px; } }

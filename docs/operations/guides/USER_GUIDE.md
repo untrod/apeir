@@ -32,13 +32,13 @@ npm ci
 npm run dev
 ```
 
-Current Studio opens with Chat and Files in a new General layout. Empty Chat
-offers **Connect a model**, **Open project files** and **Open Workflow**; these
-open existing panels without submitting a task. Existing saved
-layouts are kept. If you see only a Dashboard, choose **Chat** or **Files** on
-the left rail; **More / Add panel** opens a searchable library grouped into
-Develop, Models & resources, Monitor & inspect, and Tools & extensions. Expand
-a group or search in English or Chinese; installed extension panels remain available.
+Studio opens with Chat and project files in a new General layout. The left rail
+selects Overview, Develop, Workflow, Run, Resources, or Tools;
+the row above the dock shows that section’s views. Navigation returns to an
+existing instance. **More / Add panel** deliberately creates another instance
+through the searchable panel library. Existing layouts and extension panels remain available.
+Empty Chat offers **Connect a model**, **Open project files** and **Open Workflow**;
+these open existing views without submitting a task.
 **Workspace → Operations Console → Controller connection** configures the Runtime
 address and protected service session token. That token is not a Provider API key.
 
@@ -47,21 +47,37 @@ address and protected service session token. That token is not a Provider API ke
 | Action | How |
 | --- | --- |
 | Split or group panels | Drag a tab to an edge or another tab strip |
-| Resize | Drag a splitter |
+| Resize | Drag a splitter; host minimum sizes keep each pane usable |
 | Snap, maximize, restore or close | Use the panel title-bar arrangement menu |
 | Maximize a group | Double-click its tab strip; **Show all panels** restores it |
 | Find a panel | Ctrl/Cmd+Shift+P |
-| Arrange Dashboard widgets | **Edit layout**, or Ctrl/Cmd+Alt+L |
+| Arrange Dashboard widgets | **Customize Overview**, or Ctrl/Cmd+Alt+L |
+| Open settings | Settings at the bottom of the rail, or Ctrl/Cmd+, |
 | Save the layout | Automatic after a short delay, or Ctrl/Cmd+Alt+S |
 | Dismiss a menu | Escape |
 
 Panel movement does not execute Work. Closing a panel does not cancel its
-background task. Floating OS windows remain disabled. Choose **English / 中文**
-directly in the top toolbar; the choice saves with the existing layout. Theme
-remains in **Workspace**. Neither action resets the current editor or model form.
+background task. Floating OS windows remain disabled. **Settings → General**
+contains language and the existing Light/Dark/System themes. Preferences apply
+without replacing mounted editors. A previous version-1 layout supplies its
+language when no application preference exists; importing another layout does
+not override an explicitly selected application language.
 
-**中文提示：** 左侧栏保留常用入口；“添加面板”按用途分组，搜索支持中英文。
-模型页默认显示常用配置，连接细节、用量和历史按需展开。布局保存不等于保存文件或提交任务。
+When the available dock area cannot fit every pane’s minimum size, Studio
+focuses one group temporarily. Use section views or the panel library to reach
+other panels. Widening the window restores the split arrangement. Automatic
+compact focus is excluded from saved/exported layouts; original IDs, proportions,
+Dashboard coordinates and drafts remain intact. Manually maximized groups remain
+an explicit user choice.
+
+**中文提示：** 语言和主题集中在“设置 → 通用”，快捷键为 Ctrl/Cmd+,。
+左侧选择功能分类，上方切换具体视图；“添加面板”用于另开实例。
+窄屏会临时聚焦当前面板组，放大后还原分屏。布局保存不等于保存文件或提交任务。
+
+![Shared settings in the actual Chinese dark-theme Studio](../../media/studio-settings-source.png)
+
+*Actual Linux Chromium source session against a model-disabled Runtime.
+This settings view is not Windows installation or real-model qualification.*
 
 **Workspace → Layout library** saves named Global, Workspace, Template and
 Dashboard arrangements. Load, duplicate, rename, export or remove an entry there.
@@ -76,7 +92,7 @@ Resolve unsaved drafts and pending actions before replacing a layout. Rejected
 saved bytes are retained until an explicit replacement. Editor drafts remain in
 memory; saving a layout is not saving source files.
 
-Add **Dashboard**, then enter **Edit layout** to add, move, resize, duplicate,
+Add **Dashboard**, then enter **Customize Overview** to add, move, resize, duplicate,
 pause or configure widgets. **···** contains save/import/export/reset. Small
 windows stack cards without rewriting saved coordinates. Widgets share existing
 read subscriptions rather than creating a timer each. Node memory requires a

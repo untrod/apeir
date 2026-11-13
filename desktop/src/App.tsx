@@ -50,7 +50,7 @@ import { OperationsConsole } from "./components/OperationsConsole";
 import { TaskCenter } from "./components/TaskCenter";
 import { CommandPalette, createDefaultCommands } from "./components/CommandPalette";
 import { RuntimeCard, TaskCard } from "./components/RuntimeCard";
-import { CredentialSettings } from "./components/CredentialSettings";
+import { SettingsPage } from "./components/SettingsPage";
 import { DeveloperPlatform } from "./components/DeveloperPlatform";
 import { DocumentWorkbench } from "./components/DocumentWorkbench";
 import { EnvironmentInspector } from "./components/EnvironmentInspector";
@@ -599,48 +599,6 @@ function WorkspacePage() {
   );
 }
 
-function SettingsPage() {
-  const [devMode, setDevMode] = useState(() => localStorage.getItem("nous_developer_mode") === "1");
-  const { resolved, toggle: toggleTheme } = useTheme();
-  return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: colors.bg }}>
-      <PageHeader title="Settings" subtitle="Preferences and configuration" />
-      <div style={{ flex: 1, overflowY: "auto", padding: space.xl }}>
-        <div style={{ maxWidth: 560 }}>
-          <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: "14px", padding: space.xl, marginBottom: space.lg }}>
-            <h3 style={{ fontSize: typo.md, fontWeight: typo.semibold, margin: `0 0 ${space.md} 0`, color: colors.text }}>Provider Credentials</h3>
-            <CredentialSettings />
-          </div>
-          {[
-            { title: "Appearance", items: [{ label: "Theme", value: resolved === "dark" ? "Dark" : "Light", action: toggleTheme, actionLabel: resolved === "dark" ? "Use Light" : "Use Dark" }] },
-            { title: "Developer", items: [{ label: "Developer Mode", value: devMode ? "On" : "Off", action: () => { const v = !devMode; setDevMode(v); localStorage.setItem("nous_developer_mode", v ? "1" : "0"); }, actionLabel: devMode ? "Turn Off" : "Turn On", desc: "Enables Inspector panel for runtime internals" }] },
-            { title: "Provider", items: [{ label: "Configure Providers", value: "Manage API keys and models", action: () => { localStorage.removeItem("nous_onboarding_completed"); localStorage.removeItem("nous_setup_complete"); window.location.reload(); }, actionLabel: "Re-run Setup", desc: "Re-open the setup wizard to add or change providers" }] },
-            { title: "Diagnostics", items: [
-              { label: "Reset UI State", value: "Clear all local UI cache", action: () => { resetUIState(); window.location.reload(); }, actionLabel: "Reset", desc: "Clears cached UI state. Does not affect workspace data." },
-            ]},
-          ].map((section) => (
-            <div key={section.title} style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: "14px", padding: space.xl, marginBottom: space.lg }}>
-              <h3 style={{ fontSize: typo.md, fontWeight: typo.semibold, margin: `0 0 ${space.md} 0`, color: colors.text }}>{section.title}</h3>
-              {section.items.map((item) => (
-                <div key={item.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: `${space.sm} 0`, borderBottom: `1px solid ${colors.borderLight}` }}>
-                  <div>
-                    <div style={{ fontSize: typo.base, color: colors.text }}>{item.label}</div>
-                    {"desc" in item && item.desc && <div style={{ fontSize: typo.xs, color: colors.textTertiary, marginTop: 2 }}>{item.desc}</div>}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: space.sm }}>
-                    <span style={{ fontSize: typo.sm, color: colors.textSecondary }}>{item.value}</span>
-                    {item.action && <button onClick={item.action} style={{ padding: `${space.xs} ${space.sm}`, fontSize: typo.xs, fontWeight: typo.medium, fontFamily: typo.font, cursor: "pointer", background: colors.accentSoft, color: colors.accent, border: `1px solid ${colors.accent}40`, borderRadius: "6px" }}>{item.actionLabel}</button>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Resource Dock
 export function ResourceDock() {
   const nodes = useNodes();
@@ -713,7 +671,7 @@ function AppShell() {
   const studioProtected = useRef(false);
   const protectStudio = useCallback((value: boolean) => { studioProtected.current = value; }, []);
   const setPage = useCallback((next: NavPage) => {
-    if (page === "studio" && next !== "studio" && studioProtected.current) {
+    if ((page === "studio" || page === "settings") && next !== page && studioProtected.current) {
       toast.warning("Resolve Studio drafts or pending actions before leaving. Layout export does not save file content.");
       return;
     }
@@ -1018,7 +976,7 @@ function AppShell() {
             {page === "nodes" && <NodesPage onNodeClick={(id) => setDrawer({ kind: "node", nodeId: id })} />}
             {page === "models" && <ModelsPage onModelClick={(id) => setDrawer({ kind: "model-observations", modelId: id })} />}
             {page === "workspace" && <WorkspacePage />}
-            {page === "settings" && <SettingsPage />}
+            {page === "settings" && <SettingsPage onDraftChange={protectStudio} hasProtectedChanges={() => studioProtected.current} />}
           </div>
           <Inspector visible={inspectorOpen && page !== "studio"} onClose={() => setInspectorOpen(false)} />
         </div>
