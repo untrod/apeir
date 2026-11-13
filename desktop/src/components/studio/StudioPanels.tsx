@@ -1,19 +1,22 @@
 import { lazy, Suspense } from "react";
 const StudioWorkflow = lazy(() => import("./StudioWorkflow").then(module => ({ default: module.StudioWorkflow })));
 import { StudioChat } from "./StudioChat";
-import { DeveloperWorkbench, type WorkbenchDraft } from "../DeveloperWorkbench";
-import { DeveloperPlatform } from "../DeveloperPlatform";
-import { EnvironmentInspector } from "../EnvironmentInspector";
-import { DocumentWorkbench } from "../DocumentWorkbench";
-import { SimulationWorkbench } from "../SimulationWorkbench";
-import { TaskCenter } from "../TaskCenter";
-import { OperationsConsole, type OperationsSnapshot } from "../OperationsConsole";
+import type { WorkbenchDraft } from "../DeveloperWorkbench";
+import type { OperationsSnapshot } from "../OperationsConsole";
+const DeveloperWorkbench = lazy(() => import("../DeveloperWorkbench").then(module => ({ default: module.DeveloperWorkbench })));
+const DeveloperPlatform = lazy(() => import("../DeveloperPlatform").then(module => ({ default: module.DeveloperPlatform })));
+const EnvironmentInspector = lazy(() => import("../EnvironmentInspector").then(module => ({ default: module.EnvironmentInspector })));
+const DocumentWorkbench = lazy(() => import("../DocumentWorkbench").then(module => ({ default: module.DocumentWorkbench })));
+const SimulationWorkbench = lazy(() => import("../SimulationWorkbench").then(module => ({ default: module.SimulationWorkbench })));
+const TaskCenter = lazy(() => import("../TaskCenter").then(module => ({ default: module.TaskCenter })));
+const OperationsConsole = lazy(() => import("../OperationsConsole").then(module => ({ default: module.OperationsConsole })));
 import { useStudioSnapshot } from "./StudioData";
 export { StudioSnapshot } from "./StudioData";
 import { StudioExtensionView } from "./StudioExtensionView";
-import { StudioExtensions } from "./StudioExtensions";
+const StudioExtensions = lazy(() => import("./StudioExtensions").then(module => ({ default: module.StudioExtensions })));
 import { availableContributions } from "../../lib/studioExtensions";
-import { StudioDashboard, StudioUsage } from "./StudioDashboard";
+const StudioDashboard = lazy(() => import("./StudioDashboard").then(module => ({ default: module.StudioDashboard })));
+const StudioUsage = lazy(() => import("./StudioDashboard").then(module => ({ default: module.StudioUsage })));
 import { ErrorBoundary } from "../ErrorBoundary";
 import { CredentialSettings } from "../CredentialSettings";
 import type { DrawerView } from "../DetailDrawer";
@@ -72,6 +75,5 @@ export function useStudioPanels(): readonly PanelContribution[] {
 }
 export function StudioPanel({ type, ...props }: PanelProps & { type: string }) {
   const definition = useStudioPanels().find(panel => panel.type === type);
-  if (type.startsWith("ui:")) return <ErrorBoundary><StudioExtensionView type={type} isVisible={props.isVisible} locale={props.locale} /></ErrorBoundary>;
-  return <ErrorBoundary>{definition ? definition.render(props) : <section role="status" className="studio-projection"><h2>Missing Component / 缺失组件</h2><p>{type}</p><p>No code was loaded. Install a reviewed compatible extension before using this panel.</p></section>}</ErrorBoundary>;
+  return <ErrorBoundary><Suspense fallback={<p role="status">{props.locale === "zh" ? "正在加载模块…" : "Loading module…"}</p>}>{type.startsWith("ui:") ? <StudioExtensionView type={type} isVisible={props.isVisible} locale={props.locale} /> : definition ? definition.render(props) : <section role="status" className="studio-projection"><h2>Missing Component / 缺失组件</h2><p>{type}</p><p>No code was loaded. Install a reviewed compatible extension before using this panel.</p></section>}</Suspense></ErrorBoundary>;
 }

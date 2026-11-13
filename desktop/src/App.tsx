@@ -46,15 +46,15 @@ import { DetailDrawer, type DrawerView } from "./components/DetailDrawer";
 import { Inspector } from "./components/Inspector";
 import { ConnectScreen } from "./components/ConnectScreen";
 import { ChatView } from "./components/ChatView";
-import { OperationsConsole } from "./components/OperationsConsole";
-import { TaskCenter } from "./components/TaskCenter";
+const OperationsConsole = React.lazy(() => import("./components/OperationsConsole").then(module => ({ default: module.OperationsConsole })));
+const TaskCenter = React.lazy(() => import("./components/TaskCenter").then(module => ({ default: module.TaskCenter })));
 import { CommandPalette, createDefaultCommands } from "./components/CommandPalette";
 import { RuntimeCard, TaskCard } from "./components/RuntimeCard";
 import { SettingsPage } from "./components/SettingsPage";
-import { DeveloperPlatform } from "./components/DeveloperPlatform";
-import { DocumentWorkbench } from "./components/DocumentWorkbench";
-import { EnvironmentInspector } from "./components/EnvironmentInspector";
-import { SimulationWorkbench } from "./components/SimulationWorkbench";
+const DeveloperPlatform = React.lazy(() => import("./components/DeveloperPlatform").then(module => ({ default: module.DeveloperPlatform })));
+const DocumentWorkbench = React.lazy(() => import("./components/DocumentWorkbench").then(module => ({ default: module.DocumentWorkbench })));
+const EnvironmentInspector = React.lazy(() => import("./components/EnvironmentInspector").then(module => ({ default: module.EnvironmentInspector })));
+const SimulationWorkbench = React.lazy(() => import("./components/SimulationWorkbench").then(module => ({ default: module.SimulationWorkbench })));
 import { errorMessage, fixedNumber } from "./lib/format";
 import { usageMoney, usageNumber } from "./lib/usageAccounting";
 const StudioShell = React.lazy(() => import("./components/studio/StudioShell").then(module => ({ default: module.StudioShell })));
@@ -683,7 +683,7 @@ function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sessionBarCollapsed, setSessionBarCollapsed] = useState(true);
   const [activeConversationId, setActiveConversationId] = useState<string | undefined>();
-  const { toggle: toggleTheme } = useTheme();
+  const { toggle: toggleTheme, locale } = useTheme();
   const hydrated = useStoreHydrated();
   const tasks = useTasks();
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
@@ -965,6 +965,7 @@ function AppShell() {
         )}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ flex: inspectorOpen && page !== "studio" ? "40%" : "1", overflow: "hidden", transition: "flex 0.3s ease" }}>
+            <React.Suspense fallback={<p role="status">{locale === "zh" ? "正在加载模块…" : "Loading module…"}</p>}>
             {page === "chat" && <ChatView conversationId={activeConversationId} onConversationCreated={setActiveConversationId} onCardClick={handleEventClick} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} />}
             {page === "studio" && <React.Suspense fallback={<p role="status">Loading APEIR Studio…</p>}><StudioShell onProtectedChange={protectStudio} onExit={() => setPage("operations")} /></React.Suspense>}
             {page === "operations" && <OperationsConsole />}
@@ -977,6 +978,7 @@ function AppShell() {
             {page === "models" && <ModelsPage onModelClick={(id) => setDrawer({ kind: "model-observations", modelId: id })} />}
             {page === "workspace" && <WorkspacePage />}
             {page === "settings" && <SettingsPage onDraftChange={protectStudio} hasProtectedChanges={() => studioProtected.current} />}
+            </React.Suspense>
           </div>
           <Inspector visible={inspectorOpen && page !== "studio"} onClose={() => setInspectorOpen(false)} />
         </div>

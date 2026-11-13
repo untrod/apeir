@@ -3,14 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DeveloperPlatform } from "../components/DeveloperPlatform";
 import {
   fetchDeveloperExperiments, fetchDeveloperOverview, fetchDeveloperProjects, fetchDeveloperRuns,
-  fetchModelLab, setConfig, type ModelLabSnapshot,
+  api, fetchModelLab, setConfig, type ModelLabSnapshot,
 } from "../lib/api";
 import { usageFixture } from "./usage-fixture";
 
 vi.mock("../lib/api", async original => ({
   ...await original<typeof import("../lib/api")>(),
   fetchDeveloperOverview: vi.fn(), fetchDeveloperProjects: vi.fn(), fetchDeveloperRuns: vi.fn(),
-  fetchDeveloperExperiments: vi.fn(), fetchModelLab: vi.fn(),
+  fetchDeveloperExperiments: vi.fn(), fetchModelLab: vi.fn(), api: vi.fn(),
 }));
 vi.mock("../components/DeveloperWorkbench", () => ({ DeveloperWorkbench: () => <div>Workbench fixture</div> }));
 vi.mock("../components/ResearchEvidence", () => ({ ResearchEvidence: () => <div>Research fixture</div> }));
@@ -35,9 +35,31 @@ beforeEach(() => {
   vi.mocked(fetchDeveloperRuns).mockResolvedValue({ runs: [], total: 0 });
   vi.mocked(fetchDeveloperExperiments).mockResolvedValue({ experiments: [], results: [], summary: { total: 0, benchmarked: 0, production: 0 } });
   vi.mocked(fetchModelLab).mockResolvedValue(modelLab());
+  vi.mocked(api).mockResolvedValue([]);
 });
 
 describe("Model Lab accounting read workflow", () => {
+  it("separates model configuration, usage and records without losing edits or adding reads", async () => {
+    const protection = vi.fn();
+    const props = { modelsOnly: true, manageProviders: true, onDraftChange: protection };
+    const view = render(<DeveloperPlatform {...props} />);
+    await waitFor(() => expect(fetchModelLab).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "unsaved-model" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Usage" }));
+    expect(await screen.findByLabelText("Usage accounting")).toBeVisible();
+    expect(screen.getByLabelText("Vendor model ID")).not.toBeVisible();
+    expect(protection).toHaveBeenLastCalledWith(true);
+    fireEvent.keyDown(screen.getByRole("tab", { name: "Usage" }), { key: "End" });
+    expect(screen.getByRole("tab", { name: "Run records" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("tab", { name: "Connections" }));
+    expect(screen.getByLabelText("Vendor model ID")).toHaveValue("unsaved-model");
+    view.rerender(<DeveloperPlatform {...props} locale="zh" />);
+    expect(screen.getByRole("tab", { name: "连接配置" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("厂商模型 ID")).toHaveValue("unsaved-model");
+    expect(fetchModelLab).toHaveBeenCalledOnce();
+    expect(api).toHaveBeenCalledOnce();
+  });
   it("loads a selected usage day from the existing API and returns to the current day", async () => {
     render(<DeveloperPlatform />);
     fireEvent.click(screen.getByRole("button", { name: /Model Lab/ }));

@@ -16,6 +16,33 @@ beforeEach(() => {
 const open = (onOpenApprovals?: () => void) => render(<ProviderSettings models={models} onChanged={changed} onOpenApprovals={onOpenApprovals} />);
 
 describe("Studio Provider configuration", () => {
+  it("keeps unsaved configuration protected from Provider removal", async () => {
+    open(); await screen.findByRole("button", { name: "Edit example" });
+    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "unsaved-model" } });
+    expect(screen.getByRole("button", { name: "Remove example" })).toBeDisabled();
+    expect(screen.getByLabelText("Vendor model ID")).toHaveValue("unsaved-model");
+    expect(governedStudioMutation).not.toHaveBeenCalled();
+  });
+  it("does not test the saved model while a different configuration is being edited", async () => {
+    open(); await screen.findByRole("button", { name: "Edit example" });
+    fireEvent.change(screen.getByLabelText("Model to test"), { target: { value: "example/original" } });
+    fireEvent.click(screen.getByRole("button", { name: "Edit example" }));
+    fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "unsaved-model" } });
+    expect(screen.getByRole("button", { name: "Run inference test" })).toBeDisabled();
+    expect(testModel).not.toHaveBeenCalled();
+  });
+  it("retires previous inference status when Provider metadata is refreshed", async () => {
+    vi.mocked(testModel).mockResolvedValueOnce({ model_id: "example/original", selected_model_id: "example/original", instance_id: "instance", request_id: "original-request", response_id: "response", healthy: true, latency_ms: 1 });
+    open(); await screen.findByRole("button", { name: "Edit example" });
+    fireEvent.change(screen.getByLabelText("Model to test"), { target: { value: "example/original" } });
+    fireEvent.click(screen.getByRole("button", { name: "Run inference test" }));
+    await screen.findByLabelText("Model test result");
+    fireEvent.click(screen.getByRole("button", { name: "Refresh Providers" }));
+    await waitFor(() => expect(api).toHaveBeenCalledTimes(2));
+    expect(screen.queryByLabelText("Model test result")).not.toBeInTheDocument();
+    expect(testModel).toHaveBeenCalledOnce();
+  });
   it("resets provider-specific model and credential references when the protocol template changes", async () => {
     open(); await screen.findByRole("button", { name: "Edit example" });
     fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
@@ -25,6 +52,32 @@ describe("Studio Provider configuration", () => {
     expect(screen.getByLabelText("Vendor model ID")).toHaveValue("");
     expect(screen.getByLabelText("Credential reference")).toHaveValue("");
     expect(governedStudioMutation).not.toHaveBeenCalled();
+    expect(testModel).not.toHaveBeenCalled();
+  });
+  it("keeps local and API model identities explicit without automatic inference", async () => {
+    const local = { ...models[0], model_id: "workstation/original", provider_id: "workstation", endpoint_type: "local_service" };
+    const view = render(<ProviderSettings models={[...models, local]} onChanged={changed} />);
+    await screen.findByRole("button", { name: "Edit example" });
+    expect(screen.getByRole("group", { name: "Local models" })).toHaveTextContent("workstation/original");
+    expect(screen.getByRole("group", { name: "API models" })).toHaveTextContent("example/original");
+    fireEvent.change(screen.getByLabelText("Model to test"), { target: { value: local.model_id } });
+    view.rerender(<ProviderSettings models={[]} modelsReady={false} onChanged={changed} />);
+    expect(screen.getByRole("button", { name: "Run inference test" })).toBeDisabled();
+    view.rerender(<ProviderSettings models={[...models, local]} onChanged={changed} />);
+    expect(screen.getByLabelText("Model to test")).toHaveValue(local.model_id);
+    view.rerender(<ProviderSettings models={models} onChanged={changed} />);
+    expect(screen.getByLabelText("Model to test")).toHaveValue("");
+    expect(testModel).not.toHaveBeenCalled();
+  });
+  it("saves an explicit Ollama model without requiring or inventing a credential", async () => {
+    open(); await screen.findByRole("button", { name: "Edit example" });
+    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    fireEvent.change(screen.getByLabelText("Protocol template"), { target: { value: "ollama" } });
+    expect(screen.queryByLabelText("Credential reference")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "fixture-model:local" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Provider" }));
+    await waitFor(() => expect(governedStudioMutation).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(governedStudioMutation).mock.calls[1][1]).toMatchObject({ provider_id: "ollama", model: "fixture-model:local", credential_ref: "", api_base_url: "http://localhost:11434/v1" });
     expect(testModel).not.toHaveBeenCalled();
   });
   it("refreshes both Provider metadata and the registered model catalog without inference", async () => {

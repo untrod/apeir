@@ -56,6 +56,17 @@ address and protected service session token. That token is not a Provider API ke
 | Save the layout | Automatic after a short delay, or Ctrl/Cmd+Alt+S |
 | Dismiss a menu | Escape |
 
+Saved visible panels load when the workspace opens. A hidden panel loads on its
+first visit, then keeps its instance and draft while you switch views or split
+the workspace. This restores presentation; it does not start a new Work.
+
+Enable or disable installed UI extensions in **Tools → UI Extensions**. Their
+existing Registry keeps that choice across restart. Disabled or removed
+contributions retain their layout slot and show their actual unavailable state.
+Skills keep their separate installation/load/enable controls in Operations Console;
+loading instructions does not execute a Tool. Local model service installation and
+startup are separate from opening a Models panel.
+
 Panel movement does not execute Work. Closing a panel does not cancel its
 background task. Floating OS windows remain disabled. **Settings → General**
 contains language and the existing Light/Dark/System themes. Preferences apply

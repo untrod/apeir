@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Actions, DockLocation, I18nLabelDefaults, Layout, Model, TabNode, type Action } from "flexlayout-react";
 import { useRuntimeConfigVersion } from "../../store";
@@ -341,5 +341,15 @@ function StablePanel({ node, host, dirty, onSnapshot, open, onProtectionChange, 
   const openPanel = useCallback((type: string) => callbacks.current.open(type), []);
   const hasOtherDrafts = useCallback(() => [...dirty].some(panelId => panelId !== id), [dirty, id]);
   const isVisible = useCallback(() => host.isConnected && host.getClientRects().length > 0 && getComputedStyle(host).visibility !== "hidden", [host]);
-  return createPortal(<StudioPanel config={config} locale={locale} updateConfig={updateConfig} saveLayout={saveLayout} isVisible={isVisible} type={node.getComponent() ?? "missing"} onDraftChange={onDraftChange} onDraftSnapshot={onDraftSnapshot} hasOtherDrafts={hasOtherDrafts} open={openPanel} inspect={inspect} />, host, id);
+  const [activated, setActivated] = useState(false);
+  useLayoutEffect(() => {
+    if (activated) return;
+    const activate = () => { if (isVisible()) setActivated(true); };
+    activate();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(activate); observer.observe(host);
+    return () => observer.disconnect();
+  });
+  // First visibility loads the module; later moves keep the same portal and drafts.
+  return createPortal(activated ? <StudioPanel config={config} locale={locale} updateConfig={updateConfig} saveLayout={saveLayout} isVisible={isVisible} type={node.getComponent() ?? "missing"} onDraftChange={onDraftChange} onDraftSnapshot={onDraftSnapshot} hasOtherDrafts={hasOtherDrafts} open={openPanel} inspect={inspect} /> : null, host, id);
 }
