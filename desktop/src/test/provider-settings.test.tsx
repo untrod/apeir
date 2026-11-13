@@ -130,6 +130,17 @@ describe("Studio Provider configuration", () => {
     expect(await screen.findByRole("alert")).not.toHaveTextContent("PRIVATE_NOT_A_REFERENCE");
     expect(governedStudioMutation).not.toHaveBeenCalled();
   });
+  it("preserves a Controller's case-sensitive environment reference", async () => {
+    open(); await screen.findByRole("button", { name: "Edit example" });
+    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "fixture-model" } });
+    fireEvent.change(screen.getByLabelText("Credential reference"), { target: { value: "env:fixture_owner_key" } });
+    expect(screen.getByLabelText("Credential reference")).toHaveAttribute("type", "text");
+    fireEvent.click(screen.getByRole("button", { name: "Save Provider" }));
+    await waitFor(() => expect(governedStudioMutation).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(governedStudioMutation).mock.calls[1][1]).toMatchObject({ credential_ref: "env:fixture_owner_key" });
+    expect(testModel).not.toHaveBeenCalled();
+  });
   it("validates a new configuration before its governed creation, without testing inference", async () => {
     open(); await screen.findByRole("button", { name: "Edit example" });
     fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));

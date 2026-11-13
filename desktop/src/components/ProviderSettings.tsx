@@ -4,7 +4,7 @@ import { ApiError, api, getRuntimeConfigVersion, governedStudioMutation, testMod
 import { useRuntimeConfigVersion } from "../store";
 import { PROVIDER_TEMPLATES } from "./OnboardingWizard";
 
-const credentialReference = /^env:[A-Z_][A-Z0-9_]{0,127}$/;
+const credentialReference = /^env:[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
 type SavedConfiguration = { name: string; api_base_url: string; model: string; has_reference: boolean };
 type ProviderSummary = { id: string; name: string; health?: { status?: string }; configuration?: SavedConfiguration };
@@ -43,10 +43,11 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
     if (sequence === reads.current) setProviders(rows);
   }, [current]);
   useEffect(() => {
+    let retired = false;
     active.current = true;
     inFlight.current = false; setBusy(false); setDraft(null); setResult(null); setModelId(""); setRemoving(""); setError(""); setMessage(""); setApprovalRequired(false);
-    void refresh().catch(() => { if (active.current && getRuntimeConfigVersion() === version) setError("Provider metadata is unavailable."); });
-    return () => { active.current = false; };
+    void Promise.resolve().then(() => { if (!retired) return refresh(); }).catch(() => { if (!retired && active.current && getRuntimeConfigVersion() === version) setError("Provider metadata is unavailable."); });
+    return () => { retired = true; active.current = false; };
   }, [refresh, version]);
   useEffect(() => {
     if (modelsReady && modelId && !models.some(model => model.model_id === modelId)) {

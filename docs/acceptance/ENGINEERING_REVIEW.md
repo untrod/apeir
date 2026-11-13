@@ -7010,7 +7010,7 @@ This is one HTTP-init measurement, not a whole-app CPU/memory/latency benchmark.
 
 Broad existing model/Provider/Skill/extension/Workflow/Work contracts:1226 passed,
 17 skipped before the health diagnostic change. After it, Provider/Control Plane/
-Governance:602 passed,11 skipped. Full Desktop:524 passed in65 files; typecheck,
+Governance:602 passed,11 skipped. Final Desktop:526 passed in65 files; typecheck,
 lint and production build pass. Actual authenticated model-disabled Runtime and
 production Chromium:21 cases pass, including original approval/run/restart,
 extension revocation, malicious layout rejection, scoped Controller changes,
@@ -7034,3 +7034,24 @@ remain. The existing workflow group now distinguishes native and diagnostic
 targets as well as event/ref; no integrity, authorization or test gate changes.
 Both final-source architecture builds are qualified separately through the same
 full official launcher. This is a dispatch fix, not a successful binary claim.
+
+
+Original Desktop run43466514894 failed two source-development browser assertions:
+Models made two initial reads instead of one, and two historical Usage widgets
+requested the same day twice. Its full original job132026978799 log is retained.
+React development-mode mount replay dispatched requests from a mount that was
+immediately retired. Models/Provider initialization now defers pure reads until
+that mount remains current; the existing shared Usage transport coalesces
+same-turn subscriptions. No second cache, polling loop or execution owner is
+added. StrictMode regression checks retain one-read assertions; late-Controller
+unit cases first establish an actual pending read before retiring it. The
+original browser assertions and timeouts remain unchanged. Development and
+production browser qualification are recorded separately in the PR.
+
+
+A configuration counterexample also found that the form rejected lower-case
+`env:` variable names which the existing Controller/NKI contract accepts. The
+form now preserves case within the same bounded variable-name grammar; it still
+rejects raw keys and does not resolve or persist secret values in the browser.
+The original failing fixture is retained. Case preservation matters on Linux;
+no new Credential store or host-environment access is introduced.

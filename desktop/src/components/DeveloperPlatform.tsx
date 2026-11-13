@@ -153,9 +153,11 @@ export function DeveloperPlatform({ modelsOnly = false, manageProviders = false,
   }, [usageDay, modelsOnly]);
 
   useEffect(() => {
+    let retired = false;
     setOverview(null); setProjects([]); setRuns([]); setExperiments([]); setResults([]);
-    void refresh();
-    return invalidateReads;
+    // A discarded development-mode mount does not need its own HTTP read.
+    void Promise.resolve().then(() => { if (!retired) return refresh(); });
+    return () => { retired = true; invalidateReads(); };
   }, [refresh, configurationVersion, invalidateReads]);
 
   const createProject = async () => {

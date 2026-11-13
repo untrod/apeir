@@ -1,4 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { setConfig } from "../lib/api";
 import { useCostSummary } from "../store/hooks";
@@ -6,6 +7,16 @@ import { usageFixture } from "./usage-fixture";
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); sessionStorage.clear(); });
 const reply = () => ({ ok: true, json: async () => ({ ok: true, data: usageFixture() }) });
+
+it("shares the original usage read across development-mode subscription replay", async () => {
+  setConfig({ url: "http://127.0.0.1:8770", token: "fake-strict-usage" });
+  const request = vi.fn().mockImplementation(async () => reply()); vi.stubGlobal("fetch", request);
+  const view = renderHook(() => useCostSummary(), { wrapper: StrictMode });
+  await act(async () => { await Promise.resolve(); });
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(view.result.current.summary?.receipts[0].receipt_id).toBe("receipt-original");
+  view.unmount();
+});
 
 it("shares one usage request and one poll across independent widgets and retires the last reader", async () => {
   vi.useFakeTimers(); setConfig({ url: "http://127.0.0.1:8770", token: "fake-shared-usage" });
@@ -81,6 +92,8 @@ it("a retired Controller's historical reply cannot restore private accounting", 
   const request = vi.fn().mockReturnValueOnce(new Promise(resolve => { finish = resolve; })).mockResolvedValue({ ok: true, json: async () => ({ ok: true, data: usageFixture({ day: "2000-01-01", requests: 2 }) }) });
   vi.stubGlobal("fetch", request);
   const view = renderHook(() => useCostSummary(() => true, "2000-01-01"));
+  await act(async () => { await Promise.resolve(); });
+  expect(request).toHaveBeenCalledTimes(1);
   setConfig({ url: "http://127.0.0.1:8771", token: "fake-history-b" });
   await act(async () => { await Promise.resolve(); });
   expect(view.result.current.summary?.requests).toBe(2);
