@@ -119,3 +119,16 @@
 .studio-dock .flexlayout__tabset-selected { outline:1px solid var(--nous-border-focus); outline-offset:-1px; }
 @media (max-width:900px) { .studio-activity-rail { width:44px; }.studio-activity-rail button { min-height:40px; }.studio-activity-rail button span { display:none; } }
 @container (max-width:600px) { .studio-chat-body > [aria-label="Conversation history"], .studio-chat-body > [aria-label="会话历史"] { position:absolute; inset:0 auto 0 0; z-index:5; width:min(260px,100%) !important; min-width:0 !important; box-shadow:6px 0 16px var(--nous-border); }.studio-chat-toolbar { padding:6px; gap:0; } }
+
+.studio-work-area { display:flex; flex-direction:column; flex:1; min-width:0; min-height:0; overflow:hidden; }
+.studio-work-area > .studio-dock { min-width:0; min-height:0; --flexlayout-splitter-size:8px; }
+.studio-section-tabs { display:flex; align-items:center; gap:3px; min-height:36px; flex-shrink:0; overflow-x:auto; padding:0 10px; border-bottom:1px solid var(--nous-border); background:var(--nous-surface); }
+.studio-section-tabs > strong { font-size:11px; font-weight:500; color:var(--nous-text-secondary); padding-right:10px; white-space:nowrap; }
+.studio-section-tabs button { flex-shrink:0; border:0; border-radius:0; background:transparent; min-height:36px; padding:5px 10px; white-space:nowrap; }
+.studio-section-tabs button[aria-pressed=true] { color:var(--nous-accent); box-shadow:inset 0 -2px var(--nous-accent); }
+.studio-settings-entry { margin-top:auto; }.studio-compact-label { font-size:11px; color:var(--nous-text-secondary); white-space:nowrap; }
+.studio-settings-dialog { width:min(800px,calc(100vw - 32px)); height:min(620px,calc(100dvh - 32px)); max-width:none; max-height:none; padding:0; border:1px solid var(--nous-border); border-radius:6px; background:var(--nous-surface); color:var(--nous-text); box-shadow:0 12px 40px var(--nous-border); }
+.studio-settings-dialog::backdrop { background:rgb(0 0 0 / .32); }
+@media (max-width:850px) { .studio-section-tabs > strong { display:none; } }
+@media (max-width:480px) { .studio-settings-dialog { width:calc(100vw - 12px); height:calc(100dvh - 12px); }.studio-compact-label { display:none; } }
+@media (pointer:coarse) { .studio-work-area > .studio-dock { --flexlayout-splitter-size:16px; }.studio-section-tabs button { min-height:40px; } }

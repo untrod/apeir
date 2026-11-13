@@ -24,10 +24,12 @@ export type PanelContribution = {
 };
 export type PanelProps = { config?: unknown; updateConfig: (config: unknown) => void; saveLayout: () => void; isVisible: () => boolean; locale: "en" | "zh"; onDraftChange: (dirty: boolean) => void; onDraftSnapshot: (drafts: WorkbenchDraft[]) => void; hasOtherDrafts?: () => boolean; open: (type: string) => void; inspect: (view: DrawerView) => void };
 export const PANEL_GROUPS = [
-  { id: "develop", en: "Develop", zh: "开发", types: ["chat", "files", "editor", "workflow", "tasks", "terminal"] },
-  { id: "resources", en: "Models & resources", zh: "模型与资源", types: ["models", "credentials", "nodes", "devices", "environment"] },
-  { id: "inspect", en: "Monitor & inspect", zh: "监控与检查", types: ["dashboard", "usage", "evidence", "activity", "diagnostics", "inspector", "operations"] },
-  { id: "extend", en: "Tools & extensions", zh: "工具与扩展", types: ["extensions", "documents", "simulation"] },
+  { id: "overview", en: "Overview", zh: "概览", icon: "dashboard", primary: "dashboard", types: ["dashboard", "usage"] },
+  { id: "develop", en: "Develop", zh: "开发", icon: "chat", primary: "chat", types: ["chat", "files", "editor", "terminal"] },
+  { id: "workflow", en: "Workflow", zh: "工作流", icon: "workflow", primary: "workflow", types: ["workflow"] },
+  { id: "inspect", en: "Run", zh: "运行", icon: "tasks", primary: "tasks", types: ["tasks", "evidence", "activity", "diagnostics", "inspector", "operations"] },
+  { id: "resources", en: "Resources", zh: "资源", icon: "node", primary: "models", types: ["models", "nodes", "devices", "environment"] },
+  { id: "extend", en: "Tools", zh: "工具", icon: "extensions", primary: "extensions", types: ["extensions", "documents", "simulation"] },
 ] as const;
 function Projection({ collection }: { collection: keyof OperationsSnapshot | "runtime" }) {
   const { data, loading, error, refresh } = useStudioSnapshot();

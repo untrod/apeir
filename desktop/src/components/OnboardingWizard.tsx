@@ -17,6 +17,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { colors, typo, radius, space, card, input, btnPrimary, btnSecondary } from "../design";
 import { api, fetchModels, getRuntimeConfigVersion } from "../lib/api";
 import { useRuntimeConfigVersion } from "../store";
+import { useTheme } from "../theme";
 import { bindNativeRuntimeSession, isLocalRuntimeSelected, nativeRuntimeStatus } from "../lib/nativeRuntime";
 
 /** Lazy-load Tauri invoke — never top-level import to avoid module-load crashes. */
@@ -258,6 +259,7 @@ interface OnboardingWizardProps {
 type WizardStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) {
+  const { setLocale } = useTheme();
   const active = useRef(false);
   useEffect(() => {
     active.current = true;
@@ -500,6 +502,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       localStorage.setItem("nous_provider_id", selectedProviderId);
       localStorage.setItem("nous_workspace_path", workspacePath);
       localStorage.setItem("nous_language", language);
+      setLocale(language === "zh-CN" ? "zh" : "en");
     } catch {
       // Runtime-owned configuration is already saved; UI markers are optional.
     }

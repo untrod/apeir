@@ -1,8 +1,31 @@
 import { describe, expect, it } from "vitest";
 import { Actions, DockLocation, Model, TabNode } from "flexlayout-react";
-import { captureStudioLayout, createStudioLayout, discardsProtectedPanel, dockStudioTab, focusStudioTab, loadStudioLayout, MAX_LAYOUT_BYTES, parseStudioLayout, STUDIO_TEMPLATES, studioModel } from "../lib/studioLayout";
+import { activeStudioTab, captureStudioLayout, createStudioLayout, discardsProtectedPanel, dockStudioTab, focusStudioTab, loadStudioLayout, MAX_LAYOUT_BYTES, parseStudioLayout, STUDIO_TEMPLATES, studioModel, studioMinimumSize } from "../lib/studioLayout";
 
 describe("Studio presentation schema", () => {
+  it("finds the visible selected tab in an imported layout with no active group", () => {
+    const source = createStudioLayout(); const model = Model.fromJson(studioModel(source));
+    expect(activeStudioTab(model)?.getId()).toBe("panel-1");
+    model.doAction(Actions.maximizeToggle("group-1"));
+    expect(activeStudioTab(model)?.getId()).toBe("panel-2");
+  });
+  it("applies host minimum sizes without adding them to v1 layout imports or exports", () => {
+    const source = createStudioLayout();
+    const model = Model.fromJson(studioModel(source));
+    expect(model.getNodeById("panel-1")?.getAttributeOwn("minWidth")).toBe(320);
+    expect(model.getNodeById("panel-2")?.getAttributeOwn("minWidth")).toBe(380);
+    expect(studioMinimumSize(source.layout)).toEqual({ width: 709, height: 236 });
+    expect(studioMinimumSize(source.layout, 16).width).toBe(717);
+    expect(captureStudioLayout(model.toJson(), source)).toEqual(source);
+    expect(() => parseStudioLayout(JSON.stringify(source).replace('"component":"chat"', '"component":"chat","minWidth":1'))).toThrow(/Unsupported/);
+  });
+  it("does not save temporary compact focus as the user's maximized layout", () => {
+    const source = createStudioLayout(); const model = Model.fromJson(studioModel(source));
+    model.doAction(Actions.maximizeToggle("group-0"));
+    expect(JSON.stringify(captureStudioLayout(model.toJson(), source))).toContain('"maximized":true');
+    expect(JSON.stringify(captureStudioLayout(model.toJson(), source, "group-0"))).not.toContain('"maximized":true');
+    expect(model.getMaximizedTabset()?.getId()).toBe("group-0");
+  });
   it("rejects grouped close actions that would discard a protected editor, while permitting moves", () => {
     const protectedIds = new Set(["draft"]);
     expect(discardsProtectedPanel(Actions.group([Actions.selectTab("other"), Actions.group([Actions.deleteTab("draft")])]), protectedIds)).toBe(true);
@@ -52,8 +75,7 @@ describe("Studio presentation schema", () => {
   });
   it("rejects script/module configuration nested in a panel", () => {
     const value = createStudioLayout();
-    const model = studioModel(value);
-    const panel = model.layout.children?.[0];
+    const panel = value.layout.children?.[0];
     expect(panel?.type).toBe("tabset");
     (panel as Record<string, unknown>).config = { entry: "javascript:untrusted" };
     expect(() => parseStudioLayout(JSON.stringify(value))).toThrow();

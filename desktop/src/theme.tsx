@@ -13,12 +13,34 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 
 
 export type ThemeMode = "light" | "dark" | "system";
+export type AppLocale = "en" | "zh";
+export const LOCALE_STORAGE_KEY = "apeir.locale";
+
+/** Adopt the previous Studio choice without rewriting its saved layout. */
+export function readAppLocale(storage: Storage): AppLocale {
+  try {
+    const saved = storage.getItem(LOCALE_STORAGE_KEY);
+    if (saved === "en" || saved === "zh") return saved;
+    for (const key of ["apeir.studio.layout.v1", "apeir.operations.layout.v1"]) {
+      const layout = storage.getItem(key);
+      if (layout && layout.length <= 96 * 1024) {
+        try {
+          const previous = JSON.parse(layout)?.locale;
+          if (previous === "en" || previous === "zh") return previous;
+        } catch { /* Preserve invalid layout bytes for explicit recovery. */ }
+      }
+    }
+    return ["zh", "zh-CN"].includes(storage.getItem("nous_language") || "") ? "zh" : "en";
+  } catch { return "en"; }
+}
 
 interface ThemeContextValue {
   mode: ThemeMode;
   resolved: "light" | "dark";
   setMode: (mode: ThemeMode) => void;
   toggle: () => void;
+  locale: AppLocale;
+  setLocale: (locale: AppLocale) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
@@ -26,6 +48,8 @@ const ThemeContext = createContext<ThemeContextValue>({
   resolved: "light",
   setMode: () => {},
   toggle: () => {},
+  locale: "en",
+  setLocale: () => {},
 });
 
 
@@ -158,6 +182,12 @@ function injectTokens(tokens: Record<string, string>): void {
 
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [locale, setLocaleState] = useState<AppLocale>(() => typeof window === "undefined" ? "en" : readAppLocale(localStorage));
+  const setLocale = useCallback((value: AppLocale) => {
+    if (value !== "en" && value !== "zh") throw new Error("Unsupported interface language.");
+    localStorage.setItem(LOCALE_STORAGE_KEY, value);
+    setLocaleState(value);
+  }, []);
   const [mode, setModeState] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") return "system";
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -175,6 +205,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const toggle = useCallback(() => {
     setMode(resolved === "light" ? "dark" : "light");
   }, [resolved, setMode]);
+
+  useEffect(() => {
+    window.document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+    const changed = (event: StorageEvent) => {
+      if (event.key === LOCALE_STORAGE_KEY && (event.newValue === "en" || event.newValue === "zh")) setLocaleState(event.newValue);
+    };
+    window.addEventListener("storage", changed);
+    return () => window.removeEventListener("storage", changed);
+  }, [locale]);
 
   // Inject CSS custom properties on change
   useEffect(() => {
@@ -195,7 +234,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [mode]);
 
   return (
-    <ThemeContext.Provider value={{ mode, resolved, setMode, toggle }}>
+    <ThemeContext.Provider value={{ mode, resolved, setMode, toggle, locale, setLocale }}>
       {children}
     </ThemeContext.Provider>
   );

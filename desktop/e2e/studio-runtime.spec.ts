@@ -67,8 +67,30 @@ async function open(page: Page) {
 }
 
 async function workspaceMenu(page: Page) {
-  const summary = page.getByLabel("Workspace menu", { exact: true });
+  const summary = page.getByLabel(/^(Workspace menu|工作区菜单)$/, { exact: true });
   if (!(await summary.evaluate(node => (node.parentElement as HTMLDetailsElement).open))) await summary.click();
+}
+async function settings(page: Page) {
+  await page.keyboard.press("Control+Comma");
+  const dialog = page.getByRole("dialog", { name: /^(Settings|设置)$/ });
+  await expect(dialog).toBeVisible(); return dialog;
+}
+async function closeSettings(page: Page) {
+  await page.getByRole("dialog").getByRole("button", { name: /^(Close settings|关闭设置)$/ }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+}
+async function changeLanguage(page: Page, value: string) {
+  const dialog = await settings(page); await dialog.getByLabel("Studio language", { exact: true }).selectOption(value); await closeSettings(page);
+}
+async function changeTheme(page: Page, value: string) {
+  const dialog = await settings(page); await dialog.getByLabel("Studio theme", { exact: true }).selectOption(value); await closeSettings(page);
+}
+async function revealView(page: Page, name: string) {
+  const target = page.getByRole("button", { name: `Open ${name}`, exact: true });
+  if (await target.first().isVisible()) { await target.first().click(); return; }
+  const group = name === "Chat" || name === "Workspace Editor" || name === "Project Files" ? "Develop" : name === "Workflow Builder" ? "Workflow" : ["Models", "Nodes", "Devices", "Environment"].includes(name) ? "Resources" : name === "Dashboard" || name === "Model Usage" ? "Overview" : "Run";
+  await page.getByRole("navigation", { name: "Studio panels", exact: true }).getByRole("button", { name: group, exact: true }).click();
+  await target.first().click();
 }
 async function dashboardMenu(page: Page) {
   const summary = page.getByLabel("Dashboard options", { exact: true });
@@ -102,7 +124,7 @@ print(r.start(d.workflow_id,d.version,idempotency_key="overview-original").run_i
   await expect(page.getByText(original, { exact: true })).toHaveCount(2);
   expect(reads).toBe(1);
   await page.getByRole("combobox", { name: "Overview mode", exact: true }).selectOption("professional");
-  await page.getByRole("button", { name: "Edit layout", exact: true }).click();
+  await page.getByRole("button", { name: "Customize Overview", exact: true }).click();
   await page.getByRole("button", { name: "Settings Cache tokens", exact: true }).click();
   await page.getByRole("combobox", { name: "Widget accent", exact: true }).selectOption("info");
   await page.getByRole("combobox", { name: "Widget density", exact: true }).selectOption("compact");
@@ -124,12 +146,12 @@ print(r.start(d.workflow_id,d.version,idempotency_key="overview-original").run_i
   await page.getByRole("button", { name: "Ask a model", exact: true }).click();
   await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toBeVisible();
   await page.getByRole("textbox", { name: "Message", exact: true }).fill("Keep the original draft; no new model call");
-  await page.getByRole("button", { name: "Open Dashboard", exact: true }).click();
+  await revealView(page, "Dashboard");
   await page.getByRole("button", { name: "Ask a model", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveValue("Keep the original draft; no new model call");
   expect(errors).toEqual([]); expect(mutations).toEqual([]);
   await writeFile(info.outputPath("overview-v2-real-runtime.json"), JSON.stringify({ original_run_id: original, data_source: "WorkflowStore; real model-disabled Runtime", layout: configuration, runtime_mutations_from_overview: mutations, live_model_calls: 0, native_installation: "NOT_TESTED" }, null, 2));
-  await page.getByRole("button", { name: "Open Dashboard", exact: true }).click();
+  await revealView(page, "Dashboard");
   const boxes = await page.locator(".studio-widget").evaluateAll(nodes => nodes.map(node => ({ id: node.getAttribute("data-widget-id"), inline: node.getAttribute("style"), className: node.className, rect: { x: node.getBoundingClientRect().x, y: node.getBoundingClientRect().y, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height }, position: getComputedStyle(node).position, transform: getComputedStyle(node).transform, gridWidth: node.parentElement?.getBoundingClientRect().width })));
   await writeFile(info.outputPath("overview-visual-geometry.json"), JSON.stringify(boxes, null, 2));
   for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
@@ -141,7 +163,7 @@ print(r.start(d.workflow_id,d.version,idempotency_key="overview-original").run_i
 
 test("Chat stops waiting without claiming backend cancellation or resubmitting the original Run", async ({ page }, info) => {
   await open(page);
-  await page.getByRole("button", { name: "Open Chat", exact: true }).click();
+  await revealView(page, "Chat");
   const chat = page.getByRole("region", { name: "AI conversation", exact: true });
   let original = "", submissions = 0, stopped = false;
   let release!: () => void, received!: () => void, settled!: () => void;
@@ -250,7 +272,7 @@ test("Studio restores safe layouts, preserves drafts while docking and isolates 
   await page.getByRole("button", { name: /example.py/ }).click();
   const editor = page.getByRole("textbox", { name: "Code editor", exact: true });
   await editor.fill("PRIVATE_DRAFT_CONTROLLER_A"); const originalReads = fileReads;
-  await page.getByRole("button", { name: "Edit layout", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Customize Overview", exact: true })).toHaveCount(0);
   await page.locator(".flexlayout__tab_button").filter({ hasText: "Workspace Editor" }).first().dragTo(page.locator(".flexlayout__tab_button").filter({ hasText: "Chat" }).first());
   await expect(editor).toHaveValue("PRIVATE_DRAFT_CONTROLLER_A"); expect(fileReads).toBe(originalReads);
   await workspaceMenu(page);
@@ -295,7 +317,7 @@ test("EventStream widgets retain their authenticated workspace owner across Cont
   await page.getByRole("button", { name: /Add panel/ }).click();
   await page.getByRole("textbox", { name: "Search panels" }).fill("dashboard");
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
-  await page.getByRole("button", { name: "Edit layout", exact: true }).click();
+  await page.getByRole("button", { name: "Customize Overview", exact: true }).click();
   await page.getByRole("combobox", { name: "Widget type", exact: true }).selectOption("events");
   await page.getByRole("button", { name: "Add widget", exact: true }).click();
   await expect(page.getByText("qualification.workspace-0", { exact: false })).toBeVisible();
@@ -310,7 +332,7 @@ test("EventStream widgets retain their authenticated workspace owner across Cont
   await page.getByLabel("Service session token", { exact: true }).fill(token);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByText("Controller connection changed.", { exact: false })).toBeVisible();
-  await page.getByRole("button", { name: "Open Dashboard", exact: true }).click();
+  await revealView(page, "Dashboard");
   await expect(page.getByText("qualification.workspace-1", { exact: false })).toBeVisible();
   await expect(page.getByText("qualification.workspace-0", { exact: false })).toHaveCount(0);
   await page.screenshot({ path: info.outputPath("studio-event-workspace-owner-source-browser.png"), fullPage: true });
@@ -328,7 +350,7 @@ test("malicious layouts fail closed and missing components never load executable
   await input.setInputFiles({ name: "missing.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(layout)) });
   await expect(page.getByText("Missing Component / 缺失组件", { exact: true })).toBeVisible();
   await workspaceMenu(page);
-  await page.getByRole("combobox", { name: "Studio theme" }).selectOption("dark");
+  await changeTheme(page, "dark");
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath("studio-mobile-dark-source-browser.png"), fullPage: true });
@@ -347,7 +369,7 @@ test("Dashboard uses real Runtime reads, moves/resizes widgets and restores safe
   await page.getByRole("textbox", { name: "Search panels" }).fill("dashboard");
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   await expect(page.getByRole("region", { name: "Dashboard builder" })).toBeVisible();
-  await page.getByRole("button", { name: "Edit layout", exact: true }).click();
+  await page.getByRole("button", { name: "Customize Overview", exact: true }).click();
   // A pre-polish version-1 Dashboard keeps its exact six-row geometry.
   const legacy = { schemaVersion: 1, kind: "dashboard", name: "Legacy Dashboard", locale: "en", layout: { type: "row", id: "root", children: [{ type: "tabset", id: "g", children: [{ type: "tab", id: "p", component: "dashboard", config: { schemaVersion: 1, widgets: ["runtime", "kernel", "nodes", "works", "usage", "evidence"].map((type, i) => ({ id: `widget-${i + 1}`, type, title: "", x: (i % 3) * 4, y: Math.floor(i / 3) * 6, w: 4, h: 6, paused: false })) } }] }] } };
   await page.getByLabel("Import dashboard", { exact: true }).setInputFiles({ name: "legacy.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(legacy)) });
@@ -384,7 +406,7 @@ test("Dashboard uses real Runtime reads, moves/resizes widgets and restores safe
   expect(JSON.parse(exported).kind).toBe("dashboard");
   await page.reload(); await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Move My authorized nodes", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Edit layout", exact: true }).click();
+  await page.getByRole("button", { name: "Customize Overview", exact: true }).click();
   await expect(page.getByRole("button", { name: "Move My authorized nodes", exact: true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"))).toBe(saved);
   await page.getByLabel("Import dashboard", { exact: true }).setInputFiles({ name: "dashboard.json", mimeType: "application/json", buffer: Buffer.from(exported) });
@@ -500,10 +522,10 @@ test("Studio keeps the everyday view compact and layout editing explicit across 
   await workspaceMenu(page); await page.getByRole("button", { name: "Save layout", exact: true }).click();
   expect(await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"))).toBe(original);
   for (const theme of ["light", "dark"]) {
-    await workspaceMenu(page); await page.getByRole("combobox", { name: "Studio theme" }).selectOption(theme);
+    await changeTheme(page, theme);
     await page.keyboard.press("Escape");
     await page.evaluate(() => window.getSelection()?.removeAllRanges());
-    await expect.poll(() => page.getByRole("button", { name: "Edit layout", exact: true }).evaluate(node => {
+    await expect.poll(() => page.getByRole("button", { name: "Customize Overview", exact: true }).evaluate(node => {
       const probe = document.createElement("span"); probe.style.backgroundColor = "var(--nous-surface)"; document.body.appendChild(probe);
       const expected = getComputedStyle(probe).backgroundColor; probe.remove();
       return getComputedStyle(node).backgroundColor === expected;
@@ -524,9 +546,9 @@ test("Studio keeps the everyday view compact and layout editing explicit across 
   await page.keyboard.press("Escape"); await expect(page.getByRole("form", { name: "Widget settings" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Done editing", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Control+Alt+l"); await expect(page.getByRole("form", { name: "Widget settings" })).toHaveCount(0);
-  await workspaceMenu(page); await page.getByRole("combobox", { name: "Studio language" }).selectOption("zh");
-  await page.getByRole("button", { name: "保存布局", exact: true }).click(); await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "编辑布局", exact: true })).toBeVisible();
+  await changeLanguage(page, "zh");
+  await workspaceMenu(page); await page.getByRole("button", { name: "保存布局", exact: true }).click(); await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "自定义概览", exact: true })).toBeVisible();
   await expect(dashboard.getByText("尚无模型请求", { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -534,7 +556,7 @@ test("Studio keeps the everyday view compact and layout editing explicit across 
   await expect.poll(async () => { const bounds = await dashboard.locator(".studio-widget").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect())); return bounds.every(bounds => bounds.x >= 0 && bounds.right <= 390); }).toBe(true);
   await page.screenshot({ path: info.outputPath("studio-overview-zh-small-source-browser.png"), fullPage: true, animations: "disabled" });
   await page.reload(); await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "编辑布局", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "自定义概览", exact: true })).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("apeir.studio.layout.v1")!).schemaVersion)).toBe(1);
   expect(errors).toEqual([]); expect(mutations).toEqual([]);
 });
@@ -551,7 +573,7 @@ test("Studio retains readable controls at browser 2x DPI with touch and keyboard
     const add = page.getByRole("button", { name: "Add panel", exact: true });
     expect((await add.boundingBox())!.height).toBeGreaterThanOrEqual(40);
     await add.focus(); await page.keyboard.press("Tab");
-    await expect(page.getByRole("button", { name: "Edit layout", exact: true })).toBeFocused();
+    await expect(page.getByLabel(/^(Workspace menu|工作区菜单)$/, { exact: true })).toBeFocused();
     await page.keyboard.press("Control+Shift+p");
     await expect(page.getByRole("textbox", { name: "Search panels" })).toBeFocused();
     await page.getByRole("textbox", { name: "Search panels" }).fill("dashboard");
@@ -766,7 +788,7 @@ test(`Declarative UI extension uses public review and approval, real status, rev
     await page.getByRole("button", { name: /Add panel/ }).click();
     await page.getByRole("textbox", { name: "Search panels" }).fill("Dashboard");
     await page.getByRole("button", { name: "Dashboard", exact: true }).click();
-    await page.getByRole("button", { name: "Edit layout", exact: true }).click();
+    await page.getByRole("button", { name: "Customize Overview", exact: true }).click();
     await page.getByRole("combobox", { name: "Widget type", exact: true }).selectOption(widgetType);
     await page.getByRole("button", { name: "Add widget", exact: true }).click();
     await expect(page.getByRole("region", { name: profile.widget, exact: true }).getByText(profile.source === "runtime.status" ? "ONLINE" : "Unknown", { exact: true })).toBeAttached();
@@ -862,14 +884,14 @@ test("Empty Chat offers real setup panels without submitting work or losing a dr
   await chat.getByRole("textbox", { name: "Message", exact: true }).fill("Keep this unsent project question");
   await chat.getByRole("button", { name: "Connect a model", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Models", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Open Chat", exact: true }).click();
+  await revealView(page, "Chat");
   await chat.getByRole("button", { name: "Open project files", exact: true }).click();
   await page.getByRole("button", { name: "example.py", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Code editor", exact: true })).toHaveValue("def add(a, b):\n    return a + b\n");
-  await page.getByRole("button", { name: "Open Chat", exact: true }).click();
+  await revealView(page, "Chat");
   await chat.getByRole("button", { name: "Open Workflow", exact: true }).click();
   await expect(page.getByRole("region", { name: "Workflow Builder", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Open Chat", exact: true }).click();
+  await revealView(page, "Chat");
   await expect(chat.getByRole("textbox", { name: "Message", exact: true })).toHaveValue("Keep this unsent project question");
   expect(mutations).toEqual([]);
 });
@@ -884,7 +906,7 @@ test("Studio opens the conversation workspace and manages existing windows witho
   await expect(page.getByText("Loading conversation...", { exact: true })).toBeHidden();
   const prompt = page.getByRole("region", { name: "AI conversation", exact: true }).getByRole("textbox", { name: "Message", exact: true });
   expect((await prompt.boundingBox())!.height).toBeGreaterThanOrEqual(24);
-  await expect(rail.getByRole("button", { name: "Open Chat", exact: true })).toBeVisible();
+  await expect(rail.getByRole("button", { name: "Develop", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Conversations", exact: true }).click();
   await expect(page.getByLabel("Conversation history", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Conversations", exact: true }).click();
@@ -897,7 +919,7 @@ test("Studio opens the conversation workspace and manages existing windows witho
   await page.locator(".flexlayout__tab_button").filter({ hasText: "Workspace Editor" }).first().dragTo(page.locator(".flexlayout__tab_button").filter({ hasText: "Chat" }).first());
   await expect(editor).toHaveValue("UNSAVED_WINDOW_DRAFT");
   // Snapping and maximizing are ordinary window actions; Edit layout remains off.
-  await expect(page.getByRole("button", { name: "Edit layout", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "Customize Overview", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Arrange Workspace Editor", exact: true }).click();
   const windows = page.getByRole("menu", { name: "Window arrangement", exact: true });
   await expect(windows.getByRole("menuitem", { name: "Snap left", exact: true })).toBeFocused();
@@ -906,11 +928,11 @@ test("Studio opens the conversation workspace and manages existing windows witho
   await windows.getByRole("menuitem", { name: "Snap bottom", exact: true }).click();
   await expect(editor).toHaveValue("UNSAVED_WINDOW_DRAFT");
   await page.getByRole("button", { name: "Arrange Workspace Editor", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Maximize panel", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Maximize group", exact: true }).click();
   await expect(page.getByRole("button", { name: "Show all panels", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toBeHidden();
   // Navigation restores the obscured existing Chat, rather than adding duplicates.
-  await rail.getByRole("button", { name: "Open Chat", exact: true }).click();
+  await revealView(page, "Chat");
   await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toHaveCount(1);
   await expect(prompt).toHaveValue("UNSENT_WINDOW_PROMPT");
@@ -934,7 +956,7 @@ test("Studio recovers a dashboard-only or empty saved workspace without deleting
   await page.addInitScript(value => { if (!localStorage.getItem("apeir.studio.layout.v1")) localStorage.setItem("apeir.studio.layout.v1", JSON.stringify(value)); }, legacy);
   await open(page);
   await expect(page.getByRole("region", { name: "Dashboard builder" })).toBeVisible();
-  await page.getByRole("button", { name: "Open Chat", exact: true }).click();
+  await revealView(page, "Chat");
   await expect(page.getByRole("region", { name: "AI conversation", exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem("apeir.studio.layout.v1") || "null")))).toContain('"id":"overview"');
   await expect.poll(() => page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem("apeir.studio.layout.v1") || "null")))).toContain('"component":"chat"');
@@ -991,7 +1013,7 @@ test("Overview history and selected fields use the actual dated ledger and survi
   expect(days).toEqual(["2000-01-01"]);
   const usage = page.locator('[data-widget-id="history-0"]');
   expect(await usage.locator(".studio-usage-pairs dt").allTextContents()).toEqual(["Requests", "Token"]);
-  await page.getByRole("button", { name: "Edit layout", exact: true }).click();
+  await page.getByRole("button", { name: "Customize Overview", exact: true }).click();
   await page.getByRole("button", { name: "Settings Model Usage", exact: true }).click();
   await page.getByRole("checkbox", { name: "Usage field pending", exact: true }).check();
   await page.getByLabel("Usage UTC date", { exact: true }).fill("2000-01-02");
@@ -1014,13 +1036,12 @@ test("Grouped Studio controls preserve bilingual Provider drafts and add real Wo
   page.on("request", request => { if (request.url().includes("/api/") && !["GET", "OPTIONS"].includes(request.method())) mutations.push(request.url()); });
   page.on("pageerror", error => errors.push(error.message));
   await open(page);
-  const language = page.getByRole("combobox", { name: "Studio language", exact: true });
-  await expect(language).toBeVisible(); await language.selectOption("zh");
+  await changeLanguage(page, "zh");
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("apeir.studio.layout.v1") || "{}").locale)).toBe("zh");
   await page.getByRole("button", { name: "添加面板", exact: true }).click();
   const library = page.getByRole("region", { name: "Panel library", exact: true });
   await expect(library.getByRole("button", { name: "模型", exact: true })).toBeHidden();
-  await library.locator("summary").filter({ hasText: "模型与资源" }).click();
+  await library.locator("summary").filter({ hasText: "资源" }).click();
   await library.getByRole("button", { name: "模型", exact: true }).click();
   const providers = page.getByRole("region", { name: "服务商设置", exact: true });
   await providers.getByRole("button", { name: "添加服务商" }).click();
@@ -1029,7 +1050,7 @@ test("Grouped Studio controls preserve bilingual Provider drafts and add real Wo
   await providers.getByLabel("厂商模型 ID", { exact: true }).fill("deepseek-chat");
   await providers.getByLabel("凭据引用", { exact: true }).fill("env:FAKE_STUDIO_KEY");
   await providers.screenshot({ path: info.outputPath("models-essential-settings-zh-source.png") });
-  await language.selectOption("en");
+  await changeLanguage(page, "en");
   const english = page.getByRole("region", { name: "Provider settings", exact: true });
   await expect(english.getByLabel("Vendor model ID", { exact: true })).toHaveValue("deepseek-chat");
   await expect(english.getByLabel("Credential reference", { exact: true })).toHaveValue("env:FAKE_STUDIO_KEY");
@@ -1041,8 +1062,9 @@ test("Grouped Studio controls preserve bilingual Provider drafts and add real Wo
   await english.getByRole("button", { name: "Cancel editing" }).click();
   await english.getByRole("button", { name: "Manage credentials" }).click();
   await expect(page.getByRole("button", { name: "Store or Rotate", exact: true })).toBeDisabled();
-  await expect(page.getByRole("alert")).toContainText("desktop application");
-  await page.getByRole("button", { name: "Open Workflow Builder", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("desktop application");
+  await closeSettings(page);
+  await revealView(page, "Workflow Builder");
   const builder = page.getByRole("region", { name: "Workflow Builder", exact: true });
   await expect(builder.getByRole("button", { name: "Add step", exact: true })).toBeEnabled();
   await builder.locator(".react-flow__pane").click({ button: "right", position: { x: 180, y: 220 } });
@@ -1069,11 +1091,73 @@ test("Grouped Studio controls preserve bilingual Provider drafts and add real Wo
   await expect(menu.getByRole("menuitem", { name: "Condition check", exact: true })).toBeFocused();
   await page.keyboard.press("Escape"); await expect(menu).toBeHidden();
   await expect(builder.getByLabel("Workflow canvas", { exact: true })).toBeFocused();
-  await language.selectOption("zh");
+  await changeLanguage(page, "zh");
   await builder.getByRole("button", { name: "验证", exact: true }).click();
   await builder.screenshot({ path: info.outputPath("workflow-grouped-controls-zh-source.png") });
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("apeir.studio.layout.v1") || "{}").locale)).toBe("zh");
   await expect.poll(() => mutations.length).toBe(2);
   expect(mutations.map(url => new URL(url).pathname)).toEqual(["/api/v1/workflow/validate", "/api/v1/workflow/validate"]); expect(errors).toEqual([]);
   await info.attach("progressive-controls-scope", { body: JSON.stringify({ runtime: "real authenticated model-disabled Runtime", workflow_execution_requests: 0, validation_requests: 2, inference_calls: 0, bilingual_draft_preserved: true, raw_key_rejected: true, keyboard_context_menu: true, native_install: "NOT_RUN" }), contentType: "application/json" });
+});
+
+test("Settings and bounded splitters preserve original panel drafts and restore wide-screen geometry", async ({ page }, info) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const mutations: string[] = [], errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("request", request => { if (request.url().includes("/api/") && !["GET", "OPTIONS"].includes(request.method())) mutations.push(new URL(request.url()).pathname); });
+  await open(page);
+  await page.getByRole("button", { name: /example.py/ }).click();
+  const editor = page.getByRole("textbox", { name: "Code editor", exact: true });
+  const original = await editor.inputValue();
+  await editor.fill("UNSAVED_BOUNDED_SPLIT_DRAFT");
+  const chat = page.getByRole("region", { name: "AI conversation", exact: true });
+  const prompt = chat.getByRole("textbox");
+  await prompt.fill("UNSENT_BOUNDED_SPLIT_PROMPT");
+  await expect(page.getByLabel("Studio language", { exact: true })).toHaveCount(0);
+  await changeLanguage(page, "zh");
+  await changeTheme(page, "dark");
+  await (await settings(page)).screenshot({ path: info.outputPath("studio-settings-zh-source.png"), animations: "disabled" });
+  await closeSettings(page);
+  await changeLanguage(page, "en");
+  await expect(editor).toHaveValue("UNSAVED_BOUNDED_SPLIT_DRAFT");
+  await expect(prompt).toHaveValue("UNSENT_BOUNDED_SPLIT_PROMPT");
+  const chatHost = page.locator(".studio-panel-host").filter({ has: chat });
+  const editorHost = page.locator(".studio-panel-host").filter({ has: editor });
+  for (const x of [0, 1500]) {
+    const divider = await page.locator(".studio-dock .flexlayout__splitter").first().boundingBox();
+    if (!divider) throw new Error("Expected the real docking splitter");
+    await page.mouse.move(divider.x + divider.width / 2, divider.y + divider.height / 2);
+    await page.mouse.down(); await page.mouse.move(x, divider.y + divider.height / 2, { steps: 8 }); await page.mouse.up();
+    await expect.poll(async () => Math.round((await chatHost.boundingBox())?.width || 0)).toBeGreaterThanOrEqual(320);
+    await expect.poll(async () => Math.round((await editorHost.boundingBox())?.width || 0)).toBeGreaterThanOrEqual(380);
+  }
+  await expect.poll(() => page.evaluate(() => !!localStorage.getItem("apeir.studio.layout.v1"))).toBe(true);
+  const geometry = () => page.evaluate(() => {
+    const root = JSON.parse(localStorage.getItem("apeir.studio.layout.v1")!).layout;
+    return root.children.map((group: { id: string; weight: number }) => [group.id, group.weight]);
+  });
+  await page.keyboard.press("Control+Alt+s");
+  const wide = await geometry();
+  await page.setViewportSize({ width: 640, height: 800 });
+  await expect(page.locator(".studio-compact-label")).toBeVisible();
+  await revealView(page, "Workspace Editor");
+  await expect(editor).toHaveValue("UNSAVED_BOUNDED_SPLIT_DRAFT");
+  await revealView(page, "Chat");
+  await expect(prompt).toHaveValue("UNSENT_BOUNDED_SPLIT_PROMPT");
+  await expect(chat).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.keyboard.press("Control+Alt+s");
+  expect(await geometry()).toEqual(wide);
+  expect(await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"))).not.toContain('"maximized":true');
+  await page.screenshot({ path: info.outputPath("studio-compact-navigation-source.png"), animations: "disabled" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(page.locator(".studio-compact-label")).toHaveCount(0);
+  await expect(editor).toBeVisible(); await expect(chat).toBeVisible();
+  await expect(editor).toHaveValue("UNSAVED_BOUNDED_SPLIT_DRAFT");
+  await expect(prompt).toHaveValue("UNSENT_BOUNDED_SPLIT_PROMPT");
+  await editor.fill(original); await prompt.fill("");
+  await page.reload(); await expect(chat).toBeVisible(); await expect(editor).toBeVisible();
+  expect(await geometry()).toEqual(wide);
+  expect(mutations).toEqual([]); expect(errors).toEqual([]);
+  await info.attach("bounded-layout-scope", { body: JSON.stringify({ runtime: "actual authenticated model-disabled API", settings_preserved_drafts: true, actual_splitter_limits: [320, 380], compact_did_not_replace_layout: true, mutations, native_gui: "NOT_RUN" }), contentType: "application/json" });
 });
