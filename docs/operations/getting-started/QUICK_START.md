@@ -23,9 +23,9 @@ identify its actual files.
 
 | Path | Requirements / tested scope | Source and expiry |
 | --- | --- | --- |
-| Source Preview | Python 3.10+ and a browser. Independently installed on Linux with Python 3.10.22: public CLI, authenticated model-free API and simulated response-loss recovery. Matching browser Studio passed real Runtime/Controller checks; native installation is separate. | Source `16308a6b5bb6f1d3049144f413bc8a9b9541561a`; [Runtime wheel](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13898312736) + [built Studio](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13898392276), run43115765924; expires2026-11-18 |
-| Windows Development Build | x64 target, WebView2 prerequisite; Python and Kernel sidecars included. Full build/real component Smoke passed on Windows Server2025. Includes the reviewed RC1 fixes and Studio extension feature discovery; read [known limitations](INSTALL_WINDOWS.md#known-limitations). Windows10 lifecycle/Defender remain PENDING. | Source `70a5c69b1b2bd9f36f5f6725e7a1e7bdf411fd2d`; [Portable + NSIS bundle](https://github.com/untrod/apeir/actions/runs/42977022966/artifacts/13837634414), full-mode run42977022966; expires2026-11-25 |
-| Windows ARM64 Development Build | Native ARM64 Desktop and all three sidecars; WebView2 required. Full validation, real NKI/Runtime smoke, silent NSIS install and installed-sidecar checks passed on Windows11 ARM64. Windows10 Pad5 GUI, upgrade, Defender and driver acceptance remain PENDING. | Source `16308a6b5bb6f1d3049144f413bc8a9b9541561a`; [ARM64 Portable + NSIS](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13901748571), full-mode run43115765924; expires2026-11-25 |
+| Source Preview | Python 3.10+ and a browser. Independently installed on Linux with Python 3.10.22: public CLI, authenticated model-free API and simulated response-loss recovery. Matching browser Studio passed real Runtime/Controller checks; native installation is separate. | Source `d94159ea45badf665999dffdafe6786a5e35c085`; [Runtime wheel](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14095499424) + [built Studio](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14095763502), run43549737576; expires2026-11-21 |
+| Windows Development Build | x64 target, WebView2 prerequisite; Python and Kernel sidecars included. Full build/real component Smoke passed on Windows Server2025. Includes the Settings model roster, saved-key selection and save/restart feedback; read [known limitations](INSTALL_WINDOWS.md#known-limitations). Windows10 lifecycle/Defender remain PENDING. | Source `d94159ea45badf665999dffdafe6786a5e35c085`; [Portable + NSIS bundle](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424), full-mode run43549734683; expires2026-11-28 |
+| Windows ARM64 Development Build | Native ARM64 Desktop and all three sidecars; WebView2 required. Full validation, real NKI/Runtime smoke, silent NSIS install and installed-sidecar checks passed on Windows11 ARM64. Windows10 Pad5 GUI, upgrade, Defender and driver acceptance remain PENDING. | Source `d94159ea45badf665999dffdafe6786a5e35c085`; [ARM64 Portable + NSIS](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427), full-mode run43549737576; expires2026-11-28 |
 | Developer Setup | Python 3.10+, Git; Node.js22.19+ for Studio development. Rust/platform SDKs are only needed for native packaging. | [Source checkout](#developer-setup); use the Git revision as its identity |
 | Future Stable Release | Not available. Installation lifecycle, signing, supply-chain review and publication authorization are incomplete. | No stable download or one-line installer is offered |
 
@@ -35,11 +35,11 @@ expired artifact requires another qualified build, not a similarly named EXE.
 
 | File inside the indicated artifact | SHA-256 |
 | --- | --- |
-| `apeir_distribution-0.1.0rc1-py3-none-any.whl` | `24807bb4e7680033cbadf0a5ab75539c15f30f3a1b322181514d4b6b75e018ce` |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `5896b513211d25dd3518fa7570c1d69bd343bf80babd756f63b5695355f863e3` |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | `ff3e8a56f14d048aee24367f282617a92e89f2d3397406e008b8bac7008e4b85` |
-| `APEIR-Portable-0.1.0-rc1-windows-arm64.zip` | `243f294d4640c71c2b9437ca7936594919f08e0a9ed1b463d9a46691faef5996` |
-| `APEIR_0.1.0-rc1_arm64-setup.exe` | `0f2922faa9336c04ee63657f40c43b2c9a7e050c4d2586612ec98887a5a7b164` |
+| `apeir_distribution-0.1.0rc1-py3-none-any.whl` | `91f8d957b7d07f8e0071dca48ed542853f04d6ec72dac5960a2bb75f7d2facb2` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `95b65c4556e08812d64d5b0b631a9685d5000e0e26c38ecbc419144d8b030168` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `8374139b89f070ab6e2982c8930055b3ff2fbf44d278756e32a538362e360a4e` |
+| `APEIR-Portable-0.1.0-rc1-windows-arm64.zip` | `feae9bc7a299b51c34680ecbf8920f0ebdd70db8fb2adb42ffb0964c9c947e8d` |
+| `APEIR_0.1.0-rc1_arm64-setup.exe` | `a75391060652b2f34ba590830a6ffef5ca889222813e410fd12d4796ba29c8d9` |
 
 <details>
 <summary>Outer download ZIP hashes</summary>
@@ -49,10 +49,10 @@ hashes of the wheel or installer inside.
 
 | Download | SHA-256 |
 | --- | --- |
-| Runtime source artifact ZIP | `cd6df42ecb2b9ce8664ab70b21bcbe5b24a004c1b661f01ffd37f9a79af5ce57` |
-| Studio frontend artifact ZIP | `3a1c261afbef05ef00699cbfd8c23c2a9952065a60d9bdfbc7542dcc8ff213b8` |
-| Windows x64 native artifact ZIP | `47e35e52c46d18eab6fe1c22bc6850616911656882d15bd593316234d4f5a33d` |
-| Windows ARM64 native artifact ZIP | `2174890ffcd04577f29d1d49285e9c3219ae977de1651ff6b29606941bf4224d` |
+| Runtime source artifact ZIP | `5e1f55177a8b9ef234f1b7383dff5cc9e8a6bae619c0f108cf8a846956fd4961` |
+| Studio frontend artifact ZIP | `6f6d9474957b7362bd58b373f81d7032275618290454425b55d18e90311731c4` |
+| Windows x64 native artifact ZIP | `eafb38ac9bde3bd57575d3de8d299829dc46631e52f81b1ea1ed6c390425f544` |
+| Windows ARM64 native artifact ZIP | `bd12c756ede57c30cddaa1b5bde8b8e8c1ffbacf5762cffa620b8ee86f425011` |
 
 </details>
 
@@ -72,25 +72,25 @@ GitHub sign-in is required. Source artifacts expire after seven days. Use a newe
 qualified run if one has expired; do not mix revisions. A repository source ZIP
 or a frontend-only PR artifact is not this complete pair.
 
-The verified Source Preview is `16308a6b5bb6f1d3049144f413bc8a9b9541561a`,
-reviewed in [PR147](https://github.com/untrod/apeir/pull/147):
-[Runtime wheel](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13898312736)
-and [built Studio](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13898392276).
+The verified Source Preview is `d94159ea45badf665999dffdafe6786a5e35c085`,
+reviewed in [PR154](https://github.com/untrod/apeir/pull/154):
+[Runtime wheel](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14095499424)
+and [built Studio](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14095763502).
 The producer installed the wheel in a clean Python 3.10.22 environment outside
 the checkout. Its public CLI started the authenticated model-free API, refused
 unauthenticated access and closed its session and listener on exit. The simulated
 response-loss Demo retained one effect before and after recovery, with two
-observations and five Artifact integrity checks. The matching production Studio
-passed real model-free Runtime/Controller browser checks. Downloaded archives,
-checksums, manifests and changed Runtime module bytes were independently checked.
-These checks made no model request and do not qualify Windows installation.
-Downloads expire on **2026-11-18**. The later Workflow Monitor 1.0.1 example
-uses a compact table; it is installed separately and is not bundled into the
-Runtime wheel or native application. Application and build inputs are unchanged
-from the recorded producer. Test and documentation commits do not change its bytes.
+observations and five Artifact integrity checks. The matching Studio passed
+all22 model-free Runtime/Controller browser cases in development and production,
+including saved model configuration and reload. Downloaded archives, checksums
+and source manifests were independently checked. These checks made no model
+request and do not qualify Windows installation.
+Downloads expire on **2026-11-21**. Studio extension examples are installed
+separately; they are not bundled into the Runtime wheel or native application.
+Later documentation commits do not change the recorded producer's bytes.
 Wheel SHA-256:
 
-`24807bb4e7680033cbadf0a5ab75539c15f30f3a1b322181514d4b6b75e018ce`
+`91f8d957b7d07f8e0071dca48ed542853f04d6ec72dac5960a2bb75f7d2facb2`
 
 Extract into separate directories. Check that both manifests'
 `distribution_revision` values match. From each extracted directory, verify
@@ -327,7 +327,7 @@ private paths. Vulnerabilities follow [SECURITY](../../../SECURITY.md).
 Use [APEIR on Windows](INSTALL_WINDOWS.md) for Setup, Portable and first-launch
 steps. Each architecture's download contains both packages and its build records;
 GitHub sign-in is required. Choose **x64** for Intel/AMD PCs or **ARM64** for
-Windows on Arm, including a Windows Pad5. Both artifacts expire2026-11-25.
+Windows on Arm, including a Windows Pad5. Both artifacts expire2026-11-28.
 
 1. Download the matching architecture from [Download metadata](#download-metadata).
 2. Extract the outer GitHub ZIP. Check its `source-manifest.json` against that
