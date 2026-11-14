@@ -217,6 +217,35 @@ describe("native Runtime session destination", () => {
     }
   });
 
+  it("gives native Studio one search and settings owner after bootstrap", async () => {
+    // Host contract only: this does not qualify a Windows installation.
+    setConfig({ url: "https://controller.example.test", token: remoteSession });
+    localStorage.setItem("nous_onboarding_completed", "1");
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function (this: HTMLDialogElement) { this.setAttribute("open", ""); } });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (value: string) => {
+      const path = new URL(value).pathname;
+      const data = path.endsWith("/workspace") ? { active: { root: "fixture-project" } } :
+        path.endsWith("/providers") ? [] : path.endsWith("/models") ? { models: [] } :
+          path.endsWith("/tasks") ? { tasks: [] } : path.endsWith("/nodes") ? [] :
+            path.endsWith("/approvals") ? { approvals: [] } : path.endsWith("/conversations") ? { conversations: [] } :
+              { running: true, version: "0.1.0-rc1" };
+      return new Response(JSON.stringify({ ok: true, data }));
+    }));
+    render(<App />);
+    await screen.findByRole("region", { name: "APEIR Studio" });
+    fireEvent.keyDown(window, { key: ",", code: "Comma", ctrlKey: true });
+    expect(screen.getByRole("region", { name: "Application settings" })).toBeVisible();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "k", code: "KeyK", ctrlKey: true });
+    expect(screen.getAllByRole("dialog", { name: "Search and commands" })).toHaveLength(1);
+    const search = screen.getByRole("combobox", { name: "Search APEIR" });
+    fireEvent.keyDown(search, { key: "Escape", code: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Application settings" })).toBeVisible();
+    expect(native.invoke.mock.calls.some(([command]) => command === "store_provider_credential")).toBe(false);
+  });
+
   it("uses the original authenticated HTTP client against only the native endpoint on real loopback sockets", async () => {
     const calls: string[] = [];
     const otherCalls: string[] = [];

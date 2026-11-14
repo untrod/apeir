@@ -46,6 +46,7 @@ export interface ComposerProps {
   attachmentsSupported?: boolean;
   extendedConstraintsSupported?: boolean;
   stopLabel?: string;
+  onDraftChange?: (dirty: boolean) => void;
 }
 
 export const CHAT_ATTACHMENTS_UNAVAILABLE = "File attachment delivery is unavailable. Select a saved file in Workspace instead; the Runtime checks permission before reading it.";
@@ -81,7 +82,7 @@ export function Composer({
   onSend, onStop, disabled, streaming,
   models, nodes, conversationId, readOnly = false,
   attachmentsSupported = true, extendedConstraintsSupported = true,
-  stopLabel = "Stop waiting",
+  stopLabel = "Stop waiting", onDraftChange,
 }: ComposerProps) {
   const [text, setText] = useState(() => loadDraft(conversationId));
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -91,6 +92,9 @@ export function Composer({
   const [admissionError, setAdmissionError] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { onDraftChange?.(!!text || attachments.length > 0); }, [text, attachments.length, onDraftChange]);
+  useEffect(() => () => onDraftChange?.(false), [onDraftChange]);
 
   // Persist draft
   useEffect(() => {

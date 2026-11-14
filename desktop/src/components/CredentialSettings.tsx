@@ -23,9 +23,10 @@ function unusedName(provider: string, rows: CredentialStatus[]) {
 }
 
 /** The existing native credential manager; no key is sent to a Runtime API. */
-export function CredentialSettings({ locale = "en", onDraftChange, hasOtherDrafts, onStored }: {
+export function CredentialSettings({ locale = "en", onDraftChange, hasOtherDrafts, onStored, onBusyChange }: {
   locale?: "en" | "zh"; onDraftChange?: (dirty: boolean) => void; hasOtherDrafts?: () => boolean;
   onStored?: (notice: NativeCredentialNotice) => void;
+  onBusyChange?: (busy: boolean) => void;
 } = {}) {
   const version = useRuntimeConfigVersion();
   const t = (en: string, zh: string) => locale === "zh" ? zh : en;
@@ -74,7 +75,7 @@ export function CredentialSettings({ locale = "en", onDraftChange, hasOtherDraft
       if (credentialSecretError(secret)) { setError(t("Enter your complete Provider API key.", "请填写服务商提供的完整 API Key。")); return; }
       if (credentials.some(row => row.environment_name === name) && editing !== name) { setError(t("This name already exists. Choose Update on that saved key, or use another name.", "此名称已存在。请点击该密钥的“更新”，或使用其他名称。")); return; }
     }
-    operation.current = true; setBusy(true);
+    operation.current = true; setBusy(true); onBusyChange?.(true);
     let dispatched = false;
     const command = removeName ? "remove_provider_credential" : "store_provider_credential";
     const args = removeName ? { environmentName: name } : { environmentName: name, secret };
@@ -86,15 +87,15 @@ export function CredentialSettings({ locale = "en", onDraftChange, hasOtherDraft
       if (result.version !== getRuntimeConfigVersion() || !isLocalRuntimeSelected(result.endpoint)) return;
       const title = removeName ? t("Key removed", "密钥已移除") : t("Key saved", "密钥已保存");
       const detail = removeName ? t("Local Runtime restarted.", "本地运行时已重启。") : t(`Saved as ${name}. Continue in Models to add a connection.`, `已保存为 ${name}。请在“模型”中添加连接。`);
-      toast({ title, message: detail, level: "success", durationMs: 8000 });
-      if (!removeName) onStored?.({ environmentName: name, providerId: editing ? "" : providerId, endpoint: result.endpoint, version: result.version });
-      if (active.current) { setEditing(null); nameTouched.current = false; setMessage(`${title}. ${detail}`); setRemoving(null); await refresh(); }
+      if (onStored) onStored({ environmentName: name, providerId: editing ? "" : providerId, endpoint: result.endpoint, version: result.version, operation: removeName ? "removed" : "saved" });
+      else if (!active.current) toast({ title, message: detail, level: "success", durationMs: 8000 });
+      if (active.current) { setEditing(null); nameTouched.current = false; if (!onStored) setMessage(`${title}. ${detail}`); setRemoving(null); await refresh(); }
     } catch (reason) {
       if (active.current && version === getRuntimeConfigVersion()) {
         setUncertain(dispatched);
         setError(dispatched ? t("The key may have been saved, but Runtime reconnection was not confirmed. Inspect saved keys and Runtime diagnostics before another attempt.", "密钥可能已保存，但尚未确认运行时重新连接。请先核对已保存密钥和运行时诊断，再决定是否重试。") : reason instanceof Error ? reason.message : t("Credential operation could not start.", "未能启动密钥操作。"));
       }
-    } finally { operation.current = false; if (active.current) setBusy(false); }
+    } finally { operation.current = false; if (active.current) setBusy(false); onBusyChange?.(false); }
   };
   const remove = (name: string) => {
     if (operation.current || uncertain) return;

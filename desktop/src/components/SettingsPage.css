@@ -17,3 +17,4 @@
 .app-settings table { width:100%; border-collapse:collapse; margin-bottom:16px; }
 .app-settings :is(th,td) { padding:10px 8px; text-align:left; border-bottom:1px solid var(--nous-border); overflow-wrap:anywhere; }
 .app-settings th { color:var(--nous-text-secondary); font-size:12px; font-weight:500; }
+.app-settings-completion { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:10px 12px; margin-bottom:16px; background:var(--nous-success-soft); border:1px solid var(--nous-border); border-radius:4px; }

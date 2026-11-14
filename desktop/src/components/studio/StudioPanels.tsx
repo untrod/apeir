@@ -25,7 +25,8 @@ export type PanelContribution = {
   type: string; en: string; zh: string; owner: string;
   render: (props: PanelProps) => React.ReactNode;
 };
-export type PanelProps = { config?: unknown; updateConfig: (config: unknown) => void; saveLayout: () => void; isVisible: () => boolean; locale: "en" | "zh"; onDraftChange: (dirty: boolean) => void; onDraftSnapshot: (drafts: WorkbenchDraft[]) => void; hasOtherDrafts?: () => boolean; open: (type: string) => void; inspect: (view: DrawerView) => void };
+export type PanelNavigation = { requestId: string; conversationId?: string; filePath?: string };
+export type PanelProps = { navigation?: PanelNavigation; config?: unknown; updateConfig: (config: unknown) => void; saveLayout: () => void; isVisible: () => boolean; locale: "en" | "zh"; onDraftChange: (dirty: boolean) => void; onDraftSnapshot: (drafts: WorkbenchDraft[]) => void; hasOtherDrafts?: () => boolean; open: (type: string) => void; inspect: (view: DrawerView) => void };
 export const PANEL_GROUPS = [
   { id: "overview", en: "Overview", zh: "概览", icon: "dashboard", primary: "dashboard", types: ["dashboard", "usage"] },
   { id: "develop", en: "Develop", zh: "开发", icon: "chat", primary: "chat", types: ["chat", "files", "editor", "terminal"] },
@@ -49,8 +50,8 @@ export const STUDIO_PANELS: readonly PanelContribution[] = [
   { type: "extensions", en: "UI Extensions", zh: "界面扩展", owner: "ExtensionRegistry / Governance", render: props => <StudioExtensions {...props} /> },
   { type: "dashboard", en: "Dashboard", zh: "仪表盘", owner: "Existing Runtime projections / read-only", render: props => <StudioDashboard {...props} /> },
   { type: "chat", en: "Chat", zh: "对话", owner: "Conversation / Model Gateway", render: p => <StudioChat {...p} /> },
-  { type: "files", en: "Project Files", zh: "项目文件", owner: "Workspace API / Governance", render: p => <DeveloperWorkbench locale={p.locale} embeddedConversation={false} onDraftChange={p.onDraftChange} onDraftSnapshot={p.onDraftSnapshot} onOpenEnvironments={() => p.open("environment")} /> },
-  { type: "editor", en: "Workspace Editor", zh: "工作区编辑", owner: "Workspace API / Governance", render: p => <DeveloperWorkbench locale={p.locale} onDraftChange={p.onDraftChange} onDraftSnapshot={p.onDraftSnapshot} onOpenEnvironments={() => p.open("environment")} /> },
+  { type: "files", en: "Project Files", zh: "项目文件", owner: "Workspace API / Governance", render: p => <DeveloperWorkbench navigation={p.navigation} locale={p.locale} embeddedConversation={false} onDraftChange={p.onDraftChange} onDraftSnapshot={p.onDraftSnapshot} onOpenEnvironments={() => p.open("environment")} /> },
+  { type: "editor", en: "Workspace Editor", zh: "工作区编辑", owner: "Workspace API / Governance", render: p => <DeveloperWorkbench navigation={p.navigation} locale={p.locale} onDraftChange={p.onDraftChange} onDraftSnapshot={p.onDraftSnapshot} onOpenEnvironments={() => p.open("environment")} /> },
   { type: "tasks", en: "Tasks", zh: "任务", owner: "EntityStore / Task", render: p => <TaskCenter onTaskClick={taskId => p.inspect({ kind: "task", taskId })} onTraceClick={traceId => p.inspect({ kind: "trace", traceId })} /> },
   { type: "models", en: "Models", zh: "模型", owner: "Model Center / Gateway", render: p => <DeveloperPlatform modelsOnly manageProviders locale={p.locale} onDraftChange={p.onDraftChange} onOpenCredentials={() => p.open("credentials")} onOpenApprovals={() => p.open("operations")} /> },
   { type: "credentials", en: "Credentials", zh: "凭据", owner: "Existing native credential manager", render: p => <section className="studio-projection"><h2>{p.locale === "zh" ? "安全凭据" : "Secure credentials"}</h2><CredentialSettings locale={p.locale} onDraftChange={p.onDraftChange} hasOtherDrafts={p.hasOtherDrafts} /></section> },
@@ -60,7 +61,7 @@ export const STUDIO_PANELS: readonly PanelContribution[] = [
   { type: "environment", en: "Environment", zh: "环境", owner: "EnvironmentRuntime", render: () => <EnvironmentInspector /> },
   { type: "inspector", en: "Inspector", zh: "检查器", owner: "Existing Operations Console", render: () => <OperationsConsole /> },
   { type: "evidence", en: "Evidence Metadata", zh: "证据元数据", owner: "DistributedWork receipt / verification metadata", render: () => <Projection collection="evidence" /> },
-  { type: "terminal", en: "Controlled Commands", zh: "受控命令", owner: "Existing Workbench / ProcessSession; not PTY", render: p => <DeveloperWorkbench embeddedConversation={false} onDraftChange={p.onDraftChange} onDraftSnapshot={p.onDraftSnapshot} /> },
+  { type: "terminal", en: "Controlled Commands", zh: "受控命令", owner: "Existing Workbench / ProcessSession; not PTY", render: p => <DeveloperWorkbench navigation={p.navigation} embeddedConversation={false} onDraftChange={p.onDraftChange} onDraftSnapshot={p.onDraftSnapshot} /> },
   { type: "diagnostics", en: "Diagnostics", zh: "诊断", owner: "Runtime health projection", render: () => <Projection collection="runtime" /> },
   { type: "documents", en: "Documents", zh: "文档", owner: "DocumentRuntime", render: () => <DocumentWorkbench /> },
   { type: "simulation", en: "Simulation", zh: "仿真", owner: "SimulationRuntime", render: () => <SimulationWorkbench /> },

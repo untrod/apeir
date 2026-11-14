@@ -978,10 +978,10 @@ export interface GlobalSearchResult {
   path?: string;
 }
 
-export const globalSearch = (query: string, limit = 40) => {
+export const globalSearch = (query: string, limit = 40, signal?: AbortSignal) => {
   const params = new URLSearchParams({ q: query, limit: String(limit) });
   return api<{ query: string; scope: string; results: GlobalSearchResult[]; count: number }>(
-    `/api/v1/search?${params.toString()}`,
+    `/api/v1/search?${params.toString()}`, { signal },
   );
 };
 

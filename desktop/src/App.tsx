@@ -811,9 +811,14 @@ function AppShell() {
     return () => { active = false; clearInterval(timer); document.removeEventListener("visibilitychange", visible); eventClient.stop(); };
   }, [connected, runtimeConfigVersion]);
 
+  useEffect(() => {
+    if (page === "studio") { setPaletteOpen(false); setDrawer(null); setInspectorOpen(false); }
+  }, [page]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (page === "studio" || e.defaultPrevented) return;
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key === "k") { e.preventDefault(); setPaletteOpen((p) => !p); }
       if (mod && e.key === "i") { e.preventDefault(); setInspectorOpen((p) => !p); }
@@ -821,7 +826,7 @@ function AppShell() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [drawer, inspectorOpen]);
+  }, [drawer, inspectorOpen, page]);
 
   const handleEventClick = useCallback((event: RuntimeEventEnvelope) => {
     const p = event.payload || {};
@@ -949,25 +954,30 @@ function AppShell() {
     );
   }
 
+  // Studio owns its navigation, search and inspector in both web and native
+  // hosts. Bootstrap/security gates above still apply to the native host.
+  if (page === "studio") {
+    return <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}><React.Suspense fallback={<p role="status">Loading APEIR Studio…</p>}><StudioShell onProtectedChange={protectStudio} onExit={() => setPage("operations")} /></React.Suspense></div>;
+  }
+
   // Render: Main Dashboard
   return (
     <>
       <StatusBar onSearch={() => setPaletteOpen(true)} />
-      <div style={{ display: "flex", flex: 1, overflow: "hidden", height: `calc(100vh - ${page === "chat" || page === "operations" || page === "studio" ? 44 : 148}px)` }}>
-        {page !== "studio" && <Sidebar currentPage={page} onNavigate={setPage} inspectorOpen={inspectorOpen}
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", height: `calc(100vh - ${page === "chat" || page === "operations" ? 44 : 148}px)` }}>
+        <Sidebar currentPage={page} onNavigate={setPage} inspectorOpen={inspectorOpen}
           onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
           taskCount={tasks.filter((t) => ["running", "queued", "awaiting_approval"].includes(t.status)).length}
-          collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} />}
+          collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)} />
         {page === "chat" && (
           <SessionBar activeId={activeConversationId} onSelect={(id) => setActiveConversationId(id)}
             onNew={() => setActiveConversationId(undefined)} collapsed={sessionBarCollapsed}
             onToggleCollapse={() => setSessionBarCollapsed(!sessionBarCollapsed)} />
         )}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ flex: inspectorOpen && page !== "studio" ? "40%" : "1", overflow: "hidden", transition: "flex 0.3s ease" }}>
+          <div style={{ flex: inspectorOpen ? "40%" : "1", overflow: "hidden", transition: "flex 0.3s ease" }}>
             <React.Suspense fallback={<p role="status">{locale === "zh" ? "正在加载模块…" : "Loading module…"}</p>}>
             {page === "chat" && <ChatView conversationId={activeConversationId} onConversationCreated={setActiveConversationId} onCardClick={handleEventClick} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} />}
-            {page === "studio" && <React.Suspense fallback={<p role="status">Loading APEIR Studio…</p>}><StudioShell onProtectedChange={protectStudio} onExit={() => setPage("operations")} /></React.Suspense>}
             {page === "operations" && <OperationsConsole />}
             {page === "tasks" && <TaskCenter onTaskClick={(id) => setDrawer({ kind: "task", taskId: id })} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} onConversationClick={id => { setActiveConversationId(id); setPage("chat"); }} />}
             {page === "develop" && <DeveloperPlatform />}
@@ -980,11 +990,11 @@ function AppShell() {
             {page === "settings" && <SettingsPage onDraftChange={protectStudio} hasProtectedChanges={() => studioProtected.current} />}
             </React.Suspense>
           </div>
-          <Inspector visible={inspectorOpen && page !== "studio"} onClose={() => setInspectorOpen(false)} />
+          <Inspector visible={inspectorOpen} onClose={() => setInspectorOpen(false)} />
         </div>
         <DetailDrawer view={drawer} onClose={() => setDrawer(null)} />
       </div>
-      {page !== "chat" && page !== "operations" && page !== "studio" && <ResourceDock />}
+      {page !== "chat" && page !== "operations" && <ResourceDock />}
       <CommandPalette
         commands={commands}
         open={paletteOpen}

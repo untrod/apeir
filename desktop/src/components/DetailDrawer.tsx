@@ -17,6 +17,7 @@ import {
 } from "../lib/api";
 import { useRuntimeConfigVersion } from "../store";
 import { toast } from "./Toast";
+import { useTheme } from "../theme";
 
 export type DrawerView =
   | null
@@ -32,9 +33,12 @@ export type DrawerView =
 interface DetailDrawerProps {
   view: DrawerView;
   onClose: () => void;
+  presentation?: "overlay" | "docked";
 }
 
-export function DetailDrawer({ view, onClose }: DetailDrawerProps) {
+export function DetailDrawer({ view, onClose, presentation = "overlay" }: DetailDrawerProps) {
+  const { locale } = useTheme();
+  const docked = presentation === "docked";
   const version = useRuntimeConfigVersion();
   const owner = useMemo(() => ({ view, version: getRuntimeConfigVersion(), current: captureRuntimeConnection() }), [view]);
   const active = owner.version === version;
@@ -45,29 +49,31 @@ export function DetailDrawer({ view, onClose }: DetailDrawerProps) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 88 }} />
+      {!docked && <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 88 }} />}
       <aside
+        aria-label={locale === "zh" ? "详情检查器" : "Detail inspector"}
         style={{
-          position: "fixed",
-          top: 44,
+          position: docked ? "relative" : "fixed",
+          top: docked ? undefined : 44,
           right: 0,
-          bottom: 104,
-          width: 360,
-          maxWidth: "calc(100vw - 48px)",
+          bottom: docked ? undefined : 104,
+          width: docked ? "100%" : 360,
+          height: docked ? "100%" : undefined,
+          maxWidth: docked ? undefined : "calc(100vw - 48px)",
           background: colors.surface,
           borderLeft: `1px solid ${colors.border}`,
-          boxShadow: shadow.drawer,
-          zIndex: 89,
+          boxShadow: docked ? undefined : shadow.drawer,
+          zIndex: docked ? undefined : 89,
           display: "flex",
           flexDirection: "column",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: `${space.lg} ${space.xl}`, borderBottom: `1px solid ${colors.borderLight}` }}>
           <div>
-            <div style={{ fontSize: typo.xs, color: colors.textTertiary, textTransform: "uppercase" }}>Inspector</div>
-            <h2 style={{ margin: 0, fontSize: typo.lg, color: colors.text }}>{titleFor(view)}</h2>
+            <div style={{ fontSize: typo.xs, color: colors.textTertiary, textTransform: "uppercase" }}>{locale === "zh" ? "检查器" : "Inspector"}</div>
+            <h2 style={{ margin: 0, fontSize: typo.lg, color: colors.text }}>{titleFor(view, locale)}</h2>
           </div>
-          <button onClick={onClose} title="Close" style={{ ...btnSecondary, padding: `${space.xs} ${space.sm}` }}>Close</button>
+          <button onClick={onClose} aria-label={locale === "zh" ? "关闭详情" : "Close inspector"} style={{ ...btnSecondary, padding: `${space.xs} ${space.sm}` }}>{locale === "zh" ? "关闭" : "Close"}</button>
         </div>
         <div key={JSON.stringify(view)} style={{ flex: 1, overflowY: "auto", padding: space.xl }}>
           {view.kind === "task" && <TaskDetails taskId={view.taskId} />}
@@ -84,7 +90,8 @@ export function DetailDrawer({ view, onClose }: DetailDrawerProps) {
   );
 }
 
-function titleFor(view: Exclude<DrawerView, null>): string {
+function titleFor(view: Exclude<DrawerView, null>, locale: "en" | "zh"): string {
+  if (locale === "zh") return ({ task: "任务详情", trace: "执行时间线", run: "原始运行记录", node: "节点详情", approval: "审批请求", artifact: "制品", verification: "效果核验", "model-observations": "模型观测" })[view.kind];
   switch (view.kind) {
     case "task": return "Task Details";
     case "trace": return "Trace Timeline";

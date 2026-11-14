@@ -65,8 +65,9 @@ const input: React.CSSProperties = {
 };
 
 export type WorkbenchDraft = { path: string; content: string; originalSha256: string };
-export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange, onDraftSnapshot, embeddedConversation = true, locale = "en" }: {
+export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChange, onDraftSnapshot, embeddedConversation = true, locale = "en" }: {
   onOpenEnvironments?: () => void; onDraftChange?: (protectedDraft: boolean) => void;
+  navigation?: { requestId: string; filePath?: string };
   onDraftSnapshot?: (drafts: WorkbenchDraft[]) => void; embeddedConversation?: boolean; locale?: "en" | "zh";
 }) {
   const t = (en: string, zh: string) => locale === "zh" ? zh : en;
@@ -233,6 +234,13 @@ export function DeveloperWorkbench({ onOpenEnvironments, onDraftChange, onDraftS
       content: "", loadedPath: "", loadedContent: "", sha256: "", preview: null, writeResult: null };
     rememberTab(tab); restoreTab(tab);
   };
+
+  const navigationHandled = useRef<string>();
+  useEffect(() => {
+    if (!navigation?.filePath || navigationHandled.current === navigation.requestId || busy || pending || closeTarget !== null) return;
+    navigationHandled.current = navigation.requestId;
+    void loadFile(navigation.filePath);
+  });
 
   const selectFile = (path: string) => {
     if (path) void loadFile(path); else newFile();

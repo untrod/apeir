@@ -1,7 +1,7 @@
 import { getConfig, getRuntimeConfigVersion, setConfig } from "./api";
 
 export interface NativeCredentialStatus { environment_name: string; stored: boolean }
-export interface NativeCredentialNotice { environmentName: string; providerId: string; endpoint: string; version: number }
+export interface NativeCredentialNotice { environmentName: string; providerId: string; endpoint: string; version: number; operation?: "saved" | "removed" }
 
 type SessionCommand = "load_runtime_session_token" | "start_runtime_api" |
   "restart_runtime_api" | "store_provider_credential" | "remove_provider_credential";
