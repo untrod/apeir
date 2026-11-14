@@ -1,17 +1,25 @@
 # Compatibility Matrix
 
 This matrix separates declared support from evidence collected on the current
-release-maintenance device.
+release-maintenance environments.
 
 ## Current ARM64 native preview
 
 The [ARM64 preview](../operations/deployment/WINDOWS_10_ARM64_LOCAL.md) bundles
 CPython 3.13.17 and target-native Desktop, Runtime, Kernel and Worker. Full native
 validation and installed-sidecar smoke passed on Windows 11 ARM64 in
-[run43115765924](https://github.com/untrod/apeir/actions/runs/43115765924).
-Windows 10 Pad5 GUI, drivers, upgrade/uninstall and Defender checks remain PENDING.
+[run43549737576](https://github.com/untrod/apeir/actions/runs/43549737576).
+Windows 10 ARM64 GUI, drivers, upgrade/uninstall and Defender checks remain PENDING.
 This does not qualify every Python version, Provider, local accelerator or sandbox.
 The historical maintenance-host tables below retain their original scope.
+
+## Historical qualification snapshots
+
+The following tables record earlier source and protocol checks. They do not
+replace the current package status above or the Windows installation checklist.
+
+<details>
+<summary>Python, platform and extension protocol records</summary>
 
 ## Python
 
@@ -95,3 +103,5 @@ artifact rather than retained in the source repository.
 A platform is not considered release-validated solely because it appears in
 package metadata. Release evidence must record the operating system,
 architecture, Python version, dependency set, and executed gates.
+
+</details>

@@ -87,10 +87,7 @@ requests; do not reuse its credential or approvals.
 
 ![Model connections managed directly in Settings](../../media/studio-model-settings-compact-source.png)
 
-*Actual production Linux Chromium source session, 1600×1000 viewport; the image
-captures Settings. The connection is persisted through the real model-disabled
-Runtime; its model ID and closed loopback endpoint are test fixtures. No key or
-inference is shown. This is source-browser evidence, not Windows installation.*
+*Model connections in Settings. Saving a profile does not send a model request.*
 
 ## Cloud and local services
 

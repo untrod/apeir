@@ -77,8 +77,7 @@ continue through the existing connection guards, Registry and Workflow history.
 
 ![Workflow Monitor with visible Running, Completed and Unknown rows in a source Dashboard](../media/studio-workflow-monitor-source.png)
 
-*Actual model-disabled Runtime and public CLI in sandboxed Chromium. This shows
-read-only Workflow counts, not a Windows installation or real-model qualification.*
+*Workflow Monitor displays read-only counts from the connected Runtime.*
 
 ## Declarative UI Extension SDK
 
@@ -139,4 +138,4 @@ unavailable. Executable custom UI remains BLOCKED until target-platform isolatio
 is independently demonstrated. Neither this SDK nor browser acceptance qualifies
 Windows native installation, real model accounts or physical effects.
 
-![System Monitor Widget using real model-disabled Runtime status in source Chromium; not native installation acceptance](../media/studio-extension-runtime-source.png)
+![System Monitor displaying Runtime status](../media/studio-extension-runtime-source.png)

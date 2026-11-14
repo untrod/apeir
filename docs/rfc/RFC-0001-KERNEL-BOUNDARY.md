@@ -28,7 +28,7 @@ The result: there is no single place where correctness, security, resource manag
 1. **Must preserve existing functionality**: CLI, HTTP API, desktop, SDK, and all existing tests must continue to work during migration.
 2. **Must preserve existing data**: Run records, conversations, workspaces, model registrations, and user configuration must be migratable.
 3. **Cannot big-bang replace**: Python runtime must coexist with new Rust kernel during transition.
-4. **Must support current platforms**: Windows ARM64 (Xiaomi tablet), Windows x86_64, Linux x86_64, Linux ARM64.
+4. **Must support current platforms**: Windows ARM64, Windows x86_64, Linux x86_64, Linux ARM64.
 5. **Must not break public APIs**: Existing HTTP API, CLI commands, and Python SDK must remain compatible or have explicit deprecation paths.
 6. **Existing plugins and providers**: Must continue to function through compatibility adapters.
 

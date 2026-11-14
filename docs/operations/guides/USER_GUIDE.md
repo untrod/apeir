@@ -42,7 +42,7 @@ these open existing views without submitting a task.
 **Workspace → Operations Console → Controller connection** configures the Runtime
 address and protected service session token. That token is not a Provider API key.
 
-![Studio conversation and project windows connected to a model-disabled Runtime in Linux Chromium](../../media/studio-workspace-source.png)
+![Studio project editor and visual workflow](../../media/studio-workspace-source.png)
 
 | Action | How |
 | --- | --- |
@@ -109,8 +109,7 @@ an explicit user choice.
 
 ![Shared settings in the actual Chinese dark-theme Studio](../../media/studio-settings-source.png)
 
-*Actual Linux Chromium source session against a model-disabled Runtime.
-This settings view is not Windows installation or real-model qualification.*
+*Settings in the source build.*
 
 **Workspace → Layout library** saves named Global, Workspace, Template and
 Dashboard arrangements. Load, duplicate, rename, export or remove an entry there.
@@ -221,14 +220,7 @@ loaded Skill does not establish that a model used it in a particular request.
 
 ![Dark Dashboard with actual Runtime data; absent resources remain UNKNOWN](../../media/studio-source-overview.png)
 
-Project, Overview and Proposal images were captured on 2026-11-02 from the
-[reviewed Studio source](https://github.com/untrod/apeir/commit/1b09be440019981c1d6800b77f191cd3d3d1e7f8):
-a production build in Linux Chromium connected to a real model-disabled Runtime.
-They show actual files and records, not installed Windows or live-model inference.
-The downloadable Windows candidate retains its separate binary source identity.
-Browser Studio initializes the original EntityStore after authenticated health;
-Work and original task summaries share the existing adapter. Missing progress or
-unknown task states do not become successful tasks or enable controls.
+*Overview in the source build. Unavailable measurements remain unknown.*
 
 ## Reviewing workspace changes
 
@@ -249,7 +241,7 @@ After a lost response, inspect the original proposal, actual files and evidence;
 recovery observes the original attempt instead of writing again. Cancellation
 fences later admission but cannot undo an effect already produced.
 
-![Two-file proposal after approval and actual file readback in source Chromium; no live model or executed test qualification](../../media/studio-workspace-review-source.png)
+![A two-file change proposal after approval](../../media/studio-workspace-review-source.png)
 
 File MATCH means observed bytes match the reviewed proposal in runtime-service
 scope. It does not mean tests ran or a physical effect was verified. Multi-file
@@ -289,10 +281,7 @@ Evaluation only inspects the recorded Run; opening a report does not run tests.
 
 ![Installed Source Preview showing the original completed Work beside its unchanged project test file](../../media/studio-original-work-source.png)
 
-*Downloaded Runtime wheel and matching production Studio at source `4817e83c`,
-Linux Chromium, models disabled for this inspection. The original approved Work
-and test evidence were restored; this view did not rerun their effects. It is
-not a Windows installation or live Chat screenshot.*
+*Saved task results in the source build.*
 
 In **Environment**, select **Read-only workspace / 只读工程** for the qualified
 Linux profile. It runs only the pinned interpreter against staged inputs;
@@ -309,30 +298,15 @@ an interrupted in-memory Chat turn can automatically resume after restart.
 Proposal and pure Workflow restart recovery have separate exercised paths.
 
 
-## What is APEIR?
+<!-- Existing guide anchors remain available for incoming links. -->
+<a name="what-is-apeir"></a>
+<a name="installation"></a>
+<a name="your-first-interaction"></a>
+<a name="concepts"></a>
+<a name="common-tasks"></a>
 
-[APEIR](../../../README.md) is the platform; Studio is its workspace.
-Runtime runs admitted operations, Governance authorizes them, and the pinned
-Kernel manages its supported execution scope.
+## Next steps
 
-## Installation
-
-Use [Quick Start](../getting-started/QUICK_START.md) for Source Preview, Windows
-development builds or a source checkout.
-
-## Your First Interaction
-
-Start with the first task above. Chat needs a configured model; no model is
-needed to inspect files, layouts or supported pure Workflow records.
-
-## Concepts
-
-A Provider supplies an implementation; a Capability names an operation. Neither
-is permission. A Workflow definition describes steps; its Run is one persisted
-execution. Follow the original Work/Run links rather than treating a status card
-as execution evidence.
-
-## Common Tasks
-
-[Models](PROVIDER_GUIDE.md) · [Workflow](WORKFLOW_GUIDE.md) ·
-[Context and Usage](CONTEXT_AND_USAGE.md) · [CLI](../../development/CLI_REFERENCE.md).
+[Install APEIR](../getting-started/QUICK_START.md) ·
+[Connect a model](PROVIDER_GUIDE.md) · [Build a workflow](WORKFLOW_GUIDE.md) ·
+[Inspect context and usage](CONTEXT_AND_USAGE.md) · [CLI reference](../../development/CLI_REFERENCE.md)

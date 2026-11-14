@@ -4,13 +4,13 @@ Use this section to install, configure, operate, and troubleshoot APEIR Runtime.
 
 ## Start here
 
-- [Source Quick Start — recommended first-run path](getting-started/QUICK_START.md)
+- [Quick Start](getting-started/QUICK_START.md)
 - [Installation notes and optional dependencies](INSTALLATION.md)
 - [Windows installation](getting-started/INSTALL_WINDOWS.md)
 - [Linux installation](getting-started/INSTALL_LINUX.md)
 - [macOS installation](getting-started/INSTALL_MACOS.md)
 - [Docker installation](getting-started/INSTALL_DOCKER.md)
-- [Windows 10 ARM64 local deployment](deployment/WINDOWS_10_ARM64_LOCAL.md)
+- [Windows ARM64 notes](deployment/WINDOWS_10_ARM64_LOCAL.md)
 - [Troubleshooting](getting-started/TROUBLESHOOTING.md)
 - [Studio user guide](guides/USER_GUIDE.md)
 - [Workflow guide](guides/WORKFLOW_GUIDE.md)

@@ -1,5 +1,79 @@
 # Repository consolidation audit
 
+## Product documentation refresh — 2026-11-14
+
+Baseline: Distribution `3aafb1b26bf4fb5e223f5120691ca6c8444ea38f`;
+Kernel `87fd1b2ff28ef14ab1a515a58162592b452fda2e`.
+The component lock remains unchanged. This revision changes documentation and
+screenshots, not Runtime behavior or native packages.
+
+### Inventory and decisions
+
+The tracked-file inventory starts with 2,163 files (18,706,456 bytes), including
+239 Markdown files. Each Markdown entry is classified by reader and current
+navigation; local links, duplicate material, package inclusion and consumers
+were checked. The resulting tree has 2,158 files and 234 Markdown files.
+
+| Scope | Decision | Reason |
+| --- | --- | --- |
+| README, installation, Quick Start and developer navigation | UPDATE | Use task-oriented copy; remove personal device references and repeated acceptance prose |
+| Windows downloads | FIX | The install page linked older packages than README; all entry points now identify the same reviewed architecture-specific bundles |
+| Studio hero, Overview and Workflow images | UPDATE | Replace older images with the actual downloaded production frontend and installed Runtime from the baseline above |
+| MCP integration text | MERGE / extract | Move the detailed bridge contract from the developer landing page into [MCP integration](../development/MCP_INTEGRATION.md); preserve the old heading and link |
+| Research hypotheses and compatibility tables | ARCHIVE in place | Retain the original hypotheses and measured historical scope, clearly separated from current product status |
+| Security, architecture, protocols, legal files and original test records | KEEP | Preserve contracts, compatibility and auditable results |
+
+Six files were deleted from the current tree:
+
+| Deleted file | Review result |
+| --- | --- |
+| `research/datasets/README.md` | Catalog of uncollected datasets; no dataset or consuming code |
+| `research/experiments/README.md` | Unrun experiment list and placeholder pseudocode; no experiment implementation |
+| `research/literature/README.md` | Empty literature organization and placeholder citation format; no bibliography |
+| `research/papers/README.md` | Empty manuscript pipeline and generic writing checklist |
+| `research/prior-art/README.md` | Uncited comparison table; no substantiated research result |
+| `research/results/README.md` | Empty results catalog; no measured result or analysis |
+
+Exact-path references, Runtime research modules, tests, workflows, setuptools,
+MANIFEST and the source exporter were inspected before deletion. The exporter
+includes the existing `research` tree generically and requires none of these
+files. Research Runtime code, original hypotheses and the engineering-loop
+experiment/benchmark remain intact. No existing link points to a deleted file;
+Git history retains their original contents.
+
+### Verification and image provenance
+
+The matching Runtime wheel and built frontend from Desktop run43622764883 were
+retrieved and checked against GitHub's artifact digests and their own manifests.
+An independent Python environment outside the checkout installed the wheel and
+exercised the public CLI, authenticated model-free API, refusal without credentials,
+shutdown and simulated Demo. SDK Provider and Skill examples also ran from that
+consumer environment. The Demo retained one effect and checked five Artifacts.
+
+The three replacement PNGs are unmodified 1680×1050 Chromium captures from that
+frontend and Runtime. The project files are real files in an isolated sample
+workspace. The Workflow uses the existing typed-binding example, independently
+approved through the public CLI; it runs TRANSFORM steps, not a model or project
+tests. Overview reads original Runtime/Workflow/Usage data. Missing model usage
+remains unknown. No model request, user key or personal device appears in the
+captures. Existing images not replaced in this revision retain their older
+source-browser scope and provenance in Engineering Review.
+
+PowerShell parsed all updated command blocks. Hash checks used both real Setup
+and Portable pairs; wrong-hash, missing-file and acquisition-failure cases stopped.
+The managed shell's live GitHub CLI artifact redirect returned HTTP403; authenticated
+GitHub connector retrieval succeeded. This does not qualify Windows-side download
+or installation. The current checkout has no staged native sidecars. Isolated copies of the
+admitted package components passed the existing verifier against the unchanged
+lock, including all four Kernel/Worker SHA-256 values and PE architectures.
+Source manifests and full-mode validation reports match the documented producer.
+
+Repository/hygiene/public-example regressions passed (390 cases, seven existing
+skips). Local Markdown links, document hygiene, identity/comment audits and version
+checks passed. Security scan: zero HIGH, six unchanged MEDIUM findings.
+The pushed candidate and resulting main require their own CI. Windows10 installed
+lifecycle, signing and public Release remain separate pending qualifications.
+
 ## Source and consumer audit — 2026-11-02
 
 Baseline: Distribution `19e8bb7b8136ae187ae29be5705a0373bf75a813`.

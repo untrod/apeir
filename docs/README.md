@@ -4,15 +4,17 @@
 <a name="apeir-documentation--文档"></a>
 
 
-Choose a task first. Architecture and dated test records remain available when
-you need their detail; opening a project does not require reading every contract.
+Install APEIR, work in Studio, or build an extension. Choose a guide below.
+先找到要做的事；接口、架构和工程记录分别收在后面的参考入口。
 
 ## Getting Started
 
-- [Quick Start](operations/getting-started/QUICK_START.md): Source Preview,
-  Windows development builds, source setup and the first model-free task.
+- [Windows installation](operations/getting-started/INSTALL_WINDOWS.md): Setup,
+  Portable and first launch.
+- [Quick Start](operations/getting-started/QUICK_START.md): Python packages,
+  source setup and a first model-free task.
 - [Download metadata](operations/getting-started/QUICK_START.md#download-metadata):
-  exact versions, hashes, expiry and qualification.
+  versions, checksums and retention dates.
 - [Troubleshooting](operations/getting-started/TROUBLESHOOTING.md) and [FAQ](operations/FAQ.md).
 
 ## Guides
@@ -33,21 +35,20 @@ prerequisites. [Operations](operations/README.md) indexes deployment and recover
 
 [API](development/API_REFERENCE.md) · [CLI](development/CLI_REFERENCE.md) ·
 [Provider SDK](development/PROVIDER_DEVELOPMENT.md) ·
+[MCP integration](development/MCP_INTEGRATION.md) ·
 [Extension schemas](../spec/extensions/v1/README.md) ·
 [Compatibility](development/COMPATIBILITY_MATRIX.md) ·
 [Code entry points](development/RUNTIME_MODULE_MAP.md#current-code-entry-points)
 
 The [Developer Platform](development/DEVELOPER_PLATFORM.md) connects these public
 interfaces. [Development](development/README.md) covers contributor setup and
-integration policy. SDK interfaces are beta; legacy names do not imply a second
-Runtime or a stable package release.
+integration policy. SDK interfaces are beta.
 
 ## Architecture
 
 [Start with the canonical contracts](architecture/README.md): authority,
 execution, state ownership, security and Provider boundaries. Read them before
-changing execution or permission behavior. [RFCs](rfc/README.md) record proposals;
-a proposal is not a shipped capability.
+changing execution or permission behavior. [RFCs](rfc/README.md) record design proposals.
 
 ## Engineering
 
@@ -57,9 +58,5 @@ a proposal is not a shipped capability.
 [Release Runbook](acceptance/RELEASE_RUNBOOK.md) ·
 [ROADMAP](../ROADMAP.md)
 
-ROADMAP owns current status. Acceptance records describe their exact revision,
-environment and tested scope; historical evidence is retained rather than
-relabelled as a current PASS. Historical tags and Git history remain unchanged.
-
-使用指南回答“怎样完成这件事”，参考资料解释接口，工程记录说明“实际测过什么”。
-发现过时说明时，请附页面链接、软件版本与可复现步骤；不要公开凭据或私有 Runtime 状态。
+ROADMAP tracks current status. Acceptance records retain build provenance,
+test environments, results and known failures.

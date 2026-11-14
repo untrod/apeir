@@ -11,78 +11,89 @@
 <a name="文档"></a>
 <a name="概览"></a>
 
+把模型、项目和工作流放进同一个工作台。
 
-开放、以本地工作为起点的工程工作台：组织文件、工作流和连接资源，修改先审查，操作有审批，结果有记录。
+APEIR Studio 将项目文件、对话和可视化工作流连接起来。修改先看 Diff，操作经过审批，
+执行结果随时可查。界面可以按自己的习惯组合，不必围着固定页面工作。
 
 [**⬇ Windows x64**](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424) ·
-[**Windows ARM64（平板等设备）**](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427) ·
-[**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
+[**Windows ARM64**](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427) ·
 [**快速开始**](docs/operations/getting-started/QUICK_START.md) ·
 [**文档**](docs/README.md) · [English](README.md)
 
-**Windows：**Intel/AMD 电脑选 x64；小米平板 5 等 Windows on Arm 设备选 ARM64，不是 32 位。
-[安装版](docs/operations/getting-started/INSTALL_WINDOWS.md#setup) · [Portable 用法](docs/operations/getting-started/INSTALL_WINDOWS.md#portable) · [SHA-256 校验](docs/operations/getting-started/QUICK_START.md#download-metadata)。
-当前是未签名开发包，不是稳定版；下载需要登录 GitHub，Windows 10 安装仍待实机验收。
-正式版还没出炉，生产环境先别急着端上桌。
+Intel/AMD Windows 选 **x64**，Windows on Arm 选 **ARM64**。
+下载包内同时提供安装版和 Portable。当前版本 **0.1.0-rc1** 为未签名开发预览版，
+从 Actions 下载需要登录 GitHub。这是开发预览包，不是稳定发行版。
 
-![APEIR Studio 中的工程文件、编辑器与 Chat](docs/media/studio-workspace-source.png)
+![APEIR Studio 中的项目编辑器与可视化工作流](docs/media/studio-workspace-source.png)
 
-*Studio 源码界面的真实截图（Linux 浏览器，模型已禁用）。
-下载的 Windows 包有独立构建版本；此图不代表 Windows 安装或真实模型验收。*
+*APEIR Studio · 源码运行界面。*
 
-APEIR Studio 可以组合工程、对话、Workflow、任务和证据面板，保存自己的工作布局。
-APEIR Runtime 负责已获准的操作与原始记录。模型和扩展提供能力，不负责批准自己的请求。
+## 可以做什么？
 
-## 可以先做什么？
-
-| 场景 | 使用入口 |
+| 场景 | 从这里开始 |
 | --- | --- |
-| 读取工程、审查多文件 Diff，再应用经过独立审批的修改 | [Studio 与工程修改](docs/operations/guides/USER_GUIDE.md#reviewing-workspace-changes) |
-| 创建受支持的 Workflow，查看原始 Run，并恢复历史记录 | [Workflow 指南](docs/operations/guides/WORKFLOW_GUIDE.md) |
-| 通过公开的声明式接口添加一个只读 Studio Widget | [System Monitor 示例](examples/studio_system_monitor/README.md) |
+| 阅读工程、审查多文件 Diff，确认后应用修改 | [项目与代码修改](docs/operations/guides/USER_GUIDE.md#reviewing-workspace-changes) |
+| 连接工作流节点、执行任务，重新查看结果和历史 | [Workflow 指南](docs/operations/guides/WORKFLOW_GUIDE.md) |
+| 组合窗口、保存布局，添加自己的只读组件 | [UI Extension 示例](examples/studio_system_monitor/README.md) |
 
-也可以[配置兼容的云端与本地模型](docs/operations/guides/PROVIDER_GUIDE.md)，
-查看 Node、Device 和已经记录的工具活动。模型调用需要实际可用的端点及通过认证的
-Kernel；测试命令还需要对应权限和合格沙箱。条件不足时会显示原因，不会装作已经执行。
+需要模型时，再[连接云端 API 或本地模型服务](docs/operations/guides/PROVIDER_GUIDE.md)。
+查看文件、调整布局和运行无模型工作流不需要模型账号。
 
 ## 下载与启动
 
-[安装指南](docs/operations/getting-started/QUICK_START.md)提供三条路径：
+下载对应架构的包并解压，打开其中的 **Setup 安装程序**。
+不想安装，可以继续解压 **Portable ZIP**，运行 `APEIR-Portable/APEIR.exe`。
+请保留整个目录，旁边的文件也是程序的一部分。
 
-- **Source Preview：**下载同源 Runtime wheel 与已构建的浏览器 Studio，需要 Python
-  3.10+；使用这份前端不需要安装 Node.js 或 Rust。
-- **Windows Development Build：**GitHub Actions 工件分别提供未签名的 x64、ARM64 Portable
-  和 NSIS 安装程序，下载需要登录 GitHub。
-- **Developer Setup：**从源码开发 Runtime、调试 Studio，适合参与项目或修改代码。
+[安装与首次启动](docs/operations/getting-started/INSTALL_WINDOWS.md) ·
+[版本与 SHA-256](docs/operations/getting-started/QUICK_START.md#download-metadata)
 
-[下载信息](docs/operations/getting-started/QUICK_START.md#download-metadata)列出版本、
-SHA-256、保留期限和验收范围。目前提供的是临时预览工件，没有稳定正式版或一键安装脚本。
+已安装并登录 [GitHub CLI](https://cli.github.com/) 的开发者，可以在 PowerShell
+下载并校验 x64 安装程序：
+
+```powershell
+gh run download 43549734683 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-rc1-x64
+if ($LASTEXITCODE -ne 0) { throw 'Download failed' }
+$setup = '.\apeir-rc1-x64\APEIR_0.1.0-rc1_x64-setup.exe'
+$expected = '8374139b89f070ab6e2982c8930055b3ff2fbf44d278756e32a538362e360a4e'
+if ((Get-FileHash -LiteralPath $setup -Algorithm SHA256 -ErrorAction Stop).Hash -ne $expected) { throw 'SHA-256 mismatch' }
+Write-Host 'Verified. Open the installer when ready.'
+```
+
+使用一个新的下载目录。这段命令只下载和校验，不自动安装。
+[ARM64 命令及完整校验说明](docs/operations/getting-started/INSTALL_WINDOWS.md#download-with-github-cli)。
+Actions 下载有保留期限；目前尚无公开 Release 下载渠道。
+
+也可以选择：
+
+- [**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview)：
+  安装 Python 包，用浏览器打开预构建的 Studio。
+- [**Developer Setup**](docs/operations/getting-started/QUICK_START.md#developer-setup)：
+  从源码开发，需要 Python 3.10+ 和 Node.js 22.19+。
 
 ## 开发与扩展
 
-[开发者入口](docs/development/DEVELOPER_PLATFORM.md) ·
-[公开 Provider SDK](docs/development/PROVIDER_DEVELOPMENT.md) ·
+[开发者指南](docs/development/DEVELOPER_PLATFORM.md) ·
+[Provider SDK](docs/development/PROVIDER_DEVELOPMENT.md) ·
 [UI Extension SDK](docs/development/STUDIO_UI_EXTENSIONS.md) ·
-[示例](examples/README.md) · [API / CLI 参考](docs/development/README.md)
+[示例](examples/README.md) · [代码入口](docs/development/RUNTIME_MODULE_MAP.md#current-code-entry-points)
 
-SDK 仍处于 beta。Studio UI 扩展目前使用经过审查的数据型 Manifest，
-尚未开放任意第三方 JavaScript。独立维护的 [Kernel](https://github.com/untrod/apeir-kernel)
-由[组件锁](runtime-components.lock.json)固定。
+Provider SDK 处于 beta 阶段。Studio 扩展通过声明式配置描述界面，由宿主负责渲染。
+CLI、Runtime、Studio 和 SDK 的入口都可以从代码导航中找到。
 
 ## 参与贡献
 
-从 [CONTRIBUTING](CONTRIBUTING.md) 开始。可复现的问题通过
-[Issues](https://github.com/untrod/apeir/issues)报告，安全漏洞按
-[SECURITY](SECURITY.md)私下提交。架构与验收资料见[文档导航](docs/README.md)。
-已有的 `nous` 命令和标识保留兼容用途。
+开发环境和 PR 流程见 [CONTRIBUTING](CONTRIBUTING.md)。普通问题请提交
+[Issue](https://github.com/untrod/apeir/issues)，安全漏洞请按 [SECURITY](SECURITY.md) 私下报告。
+[架构文档](docs/architecture/README.md)说明执行、权限和状态归属；
+APEIR Kernel 维护在[独立仓库](https://github.com/untrod/apeir-kernel)。
 
-## Developer Preview 状态
+## 预览版说明
 
-当前版本为 **0.1.0-rc1**，源码安装及部分完整软件流程已经验收。
-未签名 Windows 包通过了构建和 Sidecar 检查，Windows 10 安装生命周期仍待验收。
-真实模型账户、严格命令隔离和物理设备操作分别需要对应条件。
-[ROADMAP](ROADMAP.md)是当前状态的唯一记录入口。
-文件 MATCH 不代表测试已经运行，更不代表设备效果已经独立验证。
+Windows 包已通过构建和服务检查，Windows 10 的安装、升级、卸载仍在验证中。
+模型支持取决于实际协议和服务端能力；运行项目测试还需要受支持的隔离环境。
+详细状态见 [ROADMAP](ROADMAP.md) 和[已知限制](docs/acceptance/KNOWN_LIMITATIONS.md)。
 
 ## 许可证
 

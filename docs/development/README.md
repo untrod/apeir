@@ -19,6 +19,8 @@ and protected-main PR integration.
 [Provider SDK](PROVIDER_DEVELOPMENT.md) · [Write a Provider](WRITE_A_PROVIDER.md) ·
 [Pack development](PACK_DEVELOPMENT.md) · [Extension paths](ECOSYSTEM.md)
 
+[MCP integration](MCP_INTEGRATION.md) covers client access to existing Runtime tools.
+
 The Python Provider SDK is beta and installed from the matching source checkout.
 The checked-in TypeScript HTTP client is not a published stable npm package.
 [Current code entry points](RUNTIME_MODULE_MAP.md#current-code-entry-points) map the maintained owners;
@@ -32,8 +34,7 @@ The checked-in TypeScript HTTP client is not a published stable npm package.
 
 [Canonical architecture](../architecture/README.md) and
 [Engineering Review](../acceptance/ENGINEERING_REVIEW.md) retain authority and
-acceptance detail. Old names and dated examples are not promises of a current
-release, live Provider, native installation or physical effect.
+acceptance detail.
 
 ## Run the checks for your change
 
