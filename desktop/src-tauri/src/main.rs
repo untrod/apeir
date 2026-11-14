@@ -13,7 +13,10 @@ use std::{
     net::{TcpStream, ToSocketAddrs},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
     thread,
     time::Duration,
 };
@@ -44,11 +47,31 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Default)]
 struct RuntimeManager {
+    operation: Mutex<()>,
+    exiting: AtomicBool,
     child: Mutex<Option<Child>>,
     nousd_child: Mutex<Option<Child>>,
     kernel_token: Mutex<Option<String>>,
     #[cfg(target_os = "windows")]
     job_handle: Mutex<Option<usize>>,
+}
+
+// Blocking lifecycle calls run off the WebView thread but still share the
+// original manager. Serialize mutations and refuse queued work after exit.
+fn with_runtime_operation<T>(
+    manager: &RuntimeManager,
+    operation: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let _guard = manager
+        .operation
+        .lock()
+        .map_err(|_| "Runtime lifecycle is unavailable.".to_string())?;
+    if manager.exiting.load(Ordering::Acquire) {
+        return Err(
+            "The application is exiting; no new Runtime action was started.".to_string(),
+        );
+    }
+    operation()
 }
 
 #[cfg(target_os = "windows")]
@@ -826,51 +849,59 @@ fn stop_runtime_api_inner(manager: &RuntimeManager) -> Result<(), String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn start_runtime_api(manager: State<'_, RuntimeManager>) -> Result<String, String> {
-    start_runtime_api_inner(&manager)
+    with_runtime_operation(&manager, || {
+        start_runtime_api_inner(&manager)
+    })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn restart_runtime_api(manager: State<'_, RuntimeManager>) -> Result<String, String> {
-    stop_runtime_api_inner(&manager)?;
-    start_runtime_api_inner(&manager)
+    with_runtime_operation(&manager, || {
+        stop_runtime_api_inner(&manager)?;
+        start_runtime_api_inner(&manager)
+    })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn stop_runtime_api(manager: State<'_, RuntimeManager>) -> Result<(), String> {
-    stop_runtime_api_inner(&manager)
+    with_runtime_operation(&manager, || {
+        stop_runtime_api_inner(&manager)
+    })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn store_provider_credential(
     environment_name: String,
     secret: String,
     manager: State<'_, RuntimeManager>,
 ) -> Result<String, String> {
-    let environment_name = credentials::validate_environment_name(&environment_name)?;
-    let previous = credentials::load(&environment_name)?;
-    credentials::store(&environment_name, &secret)?;
+    with_runtime_operation(&manager, || {
+        let environment_name = credentials::validate_environment_name(&environment_name)?;
+        let previous = credentials::load(&environment_name)?;
+        credentials::store(&environment_name, &secret)?;
 
-    let mut names = configured_credential_environment_names();
-    if !names.iter().any(|name| name == &environment_name) {
-        names.push(environment_name.clone());
-        names.sort();
-        names.dedup();
-        if let Err(error) =
-            config::update_app_config("credential_environment_names", serde_json::json!(names))
-        {
-            if let Some(previous) = previous {
-                let _ = credentials::store(&environment_name, &previous);
-            } else {
-                let _ = credentials::remove(&environment_name);
+        let mut names = configured_credential_environment_names();
+        if !names.iter().any(|name| name == &environment_name) {
+            names.push(environment_name.clone());
+            names.sort();
+            names.dedup();
+            if let Err(error) =
+                config::update_app_config("credential_environment_names", serde_json::json!(names))
+            {
+                if let Some(previous) = previous {
+                    let _ = credentials::store(&environment_name, &previous);
+                } else {
+                    let _ = credentials::remove(&environment_name);
+                }
+                return Err(error);
             }
-            return Err(error);
         }
-    }
 
-    stop_runtime_api_inner(&manager)?;
-    start_runtime_api_inner(&manager)
+        stop_runtime_api_inner(&manager)?;
+        start_runtime_api_inner(&manager)
+    })
 }
 
 #[tauri::command]
@@ -887,33 +918,35 @@ fn list_provider_credentials() -> Result<Vec<ProviderCredentialStatus>, String> 
         .collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn remove_provider_credential(
     environment_name: String,
     manager: State<'_, RuntimeManager>,
 ) -> Result<String, String> {
-    let environment_name = credentials::validate_environment_name(&environment_name)?;
-    let previous = credentials::load(&environment_name)?;
-    credentials::remove(&environment_name)?;
+    with_runtime_operation(&manager, || {
+        let environment_name = credentials::validate_environment_name(&environment_name)?;
+        let previous = credentials::load(&environment_name)?;
+        credentials::remove(&environment_name)?;
 
-    let names = configured_credential_environment_names()
-        .into_iter()
-        .filter(|name| name != &environment_name)
-        .collect::<Vec<_>>();
-    if let Err(error) =
-        config::update_app_config("credential_environment_names", serde_json::json!(names))
-    {
-        if let Some(secret) = previous {
-            let _ = credentials::store(&environment_name, &secret);
+        let names = configured_credential_environment_names()
+            .into_iter()
+            .filter(|name| name != &environment_name)
+            .collect::<Vec<_>>();
+        if let Err(error) =
+            config::update_app_config("credential_environment_names", serde_json::json!(names))
+        {
+            if let Some(secret) = previous {
+                let _ = credentials::store(&environment_name, &secret);
+            }
+            return Err(error);
         }
-        return Err(error);
-    }
 
-    stop_runtime_api_inner(&manager)?;
-    start_runtime_api_inner(&manager)
+        stop_runtime_api_inner(&manager)?;
+        start_runtime_api_inner(&manager)
+    })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_runtime_process_status(
     manager: State<'_, RuntimeManager>,
 ) -> Result<RuntimeProcessStatus, String> {
@@ -946,17 +979,21 @@ struct NousdProcessStatus {
     log_path: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn start_nousd(manager: State<'_, RuntimeManager>) -> Result<u16, String> {
-    start_nousd_inner(&manager)
+    with_runtime_operation(&manager, || {
+        start_nousd_inner(&manager)
+    })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn stop_nousd(manager: State<'_, RuntimeManager>) -> Result<(), String> {
-    stop_nousd_inner(&manager)
+    with_runtime_operation(&manager, || {
+        stop_nousd_inner(&manager)
+    })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_nousd_status(manager: State<'_, RuntimeManager>) -> Result<NousdProcessStatus, String> {
     let port = std::env::var("NOUS_KERNEL_PORT")
         .ok()
@@ -1247,6 +1284,11 @@ fn main() {
     app.run(|handle, event| {
         if matches!(event, RunEvent::Exit) {
             let manager = handle.state::<RuntimeManager>();
+            manager.exiting.store(true, Ordering::Release);
+            let _operation = manager
+                .operation
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
             if let Err(error) = stop_runtime_api_inner(&manager) {
                 log::error!("Runtime shutdown failed: {error}");
             }
@@ -1258,8 +1300,44 @@ fn main() {
 mod tests {
     use super::{
         credential_allowlist, initialize_workspace, runtime_session_is_valid,
-        should_hide_main_window_on_close, validate_workspace_root,
+        should_hide_main_window_on_close, validate_workspace_root, with_runtime_operation,
+        RuntimeManager,
     };
+
+    #[test]
+    fn queued_lifecycle_mutations_are_rejected_when_exit_begins() {
+        use std::sync::{atomic::Ordering, mpsc, Arc};
+        use std::time::Duration;
+        let manager = Arc::new(RuntimeManager::default());
+        let (started, start) = mpsc::channel();
+        let (release, released) = mpsc::channel();
+        let first_manager = Arc::clone(&manager);
+        let first = thread::spawn(move || {
+            with_runtime_operation(&first_manager, || {
+                started.send(()).unwrap();
+                released.recv_timeout(Duration::from_secs(2)).unwrap();
+                Ok(())
+            })
+        });
+        start.recv_timeout(Duration::from_secs(2)).unwrap();
+        let (queued, queued_signal) = mpsc::channel();
+        let (executed, execution) = mpsc::channel();
+        let second_manager = Arc::clone(&manager);
+        let second = thread::spawn(move || {
+            queued.send(()).unwrap();
+            with_runtime_operation(&second_manager, || {
+                executed.send(()).unwrap();
+                Ok(())
+            })
+        });
+        queued_signal.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(execution.try_recv().is_err());
+        manager.exiting.store(true, Ordering::Release);
+        release.send(()).unwrap();
+        assert!(first.join().unwrap().is_ok());
+        assert!(second.join().unwrap().unwrap_err().contains("exiting"));
+        assert!(execution.try_recv().is_err());
+    }
     use std::{
         env, fs,
         io::{Read, Write},

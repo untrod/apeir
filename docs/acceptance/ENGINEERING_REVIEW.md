@@ -7055,3 +7055,49 @@ form now preserves case within the same bounded variable-name grammar; it still
 rejects raw keys and does not resolve or persist secret values in the browser.
 The original failing fixture is retained. Case preservation matters on Linux;
 no new Credential store or host-environment access is introduced.
+
+### Model setup feedback and saved model roster — 2026-11-14
+
+The reported repeated clicks and missing model list exposed two presentation
+gaps and a session-lifecycle defect. Initial credential reads and saves had no
+prominent progress, Settings offered no model roster, and a verified native
+credential save rotated the Runtime token, retiring the Settings view before its
+completion message could be seen. Three original failing UI fixtures are
+retained. A full-Shell token-rotation case additionally reproduced a remount
+before its parent selected Models; explicit Settings requests now reach the
+remounted view.
+
+Settings reuses the original Provider form and model catalog. Its Models/API
+keys tabs distinguish registered models, saved connections and stored key names.
+New keys use an unused default name; replacing an existing key is explicit.
+The Provider form can select saved local references, retaining manual references
+for remote Controllers. No secret is returned from credential listing, sent to
+the Provider HTTP configuration API, or stored in a layout/browser preference.
+Saving configuration still performs no inference.
+
+Native lifecycle IPC now uses Tauri's asynchronous command dispatch over the
+existing RuntimeManager. That manager serializes mutations and refuses queued
+actions after application exit begins. Credential persistence, rollback,
+Runtime/Kernel startup, HTTP deadlines and process cleanup retain their original
+owners. This removes a blocking command path from the WebView thread; it is not
+a measured Windows responsiveness claim. The full official Native launcher
+compiles and tests this Rust code for each candidate target.
+
+Local qualification: Desktop lint, TypeScript and production build pass;
+534 unit cases pass. Repository, Provider configuration, first-launch credential
+security and credential ownership:435 passed,7 skipped. All22 existing/extended
+browser cases pass separately in development and production Chromium against
+the actual authenticated model-disabled Runtime. The new Settings case creates
+a real saved configuration, reloads Studio, reads the original persisted profile
+and checks that no inference request was submitted. Credential IPC and token
+rotation use fake credentials; they do not qualify Windows Credential Manager or
+a real model call. Negative cases retain Controller/ABA isolation, duplicate
+submission rejection, protected drafts and unconfirmed-save reconciliation.
+Local Markdown links, document hygiene and release-version checks pass. Security
+scan reports zero high-risk findings and the same six historical medium findings.
+
+Matching Native build results and source SHAs belong to the PR/artifact records.
+Windows10 x64/tablet ARM64 GUI, key-store behavior, install/upgrade/uninstall and
+real Provider accounts remain independently PENDING. Historical Windows timing
+Issues88/116 are not closed by these UI tests. The Kernel source, component lock,
+published tags and formal Release authorization are unchanged.

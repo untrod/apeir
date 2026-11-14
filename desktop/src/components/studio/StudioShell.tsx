@@ -14,6 +14,7 @@ import { StudioPresentation } from "./StudioPresentation";
 import { StudioLayoutLibrary } from "./StudioLayoutLibrary";
 import { DetailDrawer, type DrawerView } from "../DetailDrawer";
 import { SettingsPage } from "../SettingsPage";
+import type { NativeCredentialNotice } from "../../lib/nativeRuntime";
 import "flexlayout-react/style/light.css";
 import "./StudioShell.css";
 
@@ -39,6 +40,12 @@ export function StudioShell({ onProtectedChange, onExit }: { onProtectedChange?:
   const { locale } = useTheme();
   const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   const version = useRuntimeConfigVersion();
+  const [settingsSection, setSettingsSection] = useState<"general" | "models" | "credentials" | null>(null);
+  const [credentialNotice, setCredentialNotice] = useState<NativeCredentialNotice | null>(null);
+  const credentialStored = useCallback((notice: NativeCredentialNotice) => {
+    if (notice.version !== getRuntimeConfigVersion()) return;
+    setCredentialNotice(notice); setSettingsSection("models");
+  }, []);
   const drafts = useRef(new Map<string, WorkbenchDraft[]>());
   const previous = useRef(version);
   const [changed, setChanged] = useState(false);
@@ -58,7 +65,7 @@ export function StudioShell({ onProtectedChange, onExit }: { onProtectedChange?:
       <button onClick={() => { for (const key of drafts.current.keys()) if (!key.startsWith(`${version}:`)) drafts.current.delete(key); protect(activeProtected.current); setChanged(false); }}>{t("Discard previous drafts", "放弃原连接的草稿")}</button>
       <button onClick={() => setChanged(false)}>{t("Dismiss", "关闭提示")}</button>
     </div>}
-    <StudioSession onExit={onExit} key={version} epoch={version} remember={remember} onProtectionChange={protect} />
+    <StudioSession onExit={onExit} key={version} epoch={version} remember={remember} onProtectionChange={protect} settingsSection={settingsSection} onSettingsChange={setSettingsSection} credentialNotice={credentialNotice?.version === version ? credentialNotice : null} onCredentialStored={credentialStored} />
   </div>;
 }
 
@@ -66,7 +73,7 @@ function StudioSession(props: React.ComponentProps<typeof StudioWorkspace>) {
   return <StudioSnapshot><StudioWorkspace {...props} /></StudioSnapshot>;
 }
 
-function StudioWorkspace({ epoch, remember, onProtectionChange, onExit }: { onExit?: () => void; epoch: number; remember: (key: string, value: WorkbenchDraft[]) => void; onProtectionChange: (value: boolean) => void }) {
+function StudioWorkspace({ epoch, remember, onProtectionChange, onExit, settingsSection, onSettingsChange, credentialNotice, onCredentialStored }: { onExit?: () => void; epoch: number; remember: (key: string, value: WorkbenchDraft[]) => void; onProtectionChange: (value: boolean) => void; settingsSection: "general" | "models" | "credentials" | null; onSettingsChange: (section: "general" | "models" | "credentials" | null) => void; credentialNotice: NativeCredentialNotice | null; onCredentialStored: (notice: NativeCredentialNotice) => void }) {
   const { locale } = useTheme();
   const panels = useStudioPanels();
   const initial = useMemo(() => {
@@ -78,8 +85,7 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit }: { onEx
   const [revision, setRevision] = useState(0);
   const [message, setMessage] = useState(initial.error);
   const [editing, setEditing] = useState(false);
-  const [settings, setSettings] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<"general" | "models">("general");
+  const settings = settingsSection !== null;
   const [settingsError, setSettingsError] = useState("");
   const settingsDialog = useRef<HTMLDialogElement>(null);
   const settingsTrigger = useRef<HTMLElement | null>(null);
@@ -129,14 +135,14 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit }: { onEx
     } catch (error) { setMessage(String(error)); }
   }, [capture, locale]);
   const save = useCallback(() => persistLayout(true), [persistLayout]);
-  const openSettings = useCallback((section: "general" | "models" = "general") => {
+  const openSettings = useCallback((section: "general" | "models" | "credentials" = "general") => {
     settingsTrigger.current = window.document.activeElement as HTMLElement | null;
     if (menu.current) menu.current.open = false;
-    setSettingsSection(section); setSettingsError(""); setSettings(true); setPicker(false);
-  }, []);
+    onSettingsChange(section); setSettingsError(""); setPicker(false);
+  }, [onSettingsChange]);
   const closeSettings = () => {
-    if (dirty.current.has(SETTINGS_DRAFT)) { setSettingsError(t("Save or clear the credential input before closing settings.", "请先保存或清空凭据输入，再关闭设置。")); return false; }
-    settingsDialog.current?.close(); setSettings(false); settingsTrigger.current?.focus(); return true;
+    if (dirty.current.has(SETTINGS_DRAFT)) { setSettingsError(t("Save or cancel model changes, or clear the key input before closing settings.", "请先保存或取消模型配置修改，或清空密钥输入，再关闭设置。")); return false; }
+    settingsDialog.current?.close(); onSettingsChange(null); settingsTrigger.current?.focus(); return true;
   };
   const settingsDraft = useCallback((value: boolean) => {
     if (value) dirty.current.add(SETTINGS_DRAFT); else dirty.current.delete(SETTINGS_DRAFT);
@@ -208,7 +214,7 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit }: { onEx
     for (const [id, host] of hosts.current) if (!live.has(id)) { host.remove(); hosts.current.delete(id); }
   });
   const open = (type: string) => {
-    if (type === "credentials") { openSettings("models"); return; }
+    if (type === "credentials") { openSettings("credentials"); return; }
     if (!panels.some(panel => panel.type === type)) return;
     if (tabs.length >= 24) { setMessage("Panel limit reached (24)."); return; }
     let group = model.getActiveTabset();
@@ -223,7 +229,7 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit }: { onEx
     setRevision(value => value + 1); setPicker(false);
   };
   const reveal = (type: string) => {
-    if (type === "credentials") { openSettings("models"); return; }
+    if (type === "credentials") { openSettings("credentials"); return; }
     const compatible = type === "editor" ? ["editor", "files"] : [type];
     const active = activeStudioTab(model);
     const existing = compatible.includes(active?.getComponent() || "") ? active : tabs.find(node => node.getId() === lastFocused.current.get(type) && compatible.includes(node.getComponent() || "")) ?? tabs.find(node => compatible.includes(node.getComponent() || ""));
@@ -328,7 +334,7 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit }: { onEx
     </div>}
     {tabs.map(node => <StablePanel key={node.getId()} node={node} host={getHost(node.getId())} dirty={dirty.current} onProtectionChange={onProtectionChange} onSnapshot={value => remember(`${epoch}:${node.getId()}`, value)} open={reveal} inspect={setSelection} config={node.getConfig()} locale={locale} saveLayout={save} updateConfig={config => { if (JSON.stringify(node.getConfig()) !== JSON.stringify(config)) { model.doAction(Actions.updateNodeAttributes(node.getId(), { config })); setRevision(value => value + 1); } }} />)}
     <DetailDrawer view={selection} onClose={() => setSelection(null)} />
-    {settings && <dialog ref={settingsDialog} className="studio-settings-dialog" aria-label={t("Settings", "设置")} onCancel={event => { event.preventDefault(); closeSettings(); }}><SettingsPage initialSection={settingsSection} notice={settingsError} onClose={closeSettings} onOpenModels={() => { if (closeSettings()) reveal("models"); }} onOpenLayouts={() => { if (closeSettings()) setLibrary(true); }} onDraftChange={settingsDraft} hasOtherDrafts={otherDrafts} hasProtectedChanges={() => dirty.current.size > 0} /></dialog>}
+    {settings && <dialog ref={settingsDialog} className="studio-settings-dialog" aria-label={t("Settings", "设置")} onCancel={event => { event.preventDefault(); closeSettings(); }}><SettingsPage initialSection={settingsSection === "general" ? "general" : "models"} initialModelSection={settingsSection === "credentials" ? "credentials" : "models"} preferredCredential={credentialNotice} onCredentialStored={onCredentialStored} notice={settingsError} onClose={closeSettings} onOpenModels={() => { if (closeSettings()) reveal("models"); }} onOpenApprovals={() => { if (closeSettings()) reveal("operations"); }} onOpenLayouts={() => { if (closeSettings()) setLibrary(true); }} onDraftChange={settingsDraft} hasOtherDrafts={otherDrafts} hasProtectedChanges={() => dirty.current.size > 0} /></dialog>}
     <footer className="studio-footer"><span role="status">{message === t("Layout saved.", "布局已保存。") ? message : `${tabs.length} ${t(tabs.length === 1 ? "panel" : "panels", "个面板")}`}</span><span>{editing ? t("Editing layout", "正在编辑布局") : t("Workspace", "工作区")} · Ctrl/⌘ ⇧ P</span></footer>
   </section></StudioPresentation.Provider>;
 }

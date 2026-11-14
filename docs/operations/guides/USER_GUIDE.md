@@ -67,6 +67,13 @@ Skills keep their separate installation/load/enable controls in Operations Conso
 loading instructions does not execute a Tool. Local model service installation and
 startup are separate from opening a Models panel.
 
+Set up models in **Settings → Models & credentials**. **Models** lists registered
+models and saved connections; **API keys** manages the local native credential
+store. Select a Provider and save its key, then select that saved reference when
+adding a connection. Saving shows progress and restarts the local Runtime;
+inference remains a separate, explicit action. See the
+[model setup guide](PROVIDER_GUIDE.md#configure).
+
 Panel movement does not execute Work. Closing a panel does not cancel its
 background task. Floating OS windows remain disabled. **Settings → General**
 contains language and the existing Light/Dark/System themes. Preferences apply

@@ -1,5 +1,8 @@
 import { getConfig, getRuntimeConfigVersion, setConfig } from "./api";
 
+export interface NativeCredentialStatus { environment_name: string; stored: boolean }
+export interface NativeCredentialNotice { environmentName: string; providerId: string; endpoint: string; version: number }
+
 type SessionCommand = "load_runtime_session_token" | "start_runtime_api" |
   "restart_runtime_api" | "store_provider_credential" | "remove_provider_credential";
 
@@ -36,12 +39,32 @@ export async function nativeRuntimeStatus(): Promise<LocalRuntimeStatus> {
   return { ...status, endpoint };
 }
 
+/** Read names only, after binding the request to the selected local host. */
+export async function listNativeProviderCredentials(): Promise<NativeCredentialStatus[]> {
+  const version = getRuntimeConfigVersion();
+  const status = await nativeRuntimeStatus();
+  const current = () => {
+    if (getRuntimeConfigVersion() !== version || !isLocalRuntimeSelected(status.endpoint)) {
+      throw new Error("Select the local Runtime before managing its credentials.");
+    }
+  };
+  current();
+  const { invoke } = await import("@tauri-apps/api/core");
+  current();
+  const rows = await invoke<NativeCredentialStatus[]>("list_provider_credentials");
+  current();
+  if (!Array.isArray(rows) || rows.some(row => !row || typeof row.environment_name !== "string" || !/^[A-Z_][A-Z0-9_]{0,127}$/.test(row.environment_name) || typeof row.stored !== "boolean") || new Set(rows.map(row => row.environment_name)).size !== rows.length) {
+    throw new Error("Saved credential names are unavailable.");
+  }
+  return rows.map(({ environment_name, stored }) => ({ environment_name, stored }));
+}
+
 // Bind the native host's session to its reported loopback endpoint, never to
 // a form field or whichever Controller happens to be selected after an await.
 export async function bindNativeRuntimeSession(
   command: SessionCommand,
   args?: Record<string, unknown>,
-  options: { activateLocal?: boolean; isActive?: () => boolean } = {},
+  options: { activateLocal?: boolean; isActive?: () => boolean; onDispatched?: () => void } = {},
 ): Promise<{ token: string; endpoint: string; version: number }> {
   const version = getRuntimeConfigVersion();
   const original = getConfig();
@@ -64,6 +87,7 @@ export async function bindNativeRuntimeSession(
   }
   const { invoke } = await import("@tauri-apps/api/core");
   check();
+  options.onDispatched?.();
   const token = await invoke<string>(command, args);
   check();
   const after = await nativeRuntimeStatus();

@@ -74,7 +74,7 @@ describe("native Runtime session destination", () => {
     setConfig(selected);
     render(<CredentialSettings />);
     fireEvent.change(screen.getByLabelText("Provider credential"), { target: { value: "fixture-only-provider-value" } });
-    fireEvent.click(screen.getByRole("button", { name: "Store or Rotate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save key" }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/local Runtime/i));
     expect(native.invoke.mock.calls.some(([command]) => command === "store_provider_credential")).toBe(false);
     expect(getConfig()).toEqual(selected);
@@ -82,10 +82,11 @@ describe("native Runtime session destination", () => {
 
   it("stores a local credential once, clears the input and binds the returned session to the native endpoint", async () => {
     render(<CredentialSettings />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save key" })).toBeEnabled());
     const fakeCredential = "fixture-only-provider-value";
     fireEvent.change(screen.getByLabelText("Provider credential"), { target: { value: fakeCredential } });
-    fireEvent.click(screen.getByRole("button", { name: "Store or Rotate" }));
-    await waitFor(() => expect(screen.getByText(/Credential stored/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Save key" }));
+    await waitFor(() => expect(screen.getByText(/Key saved/)).toBeInTheDocument());
     expect(getConfig()).toEqual({ url: endpoint, token: localSession });
     expect(screen.getByLabelText("Provider credential")).toHaveValue("");
     expect(native.invoke.mock.calls.filter(([command]) => command === "store_provider_credential")).toEqual([
