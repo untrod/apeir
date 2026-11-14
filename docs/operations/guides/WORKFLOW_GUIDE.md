@@ -26,8 +26,7 @@ Run inputs, registered definitions and original Run records.
 
 ![Workflow module context menu with unsupported handlers disabled](../../media/studio-workflow-module-menu-source.png)
 
-*Actual source-browser session against a model-disabled Runtime. The enabled
-Model entry allows configuration; it does not prove inference is available.*
+*Right-click the canvas to add a supported step.*
 
 1. Add nodes, edit parameters and connect dependency handles. Shift-select,
    duplicate/delete, arrange, zoom and undo/redo are available.
@@ -129,9 +128,4 @@ apeir --no-intelligence workflow validate workflow.json --json
 ![Workflow Builder with a registered pure workflow and its original Run](../../media/studio-workflow-source.png)
 
 
-The image above shows a real three-step TRANSFORM workflow at
-[Studio source `1b09be4`](https://github.com/untrod/apeir/commit/1b09be440019981c1d6800b77f191cd3d3d1e7f8),
-captured in Linux Chromium on 2026-11-02. The steps transfer recorded review
-notes; they do not perform model analysis or run project tests. Registration and
-execution each received an independent local approval. This is source-browser
-acceptance, not Windows installation acceptance.
+*A model-free workflow and its saved execution record in the source build.*

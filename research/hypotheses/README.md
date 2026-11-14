@@ -1,6 +1,11 @@
-# Research Hypotheses
+# Archived research hypotheses
 
-Falsifiable claims with pre-registered predictions. Each hypothesis must include:
+Historical planning notes, retained for reference. The numerical targets and
+implementation comments below have not been revalidated against the current
+Runtime; they are not product claims. Current feature status is in
+[ROADMAP](../../ROADMAP.md).
+
+The original proposed format follows. Each hypothesis must include:
 - Research question
 - Prior work
 - Nous-specific claim
@@ -10,7 +15,7 @@ Falsifiable claims with pre-registered predictions. Each hypothesis must include
 - Ablation plan
 - Success criteria
 
-## Active Hypotheses
+## Original hypotheses
 
 ### H1: Context VM reduces token usage vs full history
 - **Claim:** Cross-representation context paging reduces total tokens by 30%+ vs full history retransmission for long-running agent tasks (>100 turns)

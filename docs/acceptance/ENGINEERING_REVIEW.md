@@ -145,7 +145,7 @@ CPython3.13.17, Rust1.99.1, MSVC14.51, SDK26100 and Microsoft vcpkg
 No source or binary is fetched from an unreviewed EXE mirror.
 
 The lock now admits those exact ARM64 inputs through the existing verifier.
-The full native build, installer checks on disposable CI and Windows10 Pad5 GUI
+The full native build, installer checks on disposable CI and Windows10 ARM64 GUI
 lifecycle still require their actual results. This approval does not make
 `NATIVE_INSTALL_READY` or `RELEASE_READY` pass.
 
@@ -189,7 +189,7 @@ Original dependency/startup failures below remain recorded with their exact sour
 
 ## Windows ARM64 candidate preparation — 2026-11-11
 
-The requested Xiaomi Pad5 target is Windows ARM64, not 32-bit Windows. Starting
+The requested target is Windows ARM64, not 32-bit Windows. Starting
 main is `cf24eb55c5b4ff13f03a1226a10892cbbf93a7a3`. The maintained lock contains
 only the approved x64 components. The old ARM64 packaging job cannot satisfy it;
 a renamed x64 executable is not an ARM64 candidate.

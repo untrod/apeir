@@ -1,143 +1,110 @@
-# APEIR on Windows
+# Install APEIR on Windows
 
-The current **0.1.0-rc1 development bundle** contains both an installer and a
-Portable ZIP. Pick one; you do not need to install Python or Kernel separately.
+[**Download x64**](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424) ·
+[**Download ARM64**](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427) ·
+[Version and checksums](QUICK_START.md#download-metadata)
 
-[**Download x64 Setup + Portable**](https://github.com/untrod/apeir/actions/runs/42977022966/artifacts/13837634414)
-· [**Download ARM64 Setup + Portable**](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13901748571)
-· [Version, hashes and source](QUICK_START.md#download-metadata)
+Each bundle contains Setup and Portable. You do not need to install Python,
+Node.js or Rust to use either one.
 
-This is an **unsigned development build**, not a stable Release. GitHub sign-in
-is required; the artifact expires on **2026-11-25**. Build and real sidecar checks
-passed on Windows Server 2025 for x64. ARM64 full build, silent installation and
-installed-sidecar checks passed on Windows 11 ARM64. Windows 10 installation,
-GUI, upgrade, uninstall and Defender acceptance are **PENDING**. There is no public Release asset yet.
+下载对应架构的包并解压，安装版和 Portable 选一种即可。模型可以稍后配置。
 
-中文速读：下载上面的工件，解压后任选安装版或 Portable。先校验，再打开；
-暂时没有 Windows 10 实机验收，不要把工作资料当测试沙盒。模型可以稍后配置。
+## Requirements
 
-## Known limitations
+- **Architecture:** x64 for Intel/AMD Windows; ARM64 for Windows on Arm.
+- **WebView2:** Setup can download Microsoft's WebView2 runtime when it is missing.
+  Portable also needs WebView2 installed.
+- **Storage:** a writable application directory and a project folder.
 
-This bundle includes governed project tests, passive evidence evaluation,
-queued Relay cancellation, Context connection cleanup, WAL-aware backups and
-Studio extension host-feature discovery. Workflow Monitor is a separately reviewed, read-only example; installing
-a Widget does not grant Workflow access or execute a run.
-Its full build and native component checks passed; the installer has not been
-exercised on Windows10. GUI startup, upgrade, uninstall, Defender and old-workspace
-compatibility remain **PENDING**.
+<a name="known-limitations"></a>
 
-Historical Windows [Skill HTTP](https://github.com/untrod/apeir/issues/88) and
-[Context persistence](https://github.com/untrod/apeir/issues/116) deadlines remain
-under investigation. Current passing checks do not establish a common root cause
-or close those issues. After an uncertain response, query the original Work/Run
-rather than submitting the operation again.
+Version **0.1.0-rc1** is an unsigned Developer Preview. GitHub sign-in is required
+for these Actions downloads, which are retained until **2026-11-28**.
+Windows 10 install, upgrade and uninstall testing is still in progress.
+If Windows blocks the application, keep the exact message for troubleshooting;
+do not disable Defender or SmartScreen.
 
-## Before opening a package
+## Verify the download
 
-- Choose the matching architecture: **x64** for Intel/AMD Windows, **ARM64** for
-  Windows on Arm, including a Xiaomi Pad5 running Windows. These are separate
-  builds, not a 32-bit app or an Android package. Windows 10 target acceptance
-  remains pending for both. See the [tablet checklist](../deployment/WINDOWS_10_ARM64_LOCAL.md#first-tablet-test).
-- The desktop needs **Microsoft Edge WebView2**. Setup uses its download
-  bootstrapper when necessary, so first installation can require network access.
-- Keep the included sidecars and app-local runtime DLLs together. Their presence
-  was checked in the build; clean Windows 10 dependency acceptance is still pending.
-- Start with a **new, empty workspace**. Back up existing workspace and application
-  state before testing an upgrade. Use an isolated copy for migration tests.
+Extract the outer GitHub ZIP. In PowerShell, check the installer or Portable ZIP:
 
-Extract the outer GitHub artifact ZIP. Compare the Setup or Portable file's
-SHA-256 with [Download metadata](QUICK_START.md#download-metadata), not with the
-outer ZIP hash. In PowerShell, `Get-FileHash -Algorithm SHA256 <file>` prints it.
-A mismatch means **stop**. Do not run a similarly named file from another source.
+```powershell
+Get-FileHash -Algorithm SHA256 .\APEIR_0.1.0-rc1_x64-setup.exe
+```
 
-The bundle also contains `SHA256SUMS.txt`, manifests and native validation
-reports. The x64 source is `70a5c69b1b2bd9f36f5f6725e7a1e7bdf411fd2d`;
-ARM64 is `16308a6b5bb6f1d3049144f413bc8a9b9541561a`. A newer README or screenshot does
-not change either binary. Use the correct row in Download metadata.
+Use the matching filename for ARM64. Compare the result with
+[Download metadata](QUICK_START.md#download-metadata). Stop if it differs.
+`SHA256SUMS.txt` and the source manifest are also included in the bundle.
 
 ## Setup
 
-1. After verification, open `APEIR_0.1.0-rc1_x64-setup.exe` for x64 or
-   `APEIR_0.1.0-rc1_arm64-setup.exe` for ARM64.
-2. Setup is configured for the **current user**. Do not add administrator
-   elevation to work around a failure. Allow the supported WebView2 prerequisite
-   installation if it is needed and acceptable on your machine.
-3. Open APEIR and select a new workspace. Check the displayed Runtime and Kernel
-   status. A missing model is **UNCONFIGURED**, not a reason to lose read-only access.
-4. Open **Files**, **Workflow** or the supported model-free Demo. Add Provider
-   credentials later through the supported secure configuration flow.
-
-An unsigned application can receive Windows security warnings. If Windows blocks
-it, stop and retain the exact warning for review. Do not disable Defender,
-SmartScreen or other protection to make the test pass.
+1. Open `APEIR_0.1.0-rc1_x64-setup.exe` or `APEIR_0.1.0-rc1_arm64-setup.exe`.
+2. Follow Setup. It installs for the current user; no manual elevation is needed.
+3. Open APEIR, choose a project folder and enter Studio.
+4. Open **Files** or **Workflow**. To connect a model, use
+   **Settings → Models & credentials** and follow the [model guide](../guides/PROVIDER_GUIDE.md).
 
 ## Portable
 
-1. Verify `APEIR-Portable-0.1.0-rc1-windows-x64.zip` or
-   `APEIR-Portable-0.1.0-rc1-windows-arm64.zip` for your system.
-2. Extract the **whole ZIP** into a writable directory.
-3. Open `APEIR-Portable/APEIR.exe` from the extracted package. Do not move only
-   the EXE: Kernel, Worker and Runtime sidecars are part of the application.
-4. Follow the same workspace and service checks as Setup.
+1. Extract the included `APEIR-Portable-0.1.0-rc1-windows-x64.zip` or ARM64 ZIP.
+2. Open `APEIR-Portable/APEIR.exe`.
+3. Keep all files in that folder together, including the service executables and DLLs.
 
-“Portable” describes the application package. It does **not** mean all user data
-stays beside the EXE. The launcher uses `%LOCALAPPDATA%\Nous` for application
-configuration, logs and local service state, plus your selected workspace for
-project state. `Nous` is a retained compatibility directory name.
+Portable keeps application state under `%LOCALAPPDATA%\Nous`, just like Setup.
+Your selected project folder holds project state. The `Nous` directory name is
+retained for compatibility; Portable does not keep all data beside the EXE.
 
 <a name="download-with-github-cli"></a>
 
-## Download x64 with GitHub CLI
+## Download with GitHub CLI
 
-For developers who already use authenticated `gh`, this is the exact current
-artifact. It downloads files; it does **not** start installation:
+With [GitHub CLI](https://cli.github.com/) installed and authenticated, run this
+in PowerShell. Set `$apeirArch` to `arm64` for Windows on Arm:
 
 ```powershell
-gh run download 42977022966 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-0.1.0-rc1
-if ($LASTEXITCODE -ne 0) { throw 'Download failed; no installer was run.' }
+$apeirArch = 'x64' # or 'arm64'
+$apeirPackages = @{
+    x64 = @{ Run = '43549734683'; Setup = '8374139b89f070ab6e2982c8930055b3ff2fbf44d278756e32a538362e360a4e'; Portable = '95b65c4556e08812d64d5b0b631a9685d5000e0e26c38ecbc419144d8b030168' }
+    arm64 = @{ Run = '43549737576'; Setup = 'a75391060652b2f34ba590830a6ffef5ca889222813e410fd12d4796ba29c8d9'; Portable = 'feae9bc7a299b51c34680ecbf8920f0ebdd70db8fb2adb42ffb0964c9c947e8d' }
+}
+if (!$apeirPackages.ContainsKey($apeirArch)) { throw 'Choose x64 or arm64' }
+$apeirPackage = $apeirPackages[$apeirArch]
+$apeirDestination = ".\apeir-rc1-$apeirArch"
+if (Test-Path -LiteralPath $apeirDestination) { throw 'Choose a new download directory' }
+gh run download $apeirPackage.Run --repo untrod/apeir --name "windows-$apeirArch-native-development-build" --dir $apeirDestination
+if ($LASTEXITCODE -ne 0) { throw 'Download failed' }
 $apeirFiles = @{
-    'APEIR_0.1.0-rc1_x64-setup.exe' = 'ff3e8a56f14d048aee24367f282617a92e89f2d3397406e008b8bac7008e4b85'
-    'APEIR-Portable-0.1.0-rc1-windows-x64.zip' = '5896b513211d25dd3518fa7570c1d69bd343bf80babd756f63b5695355f863e3'
+    "APEIR_0.1.0-rc1_$apeirArch-setup.exe" = $apeirPackage.Setup
+    "APEIR-Portable-0.1.0-rc1-windows-$apeirArch.zip" = $apeirPackage.Portable
 }
 foreach ($apeirName in $apeirFiles.Keys) {
-    $apeirPath = Join-Path '.\apeir-0.1.0-rc1' $apeirName
-    if (!(Test-Path -LiteralPath $apeirPath)) { throw "Missing package: $apeirName" }
-    $apeirHash = (Get-FileHash -LiteralPath $apeirPath -Algorithm SHA256).Hash
+    $apeirPath = Join-Path $apeirDestination $apeirName
+    $apeirHash = (Get-FileHash -LiteralPath $apeirPath -Algorithm SHA256 -ErrorAction Stop).Hash
     if ($apeirHash -ne $apeirFiles[$apeirName]) { throw "SHA-256 mismatch: $apeirName" }
 }
-Write-Host 'Package hashes match. No installer was run.'
+Write-Host 'Verified. Open Setup or extract Portable when ready.'
 ```
 
-Use a new destination directory. These fixed hashes refer only to the files
-above. The actual archive and hash guards were independently checked with PowerShell
-on Linux, including mismatch, missing-file and download-failure refusal.
-Target-machine download and installation still need execution. Public, no-login
-Release downloads will be documented only after their actual publication.
+This downloads and verifies both files. It does not start an installer or
+request administrator access.
+
+## Updates and your data
+
+Back up the project folder and `%LOCALAPPDATA%\Nous` before testing an upgrade.
+Use a copy when checking older workspaces. Uninstalling the application should
+not be treated as a way to erase project data; keep your backup independently.
 
 ## Exit, recovery and troubleshooting
 
-Close the application normally, reopen it and inspect the original project and
-Work records. A lost response is a reason to query the original operation, not
-to submit its effects again. Closing a panel does not cancel background Work.
+Close APEIR normally. On reopening, return to the saved project and task history.
+If a request lost its response, inspect the original task before submitting it
+again. Closing a panel does not cancel a running task.
 
-Launcher logs normally live under `%LOCALAPPDATA%\Nous\logs`:
-`runtime-api.log` and `nousd.log`. If startup fails, record the application
-version, Windows version, warning text and relevant log excerpt. Remove tokens,
-credentials and personal paths before sharing diagnostics. Do not upload the
-whole state directory.
+Startup logs are under `%LOCALAPPDATA%\Nous\logs`, normally `runtime-api.log`
+and `nousd.log`. Include the app version, Windows version and exact error when
+reporting a problem. Remove keys, tokens and personal paths from log excerpts;
+do not upload the whole state directory.
 
-Upgrade, uninstall, reinstall, retained-data behavior and child-process cleanup
-still need Windows 10 acceptance. Back up state first; do not assume uninstall
-removes your workspace, or manually delete it as a troubleshooting shortcut.
-The [launcher reference](../deployment/WINDOWS_10_X64_LAUNCHER.md) and
-[Release Runbook](../../acceptance/RELEASE_RUNBOOK.md) retain the engineering
-checks and the pending installation lifecycle.
-
-## Windows source installation
-
-Follow [Source Preview](QUICK_START.md#source-preview) or
-[Developer Setup](QUICK_START.md#developer-setup). Activate the same virtual
-environment used by `python -m pip`; no administrator privilege is needed.
-Native development additionally requires Rust, MSVC/Windows SDK and locked
-components. [Windows ARM64](../deployment/WINDOWS_10_ARM64_LOCAL.md) has a separate
-support scope. See [troubleshooting](TROUBLESHOOTING.md) for source startup issues.
+For source installation, use [Quick Start](QUICK_START.md).
+For build and platform details, see the [launcher reference](../deployment/WINDOWS_10_X64_LAUNCHER.md)
+and [Windows ARM64 notes](../deployment/WINDOWS_10_ARM64_LOCAL.md).
