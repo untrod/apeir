@@ -1,5 +1,76 @@
 # Engineering review and research comparison
 
+## Studio interaction continuity — 2026-11-14
+
+Baseline: Distribution `47c55db95ba79f8761037fa43dd14fb485a9ba11`, frozen
+Kernel `87fd1b2ff28ef14ab1a515a58162592b452fda2e`. No dependencies, component
+hashes, layout schemas or native packages are changed for this work.
+
+The first real-Runtime Chromium check failed on the baseline: **Add panel →
+Workspace → Layout library** left both utilities visible. The captured page
+showed the editor pushed down below two tool areas. Source inspection also found
+the native host's legacy shortcut/search layer around Studio, a transparent
+window-wide Inspector backdrop, unbounded duplicate toasts, and three separate
+success/connection signals following a verified key rotation.
+
+| Area | Decision | Result |
+| --- | --- | --- |
+| FlexLayout, panel registry, Layout Library, themes | REUSE | Existing panel identities, portal hosts, layouts and library revision checks remain authoritative for presentation |
+| Utility navigation | FIX | Panel picker, layout library, arrangement menu and search stop accumulating; Escape dismisses the current surface |
+| Settings | EXTEND | In-workspace page retains mounted drafts when hidden; the rail marks unsaved settings; replacing layouts and leaving Studio still honor dirty guards |
+| Credential completion | FIX | One contextual notice, no automatic tab jump; saved/removed completion is accepted only for the verified current local session; existing mutation and uncertain-result guards remain; navigation is locked only during the admitted restart |
+| Inspector and search | FIX / REUSE | Docked original DetailDrawer, original search/read APIs, ephemeral selections; native and source Studio share shortcut ownership |
+| Notifications | FIX | Duplicate non-action notices coalesce for 30 seconds; three are initially visible with access to the rest; errors take priority; old Controller actions are rejected |
+| Runtime/Kernel status | REUSE | Compact footer reads the existing shared health subscription; no second status poller or click-to-expand status overlay |
+| Windows 10 GUI, actual key store, live inference | PENDING | Linux Chromium and simulated host contracts do not establish target-system or account qualification |
+
+Public references reviewed before implementation:
+
+- [Codex app](https://openai.com/index/introducing-the-codex-app/): keep ongoing
+  work and review reachable without forcing configuration into every view.
+- [Claude Code Desktop](https://code.claude.com/docs/en/desktop): session
+  navigation, details and configuration have distinct places.
+- [VS Code notifications](https://code.visualstudio.com/api/ux-guidelines/notifications)
+  and [Microsoft transient UI guidance](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/dialogs-and-flyouts/): frequent information belongs in the working UI; modal interruption requires a concrete reason.
+- [Progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/)
+  and [WAI modal dialogs](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/):
+  advanced options stay available on demand; real modal search traps focus and
+  returns it on dismissal.
+
+These references inform interaction choices, not claims about APEIR performance
+or security certification. No third-party interface assets are copied.
+Source screenshots and verification commands are linked from the existing user
+and Provider guides. Current downloadable EXEs retain their original build SHA;
+they do not acquire these changes through a documentation update.
+
+Local verification: TypeScript, ESLint and production build passed; 542 Desktop
+tests passed, including simulated-native bootstrap/credential completion and
+pending-restart navigation guards. The 24-case Chromium suite passed against
+the production bundle and two owned, authenticated model-disabled Runtimes.
+It covers actual Workflow registration, independent approval, execution and
+restart recovery; extension review/revocation; v1/v2 layout compatibility;
+hidden-page subscriptions; settings drafts; search; docked inspection; and
+keyboard/theme/DPI behavior. The Inspector search case uses an explicitly
+seeded `CREATED` metadata record, not evidence that this record executed.
+Repository contracts: 360 passed, seven existing platform/qualification skips.
+All 239 current Markdown files passed local-link checks; document hygiene passed.
+The existing scanner reported zero HIGH and six retained MEDIUM findings.
+
+Reproduce from the checked-out revision:
+
+```bash
+cd desktop
+npm run lint
+npm run typecheck
+npm test
+npm run build
+APEIR_TEST_PYTHON="$(pwd)/../.venv/bin/python" npm run test:e2e
+```
+
+The checked-in Playwright configuration uses the development server; production
+qualification used the same tests against `vite preview` on loopback. Neither
+mode is Windows GUI acceptance or a real Provider inference test.
+
 ## Studio grouped controls and Workflow module menu — 2026-11-12
 
 Starting main: `0bf7c2b11e1a28091a42a4788dc6a013da734a32`. Kernel source and

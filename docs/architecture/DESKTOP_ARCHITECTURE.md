@@ -19,8 +19,10 @@ tool, not a separately hosted production website.
 
 ## APEIR Studio presentation shell
 
-Studio is the same Desktop: use **Studio** in the native sidebar or **APEIR Studio
-/ Open workspace** in source Operations. FlexLayout0.11.1 (MIT, React18, Node20+)
+Studio is the default Desktop workspace after the existing native bootstrap
+and security gates. Source Operations also offers **APEIR Studio / Open
+workspace**. Both hosts use the same Studio navigation, search and Inspector;
+the legacy sidebar/keyboard layer is not mounted around Studio. FlexLayout0.11.1 (MIT, React18, Node20+)
 is pinned in the existing lockfile. ThemeProvider skins the docking controls;
 the shell is lazy-loaded. No second Runtime or installer is introduced.
 
@@ -67,6 +69,16 @@ Governance audit, not RuntimeEventBus or a durable Run EventStream. Evidence row
 are original Work receipt/verification metadata; rendering them is not CAS byte
 integrity verification. Studio also hides the older ResourceDock to avoid a
 second bottom workspace and its extra background usage polling.
+
+Settings is an in-workspace view. Hiding it retains its mounted form and dirty
+guard; a local credential restart retains only non-sensitive navigation and its
+verified completion notice above the session key. Runtime-bound form trees are
+still retired when that key changes. A single presentation choice selects the
+panel picker, layout library or command search. This is not an execution state
+machine. Search selections are ephemeral, connection-scoped props; conversation
+IDs and file selection requests are never serialized into layouts. Search and
+Inspector reads use the original Runtime APIs. The docked Inspector has no
+window-wide overlay. Within shell navigation, command search uses a focus-trapped modal dialog.
 
 The existing EntityStore also clears synchronously on a Controller/session
 change. Its same IndexedDB record now carries cache-schema2 and a SHA-256 scope

@@ -5,8 +5,11 @@
  * without prop threading. Toasts auto-dismiss and stack at the top-right.
  */
 
-import React, { useState, useCallback, useEffect, createContext, useContext } from "react";
-import { colors, typo, radius, shadow, space, statusColor } from "../design";
+import React, { useState, useCallback, useEffect, useRef, createContext, useContext } from "react";
+import { useRuntimeConfigVersion } from "../store";
+import { getRuntimeConfigVersion } from "../lib/api";
+import { useTheme } from "../theme";
+import { colors, typo, radius, shadow, space, statusColor, btnSecondary } from "../design";
 
 
 // Types
@@ -59,37 +62,52 @@ toast.error = (title: string, message?: string) => toast({ title, message, level
 let toastCounter = 0;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-
-  const add = useCallback((input: ToastInput) => {
-    const id = `toast_${++toastCounter}_${Date.now()}`;
-    const t: Toast = { ...input, id };
-    setToasts((prev) => [...prev, t]);
-
-    // Auto-dismiss
-    const duration = input.durationMs ?? (input.level === "error" ? 8000 : 4000);
-    if (duration > 0) {
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((x) => x.id !== id));
-      }, duration);
-    }
-  }, []);
-
+  const version = useRuntimeConfigVersion();
+  const { locale } = useTheme();
+  const [toasts, setToasts] = useState<Array<Toast & { version: number }>>([]);
+  const [expanded, setExpanded] = useState(false);
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const recent = useRef(new Map<string, number>());
   const remove = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    clearTimeout(timers.current.get(id)); timers.current.delete(id);
+    setToasts(previous => previous.filter(value => value.id !== id));
   }, []);
-
-  // Register global emitter
+  const add = useCallback((input: ToastInput) => {
+    const current = getRuntimeConfigVersion(), now = Date.now();
+    const signature = JSON.stringify([current, input.level, input.title, input.message]);
+    // Repeated transport failures should not cover the workspace. Actionable
+    // notifications remain distinct so a different action is never discarded.
+    if (!input.action && recent.current.has(signature) && now - recent.current.get(signature)! < 30000) return;
+    for (const [key, timestamp] of recent.current) if (now - timestamp >= 30000) recent.current.delete(key);
+    if (!input.action) recent.current.set(signature, now);
+    const id = `toast_${++toastCounter}_${now}`;
+    setToasts(previous => [...previous.filter(value => value.version === current), { ...input, id, version: current }]);
+    const duration = input.durationMs ?? (input.level === "error" ? 8000 : 4000);
+    if (duration > 0) timers.current.set(id, setTimeout(() => remove(id), duration));
+  }, [remove]);
   useEffect(() => {
+    setToasts(previous => previous.filter(value => value.version === version)); setExpanded(false);
+    recent.current.clear();
+  }, [version]);
+  useEffect(() => {
+    const currentTimers = timers.current;
     globalAdd = add;
-    return () => { globalAdd = null; };
+    return () => {
+      if (globalAdd === add) globalAdd = null;
+      for (const timer of currentTimers.values()) clearTimeout(timer);
+      currentTimers.clear();
+    };
   }, [add]);
+  const current = toasts.filter(value => value.version === version);
+  const priority: Record<ToastLevel, number> = { error: 0, warning: 1, info: 2, success: 3 };
+  const visible = expanded ? current : [...current].sort((a, b) => priority[a.level] - priority[b.level]).slice(0, 3);
 
   return (
     <ToastContext.Provider value={{ add, remove }}>
       {children}
       {/* Toast container — fixed top-right */}
       <div
+        role="region" aria-label={locale === "zh" ? "通知" : "Notifications"}
         style={{
           position: "fixed",
           top: space.lg,
@@ -98,11 +116,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           display: "flex",
           flexDirection: "column",
           gap: space.sm,
-          maxWidth: 380,
+          maxWidth: "min(380px, calc(100vw - 32px))",
+          maxHeight: "min(440px, 55vh)",
+          overflowY: "auto",
           pointerEvents: "none",
         }}
       >
-        {toasts.map((t) => (
+        {current.length > 3 && <button style={{ ...btnSecondary, pointerEvents: "auto" }} aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? (locale === "zh" ? "收起通知" : "Show fewer") : (locale === "zh" ? `另有 ${current.length - 3} 条通知` : `${current.length - 3} more notifications`)}</button>}
+        {visible.map((t) => (
           <ToastItem key={t.id} toast={t} onDismiss={() => remove(t.id)} />
         ))}
       </div>
@@ -129,11 +150,13 @@ const levelConfig: Record<ToastLevel, { icon: string; bg: string; border: string
   error:   { icon: "X", bg: colors.dangerSoft, border: colors.danger, text: colors.danger },
 };
 
-function ToastItem({ toast: t, onDismiss }: { toast: Toast; onDismiss: () => void }) {
+function ToastItem({ toast: t, onDismiss }: { toast: Toast & { version: number }; onDismiss: () => void }) {
+  const { locale } = useTheme();
   const cfg = levelConfig[t.level];
 
   return (
     <div
+      role={t.level === "error" ? "alert" : "status"}
       style={{
         background: colors.surface,
         border: `1px solid ${colors.border}`,
@@ -177,7 +200,7 @@ function ToastItem({ toast: t, onDismiss }: { toast: Toast; onDismiss: () => voi
         )}
         {t.action && (
           <button
-            onClick={(e) => { e.stopPropagation(); t.action!.onClick(); onDismiss(); }}
+            onClick={(e) => { e.stopPropagation(); if (t.version === getRuntimeConfigVersion()) t.action!.onClick(); onDismiss(); }}
             style={{
               marginTop: space.sm,
               fontSize: typo.xs,
@@ -199,6 +222,7 @@ function ToastItem({ toast: t, onDismiss }: { toast: Toast; onDismiss: () => voi
       {/* Dismiss */}
       <button
         onClick={onDismiss}
+        aria-label={locale === "zh" ? `关闭通知：${t.title}` : `Dismiss notification: ${t.title}`}
         style={{
           background: "none",
           border: "none",

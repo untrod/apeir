@@ -72,18 +72,18 @@ async function workspaceMenu(page: Page) {
 }
 async function settings(page: Page) {
   await page.keyboard.press("Control+Comma");
-  const dialog = page.getByRole("dialog", { name: /^(Settings|设置)$/ });
+  const dialog = page.getByRole("region", { name: /^(Application settings|应用设置)$/ });
   await expect(dialog).toBeVisible(); return dialog;
 }
 async function closeSettings(page: Page) {
-  await page.getByRole("dialog").getByRole("button", { name: /^(Close settings|关闭设置)$/ }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("region", { name: /^(Application settings|应用设置)$/ }).getByRole("button", { name: /^(Close settings|关闭设置)$/ }).click();
+  await expect(page.getByRole("region", { name: /^(Application settings|应用设置)$/ })).toBeHidden();
 }
 async function changeLanguage(page: Page, value: string) {
-  const dialog = await settings(page); await dialog.getByLabel("Studio language", { exact: true }).selectOption(value); await closeSettings(page);
+  const dialog = await settings(page); await dialog.getByRole("tab", { name: /^(General|通用)$/ }).click(); await dialog.getByLabel("Studio language", { exact: true }).selectOption(value); await closeSettings(page);
 }
 async function changeTheme(page: Page, value: string) {
-  const dialog = await settings(page); await dialog.getByLabel("Studio theme", { exact: true }).selectOption(value); await closeSettings(page);
+  const dialog = await settings(page); await dialog.getByRole("tab", { name: /^(General|通用)$/ }).click(); await dialog.getByLabel("Studio theme", { exact: true }).selectOption(value); await closeSettings(page);
 }
 async function revealView(page: Page, name: string) {
   const target = page.getByRole("button", { name: `Open ${name}`, exact: true });
@@ -96,6 +96,89 @@ async function dashboardMenu(page: Page) {
   const summary = page.getByLabel("Dashboard options", { exact: true });
   if (!(await summary.evaluate(node => (node.parentElement as HTMLDetailsElement).open))) await summary.click();
 }
+
+test("Studio opens one utility at a time and keeps settings in the workspace", async ({ page }, info) => {
+  await open(page);
+  await page.getByRole("button", { name: "Add panel", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Panel library", exact: true })).toBeVisible();
+  await workspaceMenu(page);
+  await page.getByRole("button", { name: "Layout library", exact: true }).click();
+  await page.screenshot({ path: info.outputPath("studio-utility-flow.png"), animations: "disabled" });
+  await expect(page.getByRole("region", { name: "Panel library", exact: true })).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Saved layout library", exact: true })).toBeVisible();
+  await page.getByRole("textbox", { name: "Layout name", exact: true }).fill("My saved layout draft");
+  await page.keyboard.press("Control+Comma");
+  await expect(page.getByRole("dialog", { name: "Saved layout library", exact: true })).toBeHidden();
+  await expect(page.getByRole("region", { name: "Application settings", exact: true })).toBeVisible();
+  expect(await page.locator("dialog[open]").count()).toBe(0);
+  await page.getByRole("tab", { name: "Advanced", exact: true }).click();
+  await page.getByRole("navigation", { name: "Studio panels", exact: true }).getByRole("button", { name: "Develop", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Application settings", exact: true })).toBeHidden();
+  await page.keyboard.press("Control+Comma");
+  await expect(page.getByRole("tab", { name: "Advanced", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Control+k");
+  await expect(page.getByRole("dialog", { name: "Search and commands" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Search and commands" })).toBeHidden();
+  await expect(page.getByRole("region", { name: "Application settings", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Models & credentials", exact: true }).click();
+  await page.getByRole("button", { name: "Add Provider", exact: true }).click();
+  const provider = page.getByRole("region", { name: "Provider settings", exact: true });
+  await provider.getByLabel("Vendor model ID", { exact: true }).fill("preserved-settings-draft");
+  await page.getByRole("navigation", { name: "Studio panels", exact: true }).getByRole("button", { name: "Develop", exact: true }).click();
+  await page.keyboard.press("Control+Comma");
+  await expect(provider.getByLabel("Vendor model ID", { exact: true })).toHaveValue("preserved-settings-draft");
+  await page.screenshot({ path: info.outputPath("settings-in-workspace-source.png"), animations: "disabled" });
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search APEIR", exact: true }).fill("Layout library");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Saved layout library", exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Layout name", exact: true })).toHaveValue("My saved layout draft");
+  await expect(page.getByRole("region", { name: "Application settings", exact: true })).toBeHidden();
+});
+test("Studio search uses the real Runtime and its inspector leaves the workspace usable", async ({ page }, info) => {
+  const fixture = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-c", `from nous_runtime.events import EventStream
+from nous_runtime.events.models import RunState
+s=EventStream(${JSON.stringify(runtimes[0].directory)})
+s.create_run("ux-inspection-original",task_id="ux-read-only-inspection")
+s.emit_state_change("ux-inspection-original",RunState.CREATED,task_id="ux-read-only-inspection")`], { cwd: resolve(".."), stdio: ["ignore", "pipe", "pipe"] });
+  producers.push(fixture);
+  expect(await new Promise(resolve => fixture.once("exit", resolve))).toBe(0);
+  const mutations: string[] = [], queries: string[] = [];
+  page.on("request", request => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/api/") && !["GET", "OPTIONS"].includes(request.method())) mutations.push(path);
+    if (path === "/api/v1/search") queries.push(request.url());
+  });
+  await open(page);
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search APEIR", exact: true }).fill("example.py");
+  const result = page.getByRole("option").filter({ hasText: "example.py" });
+  await expect(result.first()).toBeVisible(); await result.first().click();
+  await expect(page.getByRole("tab", { name: "example.py", exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Code editor", exact: true }).first()).toHaveValue("def add(a, b):\n    return a + b\n");
+  // Read an original, persisted metadata fixture through the real Runtime.
+  // This is a presentation check, not a claim that this seeded run executed.
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search APEIR", exact: true }).fill("ux-read-only-inspection");
+  const run = page.getByRole("option").filter({ hasText: "ux-read-only-inspection" });
+  await expect(run.first()).toBeVisible(); await run.first().click();
+  const inspector = page.getByRole("complementary", { name: "Detail inspector", exact: true });
+  await expect(inspector).toBeVisible();
+  await expect(inspector).toContainText("ux-inspection-original");
+  await expect(inspector).toContainText("EventStream");
+  await page.getByRole("button", { name: "Open Chat", exact: true }).click();
+  const composer = page.getByRole("textbox", { name: "Message", exact: true }).first();
+  await composer.fill("Unsent project discussion");
+  await expect(inspector).toBeVisible();
+  await page.getByRole("button", { name: "New conversation", exact: true }).click();
+  await expect(composer).toHaveValue("Unsent project discussion");
+  await expect(page.getByRole("status").filter({ hasText: "Send or clear the current draft" })).toBeVisible();
+  await page.keyboard.press("Control+Comma"); await closeSettings(page);
+  await expect(composer).toHaveValue("Unsent project discussion");
+  await page.screenshot({ path: info.outputPath("docked-inspector-source.png"), animations: "disabled" });
+  expect(queries.length).toBeGreaterThanOrEqual(2); expect(mutations).toEqual([]);
+});
 
 test("Overview v2 preserves v1 geometry and reads canonical progress without executing Work", async ({ page }, info) => {
   const fixture = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-c", `from nous_runtime.workflow import WorkflowRuntime
@@ -540,7 +623,8 @@ test("Studio keeps the everyday view compact and layout editing explicit across 
   await expect(dashboard.locator('[data-state="UNCONFIGURED"]')).toBeVisible();
   await expect(dashboard.getByText("No model requests yet", { exact: true })).toBeVisible();
   await expect(dashboard.getByRole("button", { name: /Settings|Remove|Move / })).toHaveCount(0);
-  await expect(page.locator(".studio-toolbar-actions > button")).toHaveCount(2);
+  await expect(page.locator(".studio-toolbar-actions > button")).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "Search APEIR", exact: true })).toBeVisible();
   await workspaceMenu(page); await page.getByRole("button", { name: "Save layout", exact: true }).click();
   const original = await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"));
   expect(original).toContain('"h":4');
@@ -1092,7 +1176,7 @@ test("Grouped Studio controls preserve bilingual Provider drafts and add real Wo
   await english.getByRole("button", { name: "Cancel editing" }).click();
   await english.getByRole("button", { name: "Manage credentials" }).click();
   await expect(page.getByRole("button", { name: "Save key", exact: true })).toBeDisabled();
-  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("desktop application");
+  await expect(page.getByRole("region", { name: "Application settings", exact: true }).getByRole("alert")).toContainText("desktop application");
   await closeSettings(page);
   await revealView(page, "Workflow Builder");
   const builder = page.getByRole("region", { name: "Workflow Builder", exact: true });
@@ -1143,10 +1227,11 @@ test("Settings and bounded splitters preserve original panel drafts and restore 
   const chat = page.getByRole("region", { name: "AI conversation", exact: true });
   const prompt = chat.getByRole("textbox");
   await prompt.fill("UNSENT_BOUNDED_SPLIT_PROMPT");
-  await expect(page.getByLabel("Studio language", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Studio language", { exact: true })).toBeHidden();
   await changeLanguage(page, "zh");
   await changeTheme(page, "dark");
-  await (await settings(page)).screenshot({ path: info.outputPath("studio-settings-zh-source.png"), animations: "disabled" });
+  await settings(page);
+  await page.screenshot({ path: info.outputPath("studio-settings-zh-source.png"), animations: "disabled" });
   await closeSettings(page);
   await changeLanguage(page, "en");
   await expect(editor).toHaveValue("UNSAVED_BOUNDED_SPLIT_DRAFT");

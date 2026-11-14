@@ -51,10 +51,11 @@ address and protected service session token. That token is not a Provider API ke
 | Snap, maximize, restore or close | Use the panel title-bar arrangement menu |
 | Maximize a group | Double-click its tab strip; **Show all panels** restores it |
 | Find a panel | Ctrl/Cmd+Shift+P |
+| Search panels and Runtime history | Ctrl/Cmd+K; arrows to select, Enter to open |
 | Arrange Dashboard widgets | **Customize Overview**, or Ctrl/Cmd+Alt+L |
 | Open settings | Settings at the bottom of the rail, or Ctrl/Cmd+, |
 | Save the layout | Automatic after a short delay, or Ctrl/Cmd+Alt+S |
-| Dismiss a menu | Escape |
+| Dismiss the current menu or search | Escape; the view underneath stays open |
 
 Saved visible panels load when the workspace opens. A hidden panel loads on its
 first visit, then keeps its instance and draft while you switch views or split
@@ -74,6 +75,18 @@ adding a connection. Saving shows progress and restarts the local Runtime;
 inference remains a separate, explicit action. See the
 [model setup guide](PROVIDER_GUIDE.md#configure).
 
+Settings opens inside the workspace. Switch back to a panel without discarding
+the form, then return to Settings to continue. Unsaved settings are marked with
+a dot in the rail. Save or cancel them before replacing the layout or leaving
+Studio. Settings remembers the category you were using; it does not open another
+page when a key is saved.
+
+Search opens existing panels, project files and recorded conversations. Recorded
+Runs and artifacts open in the Inspector beside your work; the editor remains
+usable. Search never starts a Run. A conversation draft must be sent or cleared
+before switching to another conversation. Add panel, the layout library and
+window-arrangement menus close when you open another utility.
+
 Panel movement does not execute Work. Closing a panel does not cancel its
 background task. Floating OS windows remain disabled. **Settings → General**
 contains language and the existing Light/Dark/System themes. Preferences apply
@@ -90,6 +103,8 @@ an explicit user choice.
 
 **中文提示：** 语言和主题集中在“设置 → 通用”，快捷键为 Ctrl/Cmd+,。
 左侧选择功能分类，上方切换具体视图；“添加面板”用于另开实例。
+设置在工作区内打开，切回面板不会丢掉表单。Ctrl/Cmd+K 可搜索面板与历史；
+任务详情显示在侧栏，不挡住编辑区。Esc 只关闭当前菜单或搜索，不连带关闭下一层。
 窄屏会临时聚焦当前面板组，放大后还原分屏。布局保存不等于保存文件或提交任务。
 
 ![Shared settings in the actual Chinese dark-theme Studio](../../media/studio-settings-source.png)

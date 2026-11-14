@@ -50,7 +50,7 @@ it("manages model connections inside settings instead of requiring a second wind
 });
 
 
-it("keeps the Settings dialog and shows completion after the verified local token rotates", async () => {
+it("keeps the selected settings page and shows one completion after a verified local token rotation", async () => {
   const fakeKey = "fixture-private-credential-value";
   let stored = false;
   invoke.mockImplementation(async command => {
@@ -61,18 +61,21 @@ it("keeps the Settings dialog and shows completion after the verified local toke
   });
   render(<ThemeProvider><ToastProvider><StudioShell /></ToastProvider></ThemeProvider>);
   fireEvent.click(screen.getByRole("button", { name: /^Settings$/ }));
-  const dialog = screen.getByRole("dialog", { name: "Settings" });
+  const dialog = screen.getByRole("region", { name: "Application settings" });
   fireEvent.click(within(dialog).getByRole("tab", { name: "Models & credentials" }));
   fireEvent.click(within(dialog).getByRole("tab", { name: "API keys" }));
   await waitFor(() => expect(within(dialog).getByRole("button", { name: "Save key" })).toBeEnabled());
   fireEvent.change(within(dialog).getByLabelText("Provider credential"), { target: { value: fakeKey } });
   fireEvent.submit(within(dialog).getByRole("form", { name: "API key form" }));
   await waitFor(() => expect(getConfig().token).toBe("fixture.rotated-session"));
-  const current = screen.getByRole("dialog", { name: "Settings" });
+  const current = screen.getByRole("region", { name: "Application settings" });
   expect(current).toBeVisible();
+  await waitFor(() => expect(within(current).getByRole("tab", { name: "API keys" })).toHaveAttribute("aria-selected", "true"));
+  expect(within(current).getByText("Key saved. Local Runtime reconnected.", { exact: true })).toBeVisible();
+  expect(screen.queryByText(/Controller connection changed/)).not.toBeInTheDocument();
+  expect(screen.queryByText("Key saved", { exact: true })).not.toBeInTheDocument();
+  fireEvent.click(within(current).getByRole("button", { name: "Continue to Models" }));
   await waitFor(() => expect(within(current).getByRole("table", { name: "Registered models" })).toHaveTextContent(model.model_id));
-  expect(within(current).getByText(/Key saved. Add a model below/)).toBeVisible();
-  expect(screen.getByText("Key saved", { exact: true })).toBeVisible();
   expect(invoke.mock.calls.filter(([name]) => name === "store_provider_credential")).toHaveLength(1);
   expect(JSON.stringify(localStorage)).not.toContain(fakeKey);
   expect(JSON.stringify(sessionStorage)).not.toContain(fakeKey);
@@ -94,6 +97,72 @@ it("shows saving progress and submits only once while a credential command is pe
   expect(screen.getByRole("status")).toHaveTextContent(/restarting/);
   expect(screen.getByLabelText("Provider credential")).toHaveValue("");
   await act(async () => { finish("fixture.next-session"); });
+});
+
+it("keeps an unfinished key on its own tab when visiting another settings category", async () => {
+  invoke.mockImplementation(async command => command === "get_runtime_process_status" ? { endpoint: "http://127.0.0.1:9017", ready: true, session_available: true } : []);
+  render(<ThemeProvider><StudioShell /></ThemeProvider>);
+  fireEvent.click(screen.getByRole("button", { name: /^Settings$/ }));
+  fireEvent.click(screen.getByRole("tab", { name: "Models & credentials" }));
+  fireEvent.click(screen.getByRole("tab", { name: "API keys" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save key" })).toBeEnabled());
+  fireEvent.change(screen.getByLabelText("Provider credential"), { target: { value: "fixture-unsent-private-key" } });
+  fireEvent.click(screen.getByRole("tab", { name: "General" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Models & credentials" }));
+  expect(screen.getByRole("tab", { name: "API keys" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByLabelText("Provider credential")).toBeVisible();
+  expect(screen.getByLabelText("Provider credential")).toHaveValue("fixture-unsent-private-key");
+  expect(invoke.mock.calls.some(([name]) => name === "store_provider_credential")).toBe(false);
+  expect(JSON.stringify(localStorage)).not.toContain("fixture-unsent-private-key");
+});
+
+it("prevents new configuration drafts during an admitted local credential restart", async () => {
+  let finish!: (value: string) => void;
+  invoke.mockImplementation(async command => {
+    if (command === "get_runtime_process_status") return { endpoint: "http://127.0.0.1:9017", ready: true, session_available: true };
+    if (command === "list_provider_credentials") return [];
+    if (command === "store_provider_credential") return new Promise<string>(resolve => { finish = resolve; });
+    throw new Error("Unexpected native request");
+  });
+  render(<ThemeProvider><StudioShell /></ThemeProvider>);
+  fireEvent.click(screen.getByRole("button", { name: /^Settings$/ }));
+  fireEvent.click(screen.getByRole("tab", { name: "Models & credentials" }));
+  fireEvent.click(screen.getByRole("tab", { name: "API keys" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save key" })).toBeEnabled());
+  fireEvent.change(screen.getByLabelText("Provider credential"), { target: { value: "fixture-private-key-pending" } });
+  fireEvent.submit(screen.getByRole("form", { name: "API key form" }));
+  await waitFor(() => expect(finish).toBeDefined());
+  expect(screen.getByRole("button", { name: "Close settings" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Develop" })).toBeDisabled();
+  expect(screen.getByRole("tab", { name: "General" })).toBeDisabled();
+  fireEvent.keyDown(window, { key: ",", code: "Comma", ctrlKey: true });
+  expect(screen.getByRole("region", { name: "Application settings" })).toBeVisible();
+  await act(async () => { finish("fixture.credential-restart-complete"); });
+  expect(await screen.findByText("Key saved. Local Runtime reconnected.")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Develop" })).toBeEnabled();
+  expect(invoke.mock.calls.filter(([name]) => name === "store_provider_credential")).toHaveLength(1);
+});
+
+it("reports a verified removal on the API keys page without offering the removed reference", async () => {
+  let removed = false;
+  invoke.mockImplementation(async command => {
+    if (command === "get_runtime_process_status") return { endpoint: "http://127.0.0.1:9017", ready: true, session_available: true };
+    if (command === "list_provider_credentials") return removed ? [] : [{ environment_name: "DEEPSEEK_API_KEY", stored: true }];
+    if (command === "remove_provider_credential") { removed = true; return "fixture.removed-key-session"; }
+    throw new Error("Unexpected native request");
+  });
+  render(<ThemeProvider><ToastProvider><StudioShell /></ToastProvider></ThemeProvider>);
+  fireEvent.click(screen.getByRole("button", { name: /^Settings$/ }));
+  fireEvent.click(screen.getByRole("tab", { name: "Models & credentials" }));
+  fireEvent.click(screen.getByRole("tab", { name: "API keys" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm remove" }));
+  await waitFor(() => expect(getConfig().token).toBe("fixture.removed-key-session"));
+  expect(screen.getByRole("tab", { name: "API keys" })).toHaveAttribute("aria-selected", "true");
+  expect(await screen.findByText("Key removed. Local Runtime reconnected.", { exact: true })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Continue to Models" })).not.toBeInTheDocument();
+  expect(screen.queryByText(/Controller connection changed/)).not.toBeInTheDocument();
+  expect(invoke.mock.calls.filter(([name]) => name === "remove_provider_credential")).toHaveLength(1);
 });
 
 it("selects a newly saved local reference without exposing the actual API key to Provider configuration", async () => {

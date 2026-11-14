@@ -233,6 +233,7 @@ type ChatViewProps = {
   locale?: "en" | "zh";
   conversationId?: string;
   onConversationCreated?: (conversationId: string) => void;
+  onDraftChange?: (dirty: boolean) => void;
   onCardClick: (event: RuntimeEventEnvelope) => void;
   onTraceClick: (traceId: string) => void;
   workspaceFile?: { path: string; sha256: string; controller?: string };
@@ -249,7 +250,7 @@ export function ChatView(props: ChatViewProps) {
 
 function ChatSession({
   conversationId, onConversationCreated, onCardClick, onTraceClick,
-  workspaceFile, readOnly = false, onClearWorkspaceFile, onProposalCreated, onOpenPanel, locale = "en",
+  workspaceFile, onDraftChange, readOnly = false, onClearWorkspaceFile, onProposalCreated, onOpenPanel, locale = "en",
 }: ChatViewProps) {
   const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   // All state from EntityStore
@@ -546,6 +547,7 @@ function ChatSession({
 
       {/* Composer */}
       <Composer
+        onDraftChange={onDraftChange}
         onSend={handleSend}
         onStop={handleStop}
         disabled={loading && !streaming}

@@ -33,11 +33,13 @@ computer’s keys.
 
 Saving or removing a local key restarts Runtime. Save or cancel drafts in other
 panels first. Studio shows progress, blocks duplicate submission and keeps the
-settings window open after a verified restart. If reconnection is unconfirmed,
+settings page on its current tab after a verified restart. Navigation is briefly
+locked during the admitted restart so a new configuration draft cannot be lost. If reconnection is unconfirmed,
 inspect saved keys and Runtime diagnostics before attempting another operation.
 There is no automatic retry.
 
-After a successful save, Studio returns to **Models**. Choose **Add Provider**
+After a successful save, the API keys tab confirms that Runtime reconnected.
+Choose **Continue to Models**, then **Add Provider**
 and select the saved key; there is no need to type its reference. **Registered
 models** lists Runtime model identities and reported states; **Saved
 connections** lists editable Provider profiles. Saving a key alone does not

@@ -1,5 +1,6 @@
 /** Small presentation icons; inherit the same text and status palette. */
 const paths = {
+  search: "M11 11l3 3M12 7a5 5 0 1 1-10 0 5 5 0 0 1 10 0",
   add: "M8 3v10M3 8h10",
   edit: "m10 3 3 3M3 10l7-7 3 3-7 7H3v-3Z",
   check: "m3 8 3 3 7-7",
