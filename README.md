@@ -16,8 +16,8 @@
 An open, local-first workspace for project files, workflows and connected
 resources—with approvals and execution records you can inspect.
 
-[**⬇ Windows x64**](https://github.com/untrod/apeir/actions/runs/42977022966/artifacts/13837634414) ·
-[**Windows ARM64**](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13901748571) ·
+[**⬇ Windows x64**](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424) ·
+[**Windows ARM64**](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427) ·
 [**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
 [**Quick Start**](docs/operations/getting-started/QUICK_START.md) ·
 [**Documentation**](docs/README.md) · [简体中文](README.zh-CN.md)

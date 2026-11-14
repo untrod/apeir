@@ -14,8 +14,8 @@
 
 开放、以本地工作为起点的工程工作台：组织文件、工作流和连接资源，修改先审查，操作有审批，结果有记录。
 
-[**⬇ Windows x64**](https://github.com/untrod/apeir/actions/runs/42977022966/artifacts/13837634414) ·
-[**Windows ARM64（平板等设备）**](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13901748571) ·
+[**⬇ Windows x64**](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424) ·
+[**Windows ARM64（平板等设备）**](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427) ·
 [**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
 [**快速开始**](docs/operations/getting-started/QUICK_START.md) ·
 [**文档**](docs/README.md) · [English](README.md)

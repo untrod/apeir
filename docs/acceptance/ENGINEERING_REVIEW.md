@@ -7101,3 +7101,38 @@ Windows10 x64/tablet ARM64 GUI, key-store behavior, install/upgrade/uninstall an
 real Provider accounts remain independently PENDING. Historical Windows timing
 Issues88/116 are not closed by these UI tests. The Kernel source, component lock,
 published tags and formal Release authorization are unchanged.
+
+Native qualification for that accepted source is now complete for the stated CI
+scope. [x64 run43549734683](https://github.com/untrod/apeir/actions/runs/43549734683)
+produced [artifact14097790424](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424);
+[ARM64 run43549737576](https://github.com/untrod/apeir/actions/runs/43549737576)
+produced [artifact14097648427](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427).
+Both ran the official full launcher, actual locked-component smoke and desktop
+Cargo check/tests. All10 desktop Rust cases pass on each architecture, including
+real Windows Credential Manager round-trip with temporary test values and queued
+mutation refusal at exit. These do not qualify a real Provider account.
+
+Downloaded packages were independently admitted through the maintained
+component verifier, matching source, full-validation report, declared checksums,
+Portable contents and actual locked PE bytes. Supplementary NSIS extraction
+matched the application payloads; only the upstream three-byte UNK/NSS desktop
+bundle stamp differs. All four Portable EXEs are x64 or ARM64 respectively.
+The separate ARM64 install receipt records Windows11 Enterprise10.0.26200,
+silent NSIS installation and installed-sidecar execution without the checkout.
+Windows10/tablet GUI, key entry, restart/upgrade/uninstall and Defender remain
+PENDING. The signing and formal Release gates remain unchanged.
+
+| Downloaded artifact | ZIP SHA-256 | Expiry |
+| --- | --- | --- |
+| x64 full Native | `eafb38ac9bde3bd57575d3de8d299829dc46631e52f81b1ea1ed6c390425f544` | 2026-11-28 |
+| ARM64 full Native | `bd12c756ede57c30cddaa1b5bde8b8e8c1ffbacf5762cffa620b8ee86f425011` | 2026-11-28 |
+| Source Runtime from the ARM64 producer | `5e1f55177a8b9ef234f1b7383dff5cc9e8a6bae619c0f108cf8a846956fd4961` | 2026-11-21 |
+| Matching source Studio | `6f6d9474957b7362bd58b373f81d7032275618290454425b55d18e90311731c4` | 2026-11-21 |
+
+The protected [PR154](https://github.com/untrod/apeir/pull/154) merge
+`a1158b5fbeead034d2dfd80ec52378d6a68d1fdf` preserves accepted binary source
+`d94159ea45badf665999dffdafe6786a5e35c085` with an identical Git tree. Its own
+Core/Desktop/Multi-Arch/Security checks are recorded separately. The later
+download-metadata-only change updates README, Quick Start and platform links;
+it does not rebuild or relabel those files. Previous producers remain in this
+review, the native build record and immutable Git history. No tag is moved.

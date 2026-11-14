@@ -199,7 +199,37 @@ checks do not alter the reviewed Kernel hashes or remove licensing/install gates
 
 ## Current native command-qualified build
 
-The current unsigned Windows x64 package is [full-mode run42977022966](https://github.com/untrod/apeir/actions/runs/42977022966),
+The current unsigned Windows x64 package is [full-mode run43549734683](https://github.com/untrod/apeir/actions/runs/43549734683),
+source `d94159ea45badf665999dffdafe6786a5e35c085`, preserved through
+[PR154](https://github.com/untrod/apeir/pull/154).
+[Artifact14097790424](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424)
+requires GitHub sign-in and expires **2026-11-28**. The matching source pair is in
+[Quick Start](../getting-started/QUICK_START.md#download-metadata).
+
+| File | SHA-256 |
+| --- | --- |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `8374139b89f070ab6e2982c8930055b3ff2fbf44d278756e32a538362e360a4e` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `95b65c4556e08812d64d5b0b631a9685d5000e0e26c38ecbc419144d8b030168` |
+| Outer artifact ZIP | `eafb38ac9bde3bd57575d3de8d299829dc46631e52f81b1ea1ed6c390425f544` |
+
+The official full launcher passed on **Windows Server2025 x64**, Python3.12.10,
+Rust1.99.1, MSVC14.51 and SDK26100. Actual Kernel/Worker/Runtime smoke and
+desktop Cargo check/tests passed, including10 Rust cases with a real Windows
+credential round-trip and queued lifecycle mutation refusal at exit. Neither
+validation skip switch was used. The frozen Kernel and approved component
+hashes are unchanged.
+
+Independent inspection checked the downloaded bytes, manifests, locked PE files,
+Portable contents and NSIS payload. The application has only Tauri's expected
+three-byte UNK/NSS bundle stamp difference between Portable and NSIS; all other
+application payload bytes match. This build includes the Settings model roster,
+saved local key selection and visible save/restart feedback. No real Provider
+inference or Windows10 GUI/installation lifecycle is qualified by these checks.
+Signing and public publication remain separate gates.
+
+### Previous Studio extension producer — 2026-11-11
+
+The preceding unsigned Windows x64 package is [full-mode run42977022966](https://github.com/untrod/apeir/actions/runs/42977022966),
 source `70a5c69b1b2bd9f36f5f6725e7a1e7bdf411fd2d`, preserved through [PR144](https://github.com/untrod/apeir/pull/144).
 [Artifact13837634414](https://github.com/untrod/apeir/actions/runs/42977022966/artifacts/13837634414)
 requires GitHub sign-in and expires **2026-11-25**. The matching wheel/frontend

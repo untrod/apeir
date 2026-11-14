@@ -6,12 +6,15 @@ Windows on Arm needs the **ARM64** build, including a Xiaomi Pad5 running
 Windows 10 ARM64. It does not need a 32-bit APEIR build. Android is a different
 platform. Do not rename or substitute an x64 EXE.
 
-[**Download ARM64 Setup + Portable**](https://github.com/untrod/apeir/actions/runs/43115765924/artifacts/13901748571) ·
+[**Download ARM64 Setup + Portable**](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427) ·
 [Hashes and source](../getting-started/QUICK_START.md#download-metadata).
 
 The unsigned 0.1.0-rc1 bundle passed the full native build, real NKI/Runtime
 smoke and installed-sidecar checks on Windows 11 ARM64. Download requires
-GitHub sign-in and expires on **2026-11-25**.
+GitHub sign-in and expires on **2026-11-28**. Its binary source is
+`d94159ea45badf665999dffdafe6786a5e35c085` ([PR154](https://github.com/untrod/apeir/pull/154)).
+This build includes the Settings model roster, saved-key selection and visible
+save/restart feedback. Later documentation does not change its binary identity.
 [Quick Start](../getting-started/QUICK_START.md) remains the installation entry.
 Windows 10 tablet GUI, drivers, Defender, upgrade and uninstall acceptance are
 **PENDING**. The current build host is Windows 11 ARM64, not the tablet.
