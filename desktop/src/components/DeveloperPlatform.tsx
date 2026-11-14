@@ -26,6 +26,7 @@ import { ResearchEvidence } from "./ResearchEvidence";
 import { UsageAccounting } from "./UsageAccounting";
 import { isUsageAccountingSummary, usageNumber } from "../lib/usageAccounting";
 import { useRuntimeConfigVersion } from "../store";
+import type { NativeCredentialNotice } from "../lib/nativeRuntime";
 import { ProviderSettings } from "./ProviderSettings";
 
 type PlatformTab = "workbench" | "research" | "projects" | "runs" | "experiments" | "models";
@@ -78,7 +79,7 @@ function Status({ value }: { value: string }) {
   return <span style={{ color, fontSize: typo.xs, fontWeight: typo.semibold, textTransform: "uppercase" }}>{value}</span>;
 }
 
-export function DeveloperPlatform({ modelsOnly = false, manageProviders = false, locale = "en", onOpenApprovals, onOpenCredentials, onDraftChange }: { modelsOnly?: boolean; manageProviders?: boolean; locale?: "en" | "zh"; onOpenApprovals?: () => void; onOpenCredentials?: () => void; onDraftChange?: (dirty: boolean) => void } = {}) {
+export function DeveloperPlatform({ modelsOnly = false, manageProviders = false, modelConnectionsOnly = false, preferredCredential, locale = "en", onOpenApprovals, onOpenCredentials, onDraftChange }: { modelsOnly?: boolean; manageProviders?: boolean; modelConnectionsOnly?: boolean; preferredCredential?: NativeCredentialNotice | null; locale?: "en" | "zh"; onOpenApprovals?: () => void; onOpenCredentials?: () => void; onDraftChange?: (dirty: boolean) => void } = {}) {
   const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   const [tab, setTab] = useState<PlatformTab>(modelsOnly ? "models" : "workbench");
   const [modelSection, setModelSection] = useState("connections");
@@ -208,7 +209,7 @@ export function DeveloperPlatform({ modelsOnly = false, manageProviders = false,
 
   return (
     <div style={{ height: modelsOnly ? "auto" : "100%", display: "flex", flexDirection: "column", background: colors.bg }}>
-      <header style={{ padding: `${space.lg} ${space.xl}`, background: colors.surface, borderBottom: `1px solid ${colors.borderLight}` }}>
+      {!modelConnectionsOnly && <header style={{ padding: `${space.lg} ${space.xl}`, background: colors.surface, borderBottom: `1px solid ${colors.borderLight}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: space.md, flexWrap: "wrap" }}>
           <div>
             <h1 style={{ margin: 0, color: colors.text, fontSize: typo.lg }}>{manageProviders ? (locale === "zh" ? "模型" : "Models") : modelsOnly ? "Model Lab" : "Developer Platform"}</h1>
@@ -227,9 +228,9 @@ export function DeveloperPlatform({ modelsOnly = false, manageProviders = false,
             }}>{item.label} <span style={{ color: colors.textTertiary }}>{item.count}</span></button>
           ))}
         </div>}
-      </header>
+      </header>}
 
-      <div style={{ flex: 1, overflow: "auto", padding: space.xl }}>
+      <div style={{ flex: 1, overflow: "auto", padding: modelConnectionsOnly ? 0 : space.xl }}>
         {overview && snapshotVersion === configurationVersion && <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(120px, 1fr))", gap: space.md, marginBottom: space.lg }}>
           <Metric label="Projects" value={`${overview.projects.active}/${overview.projects.total}`} />
           <Metric label="Active runs" value={overview.runs.active} />
@@ -251,7 +252,7 @@ export function DeveloperPlatform({ modelsOnly = false, manageProviders = false,
           setBaselineScores={setBaselineScores} setCandidateScores={setCandidateScores} onEvaluate={evaluateExperiment} />}
         {tab === "models" && <>
           {manageProviders && <>
-            <nav role="tablist" aria-label={t("Model sections", "模型分类")} style={{ display: "flex", gap: space.sm, marginBottom: space.md, flexWrap: "wrap" }}>
+            {!modelConnectionsOnly && <nav role="tablist" aria-label={t("Model sections", "模型分类")} style={{ display: "flex", gap: space.sm, marginBottom: space.md, flexWrap: "wrap" }}>
               {modelSections.map((section, index) => <button key={section.id} id={`${modelSectionsId}-${section.id}`} role="tab" aria-selected={modelSection === section.id} aria-controls={`${modelSectionsId}-${section.id}-panel`} tabIndex={modelSection === section.id ? 0 : -1} style={modelSection === section.id ? btnPrimary : btnSecondary} onClick={() => setModelSection(section.id)} onKeyDown={event => {
                 if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
                 event.preventDefault();
@@ -259,20 +260,20 @@ export function DeveloperPlatform({ modelsOnly = false, manageProviders = false,
                 setModelSection(modelSections[next].id);
                 event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
               }}>{section.label}</button>)}
-            </nav>
-            <section role="tabpanel" id={`${modelSectionsId}-connections-panel`} aria-labelledby={`${modelSectionsId}-connections`} hidden={modelSection !== "connections"}>
-              <ProviderSettings key={configurationVersion} locale={locale} models={snapshotVersion === configurationVersion ? modelLab?.models || [] : []} modelsReady={snapshotVersion === configurationVersion && !!modelLab && !modelLabLoading} onChanged={refresh} onOpenApprovals={onOpenApprovals} onOpenCredentials={onOpenCredentials} onDraftChange={onDraftChange} />
+            </nav>}
+            <section role={modelConnectionsOnly ? undefined : "tabpanel"} id={`${modelSectionsId}-connections-panel`} aria-labelledby={modelConnectionsOnly ? undefined : `${modelSectionsId}-connections`} hidden={!modelConnectionsOnly && modelSection !== "connections"}>
+              <ProviderSettings key={configurationVersion} locale={locale} models={snapshotVersion === configurationVersion ? modelLab?.models || [] : []} modelsReady={snapshotVersion === configurationVersion && !!modelLab && !modelLabLoading} onChanged={refresh} onOpenApprovals={onOpenApprovals} onOpenCredentials={onOpenCredentials} onDraftChange={onDraftChange} preferredCredential={preferredCredential} />
             </section>
           </>}
-          <section role={manageProviders ? "tabpanel" : undefined} id={`${modelSectionsId}-usage-panel`} aria-labelledby={manageProviders ? `${modelSectionsId}-usage` : undefined} hidden={manageProviders && modelSection !== "usage"}>
+          {!modelConnectionsOnly && <section role={manageProviders ? "tabpanel" : undefined} id={`${modelSectionsId}-usage-panel`} aria-labelledby={manageProviders ? `${modelSectionsId}-usage` : undefined} hidden={manageProviders && modelSection !== "usage"}>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: space.sm, marginBottom: space.md }}>
             <label style={{ color: colors.textSecondary, fontSize: typo.sm }}>{t("Usage day (UTC)", "用量日期（UTC）")} <input aria-label="Usage day (UTC)" type="date"
               value={usageDay || (snapshotVersion === configurationVersion ? modelLab?.usage_accounting?.day : "") || ""} onChange={event => setUsageDay(event.target.value)} style={field} /></label>
             <button onClick={() => setUsageDay("")} style={btnSecondary}>{t("Today", "今天")}</button>
           </div>
           <ModelLab locale={locale} view={manageProviders ? "usage" : "all"} data={snapshotVersion === configurationVersion ? modelLab : null} loading={modelLabLoading || snapshotVersion !== configurationVersion} />
-          </section>
-          {manageProviders && <section role="tabpanel" id={`${modelSectionsId}-evidence-panel`} aria-labelledby={`${modelSectionsId}-evidence`} hidden={modelSection !== "evidence"}>
+          </section>}
+          {manageProviders && !modelConnectionsOnly && <section role="tabpanel" id={`${modelSectionsId}-evidence-panel`} aria-labelledby={`${modelSectionsId}-evidence`} hidden={modelSection !== "evidence"}>
             <ModelLab locale={locale} view="evidence" data={snapshotVersion === configurationVersion ? modelLab : null} loading={modelLabLoading || snapshotVersion !== configurationVersion} />
           </section>}
         </>}

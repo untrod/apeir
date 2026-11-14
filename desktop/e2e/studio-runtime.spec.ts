@@ -1091,7 +1091,7 @@ test("Grouped Studio controls preserve bilingual Provider drafts and add real Wo
   expect(mutations).toEqual([]);
   await english.getByRole("button", { name: "Cancel editing" }).click();
   await english.getByRole("button", { name: "Manage credentials" }).click();
-  await expect(page.getByRole("button", { name: "Store or Rotate", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Save key", exact: true })).toBeDisabled();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText("desktop application");
   await closeSettings(page);
   await revealView(page, "Workflow Builder");
@@ -1190,4 +1190,37 @@ test("Settings and bounded splitters preserve original panel drafts and restore 
   expect(await geometry()).toEqual(wide);
   expect(mutations).toEqual([]); expect(errors).toEqual([]);
   await info.attach("bounded-layout-scope", { body: JSON.stringify({ runtime: "actual authenticated model-disabled API", settings_preserved_drafts: true, actual_splitter_limits: [320, 380], compact_did_not_replace_layout: true, mutations, native_gui: "NOT_RUN" }), contentType: "application/json" });
+});
+
+test("Settings lists saved model connections and preserves them after reload without inference", async ({ page }, info) => {
+  const inference: string[] = [];
+  page.on("request", request => { if (/\/api\/.*(?:inference|models?.*test|providers?.*test)/.test(request.url()) && request.method() === "POST") inference.push(request.url()); });
+  await open(page);
+  const dialog = await settings(page);
+  await dialog.getByRole("tab", { name: "Models & credentials", exact: true }).click();
+  const connections = dialog.getByRole("region", { name: "Provider settings", exact: true });
+  await expect(connections.getByRole("table", { name: "Registered models" })).toBeVisible();
+  await connections.getByRole("button", { name: "Add Provider", exact: true }).click();
+  await connections.getByLabel("Protocol template", { exact: true }).selectOption("openai_compatible");
+  await connections.getByLabel("Provider ID", { exact: true }).fill("settings-quickstart");
+  await connections.getByLabel("Name", { exact: true }).fill("Settings reference");
+  await connections.getByLabel("Endpoint", { exact: true }).fill("http://127.0.0.1:9/v1");
+  await connections.getByLabel("Vendor model ID", { exact: true }).fill("settings-model-demo");
+  await connections.getByRole("button", { name: "Save Provider", exact: true }).click();
+  await expect(connections.getByRole("button", { name: "Edit settings-quickstart" })).toBeVisible();
+  await expect(connections.getByText("settings-model-demo · http://127.0.0.1:9/v1")).toBeVisible();
+  await dialog.locator(".app-settings-body > main").evaluate(element => { element.scrollTop = 0; });
+  await dialog.screenshot({ path: info.outputPath("settings-model-connections-source.png") });
+  await closeSettings(page);
+  await page.reload();
+  await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
+  const reopened = await settings(page);
+  await reopened.getByRole("tab", { name: "Models & credentials", exact: true }).click();
+  const saved = reopened.getByRole("region", { name: "Provider settings", exact: true });
+  await expect(saved.getByRole("button", { name: "Edit settings-quickstart" })).toBeVisible();
+  const configuration = JSON.parse(await readFile(join(runtimes[0].directory, ".nous", "providers.json"), "utf8"));
+  expect(configuration["settings-quickstart"].model).toBe("settings-model-demo");
+  expect(configuration["settings-quickstart"].credential_ref).toBe("");
+  expect(inference).toEqual([]);
+  await info.attach("settings-model-connection-acceptance", { body: JSON.stringify({ scope: "actual model-disabled Runtime HTTP and Chromium; not native credential or live inference qualification", configured_model: "settings-model-demo", saved_profile: true, reload_restored: true, inference_requests: inference.length, kernel_traversed: false }), contentType: "application/json" });
 });

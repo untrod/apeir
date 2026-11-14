@@ -192,7 +192,7 @@ const PROVIDER_CREDENTIAL_ENVIRONMENTS: Record<string, string> = {
   openrouter: "OPENROUTER_API_KEY",
 };
 
-function defaultCredentialEnvironment(providerId: string): string {
+export function defaultCredentialEnvironment(providerId: string): string {
   return (
     PROVIDER_CREDENTIAL_ENVIRONMENTS[providerId] ||
     `${providerId.replace(/[^a-zA-Z0-9]+/g, "_").toUpperCase()}_API_KEY`
@@ -237,7 +237,7 @@ const PROVIDER_DEFAULT_MODELS: Record<string, Record<string, string>> = {
   ollama: { default: "llama3.2" },
 };
 
-function defaultModelAssignments(providerId: string, capabilities: string[]): Record<string, string> {
+export function defaultModelAssignments(providerId: string, capabilities: string[]): Record<string, string> {
   const defaults = PROVIDER_DEFAULT_MODELS[providerId] || {};
   return Object.fromEntries(
     capabilities.map((capability) => [capability, defaults[capability] || defaults.default || ""]),

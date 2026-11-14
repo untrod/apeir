@@ -6,7 +6,8 @@ endpoint reachability, inference and tool support are separate checks.
 
 ## Configure
 
-1. Open **Models → Connections** in Studio and choose **Add Provider**. Select an implemented
+1. Open **Settings → Models & credentials → Models** and choose **Add Provider**.
+   **Models → Connections** in the workspace provides the same controls. Select an implemented
    protocol; its preset supplies the endpoint. **Connection settings** contains
    the endpoint, display name and Provider ID; compatible custom endpoints expand
    this section automatically.
@@ -14,7 +15,7 @@ endpoint reachability, inference and tool support are separate checks.
    The display name is not the backend model ID. Save the profile, then select a
    registered local or API model. Ollama connects to an already-running service;
    its optional credential field lives in Connection settings.
-3. Check the saved configuration. Choose **Test** only when a model request is
+3. Check the saved configuration. Choose **Run inference test** only when a model request is
    intended and its account/budget use is authorized.
 
 You can choose **Configure model later** in the native wizard. It preserves
@@ -22,20 +23,36 @@ saved profiles and makes no inference. A Runtime started with
 `--no-intelligence` cannot infer after saving a profile; restart in normal mode
 with the required authenticated Kernel before a production model test.
 
-Choose **Manage credentials** from Models to open the existing native credential
-manager. It requires the desktop application connected to its own local Runtime;
-a remote Controller cannot manage this computer’s keys. The shared **Settings →
-Models & credentials** uses the same manager. Save a key there, then enter a reference such as
-`env:DEEPSEEK_API_KEY` in the Provider form. Use the exact variable-name case
-configured on the Controller host. The field shows valid references, masks invalid input,
-and rejects raw keys before any configuration request. Browser Studio does not
-save keys; remote services use their own host’s secure backend. Saving or removing
-a local credential restarts Runtime. Save or cancel drafts in other panels first;
-Studio blocks the restart while those drafts remain. Switching a new profile’s
-protocol template clears its previous model ID and credential reference; changing
-the interface language keeps the draft.
+For a new cloud key, open **API keys**, select its Provider, paste the key and
+choose **Save key** once. The credential name is supplied automatically; change
+it under **Credential name (advanced)** only if needed. An existing name gets a
+new suffix when adding another key; choose **Update** to replace a saved value.
+The key stays in Windows Credential Manager. This requires the native desktop
+connected to its own local Runtime; a remote Controller cannot manage this
+computer’s keys.
 
-**中文提示：** 先在“管理凭据”中保存密钥，再填写 `env:名称`。模型 ID 应使用
+Saving or removing a local key restarts Runtime. Save or cancel drafts in other
+panels first. Studio shows progress, blocks duplicate submission and keeps the
+settings window open after a verified restart. If reconnection is unconfirmed,
+inspect saved keys and Runtime diagnostics before attempting another operation.
+There is no automatic retry.
+
+After a successful save, Studio returns to **Models**. Choose **Add Provider**
+and select the saved key; there is no need to type its reference. **Registered
+models** lists Runtime model identities and reported states; **Saved
+connections** lists editable Provider profiles. Saving a key alone does not
+register a model, and saving a connection does not test inference.
+
+Manual references such as `env:DEEPSEEK_API_KEY` remain supported. Use the exact
+variable-name case configured on the Controller host. The form rejects raw keys
+before any configuration request. Browser Studio uses its Controller host’s
+existing secure backend. Switching a new profile’s protocol template supplies
+that template’s suggested model ID and clears the previous credential reference;
+changing the interface language keeps the draft.
+
+**中文提示：** 在“设置 → 模型与凭据 → API 密钥”中选择服务商、粘贴密钥并保存，
+无需自己起环境变量名。保存期间会显示进度；成功后返回“模型”，添加连接时直接选择
+已保存密钥。“已注册模型”和“已保存连接”是两份独立名单。模型 ID 应使用
 服务商实际接受的标识，例如 `deepseek-chat`，不要填写显示名称或随意编号。
 保存配置不发起推理；“运行推理测试”是一次明确的模型调用，可能产生费用。
 “连接配置”“用量”“运行记录”分开展示，切换分类保留未保存草稿。
@@ -66,11 +83,12 @@ remote host. Pending connection/restart results belong to their original session
 including A→B→A switches. Changing Controller retires the previous identity and
 requests; do not reuse its credential or approvals.
 
-![Model connections separated from usage and run records](../../media/studio-model-settings-compact-source.png)
+![Model connections managed directly in Settings](../../media/studio-model-settings-compact-source.png)
 
-*Actual Linux Chromium source session, 1600×1000 viewport; the image captures
-the Models panel. The unsaved model ID is a fixture, and no inference was
-requested. Configuration, usage and run records have separate tabs.*
+*Actual production Linux Chromium source session, 1600×1000 viewport; the image
+captures Settings. The connection is persisted through the real model-disabled
+Runtime; its model ID and closed loopback endpoint are test fixtures. No key or
+inference is shown. This is source-browser evidence, not Windows installation.*
 
 ## Cloud and local services
 
