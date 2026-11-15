@@ -121,6 +121,74 @@ def test_original_work_key_receipt_and_no_repeated_effect(package):
     assert len(adapter.calls) == 1
 
 
+def test_receipt_permission_failure_after_dispatch_remains_unknown(
+    package, monkeypatch
+):
+    _, _, _, catalog, tool, arguments = setup(package)
+
+    def unavailable_receipt(*args, **kwargs):
+        raise PermissionError("Receipt destination became read-only after dispatch")
+
+    monkeypatch.setattr(package[1], "record_execution_receipt", unavailable_receipt)
+    result = catalog.execute(tool, arguments)
+    assert len(package[4].calls) == 1
+
+    assert result["ok"] is False
+    assert result.get("state") == "UNKNOWN"
+    assert result.get("recovery_required") is True
+    repeated = catalog.execute(tool, arguments)
+    assert repeated.get("recovery_required") is True
+    assert len(package[4].calls) == 1
+
+
+def test_receipt_failure_pauses_original_work_and_restart_does_not_replay(
+    package, monkeypatch
+):
+    harness, snapshot, _, catalog, tool, arguments = setup(package)
+    snapshot.pending_action = {}
+    harness.persist_progress(snapshot, "work.progress", {"action": {}})
+
+    def unavailable_receipt(*args, **kwargs):
+        raise PermissionError("Receipt write denied after adapter returned")
+
+    monkeypatch.setattr(package[1], "record_execution_receipt", unavailable_receipt)
+    decisions = iter(
+        (
+            WorkDecision(
+                DecisionStatus.CONTINUE,
+                "Load extension schemas",
+                tool_name="catalog_expand",
+                tool_arguments={"category": "extension"},
+            ),
+            WorkDecision(
+                DecisionStatus.CONTINUE,
+                "Invoke once",
+                tool_name=tool,
+                tool_arguments=arguments,
+            ),
+        )
+    )
+    original = harness.run(
+        snapshot.run_id, deliberator=lambda _: next(decisions), tools=catalog
+    )
+    assert original.state is RunState.RECOVERY_REQUIRED
+    assert original.pending_action["tool"] == tool
+    assert len(package[4].calls) == 1
+    restarted = WorkHarness(package[0])
+    recovered = restarted.resume(
+        snapshot.run_id,
+        deliberator=lambda _: WorkDecision(
+            DecisionStatus.BLOCKED, "Inspect original effect"
+        ),
+        tools=catalog,
+    )
+    assert (
+        recovered.run_id == snapshot.run_id
+        and recovered.state is not RunState.COMPLETED
+    )
+    assert len(package[4].calls) == 1
+
+
 @pytest.mark.parametrize("change", ["disable", "remove", "revoke", "arguments", "work"])
 def test_stale_tool_cannot_cross_lifecycle_or_original_action(package, change):
     harness, snapshot, _, catalog, tool, arguments = setup(package)

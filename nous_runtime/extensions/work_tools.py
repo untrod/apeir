@@ -132,11 +132,10 @@ class WorkExtensionTools:
             result = asyncio.run(
                 self._invoke(extension_id, name, dict(arguments), key, dict(action))
             )
-        except PermissionError:
-            raise
         except Exception as error:
             # A claim may already exist. Keep the original Work unresolved; never
             # create another key or silently replay a potentially completed call.
+            # PermissionError can come from receipt persistence after an effect.
             return {
                 "ok": False,
                 "state": "UNKNOWN",
