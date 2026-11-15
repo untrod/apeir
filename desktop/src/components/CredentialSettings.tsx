@@ -23,16 +23,18 @@ function unusedName(provider: string, rows: CredentialStatus[]) {
 }
 
 /** The existing native credential manager; no key is sent to a Runtime API. */
-export function CredentialSettings({ locale = "en", onDraftChange, hasOtherDrafts, onStored, onBusyChange }: {
+export function CredentialSettings({ locale = "en", initialProviderId = "deepseek", onDraftChange, hasOtherDrafts, onStored, onBusyChange }: {
   locale?: "en" | "zh"; onDraftChange?: (dirty: boolean) => void; hasOtherDrafts?: () => boolean;
+  initialProviderId?: string;
   onStored?: (notice: NativeCredentialNotice) => void;
   onBusyChange?: (busy: boolean) => void;
 } = {}) {
   const version = useRuntimeConfigVersion();
   const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   const [credentials, setCredentials] = useState<CredentialStatus[]>([]);
-  const [providerId, setProviderId] = useState("deepseek");
-  const [environmentName, setEnvironmentName] = useState("DEEPSEEK_API_KEY");
+  const initialProvider = PROVIDER_TEMPLATES.some(item => item.providerId === initialProviderId && item.credentialType !== "none" && !item.unsupportedProtocol) ? initialProviderId : "deepseek";
+  const [providerId, setProviderId] = useState(initialProvider);
+  const [environmentName, setEnvironmentName] = useState(() => defaultCredentialEnvironment(initialProvider));
   const [editing, setEditing] = useState<string | null>(null);
   const [secret, setSecret] = useState("");
   const [busy, setBusy] = useState(false), [ready, setReady] = useState(false), [loading, setLoading] = useState(true);
@@ -42,6 +44,14 @@ export function CredentialSettings({ locale = "en", onDraftChange, hasOtherDraft
   const selectedProvider = useRef(providerId); selectedProvider.current = providerId;
   const retireReads = useCallback(() => { reads.current++; }, []);
   const protect = !!secret || busy || uncertain;
+  const lastRequestedProvider = useRef(initialProvider);
+  useEffect(() => {
+    if (lastRequestedProvider.current === initialProvider || protect || editing) return;
+    lastRequestedProvider.current = initialProvider;
+    nameTouched.current = false;
+    setProviderId(initialProvider);
+    setEnvironmentName(unusedName(initialProvider, credentials));
+  }, [initialProvider, protect, editing, credentials]);
   useEffect(() => { onDraftChange?.(protect); }, [protect, onDraftChange]);
   useEffect(() => () => onDraftChange?.(false), [onDraftChange]);
   const refresh = useCallback(async () => {

@@ -36,12 +36,20 @@ import {
   workflowDefinition,
   workflowDraft,
   workflowStepTypes,
+  sameWorkflowDefinition,
+  sameWorkflowInputs,
+  workflowRequestFingerprint,
+  createWorkflowTemplate,
+  WORKFLOW_TEMPLATES,
   type WorkflowDefinition,
   type WorkflowDraft,
   type WorkflowStepType,
 } from "../../lib/studioWorkflow";
 import type { PanelProps } from "./StudioPanels";
 import "./StudioWorkflow.css";
+import { WorkflowInputs } from "./WorkflowInputs";
+import { WorkflowOutputs } from "./WorkflowOutputs";
+import { useStudioSnapshot } from "./StudioData";
 
 type Run = {
   run_id: string;
@@ -50,6 +58,7 @@ type Run = {
   state: string;
   step_states: Record<string, string>;
   outputs: Record<string, unknown>;
+  inputs?: Record<string, unknown>;
   error: string;
   definition_digest: string;
   inputs_digest: string;
@@ -74,6 +83,7 @@ function download(name: string, value: unknown) {
 }
 export function StudioWorkflow({
   locale,
+  open,
   onDraftChange,
   onDraftSnapshot,
 }: PanelProps) {
@@ -97,6 +107,7 @@ export function StudioWorkflow({
     [busy, setBusy] = useState(false),
     [run, setRun] = useState<Run | null>(null),
     [events, setEvents] = useState<unknown[]>([]);
+  const [approvalRequest, setApprovalRequest] = useState("");
   const [stepBindings, setStepBindings] = useState<Record<string, unknown>>({});
   const [kind, setKind] = useState<WorkflowStepType>("transform"),
     [inputs, setInputs] = useState("{}"),
@@ -128,6 +139,9 @@ export function StudioWorkflow({
   const active = useRef(true),
     file = useRef<HTMLInputElement>(null),
     currentDraft = useRef(draft);
+  const root = useRef<HTMLElement>(null), inFlight = useRef(false), inspections = useRef(0);
+  const { workflow: liveWorkflow, subscribeLive } = useStudioSnapshot();
+  useEffect(() => subscribeLive(() => !!root.current?.getClientRects().length, ["workflow"]), [subscribeLive]);
   currentDraft.current = draft;
   const fitCanvas = useCallback(() => {
     cancelAnimationFrame(fitFrame.current);
@@ -167,7 +181,7 @@ export function StudioWorkflow({
             {
               path: "workflow-draft.json",
               originalSha256: "",
-              content: JSON.stringify({ schemaVersion: 1, ...draft }, null, 2),
+              content: JSON.stringify({ schemaVersion: 1, ...draft, inputText: inputs }, null, 2),
             },
             {
               path: "workflow-parameters-draft.txt",
@@ -197,6 +211,7 @@ export function StudioWorkflow({
     draft,
     paramsText,
     bindingsText,
+    inputs,
     attempt,
     onDraftChange,
     onDraftSnapshot,
@@ -221,7 +236,7 @@ export function StudioWorkflow({
     wait: t("Wait barrier", "等待屏障"), capability: t("Capability", "能力"),
     connector: t("Connector", "连接器"), command: t("Command", "命令"),
   })[type];
-  const needsModels = kind === "agent" || isModel;
+  const needsModels = kind === "agent" || isModel || draft.definition.steps.some(modelWorkflowStep);
   useEffect(() => {
     if (!needsModels) return;
     let current = true;
@@ -343,38 +358,68 @@ export function StudioWorkflow({
     if (added) { setSelected([id]); setKind(type); setNodeMenu(null); }
   }
   async function action(work: () => Promise<void>) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     const check = captureRuntimeConnection();
     setBusy(true);
     setError("");
+    setApprovalRequest("");
     try {
       await work();
       check();
     } catch (err) {
+      try { check(); } catch { return; }
+      if (active.current && err instanceof ApiError && typeof err.details?.approval_request_id === "string") setApprovalRequest(err.details.approval_request_id);
       if (active.current)
         setError(
           `${err instanceof Error ? err.message : String(err)}${err instanceof ApiError && err.details?.approval_request_id ? ` · Approval: ${err.details.approval_request_id}` : ""} · ${t("Inspect the original request before retrying.", "重试前请核对原始请求。")}`,
         );
     } finally {
+      inFlight.current = false;
       if (active.current) setBusy(false);
     }
   }
-  async function inspect(id: string, graph: WorkflowDefinition | null = null) {
+  async function inspect(id: string, graph: WorkflowDefinition | null = null, openOriginal = false) {
     const check = captureRuntimeConnection();
+    const sequence = ++inspections.current;
     const detail = await api<{
       run: Run;
       events: unknown[];
       step_bindings?: Record<string, unknown>;
+      definition?: WorkflowDefinition | null;
+      definition_status?: string;
     }>(`/api/v1/workflow/runs/${encodeURIComponent(id)}`);
     check();
-    if (active.current) {
+    if (active.current && sequence === inspections.current) {
+      const original = detail.definition_status === "MATCH" && detail.definition ? workflowDefinition(detail.definition) : null;
+      if (openOriginal && original) {
+        const next = { definition: original, positions: arrangeWorkflow(original) };
+        currentDraft.current = next; setDraft(next); setPast([]); setFuture([]); setSelected([]); setDirty(false);
+        setInputs(JSON.stringify(detail.run.inputs || {}, null, 2));
+        fitCanvas();
+      }
       setRun(detail.run);
-      setRunGraph(graph);
+      setRunGraph(detail.definition_status === "UNKNOWN" ? null : original || graph);
       setEvents(detail.events);
       setStepBindings(detail.step_bindings ?? {});
     }
   }
+  let inputsMatchRun = false;
+  try { inputsMatchRun = sameWorkflowInputs(JSON.parse(inputs), run?.inputs || {}); } catch { /* Invalid input remains an unsubmitted draft. */ }
   const graphMatchesRun =
-    !!runGraph && JSON.stringify(runGraph) === JSON.stringify(draft.definition);
+    !!runGraph && sameWorkflowDefinition(runGraph, draft.definition) && inputsMatchRun;
+  const selectedRun = run?.run_id;
+  const liveSummary = JSON.stringify(liveWorkflow.data?.find(item => item.run_id === selectedRun) ?? null);
+  useEffect(() => {
+    if (!selectedRun || !liveSummary || liveSummary === "null" || !root.current?.getClientRects().length) return;
+    const check = captureRuntimeConnection(), sequence = inspections.current;
+    const abort = new AbortController();
+    void api<{ run: Run; events: unknown[]; step_bindings?: Record<string, unknown>; definition_status?: string }>(`/api/v1/workflow/runs/${encodeURIComponent(selectedRun)}`, { signal: abort.signal }).then(detail => {
+      check();
+      if (active.current && sequence === inspections.current && !abort.signal.aborted) { setRun(detail.run); setEvents(detail.events); setStepBindings(detail.step_bindings ?? {}); if (detail.definition_status === "UNKNOWN") setRunGraph(null); }
+    }).catch(() => { /* Keep the last original record; a failed read is not execution failure. */ });
+    return () => abort.abort();
+  }, [selectedRun, liveSummary]);
   const nodes: Node[] = draft.definition.steps.map((item, index) => ({
     id: item.step_id,
     type: "default",
@@ -387,9 +432,10 @@ export function StudioWorkflow({
       label: (
         <>
           <strong title={item.step_id}>{item.step_type === "agent" && !modelWorkflowStep(item) ? t("Agent", "智能体") : stepTitle(item.step_type)}</strong>
+          <small className="workflow-node-name">{item.step_id}</small>
           <span>
             {modelWorkflowStep(item) ? "MODEL" : item.step_type.toUpperCase()} ·{" "}
-            {(graphMatchesRun && run?.step_states[item.step_id]) ||
+            {(graphMatchesRun && (run?.step_states[item.step_id] || "pending")) ||
               (modelWorkflowStep(item)
                 ? !modelHostAvailable
                   ? "BLOCKED"
@@ -493,17 +539,46 @@ export function StudioWorkflow({
         t("Replace the unsaved workflow draft?", "替换未保存的工作流草稿？"),
       )
     )
-      return;
-    safely(() => {
-      const next = workflowDraft(value);
+      return false;
+    return safely(() => {
+      const { inputText, ...next } = workflowDraft(value);
       commit(next);
+      setInputs(inputText ?? "{}");
       setSelected([]);
       fitCanvas();
     });
   }
+  function saveDraft() {
+    if (paramsPending) { setError(t("Apply parameter changes before saving the draft.", "请先应用节点参数，再保存草稿。")); return; }
+    safely(() => {
+      workflowDraft({ schemaVersion: 1, ...draft, inputText: inputs });
+      download("workflow-draft.json", { schemaVersion: 1, ...draft, inputText: inputs });
+      setDirty(false);
+      setNotice(t("Draft file saved. No workflow was executed.", "草稿文件已保存，未执行工作流。"));
+    });
+  }
+  function applyTemplate(id: typeof WORKFLOW_TEMPLATES[number]["id"]) {
+    const next = createWorkflowTemplate(id);
+    if (!restore({ schemaVersion: 1, ...next })) return;
+    setInputs(JSON.stringify({ request: "" }, null, 2)); setAttempt(null);
+    setSelected([next.definition.steps[0].step_id]);
+    if (id === "model-review") setKind("agent");
+    setNotice(t("Fill in the task inputs, review the steps, then register this version.", "填写任务输入、检查节点，再保存注册此版本。"));
+  }
+  function openRecordedRun(id: string) {
+    if ((dirty || paramsPending) && !window.confirm(t("Open the original workflow? Export your draft first if you want to keep these changes.", "打开原始流程？如需保留当前修改，请先导出草稿。"))) return;
+    void action(() => inspect(id, null, true));
+  }
+  const registered = catalog?.definitions.some(item => item.workflow_id === draft.definition.workflow_id && item.version === draft.definition.version) === true;
   return (
-    <section className="studio-workflow" aria-label="Workflow Builder">
+    <section ref={root} className="studio-workflow" aria-label="Workflow Builder" onKeyDown={event => {
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "s") { event.preventDefault(); event.stopPropagation(); if (!busy) saveDraft(); }
+    }}>
       <header className="studio-workflow-toolbar">
+        <details className="workflow-new-menu"><summary aria-label={t("New Workflow", "新建工作流")}>{t("New", "新建")}</summary><div role="group" aria-label={t("Workflow templates", "工作流模板")}>
+          {WORKFLOW_TEMPLATES.map(template => <button key={template.id} disabled={busy} onClick={event => { applyTemplate(template.id); event.currentTarget.closest("details")?.removeAttribute("open"); }}><strong>{locale === "zh" ? template.zh : template.en}</strong><small>{locale === "zh" ? template.descriptionZh : template.descriptionEn}</small></button>)}
+          <button disabled={busy} onClick={() => restore({ schemaVersion: 1, ...initialWorkflow() })}>{t("Custom workflow", "自定义流程")}</button>
+        </div></details>
         <input
           aria-label="Workflow ID"
           maxLength={128}
@@ -586,6 +661,7 @@ export function StudioWorkflow({
           {t("Validate", "验证")}
         </button>
         <button
+          title={t("Save this immutable version to the Runtime", "将此版本保存到运行时")}
           disabled={busy || paramsPending}
           onClick={() =>
             void action(async () => {
@@ -604,8 +680,11 @@ export function StudioWorkflow({
           {t("Register", "注册")}
         </button>
         <button
+          title={!registered ? t("Register this workflow version before running", "请先保存注册此工作流版本") : undefined}
           disabled={
             busy ||
+            !registered ||
+            !!run && graphMatchesRun ||
             paramsPending ||
             (draft.definition.steps.some((item) => item.data_bindings) &&
               !catalog?.data_bindings_versions?.includes(1)) ||
@@ -617,9 +696,10 @@ export function StudioWorkflow({
           }
           onClick={() =>
             void action(async () => {
+              if (run && graphMatchesRun) return;
               workflowDefinition(draft.definition);
               const parsed = JSON.parse(inputs);
-              const fingerprint = JSON.stringify([draft.definition, parsed]);
+              const fingerprint = workflowRequestFingerprint(draft.definition, parsed);
               const original =
                 attempt?.fingerprint === fingerprint
                   ? attempt
@@ -660,13 +740,7 @@ export function StudioWorkflow({
           </button>
           <button
             disabled={paramsPending}
-            onClick={() => {
-              safely(() => {
-                workflowDraft({ schemaVersion: 1, ...draft });
-                download("workflow-draft.json", { schemaVersion: 1, ...draft });
-                setDirty(false);
-              });
-            }}
+            onClick={saveDraft}
           >
             {t("Save draft", "保存草稿")}
           </button>
@@ -693,9 +767,11 @@ export function StudioWorkflow({
         />
       </header>
       {error && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
+      {approvalRequest && <div className="workflow-approval-help"><button onClick={() => open("operations")}>{t("Open approvals", "打开审批")}</button><details><summary>{t("Controller host command", "Controller 主机命令")}</summary><p>{t("An authorized operator can inspect the original request on its Controller host.", "已授权的操作者可在该 Controller 主机上核对原始请求。")}</p><code>apeir approval show {approvalRequest} --json</code></details></div>}
+      {(busy || notice) && <p role="status" aria-live="polite">{busy ? t("Processing the original request…", "正在处理原始请求…") : notice}</p>}
       <div className="studio-workflow-body">
         <aside>
+          <WorkflowInputs definition={draft.definition} value={inputs} onChange={value => { setInputs(value); setDirty(true); }} locale={locale} />
           <select
             aria-label="Step type"
             value={kind}
@@ -1071,7 +1147,7 @@ export function StudioWorkflow({
             <textarea
               aria-label="Workflow inputs"
               value={inputs}
-              onChange={(e) => setInputs(e.target.value)}
+              onChange={(e) => { setInputs(e.target.value); setDirty(true); }}
             />
           </label>
           <button disabled={busy} onClick={() => void action(reload)}>
@@ -1111,7 +1187,7 @@ export function StudioWorkflow({
             <button
               className="studio-workflow-history"
               key={item.run_id}
-              onClick={() => void action(() => inspect(item.run_id))}
+              onClick={() => openRecordedRun(item.run_id)}
             >
               {item.workflow_id} · {item.state}
               <small>{item.run_id}</small>
@@ -1213,8 +1289,15 @@ export function StudioWorkflow({
         </summary>
         {run && (
           <>
-            <strong>{run.run_id}</strong>
-            <span>runtime-service · NOT_PHYSICAL_VERIFICATION</span>
+            <p className="workflow-run-heading"><strong>{run.workflow_id}</strong><span>{run.state}</span></p>
+            {run.state === "completed" && <button disabled={busy} onClick={() => {
+              if (!window.confirm(t("Prepare a new run? It will need its own approval and may incur model charges. The original record is kept.", "准备新建一次运行？它需要独立审批，并可能产生模型费用；原始记录会保留。"))) return;
+              inspections.current++; setAttempt(null); setRun(null); setRunGraph(null); setEvents([]); setStepBindings({}); setError("");
+              setNotice(t("New run prepared. Review the inputs, then choose Run. Nothing has been executed.", "已准备新运行。请检查输入，再点运行；尚未执行任何操作。"));
+            }}>{t("New run", "新建一次运行")}</button>}
+            {!graphMatchesRun && <p>{t("Showing an original run. The current draft or inputs have not been run.", "当前显示原始执行记录；修改后的草稿或输入尚未执行。")}</p>}
+            {run.error && <p role={run.state === "waiting_approval" ? "status" : "alert"}>{run.error}</p>}
+            {run.state === "waiting_approval" && <button onClick={() => open("operations")}>{t("Open approval controls", "打开审批控制台")}</button>}
             <button
               disabled={busy}
               onClick={() => void action(() => inspect(run.run_id, runGraph))}
@@ -1286,8 +1369,11 @@ export function StudioWorkflow({
                 </li>
               ))}
             </ul>
+            <WorkflowOutputs outputs={run.outputs} states={run.step_states} locale={locale} />
             <details>
               <summary>{t("Raw record / events", "原始记录 / 事件")}</summary>
+              <strong>{run.run_id}</strong>
+              <span>runtime-service · NOT_PHYSICAL_VERIFICATION</span>
               <pre>
                 {JSON.stringify(
                   { run, events, step_bindings: stepBindings },

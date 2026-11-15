@@ -376,3 +376,44 @@ def test_configuration_validation_over_authenticated_runtime_http(
         server.server_close()
         owner.join(timeout=5)
     assert not owner.is_alive()
+
+
+@pytest.mark.parametrize(
+    "service,kind,output_mode",
+    [
+        ("deepseek", "openai-compatible", "json_object"),
+        ("ollama", "ollama", "json_schema"),
+    ],
+)
+def test_multiple_model_connections_preserve_the_explicit_service_template(
+    service, kind, output_mode
+):
+    from nous_runtime.cli.provider_setup import SERVICE_PRESETS
+
+    for connection_id in (service, service + "-2"):
+        config = build_provider_config(
+            connection_id,
+            "Chosen model",
+            SERVICE_PRESETS[service]["base_endpoint"],
+            credential_ref="env:FAKE_ONLY_MODEL_KEY" if service == "deepseek" else "",
+            model="explicit-model-id",
+            service=service,
+        )
+        assert config["provider_id"] == connection_id
+        assert config["service"] == service
+        assert config["kind"] == kind
+        assert config["structured_output_mode"] == output_mode
+        assert config["model"] == "explicit-model-id"
+        assert config["credential_ref"] == (
+            "env:FAKE_ONLY_MODEL_KEY" if service == "deepseek" else ""
+        )
+
+
+def test_unknown_service_template_is_rejected_without_echoing_untrusted_values():
+    with pytest.raises(ValueError, match="Unknown provider service template"):
+        build_provider_config(
+            "example",
+            "Example",
+            "https://provider.example.test/v1",
+            service="untrusted-template",
+        )

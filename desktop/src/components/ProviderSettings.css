@@ -1,0 +1,16 @@
+.provider-settings .provider-setup { margin:4px 0 12px; padding:16px; border:1px solid var(--nous-border); border-radius:5px; background:var(--nous-bg); display:grid; gap:12px; min-width:0; }
+.provider-settings .provider-setup legend { padding:0 6px; font-weight:600; }
+.provider-settings .provider-setup label { display:grid; gap:6px; }
+.provider-settings .provider-setup p { margin:0; color:var(--nous-text-secondary); }
+.provider-setup-steps { display:flex; flex-wrap:wrap; gap:8px 24px; padding:0; margin:0; list-style-position:inside; color:var(--nous-text-secondary); }
+.provider-setup-steps [aria-current] { color:var(--nous-accent); font-weight:600; }
+.provider-settings form { padding:14px; border:1px solid var(--nous-border); border-radius:5px; background:var(--nous-bg); }
+.provider-settings form > label { display:grid; gap:6px; }
+.provider-settings th { font-size:12px; color:var(--nous-text-secondary); }
+.provider-settings :is(th,td) { padding:9px 6px; border-bottom:1px solid var(--nous-border); }
+.provider-settings td small { color:var(--nous-text-secondary); margin-top:3px; }
+.provider-settings .provider-advanced { padding-top:8px; border-top:1px solid var(--nous-border); }
+.provider-settings .provider-advanced > label { display:grid; gap:6px; margin-top:10px; }
+.provider-settings :is(input,select,button):focus-visible { outline:2px solid var(--nous-border-focus); outline-offset:2px; }
+@media(pointer:coarse) { .provider-settings button { min-height:40px; } }
+.provider-response { white-space:pre-wrap; overflow-wrap:anywhere; padding:12px; border:1px solid var(--nous-border); background:var(--nous-bg); border-radius:4px; line-height:1.5; }

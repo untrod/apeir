@@ -332,6 +332,21 @@ def handle_workflow_run_detail(run_id: str, *, authorization_context=None):
     if run is None:
         return err_response("NOUS_NOT_FOUND", "Workflow run not found")
     definition = runtime.store.get_definition(run.workflow_id, run.workflow_version)
+    # Present the original graph only when it matches this Run's durable binding.
+    # Recorded results remain inspectable if the definition is missing or damaged.
+    original_definition = None
+    if definition is not None and run.definition_digest:
+        data = definition_to_dict(definition)
+        if (
+            runtime.store.definition_digest(definition) == run.definition_digest
+            and len(json.dumps(data).encode("utf-8")) <= 96 * 1024
+        ):
+            try:
+                validate_definition(data)
+            except ValueError:
+                pass  # Preserve history even when its graph cannot enter Studio.
+            else:
+                original_definition = data
     checkpoints = runtime.store.checkpoints(run_id)
     binding_views = {}
 
@@ -342,7 +357,7 @@ def handle_workflow_run_detail(run_id: str, *, authorization_context=None):
             else None
         )
 
-    for step in definition.steps if definition else ():
+    for step in definition.steps if original_definition is not None else ():
         if not isinstance(step.data_bindings, dict):
             continue
         checkpoint = checkpoints.get(step.step_id) or {}
@@ -406,6 +421,8 @@ def handle_workflow_run_detail(run_id: str, *, authorization_context=None):
     return ok_response(
         {
             "run": _view(run),
+            "definition": original_definition,
+            "definition_status": "MATCH" if original_definition else "UNKNOWN",
             "step_bindings": binding_views,
             "events": [
                 event.to_dict() for event in runtime.events.load_events(run_id)[-200:]

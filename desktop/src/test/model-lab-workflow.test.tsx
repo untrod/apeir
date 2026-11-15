@@ -45,7 +45,8 @@ describe("Model Lab accounting read workflow", () => {
     const props = { modelsOnly: true, manageProviders: true, onDraftChange: protection };
     const view = render(<StrictMode><DeveloperPlatform {...props} /></StrictMode>);
     await waitFor(() => expect(fetchModelLab).toHaveBeenCalledOnce());
-    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add model" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
     fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "unsaved-model" } });
     fireEvent.click(screen.getByRole("tab", { name: "Usage" }));
     expect(await screen.findByLabelText("Usage accounting")).toBeVisible();

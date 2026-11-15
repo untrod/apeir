@@ -18,7 +18,7 @@ const open = (onOpenApprovals?: () => void) => render(<ProviderSettings models={
 describe("Studio Provider configuration", () => {
   it("keeps unsaved configuration protected from Provider removal", async () => {
     open(); await screen.findByRole("button", { name: "Edit example" });
-    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
     fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "unsaved-model" } });
     expect(screen.getByRole("button", { name: "Remove example" })).toBeDisabled();
     expect(screen.getByLabelText("Vendor model ID")).toHaveValue("unsaved-model");
@@ -45,7 +45,7 @@ describe("Studio Provider configuration", () => {
   });
   it("resets provider-specific model and credential references when the protocol template changes", async () => {
     open(); await screen.findByRole("button", { name: "Edit example" });
-    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
     fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "previous-model" } });
     fireEvent.change(screen.getByLabelText("Credential reference"), { target: { value: "env:PREVIOUS_PROVIDER_KEY" } });
     fireEvent.change(screen.getByLabelText("Protocol template"), { target: { value: "deepseek" } });
@@ -71,7 +71,7 @@ describe("Studio Provider configuration", () => {
   });
   it("saves an explicit Ollama model without requiring or inventing a credential", async () => {
     open(); await screen.findByRole("button", { name: "Edit example" });
-    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
     fireEvent.change(screen.getByLabelText("Protocol template"), { target: { value: "ollama" } });
     expect(screen.queryByLabelText("Credential reference")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "fixture-model:local" } });
@@ -92,7 +92,8 @@ describe("Studio Provider configuration", () => {
     const protection = vi.fn();
     const props = { models, onChanged: changed, onDraftChange: protection };
     const view = render(<ProviderSettings {...props} locale="en" />);
-    fireEvent.click(await screen.findByRole("button", { name: "Add Provider" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add model" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Add model" }));
     fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "my-model" } });
     fireEvent.change(screen.getByLabelText("Credential reference"), { target: { value: "env:FAKE_OWNER_KEY" } });
     view.rerender(<ProviderSettings {...props} locale="zh" />);
@@ -132,7 +133,7 @@ describe("Studio Provider configuration", () => {
   });
   it("preserves a Controller's case-sensitive environment reference", async () => {
     open(); await screen.findByRole("button", { name: "Edit example" });
-    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
     fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "fixture-model" } });
     fireEvent.change(screen.getByLabelText("Credential reference"), { target: { value: "env:fixture_owner_key" } });
     expect(screen.getByLabelText("Credential reference")).toHaveAttribute("type", "text");
@@ -143,7 +144,7 @@ describe("Studio Provider configuration", () => {
   });
   it("validates a new configuration before its governed creation, without testing inference", async () => {
     open(); await screen.findByRole("button", { name: "Edit example" });
-    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
     fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "chosen-model" } });
     fireEvent.change(screen.getByLabelText("Credential reference"), { target: { value: "env:FAKE_OWNER_KEY" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Provider" }));
@@ -156,7 +157,7 @@ describe("Studio Provider configuration", () => {
     let release!: (value: unknown) => void;
     vi.mocked(governedStudioMutation).mockReturnValueOnce(new Promise(resolve => { release = resolve; }));
     const view = open(); await screen.findByRole("button", { name: "Edit example" });
-    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
     fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "chosen-model" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Provider" }));
     await waitFor(() => expect(governedStudioMutation).toHaveBeenCalledTimes(1));

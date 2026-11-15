@@ -153,6 +153,8 @@ def test_real_registration_execution_history_and_restart(api, monkeypatch):
     detail = call("GET", f"/api/v1/workflow/runs/{run['run_id']}")["data"]
     assert detail["run"]["run_id"] == run["run_id"]
     assert detail["events"] and detail["run"]["definition_digest"]
+    assert detail["definition_status"] == "MATCH"
+    assert detail["definition"] == definition_to_dict(definition_from_dict(definition))
     repeated = call("POST", "/api/v1/workflow/run", body, approve=True)
     assert repeated["data"]["run_id"] == run["run_id"]
     catalog = call("GET", "/api/v1/workflow")["data"]
@@ -333,17 +335,40 @@ def test_step_approval_requires_current_nonserialized_human_and_original_scope(
     runtime = WorkflowRuntime(str(tmp_path))
     definition = definition_from_dict(
         spec(
-            {"step_id": "review", "step_type": "approval"},
+            {
+                "step_id": "request",
+                "step_type": "transform",
+                "data_bindings": {
+                    "schema_version": 1,
+                    "inputs": {"value": {"source": "inputs", "pointer": "/request"}},
+                },
+            },
+            {"step_id": "review", "step_type": "approval", "depends_on": ["request"]},
             {
                 "step_id": "after",
                 "step_type": "transform",
-                "depends_on": ["review"],
-                "params": {"value": "approved-output"},
+                "depends_on": ["review", "request"],
+                "data_bindings": {
+                    "schema_version": 1,
+                    "inputs": {
+                        "value": {
+                            "source": "step",
+                            "step_id": "request",
+                            "pointer": "/value",
+                        }
+                    },
+                },
             },
         )
     )
     runtime.register(definition)
-    waiting = runtime.start(definition.workflow_id, definition.version)
+    waiting = runtime.start(
+        definition.workflow_id,
+        definition.version,
+        {"request": "Review the proposed change"},
+    )
+    checkpoint = runtime.store.checkpoints(waiting.run_id)["request"]
+    assert "after" not in waiting.outputs
     body = {
         "action": "approve",
         "step_id": "review",
@@ -370,7 +395,15 @@ def test_step_approval_requires_current_nonserialized_human_and_original_scope(
         waiting.run_id, body, authorization_context=context
     )
     assert completed["data"]["state"] == "completed"
-    assert completed["data"]["outputs"]["after"]["value"] == "approved-output"
+    assert (
+        completed["data"]["outputs"]["after"]["value"] == "Review the proposed change"
+    )
+    restored = WorkflowRuntime(str(tmp_path))
+    assert restored.resume(waiting.run_id).run_id == waiting.run_id
+    assert restored.store.checkpoints(waiting.run_id)["request"] == checkpoint
+    assert (
+        restored.store.get_run(waiting.run_id).outputs == completed["data"]["outputs"]
+    )
     assert any(
         item["event_type"] == "workflow.approval.accepted"
         for item in gate.store.operation_audit()
@@ -503,3 +536,32 @@ def test_history_progress_refuses_changed_definition_without_exposing_inputs(api
         )
     with pytest.raises(WorkflowBindingError):
         runtime.store.list_run_summaries()
+
+
+@pytest.mark.parametrize("damage", ["changed", "missing"])
+def test_run_graph_never_substitutes_an_unbound_definition(api, damage):
+    import json
+    import sqlite3
+    from nous_runtime.workflow import WorkflowRuntime
+
+    call, _, root = api
+    runtime = WorkflowRuntime(str(root))
+    definition = definition_from_dict(spec())
+    runtime.register(definition)
+    original = runtime.start(definition.workflow_id, definition.version)
+    with sqlite3.connect(runtime.store.path) as db:
+        if damage == "missing":
+            db.execute("DELETE FROM workflow_definitions")
+        else:
+            altered = definition_to_dict(definition)
+            altered["steps"][0]["params"]["value"] = "unbound replacement"
+            db.execute(
+                "UPDATE workflow_definitions SET definition_json=?",
+                (json.dumps(altered),),
+            )
+    detail = call("GET", f"/api/v1/workflow/runs/{original.run_id}")["data"]
+    assert detail["definition_status"] == "UNKNOWN"
+    assert detail["definition"] is None
+    assert detail["run"]["outputs"]["a"]["value"] == "actual-output"
+    assert detail["run"]["run_id"] == original.run_id
+    assert detail["step_bindings"] == {}

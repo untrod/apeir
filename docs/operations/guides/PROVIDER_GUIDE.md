@@ -6,17 +6,21 @@ endpoint reachability, inference and tool support are separate checks.
 
 ## Configure
 
-1. Open **Settings → Models & credentials → Models** and choose **Add Provider**.
-   **Models → Connections** in the workspace provides the same controls. Select an implemented
-   protocol; its preset supplies the endpoint. **Connection settings** contains
-   the endpoint, display name and Provider ID; compatible custom endpoints expand
-   this section automatically.
-2. Enter the exact vendor model ID and, when required, a credential reference.
-   The display name is not the backend model ID. Save the profile, then select a
-   registered local or API model. Ollama connects to an already-running service;
-   its optional credential field lives in Connection settings.
-3. Check the saved configuration. Choose **Run inference test** only when a model request is
-   intended and its account/budget use is authorized.
+1. Open **Settings → Models & credentials → Models** and choose **Add model**.
+   **Models → Connections** in the workspace provides the same controls.
+2. In the native app, choose a service. For a new cloud connection, the next
+   step opens **API keys** before starting a configuration draft. Save the key,
+   then choose **Continue to Models**. The connection form uses that saved key;
+   you do not need to type a credential reference. Ollama skips the key step.
+3. Enter the exact vendor model ID. **Connection settings** holds the endpoint,
+   display name and connection ID; custom compatible endpoints expand it.
+   Save, then deliberately choose **Run inference test** if account and budget
+   use are authorized. Saving alone sends no model request.
+
+A second model on the same service gets a separate connection ID automatically.
+Its selected protocol remains explicit. A key from a different service is never
+selected automatically; choose the intended saved key. Adding a connection cannot overwrite
+one created by another client; edit the existing profile instead.
 
 You can choose **Configure model later** in the native wizard. It preserves
 saved profiles and makes no inference. A Runtime started with
@@ -38,12 +42,13 @@ locked during the admitted restart so a new configuration draft cannot be lost. 
 inspect saved keys and Runtime diagnostics before attempting another operation.
 There is no automatic retry.
 
-After a successful save, the API keys tab confirms that Runtime reconnected.
-Choose **Continue to Models**, then **Add Provider**
-and select the saved key; there is no need to type its reference. **Registered
-models** lists Runtime model identities and reported states; **Saved
-connections** lists editable Provider profiles. Saving a key alone does not
-register a model, and saving a connection does not test inference.
+After a successful key save, the API keys tab confirms that Runtime reconnected.
+**Continue to Models** opens the connection form with that verified reference.
+**Registered models** lists actual Runtime model identities; **Saved connections**
+lists editable profiles. Saving a key alone does not register a model. Until an
+explicit test returns, a registered model is shown as **Not tested**. A test
+result shows the actual response, latency and available usage; reported Provider
+health is shown separately.
 
 Manual references such as `env:DEEPSEEK_API_KEY` remain supported. Use the exact
 variable-name case configured on the Controller host. The form rejects raw keys
@@ -52,9 +57,9 @@ existing secure backend. Switching a new profile’s protocol template supplies
 that template’s suggested model ID and clears the previous credential reference;
 changing the interface language keeps the draft.
 
-**中文提示：** 在“设置 → 模型与凭据 → API 密钥”中选择服务商、粘贴密钥并保存，
-无需自己起环境变量名。保存期间会显示进度；成功后返回“模型”，添加连接时直接选择
-已保存密钥。“已注册模型”和“已保存连接”是两份独立名单。模型 ID 应使用
+**中文提示：** 从“设置 → 模型与凭据 → 模型 → 添加模型”开始，选择服务商。
+新密钥先在系统凭据存储中保存，再点“继续配置模型”；表单会带入已保存的引用。
+本地 Ollama 无需密钥。添加第二个模型会分配独立连接 ID，不覆盖原来的连接。“已注册模型”和“已保存连接”是两份独立名单。模型 ID 应使用
 服务商实际接受的标识，例如 `deepseek-chat`，不要填写显示名称或随意编号。
 保存配置不发起推理；“运行推理测试”是一次明确的模型调用，可能产生费用。
 “连接配置”“用量”“运行记录”分开展示，切换分类保留未保存草稿。
@@ -87,7 +92,8 @@ requests; do not reuse its credential or approvals.
 
 ![Model connections managed directly in Settings](../../media/studio-model-settings-compact-source.png)
 
-*Model connections in Settings. Saving a profile does not send a model request.*
+*Saved connections in the source build, with model execution disabled. Saving
+a profile does not send a model request; this is not native key-store validation.*
 
 ## Cloud and local services
 

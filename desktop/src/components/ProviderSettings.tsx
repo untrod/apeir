@@ -4,6 +4,7 @@ import { ApiError, api, getRuntimeConfigVersion, governedStudioMutation, testMod
 import { useRuntimeConfigVersion } from "../store";
 import { defaultCredentialEnvironment, defaultModelAssignments, PROVIDER_TEMPLATES } from "./OnboardingWizard";
 import { listNativeProviderCredentials, type NativeCredentialNotice, type NativeCredentialStatus } from "../lib/nativeRuntime";
+import "./ProviderSettings.css";
 
 const credentialReference = /^env:[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
@@ -12,15 +13,18 @@ type ProviderSummary = { id: string; name: string; health?: { status?: string };
 type Draft = { id: string; name: string; endpoint: string; model: string; credential: string; clearCredential: boolean; original?: SavedConfiguration };
 
 /** Presentation over the existing Provider lifecycle; credentials remain references. */
-export function ProviderSettings({ locale = "en", models, modelsReady = true, onChanged, onOpenApprovals, onOpenCredentials, onDraftChange, preferredCredential }: {
-  locale?: "en" | "zh"; models: ModelLabSnapshot["models"]; modelsReady?: boolean; onChanged: () => Promise<void>; onOpenApprovals?: () => void; onOpenCredentials?: () => void; onDraftChange?: (dirty: boolean) => void;
+export function ProviderSettings({ locale = "en", models, modelsReady = true, onChanged, onOpenApprovals, onOpenCredentials, onDraftChange, preferredCredential, setupCredential }: {
+  locale?: "en" | "zh"; models: ModelLabSnapshot["models"]; modelsReady?: boolean; onChanged: () => Promise<void>; onOpenApprovals?: () => void; onOpenCredentials?: (providerId?: string) => void; onDraftChange?: (dirty: boolean) => void;
   preferredCredential?: NativeCredentialNotice | null;
+  setupCredential?: NativeCredentialNotice | null;
 }) {
   const version = useRuntimeConfigVersion();
   const active = useRef(false), inFlight = useRef(false), reads = useRef(0);
   const referenceTouched = useRef(false);
   const [providers, setProviders] = useState<ProviderSummary[]>([]);
   const [providerLoading, setProviderLoading] = useState(true);
+  const [providerVersion, setProviderVersion] = useState<number | null>(null);
+  const providersReady = providerVersion === version;
   const [savedKeys, setSavedKeys] = useState<NativeCredentialStatus[]>([]);
   const [keyError, setKeyError] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -30,6 +34,10 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
   const [modelId, setModelId] = useState("");
   const [result, setResult] = useState<ModelTestResult | null>(null);
   const [approvalRequired, setApprovalRequired] = useState(false);
+  const [adding, setAdding] = useState(false), [setupLoading, setSetupLoading] = useState(false);
+  const [setupProvider, setSetupProvider] = useState("deepseek");
+  const setupReads = useRef(0), startedCredential = useRef<NativeCredentialNotice | null>(null);
+  const [savedProvider, setSavedProvider] = useState("");
   const t = useCallback((en: string, zh: string) => locale === "zh" ? zh : en, [locale]);
   useEffect(() => { onDraftChange?.(!!draft || busy); }, [draft, busy, onDraftChange]);
   useEffect(() => () => onDraftChange?.(false), [onDraftChange]);
@@ -38,7 +46,7 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
   }, [version]);
   const refresh = useCallback(async () => {
     const sequence = ++reads.current;
-    current(); setProviders([]); setResult(null); setProviderLoading(true);
+    current(); setProviders([]); setResult(null); setProviderLoading(true); setProviderVersion(null);
     const rows = await api<ProviderSummary[]>("/api/v1/providers");
     current();
     if (!Array.isArray(rows) || rows.some(row => !row || typeof row.id !== "string" || typeof row.name !== "string" || row.configuration && (
@@ -46,15 +54,21 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
     )) || new Set(rows.map(row => row.id)).size !== rows.length) {
       throw new Error("Provider metadata is unavailable.");
     }
-    if (sequence === reads.current) { setProviders(rows); setProviderLoading(false); }
-  }, [current]);
+    if (sequence === reads.current) { setProviders(rows); setProviderLoading(false); setProviderVersion(version); }
+  }, [current, version]);
   useEffect(() => {
     let retired = false;
     active.current = true;
+    setupReads.current++; setAdding(false); setSetupLoading(false); setSavedProvider("");
     inFlight.current = false; setBusy(false); setDraft(null); setResult(null); setModelId(""); setRemoving(""); setError(""); setMessage(""); setApprovalRequired(false);
     void Promise.resolve().then(() => { if (!retired) return refresh(); }).catch(() => { if (!retired && active.current && getRuntimeConfigVersion() === version) { setProviderLoading(false); setError("Provider metadata is unavailable."); } });
     return () => { retired = true; active.current = false; };
   }, [refresh, version]);
+  useEffect(() => {
+    if (!savedProvider || !modelsReady) return;
+    const registered = models.filter(model => model.provider_id === savedProvider);
+    if (registered.length === 1) { setModelId(registered[0].model_id); setSavedProvider(""); }
+  }, [savedProvider, models, modelsReady]);
   useEffect(() => {
     if (modelsReady && modelId && !models.some(model => model.model_id === modelId)) {
       setModelId(""); setResult(null);
@@ -91,12 +105,44 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
       if (active.current && getRuntimeConfigVersion() === version) { inFlight.current = false; setBusy(false); }
     }
   };
-  const newDraft = (id: string) => {
+  const newDraft = useCallback((id: string, credential = "") => {
     referenceTouched.current = false;
     const preset = PROVIDER_TEMPLATES.find(item => item.providerId === id);
     setResult(null);
-    setTemplateId(id); setDraft({ id, name: preset?.displayName || "", endpoint: preset?.defaultBaseUrl || "", model: preset ? defaultModelAssignments(id, ["chat"]).chat || "" : "", credential: "", clearCredential: false });
+    let profileId = id, suffix = 2;
+    while (providers.some(provider => provider.id === profileId)) profileId = `${id}-${suffix++}`;
+    setAdding(false);
+    setTemplateId(id); setDraft({ id: profileId, name: preset?.displayName || "", endpoint: preset?.defaultBaseUrl || "", model: preset ? defaultModelAssignments(id, ["chat"]).chat || "" : "", credential, clearCredential: false });
     setRemoving(""); setError(""); setMessage("");
+  }, [providers]);
+  useEffect(() => {
+    if (!providersReady || !setupCredential || setupCredential === startedCredential.current || setupCredential.version !== version || setupCredential.operation === "removed") return;
+    const preset = PROVIDER_TEMPLATES.find(item => item.providerId === setupCredential.providerId && !item.unsupportedProtocol);
+    if (!preset || draft || busy) return;
+    startedCredential.current = setupCredential;
+    newDraft(preset.providerId, `env:${setupCredential.environmentName}`);
+    // A deliberate continuation from the verified local credential operation.
+  }, [setupCredential, version, draft, busy, newDraft, providersReady]);
+  const beginAdd = () => {
+    if (!providersReady || inFlight.current) return;
+    const preferred = preferredCredential?.version === version && PROVIDER_TEMPLATES.some(preset => preset.providerId === preferredCredential.providerId && !preset.unsupportedProtocol) ? preferredCredential.providerId : "deepseek";
+    if (!("__TAURI_INTERNALS__" in window) || !onOpenCredentials || preferredCredential?.version === version) { newDraft(preferredCredential?.version === version ? preferred : "openai"); return; }
+    setAdding(true); setSetupProvider(preferred); setSetupLoading(true); setKeyError(""); setError("");
+    const sequence = ++setupReads.current;
+    void listNativeProviderCredentials().then(rows => {
+      if (sequence === setupReads.current && active.current && getRuntimeConfigVersion() === version) setSavedKeys(rows.filter(row => row.stored));
+    }).catch(() => {
+      if (sequence === setupReads.current && active.current && getRuntimeConfigVersion() === version) setKeyError(t("Local key storage is unavailable. Connect the local Runtime, or use a host-managed credential reference.", "本机密钥存储不可用。请连接本地运行时，或使用主机已配置的凭据引用。"));
+    }).finally(() => { if (sequence === setupReads.current && active.current && getRuntimeConfigVersion() === version) setSetupLoading(false); });
+  };
+  const continueSetup = () => {
+    const preset = PROVIDER_TEMPLATES.find(item => item.providerId === setupProvider && !item.unsupportedProtocol);
+    if (!preset || setupLoading) return;
+    if (preset.credentialType !== "none" && !savedKeys.length && !keyError) {
+      setAdding(false); onOpenCredentials?.(preset.providerId); return;
+    }
+    const preferred = savedKeys.find(row => row.environment_name === defaultCredentialEnvironment(setupProvider));
+    newDraft(setupProvider, preset.credentialType === "none" ? "" : preferred ? `env:${preferred.environment_name}` : "");
   };
   const save = async () => {
     if (!draft) return;
@@ -114,7 +160,8 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
       // Validation does no inference; mutation remains a separately governed request.
       if (!draft.original) {
         const preset = PROVIDER_TEMPLATES.find(item => item.providerId === templateId);
-        const body = { ...changes, provider_id: draft.id, capabilities: preset?.supportedCapabilities || ["chat"] };
+        const service = ({ anthropic: "claude", openai_compatible: "generic-openai-compatible", dashscope: "generic-openai-compatible", zhipu: "generic-openai-compatible" } as Record<string, string>)[templateId] || templateId;
+        const body = { ...changes, provider_id: draft.id, service, capabilities: preset?.supportedCapabilities || ["chat"] };
         await governedStudioMutation("/api/v1/providers/validate", body, current);
         current();
         await governedStudioMutation("/api/v1/providers", body, current);
@@ -123,7 +170,7 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
       }
       current(); setDraft(previous => previous === originalDraft ? null : previous);
       setMessage(t("Configuration saved. Inference has not been tested.", "配置已保存，尚未测试推理。"));
-      await refresh(); current(); await onChanged();
+      await refresh(); current(); await onChanged(); current(); setSavedProvider(originalDraft.id);
     });
   };
   const remove = (id: string) => {
@@ -153,22 +200,30 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
   const rowStyle = { display: "flex", gap: space.sm, alignItems: "center", flexWrap: "wrap" as const };
   const measured = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : "UNKNOWN";
   const localTemplate = !draft?.original && PROVIDER_TEMPLATES.find(item => item.providerId === templateId)?.credentialType === "none";
+  const nativeKeyPicker = "__TAURI_INTERNALS__" in window && savedKeys.length > 0;
   const modelGroups = [
     { label: t("Local models", "本地模型"), values: models.filter(model => ["local_model", "local_service"].includes(model.endpoint_type)) },
     { label: t("API models", "API 模型"), values: models.filter(model => model.endpoint_type === "cloud_api") },
     { label: t("Other endpoints", "其他端点"), values: models.filter(model => !["local_model", "local_service", "cloud_api"].includes(model.endpoint_type)) },
   ];
   const draftField = (key: "id" | "name" | "endpoint" | "model" | "credential", en: string, zh: string) => draft && <label key={key}>{t(en, zh)} <input aria-label={t(en, zh)} autoComplete="off" spellCheck={false} style={input} type={key === "credential" && !!draft.credential && !credentialReference.test(draft.credential) ? "password" : "text"} disabled={busy || key === "id" && !!draft.original} value={draft[key]} onChange={event => { if (key === "credential") referenceTouched.current = true; setDraft(previous => previous && ({ ...previous, [key]: event.target.value })); }} placeholder={key === "credential" ? draft.original ? t("Blank keeps the existing reference", "留空保留现有引用") : `env:${templateId === "deepseek" ? "DEEPSEEK" : "OPENAI"}_API_KEY` : key === "model" && templateId === "deepseek" ? "deepseek-chat" : undefined} /></label>;
-  return <section aria-label={t("Provider settings", "服务商设置")} style={{ display: "grid", gap: space.sm, marginBottom: space.lg }}>
-    <div style={rowStyle}><strong>{t("Providers", "服务商")}</strong>
-      <button style={btnPrimary} disabled={busy || !!draft} onClick={() => newDraft(preferredCredential?.version === version && PROVIDER_TEMPLATES.some(preset => preset.providerId === preferredCredential.providerId && !preset.unsupportedProtocol) ? preferredCredential.providerId : "openai")}>{t("Add Provider", "添加服务商")}</button>
+  return <section className="provider-settings" aria-label={t("Provider settings", "服务商设置")} style={{ display: "grid", gap: space.sm, marginBottom: space.lg }}>
+    <div style={rowStyle}><strong>{t("Model connections", "模型连接")}</strong>
+      <button style={btnPrimary} disabled={!providersReady || busy || !!draft || adding} onClick={beginAdd}>{t("Add model", "添加模型")}</button>
       <button style={btnSecondary} disabled={busy} onClick={() => void perform(async () => { await refresh(); current(); await onChanged(); })}>{t("Refresh Providers", "刷新服务商")}</button>
-      {onOpenCredentials && <button style={btnSecondary} onClick={onOpenCredentials}>{t("Manage credentials", "管理凭据")}</button>}
+      {onOpenCredentials && <button style={btnSecondary} disabled={!!draft || busy} title={draft ? t("Save or cancel this connection first", "请先保存或取消当前连接") : undefined} onClick={() => onOpenCredentials()}>{t("Manage credentials", "管理凭据")}</button>}
     </div>
+    {adding && <fieldset className="provider-setup" aria-label={t("Add model", "添加模型")}>
+      <legend>{t("Connect a model", "连接模型")}</legend>
+      <ol className="provider-setup-steps"><li aria-current="step">{t("Service", "选择服务")}</li><li>{t("API key", "配置密钥")}</li><li>{t("Model & test", "模型与测试")}</li></ol>
+      <label>{t("Model service", "模型服务")}<select aria-label={t("Model service", "模型服务")} value={setupProvider} onChange={event => setSetupProvider(event.target.value)}>{PROVIDER_TEMPLATES.map(preset => <option key={preset.providerId} value={preset.providerId} disabled={preset.unsupportedProtocol}>{preset.displayName}{preset.credentialType === "none" ? t(" · Local", " · 本地") : ""}{preset.unsupportedProtocol ? " · UNSUPPORTED" : ""}</option>)}</select></label>
+      <p role="status">{setupLoading ? t("Checking saved keys…", "正在检查已保存的密钥…") : keyError || (PROVIDER_TEMPLATES.find(item => item.providerId === setupProvider)?.credentialType === "none" ? t("Use a running local model service. No API key is needed.", "连接已运行的本地模型服务，无需 API 密钥。") : savedKeys.length ? t("Choose a saved key in the next step. No model request is sent during setup.", "下一步选择已有密钥。配置过程不会调用模型。") : t("First save an API key, then choose the model. Your key stays in the system credential store.", "先保存 API 密钥，再选择模型。密钥由系统凭据存储保管。"))}</p>
+      <div style={rowStyle}><button disabled={setupLoading} style={btnPrimary} onClick={continueSetup}>{t("Continue", "继续")}</button><button style={btnSecondary} onClick={() => { setupReads.current++; setAdding(false); }}>{t("Cancel", "取消")}</button></div>
+    </fieldset>}
     <h3 style={{ margin: 0 }}>{t("Registered models", "已注册模型")}</h3>
     <div style={{ overflowX: "auto" }}><table aria-label={t("Registered models", "已注册模型")} style={{ width: "100%", textAlign: "left", borderCollapse: "collapse" }}>
       <thead><tr><th>{t("Model", "模型")}</th><th>{t("Provider", "服务商")}</th><th>{t("Status", "状态")}</th></tr></thead>
-      <tbody>{!modelsReady ? <tr><td colSpan={3} role="status">{t("Model catalog is loading or unavailable.", "模型名单正在加载或暂不可用。")}</td></tr> : !models.length ? <tr><td colSpan={3}>{t("No registered models. Save a connection below; saving an API key alone does not register a model.", "尚无已注册模型。请添加并保存下方连接；仅保存 API 密钥不会注册模型。")}</td></tr> : models.map(model => <tr key={model.model_id}><td><strong>{model.display_name}</strong><small style={{ display: "block" }}><code>{model.model_id}</code></small></td><td>{model.provider_id}<small style={{ display: "block" }}>{["local_model", "local_service"].includes(model.endpoint_type) ? t("Local", "本地") : model.endpoint_type === "cloud_api" ? "API" : t("Other", "其他")}</small></td><td>{model.health || "UNKNOWN"}<small style={{ display: "block" }}>{t("Reported status", "报告状态")} · {model.state || "UNKNOWN"}</small></td></tr>)}</tbody>
+      <tbody>{!modelsReady ? <tr><td colSpan={3} role="status">{t("Model catalog is loading or unavailable.", "模型名单正在加载或暂不可用。")}</td></tr> : !models.length ? <tr><td colSpan={3}>{t("No registered models. Save a connection below; saving an API key alone does not register a model.", "尚无已注册模型。请添加并保存下方连接；仅保存 API 密钥不会注册模型。")}</td></tr> : models.map(model => <tr key={model.model_id}><td><strong>{model.display_name}</strong><small style={{ display: "block" }}><code>{model.model_id}</code></small></td><td>{model.provider_id}<small style={{ display: "block" }}>{["local_model", "local_service"].includes(model.endpoint_type) ? t("Local", "本地") : model.endpoint_type === "cloud_api" ? "API" : t("Other", "其他")}</small></td><td>{result?.model_id === model.model_id ? result.healthy ? t("Inference verified", "推理已验证") : t("Test failed / blocked", "测试失败或受阻") : t("Not tested", "尚未测试")}<small style={{ display: "block" }}>{t("Reported status", "报告状态")}: {model.health || "UNKNOWN"} · {model.state || "UNKNOWN"}</small></td></tr>)}</tbody>
     </table></div>
     {busy && <p role="status" aria-live="polite">{t("Applying the request… Please wait; do not submit again.", "正在处理请求，请稍候，不要重复提交。")}</p>}
     {error && <p role="alert" style={{ color: colors.danger }}>{error}</p>}
@@ -190,13 +245,26 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
         {PROVIDER_TEMPLATES.map(preset => <option key={preset.providerId} value={preset.providerId} disabled={preset.unsupportedProtocol}>{preset.displayName}{preset.unsupportedProtocol ? " · UNSUPPORTED" : ""}</option>)}
       </select></label>}
       {draftField("model", "Vendor model ID", "厂商模型 ID")}
-      {!localTemplate && <>{savedKeys.length > 0 && <label>{t("Saved API key", "已保存的 API 密钥")} <select aria-label={t("Saved API key", "已保存的 API 密钥")} disabled={busy} style={input} value={savedKeys.some(row => `env:${row.environment_name}` === draft.credential) ? draft.credential : ""} onChange={event => { referenceTouched.current = true; setDraft(previous => previous && ({ ...previous, credential: event.target.value, clearCredential: false })); }}><option value="">{draft.original ? t("Keep existing reference / enter another", "保留原引用 / 输入其他引用") : t("Choose a saved key", "选择已保存密钥")}</option>{savedKeys.map(row => <option key={row.environment_name} value={`env:${row.environment_name}`}>{row.environment_name}</option>)}</select></label>}{draftField("credential", "Credential reference", "凭据引用")}<small>{t("Select a saved key, or enter env:NAME. Never paste an API key in this form.", "可直接选择已保存密钥，或填写 env:名称。请勿在此粘贴真实 API Key。")}</small>{keyError && <p role="status">{keyError}</p>}</>}
+      {!localTemplate && <>
+        {savedKeys.length > 0 && <label>{t("Saved API key", "已保存的 API 密钥")}
+          <select aria-label={t("Saved API key", "已保存的 API 密钥")} disabled={busy} style={input} value={savedKeys.some(row => `env:${row.environment_name}` === draft.credential) ? draft.credential : ""} onChange={event => { referenceTouched.current = true; setDraft(previous => previous && ({ ...previous, credential: event.target.value, clearCredential: false })); }}>
+            <option value="">{draft.original ? t("Keep existing reference / enter another", "保留原引用 / 输入其他引用") : t("Choose a saved key", "选择已保存密钥")}</option>
+            {savedKeys.map(row => <option key={row.environment_name} value={`env:${row.environment_name}`}>{row.environment_name}</option>)}
+          </select>
+        </label>}
+        {!nativeKeyPicker && <>
+          {draftField("credential", "Credential reference", "凭据引用")}
+          <small>{t("Enter env:NAME, never an API key.", "请输入 env:名称，请勿粘贴真实 API Key。")}</small>
+        </>}
+        {keyError && <p role="status">{keyError}</p>}
+      </>}
       {localTemplate && <small>{t("Connect an already-running local service using its installed model ID.", "填写已运行本地服务中的模型 ID；此操作不会下载或启动模型。")}</small>}
       <details className="provider-advanced" open={!draft.original && templateId === "openai_compatible"}>
         <summary>{t("Connection settings", "连接设置")}</summary>
         {draftField("endpoint", "Endpoint", "端点")}
         {draftField("name", "Name", "名称")}
         {draftField("id", "Provider ID", "服务商 ID")}
+        {!localTemplate && nativeKeyPicker && draftField("credential", "Credential reference", "凭据引用")}
         {localTemplate && draftField("credential", "Optional credential reference", "可选凭据引用")}
         {draft.original && <label><input type="checkbox" checked={draft.clearCredential} disabled={busy} onChange={event => setDraft(previous => previous && ({ ...previous, clearCredential: event.target.checked }))} />{t("Clear saved credential reference", "清除已保存的凭据引用")}</label>}
       </details>
@@ -212,7 +280,8 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
     </div>
     {result && <section aria-label={t("Model test result", "模型测试结果")}>
       <strong>{result.healthy ? t("Inference completed", "推理已完成") : t("Inference failed / blocked", "推理失败或受阻")}</strong>
-      <p>{t("Tested model", "已测试模型")}: <code>{result.model_id}</code></p>
+      <p>{t("Tested model", "已测试模型")}: <code>{result.model_id}</code> · {t("Latency", "耗时")}: {measured(result.latency_ms)} ms</p>
+      {result.response_preview && <div className="provider-response" aria-label={t("Test response", "测试响应")}>{result.response_preview}</div>}
       {result.error && <p role="alert">{result.error}</p>}
       <p>Tokens: {measured(result.tokens_used)} · USD: {["reported", "derived", "estimated"].includes(result.cost_measurement || "") ? measured(result.cost_usd) : "UNKNOWN"} · {result.cost_measurement || "unknown"}</p>
       <details><summary>{t("Original request", "原始请求")}</summary><p>{result.request_id || "UNKNOWN"}</p><p>{result.response_preview}</p><p>{result.execution?.path || "UNKNOWN"} · {result.execution?.operation_id || result.execution?.workload_id || "UNKNOWN"}</p></details>

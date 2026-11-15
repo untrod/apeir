@@ -201,3 +201,52 @@ describe("canonical workflow graph and portable drafts", () => {
     },
   );
 });
+
+describe("task workflow templates and original graph identity", () => {
+  it("ignores persisted object key order while keeping request and array identities distinct", async () => {
+    const { sameWorkflowInputs, workflowRequestFingerprint } = await import("../lib/studioWorkflow");
+    const input = { z: { second: 2, first: 1 }, a: [1, 2] };
+    const restored = { a: [1, 2], z: { first: 1, second: 2 } };
+    expect(sameWorkflowInputs(input, restored)).toBe(true);
+    expect(sameWorkflowInputs(input, { ...restored, a: [2, 1] })).toBe(false);
+    expect(workflowRequestFingerprint(initialWorkflow().definition, input)).toBe(workflowRequestFingerprint(initialWorkflow().definition, restored));
+    expect(workflowRequestFingerprint(initialWorkflow().definition, input)).not.toBe(workflowRequestFingerprint(initialWorkflow().definition, { ...restored, a: [2, 1] }));
+  });
+  it("round-trips private input drafts while preserving legacy files and execution definitions", () => {
+    const original = initialWorkflow();
+    const inputText = '{"request":"Review this change"}';
+    const saved = workflowDraft({ schemaVersion: 1, ...original, inputText });
+    expect(saved.inputText).toBe(inputText);
+    expect(saved.definition).toEqual(original.definition);
+    expect(saved.positions).toEqual(original.positions);
+    expect(workflowDraft({ schemaVersion: 1, ...original }).inputText).toBeUndefined();
+    expect(() => workflowDraft({ schemaVersion: 1, ...original, inputText: "x".repeat(32769) })).toThrow(/inputs/);
+    expect(() => workflowDraft({ schemaVersion: 1, ...original, inputText: { approval: true } })).toThrow(/inputs/);
+  });
+  it("keeps optional serialization defaults equivalent without hiding a changed operation", async () => {
+    const { sameWorkflowDefinition } = await import("../lib/studioWorkflow");
+    const d = initialWorkflow().definition;
+    const normalized = { ...d, inputs_schema: {}, outputs_schema: {}, audit_metadata: {}, steps: d.steps.map(s => ({ action: "", condition: "", compensation: "", retries: 0, timeout_seconds: 60, depends_on: [], approval_required: false, ...s })) };
+    expect(sameWorkflowDefinition(d, normalized)).toBe(true);
+    expect(sameWorkflowDefinition(d, { ...normalized, steps: [{ ...normalized.steps[0], params: { value: "other effect" } }] })).toBe(false);
+    expect(sameWorkflowDefinition(d, { ...normalized, steps: [{ ...normalized.steps[0], approval_required: true }] })).toBe(false);
+  });
+  it("binds a reviewed request through the original approval step without credentials or execution code", async () => {
+    const { createWorkflowTemplate } = await import("../lib/studioWorkflow");
+    const d = createWorkflowTemplate("approval-review");
+    expect(workflowDefinition(d.definition)).toEqual(d.definition);
+    expect(d.definition.steps[1].step_type).toBe("approval");
+    expect(d.definition.steps[2].depends_on).toContain(d.definition.steps[1].step_id);
+    expect(d.definition.steps[2].data_bindings?.inputs?.value).toEqual({ source: "step", step_id: "request", pointer: "/value" });
+    expect(d.definition.steps.every(runnableStep)).toBe(true);
+    expect(JSON.stringify(d)).not.toMatch(/credential|authorization|command|javascript/);
+  });
+  it("requires two explicit model selections and original approvals before a review template is runnable", async () => {
+    const { createWorkflowTemplate } = await import("../lib/studioWorkflow");
+    const d = createWorkflowTemplate("model-review");
+    expect(d.definition.steps.every(runnableStep)).toBe(false);
+    expect(d.definition.steps.every(s => s.approval_required && s.action === "model.invoke" && !s.retries)).toBe(true);
+    expect(d.definition.steps[1].data_bindings?.inputs?.input).toEqual({ source: "step", step_id: "analysis", pointer: "/content" });
+    expect(JSON.stringify(d)).not.toMatch(/credential|api_key|host_shell/);
+  });
+});

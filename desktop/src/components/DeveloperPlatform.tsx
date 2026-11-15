@@ -79,7 +79,7 @@ function Status({ value }: { value: string }) {
   return <span style={{ color, fontSize: typo.xs, fontWeight: typo.semibold, textTransform: "uppercase" }}>{value}</span>;
 }
 
-export function DeveloperPlatform({ modelsOnly = false, manageProviders = false, modelConnectionsOnly = false, preferredCredential, locale = "en", onOpenApprovals, onOpenCredentials, onDraftChange }: { modelsOnly?: boolean; manageProviders?: boolean; modelConnectionsOnly?: boolean; preferredCredential?: NativeCredentialNotice | null; locale?: "en" | "zh"; onOpenApprovals?: () => void; onOpenCredentials?: () => void; onDraftChange?: (dirty: boolean) => void } = {}) {
+export function DeveloperPlatform({ modelsOnly = false, manageProviders = false, modelConnectionsOnly = false, preferredCredential, setupCredential, locale = "en", onOpenApprovals, onOpenCredentials, onDraftChange }: { modelsOnly?: boolean; manageProviders?: boolean; modelConnectionsOnly?: boolean; preferredCredential?: NativeCredentialNotice | null; setupCredential?: NativeCredentialNotice | null; locale?: "en" | "zh"; onOpenApprovals?: () => void; onOpenCredentials?: (providerId?: string) => void; onDraftChange?: (dirty: boolean) => void } = {}) {
   const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   const [tab, setTab] = useState<PlatformTab>(modelsOnly ? "models" : "workbench");
   const [modelSection, setModelSection] = useState("connections");
@@ -262,7 +262,7 @@ export function DeveloperPlatform({ modelsOnly = false, manageProviders = false,
               }}>{section.label}</button>)}
             </nav>}
             <section role={modelConnectionsOnly ? undefined : "tabpanel"} id={`${modelSectionsId}-connections-panel`} aria-labelledby={modelConnectionsOnly ? undefined : `${modelSectionsId}-connections`} hidden={!modelConnectionsOnly && modelSection !== "connections"}>
-              <ProviderSettings key={configurationVersion} locale={locale} models={snapshotVersion === configurationVersion ? modelLab?.models || [] : []} modelsReady={snapshotVersion === configurationVersion && !!modelLab && !modelLabLoading} onChanged={refresh} onOpenApprovals={onOpenApprovals} onOpenCredentials={onOpenCredentials} onDraftChange={onDraftChange} preferredCredential={preferredCredential} />
+              <ProviderSettings key={configurationVersion} locale={locale} models={snapshotVersion === configurationVersion ? modelLab?.models || [] : []} modelsReady={snapshotVersion === configurationVersion && !!modelLab && !modelLabLoading} onChanged={refresh} onOpenApprovals={onOpenApprovals} onOpenCredentials={onOpenCredentials} onDraftChange={onDraftChange} preferredCredential={preferredCredential} setupCredential={setupCredential} />
             </section>
           </>}
           {!modelConnectionsOnly && <section role={manageProviders ? "tabpanel" : undefined} id={`${modelSectionsId}-usage-panel`} aria-labelledby={manageProviders ? `${modelSectionsId}-usage` : undefined} hidden={manageProviders && modelSection !== "usage"}>
