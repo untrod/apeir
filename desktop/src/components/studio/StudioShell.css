@@ -92,6 +92,22 @@
 .studio-extension-message { overflow-wrap: anywhere; font-size: 12px; }
 .studio-extension-review dl { margin: 8px 0; font-size: 12px; }
 .studio-extension-review dd { margin: 0 0 8px; }
+.studio-extension-tabs { display: flex; gap: 4px; margin: 8px 0; border-bottom: 1px solid var(--nous-border); }
+.studio-extension-tabs [aria-selected="true"] { color: var(--nous-accent); border-bottom: 2px solid var(--nous-accent); }
+.studio-extension-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin: 12px 0; }
+.studio-extension-filters label { display: grid; gap: 4px; font-size: 12px; color: var(--nous-text-secondary); }
+.studio-extension-search { flex: 1; min-width: 120px; }
+.studio-extension-group { min-width: 0; padding: 8px 0; }
+.studio-extension-group header, .studio-extension-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.studio-extension-group h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.studio-extension-group h4 { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.studio-extension-group p { margin: 6px 0; overflow-wrap: anywhere; }
+.studio-extension-group details { margin: 8px 0; font-size: 12px; }
+.studio-extension-group pre { max-height: 280px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.studio-extension-empty { color: var(--nous-text-secondary); font-size: 12px; }
+.studio-extension-catalog { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 0; }
+.studio-extension-catalog span { flex: 1; overflow-wrap: anywhere; }
+.studio-extensions [hidden] { display: none; }
 
 /* Everyday window management stays available independently of widget edit mode. */
 .studio-session { height:100%; overflow:hidden; }

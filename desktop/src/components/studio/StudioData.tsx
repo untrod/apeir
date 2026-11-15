@@ -7,9 +7,9 @@ import type { OperationsSnapshot } from "../OperationsConsole";
 export type StudioHealth = { running?: boolean; platform?: string; architecture?: string; kernel?: { configured?: boolean; connected?: boolean; ready?: boolean; state?: string } };
 type Read<T> = { data: T | null; loading: boolean; error: string; receivedAt: number | null };
 type Source = "operations" | "health" | "extensions" | "workflow";
-type Snapshot = Read<OperationsSnapshot> & { health: Read<StudioHealth>; extensions: Read<StudioUIView>; workflow: Read<WorkflowProgress[]>; invalidateExtensions: () => void; refresh: (sources?: readonly Source[]) => void; subscribeLive: (active: () => boolean, sources: readonly Source[]) => () => void };
+type Snapshot = Read<OperationsSnapshot> & { health: Read<StudioHealth>; extensions: Read<StudioUIView>; workflow: Read<WorkflowProgress[]>; invalidateExtensions: () => void; invalidateOperations: () => void; refresh: (sources?: readonly Source[]) => void; subscribeLive: (active: () => boolean, sources: readonly Source[]) => () => void };
 const empty = { data: null, loading: true, error: "", receivedAt: null };
-const Context = createContext<Snapshot>({ ...empty, health: empty, extensions: empty, workflow: empty, invalidateExtensions: () => {}, refresh: () => {}, subscribeLive: () => () => {} });
+const Context = createContext<Snapshot>({ ...empty, health: empty, extensions: empty, workflow: empty, invalidateExtensions: () => {}, invalidateOperations: () => {}, refresh: () => {}, subscribeLive: () => () => {} });
 export const useStudioSnapshot = () => useContext(Context);
 
 /** Transient reads of existing APIs, shared by all panels. No Runtime state owner. */
@@ -57,6 +57,10 @@ export function StudioSnapshot({ children }: { children: React.ReactNode }) {
     flights.current.get("extensions")?.abort(); flights.current.delete("extensions");
     delete received.current.extensions; setExtensions(empty); refresh(["extensions"]);
   }, [refresh]);
+  const invalidateOperations = useCallback(() => {
+    flights.current.get("operations")?.abort(); flights.current.delete("operations");
+    delete received.current.operations; setOperations(empty); refresh(["operations"]);
+  }, [refresh]);
   const subscribeLive = useCallback((active: () => boolean, sources: readonly Source[]) => {
     const reader = { active, sources }; readers.current.add(reader);
     const frame = requestAnimationFrame(() => {
@@ -77,6 +81,6 @@ export function StudioSnapshot({ children }: { children: React.ReactNode }) {
     const pending = flights.current;
     return () => { alive.current = false; window.clearInterval(timer); document.removeEventListener("visibilitychange", poll); for (const abort of pending.values()) abort.abort(); pending.clear(); };
   }, [refresh]);
-  const value = useMemo(() => ({ ...operations, health, extensions, workflow, invalidateExtensions, refresh, subscribeLive }), [operations, health, extensions, workflow, invalidateExtensions, refresh, subscribeLive]);
+  const value = useMemo(() => ({ ...operations, health, extensions, workflow, invalidateExtensions, invalidateOperations, refresh, subscribeLive }), [operations, health, extensions, workflow, invalidateExtensions, invalidateOperations, refresh, subscribeLive]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

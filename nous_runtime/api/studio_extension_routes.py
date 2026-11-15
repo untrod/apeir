@@ -95,6 +95,36 @@ def handle_studio_extension_review(body, *, authorization_context=None):
     return _result(review)
 
 
+def handle_studio_tool_review(body, *, authorization_context=None):
+    host = _admit(authorization_context)
+
+    def review():
+        _exact(body, {"source_manifest"})
+        return host.review(body["source_manifest"], tool_package=True)
+
+    return _result(review)
+
+
+def handle_studio_tool_install(body, *, authorization_context=None):
+    host = _admit(authorization_context)
+
+    def install():
+        _exact(body, {"source_manifest", "expected_digest", "expected_previous_digest"})
+        return host.install(
+            body["source_manifest"],
+            tool_package=True,
+            expected_digest=_digest(body["expected_digest"]),
+            expected_previous_digest=_digest(
+                body["expected_previous_digest"], empty=True
+            ),
+            before_publish=lambda: _admit(
+                authorization_context, permission="workspace.write"
+            ),
+        )
+
+    return _result(install)
+
+
 def handle_studio_extension_install(body, *, authorization_context=None):
     host = _admit(authorization_context)
 
@@ -149,6 +179,60 @@ def handle_studio_extension_remove(body, *, authorization_context=None):
     return _result(remove)
 
 
+def handle_studio_tool_configure(body, *, authorization_context=None):
+    host = _admit(authorization_context)
+
+    def configure():
+        _exact(body, {"extension_id", "enabled", "expected_digest", "expected_version"})
+        record = host.registry.set_work_enabled(
+            body["extension_id"],
+            body["enabled"],
+            expected_digest=_digest(body["expected_digest"]),
+            expected_version=body["expected_version"],
+            before_publish=lambda: _admit(
+                authorization_context, permission="workspace.write"
+            ),
+        )
+        return {
+            "extension_id": body["extension_id"],
+            "enabled": record["work_enabled"],
+            "authority": record["authority"],
+        }
+
+    return _result(configure)
+
+
+def handle_studio_tool_remove(body, *, authorization_context=None):
+    host = _admit(authorization_context)
+
+    def remove():
+        _exact(body, {"extension_id", "expected_digest", "expected_version"})
+        manifest = host.registry.verify(body["extension_id"])
+        if not manifest.tools and manifest.source_format != "mcp-config":
+            raise ValueError("Extension has no executable tools")
+        previous = host.registry.get_record(body["extension_id"]) or {}
+        removed = host.registry.remove(
+            body["extension_id"],
+            expected_digest=_digest(body["expected_digest"]),
+            expected_version=body["expected_version"],
+            before_remove=lambda: _admit(
+                authorization_context, permission="workspace.write"
+            ),
+        )
+        if removed and previous.get("artifact_ref"):
+            from nous_runtime.artifact.content_store import (
+                ContentAddressedArtifactStore,
+            )
+
+            ContentAddressedArtifactStore(host.root / ".nous" / "artifacts").unpin(
+                previous["artifact_ref"],
+                owner=host._pin_owner("tools:" + body["extension_id"]),
+            )
+        return {"removed": removed, "extension_id": body["extension_id"]}
+
+    return _result(remove)
+
+
 def handle_studio_extension_data(params=None, *, authorization_context=None):
     host = _admit(authorization_context)
 
@@ -192,6 +276,10 @@ def handle_studio_extension_action(body, *, authorization_context=None):
 
 
 STUDIO_EXTENSION_ROUTES = {
+    ("POST", "/api/v1/studio/extensions/tools/review"): handle_studio_tool_review,
+    ("POST", "/api/v1/studio/extensions/tools/install"): handle_studio_tool_install,
+    ("POST", "/api/v1/studio/extensions/tools/configure"): handle_studio_tool_configure,
+    ("POST", "/api/v1/studio/extensions/tools/remove"): handle_studio_tool_remove,
     ("GET", "/api/v1/studio/extensions"): handle_studio_extensions,
     ("POST", "/api/v1/studio/extensions/review"): handle_studio_extension_review,
     ("POST", "/api/v1/studio/extensions/install"): handle_studio_extension_install,
@@ -202,6 +290,21 @@ STUDIO_EXTENSION_ROUTES = {
     ("POST", "/api/v1/studio/extensions/action"): handle_studio_extension_action,
 }
 STUDIO_EXTENSION_GOVERNANCE = {
+    ("POST", "/api/v1/studio/extensions/tools/install"): (
+        "extension.tools.install",
+        "local_write",
+        "partially_reversible",
+    ),
+    ("POST", "/api/v1/studio/extensions/tools/configure"): (
+        "extension.tools.configure",
+        "local_write",
+        "partially_reversible",
+    ),
+    ("POST", "/api/v1/studio/extensions/tools/remove"): (
+        "extension.tools.remove",
+        "local_write",
+        "partially_reversible",
+    ),
     ("POST", "/api/v1/studio/extensions/install"): (
         "extension.ui.install",
         "local_write",
@@ -233,7 +336,9 @@ def studio_mutation_summary(route_path, body, authorization_context):
             values, {"source_manifest", "expected_digest", "expected_previous_digest"}
         )
         host = _admit(authorization_context)
-        reviewed = host.review(values["source_manifest"])
+        reviewed = host.review(
+            values["source_manifest"], tool_package="/tools/" in route_path
+        )
         return {
             "extension_id": reviewed["extension_id"],
             "version": reviewed["version"],

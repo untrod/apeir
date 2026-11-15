@@ -24,11 +24,11 @@ Do not introduce an executor or approval mechanism inside a Skill.
 
 Keep the printed workspace for local inspection; do not publish Runtime state.
 
-## Desktop Skill Center
+## Studio Skill Center
 
-The existing Operations Console exposes the workspace's canonical Skills alongside
-Work, Nodes, Approvals and Evidence. Register a reviewed local catalog as the
-workspace owner before opening the UI:
+Studio's **Extensions** panel exposes the workspace's canonical Skills alongside
+tool and interface packages. Register a reviewed local catalog as the workspace
+owner before opening the UI:
 
 ```bash
 apeir skill catalog add /absolute/path/to/apeir/examples/hello_skill --root /absolute/path/to/workspace
@@ -42,10 +42,12 @@ these controls. The human needs `governance.approve` plus `control.skill_install
 `control.skill_manage` or `control.skill_load` on `skill:<skill_id>` as applicable;
 permission configuration is a trusted-host responsibility, never a UI action.
 
-Open **Skills**, search records, choose **Review package**, inspect source, version,
-digest, risk, requested capabilities and compatibility, then confirm that exact
-entry and **Install reviewed package**. Select the installed entry to inspect CAS
-evidence, **Load instructions**, **Disable**, **Enable** or **Uninstall**. Loading
+Open **Extensions → Discover**, filter by **Skills**, choose **Install**, inspect
+the source, version and requested capabilities, then confirm that exact entry.
+Installation downloads and verifies the reviewed package without running scripts.
+The **Installed** tab offers **Read instructions**, **Disable**, **Enable** and
+**Uninstall**; version and integrity details remain expandable. The original
+Operations Console → Skills view remains available for existing users. Loading
 reads instructions only. The separate [Verified Demo](../hello_runtime/README.md)
 exercises the proposed device action through existing Work and Governance.
 

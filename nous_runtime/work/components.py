@@ -95,6 +95,9 @@ def build_work_components(
         provider_id="skill-registry",
     )
     tools.register_runtime(WebToolRuntime(workspace), provider_id="web-runtime")
+    from nous_runtime.extensions.work_tools import register_work_extensions
+
+    register_work_extensions(tools, workspace, snapshot)
 
     provider_count = load_providers_from_config(workspace)
     if not provider_count:

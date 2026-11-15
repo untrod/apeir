@@ -228,10 +228,97 @@ class StudioExtensionHost:
             if Version(dependency.version) not in SpecifierSet(specifier):
                 raise ValueError("Required extension version is incompatible")
 
-    def review(self, source_manifest):
-        with self._staged(source_manifest) as (_, manifest):
+    @contextmanager
+    def _staged_tools(self, source_manifest):
+        """Inspect data-only MCP/OpenAPI input, never run or discover a server."""
+        from nous_runtime.core.redaction import redact_sensitive_data
+        from urllib.parse import urlsplit
+
+        if (
+            not isinstance(source_manifest, str)
+            or not 1 <= len(source_manifest.encode("utf-8")) <= 128 * 1024
+        ):
+            raise ValueError("A UTF-8 manifest of at most 128 KiB is required")
+        value = json.loads(
+            source_manifest, object_pairs_hook=_json_object, parse_constant=_nonfinite
+        )
+        if not isinstance(value, dict) or redact_sensitive_data(value) != value:
+            raise ValueError(
+                "Tool configuration must be an object without embedded credentials"
+            )
+        # Inspect executable endpoints, not documentation links or schema examples.
+        # Query values belong in the declared operation parameters, and secrets
+        # stay in protected references instead of endpoint strings.
+        endpoints = []
+        mcp_servers = value.get("mcpServers", {})
+        if isinstance(mcp_servers, dict):
+            endpoints.extend(
+                server.get("url")
+                for server in mcp_servers.values()
+                if isinstance(server, dict)
+            )
+        operations = [value]
+        paths = value.get("paths", {})
+        if isinstance(paths, dict):
+            for item in paths.values():
+                if isinstance(item, dict):
+                    operations.append(item)
+                    operations.extend(
+                        item[method]
+                        for method in (
+                            "get",
+                            "head",
+                            "post",
+                            "put",
+                            "patch",
+                            "delete",
+                            "options",
+                            "trace",
+                        )
+                        if isinstance(item.get(method), dict)
+                    )
+        for operation in operations:
+            servers = operation.get("servers", [])
+            if isinstance(servers, list):
+                endpoints.extend(
+                    server.get("url") for server in servers if isinstance(server, dict)
+                )
+        for field in endpoints:
+            if not isinstance(field, str):
+                continue
+            url = urlsplit(field)
+            if (
+                url.username
+                or url.password
+                or url.query
+                or url.fragment
+                or url.scheme not in {"https", "http"}
+            ):
+                raise ValueError(
+                    "Tool endpoint URLs must use HTTP(S) without embedded credentials, query or fragment"
+                )
+        with tempfile.TemporaryDirectory(prefix="apeir-studio-tools-") as temporary:
+            path = Path(temporary) / "tools.json"
+            path.write_text(source_manifest, encoding="utf-8")
+            manifest = ExtensionInspector().inspect(path).require_valid()
+            if (
+                manifest.source_format not in {"mcp-config", "openapi-3"}
+                or "apeir_studio" in manifest.metadata
+            ):
+                raise ValueError(
+                    "Only MCP configuration and OpenAPI documents are accepted"
+                )
+            if any(tool.protocol not in {"mcp", "openapi"} for tool in manifest.tools):
+                raise ValueError("Unsupported tool protocol")
+            if manifest.source_format == "openapi-3" and not manifest.tools:
+                raise ValueError("OpenAPI document declares no supported operations")
+            yield path, manifest
+
+    def review(self, source_manifest, *, tool_package=False):
+        stage = self._staged_tools if tool_package else self._staged
+        with stage(source_manifest) as (_, manifest):
             previous = self.registry.get_record(manifest.extension_id) or {}
-            self._check_existing(manifest, previous)
+            self._check_existing(manifest, previous, tool_package=tool_package)
             self._dependencies(manifest)
             return {
                 "manifest": manifest.to_dict(),
@@ -253,19 +340,22 @@ class StudioExtensionHost:
         expected_digest,
         expected_previous_digest,
         before_publish=None,
+        tool_package=False,
     ):
         from nous_runtime.artifact.content_store import ContentAddressedArtifactStore
         from nous_runtime.artifact.models import ArtifactType
 
+        stage = self._staged_tools if tool_package else self._staged
+        record_view = self.tool_record if tool_package else self.record
         with (
-            self._staged(source_manifest) as (path, manifest),
+            stage(source_manifest) as (path, manifest),
             self.registry._writer_lock(),
         ):
             digest = manifest.provenance.digest
             if digest != expected_digest:
                 raise PermissionError("Package differs from the reviewed digest")
             previous = self.registry.get_record(manifest.extension_id) or {}
-            self._check_existing(manifest, previous)
+            self._check_existing(manifest, previous, tool_package=tool_package)
             if previous.get("digest", "") != expected_previous_digest:
                 raise PermissionError(
                     "Installed version changed; review the package again"
@@ -275,13 +365,17 @@ class StudioExtensionHost:
                 before_publish()
             if previous.get("digest") == digest:
                 self.registry.verify(manifest.extension_id)
-                return self.record(manifest.extension_id)
+                return record_view(manifest.extension_id)
             store = ContentAddressedArtifactStore(self.root / ".nous" / "artifacts")
             artifact = store.store_bytes(
                 source_manifest.encode("utf-8"),
                 artifact_type=ArtifactType.SOURCE_BUNDLE,
-                name="studio-ui-manifest.json",
-                media_type="application/vnd.apeir.studio-ui+json",
+                name="studio-tool-config.json"
+                if tool_package
+                else "studio-ui-manifest.json",
+                media_type="application/vnd.apeir.extension-config+json"
+                if tool_package
+                else "application/vnd.apeir.studio-ui+json",
                 produced_by="apeir.studio-extension-host",
                 metadata={
                     "extension_id": manifest.extension_id,
@@ -292,7 +386,9 @@ class StudioExtensionHost:
             )
             reference = artifact["artifact"]["digest"]
             attempt_owner = hashlib.sha256(uuid.uuid4().bytes).hexdigest()
-            installed_owner = self._pin_owner(manifest.extension_id)
+            installed_owner = self._pin_owner(
+                ("tools:" if tool_package else "") + manifest.extension_id
+            )
             store.pin(reference, reason="installed-declarative-ui", owner=attempt_owner)
             published = retained = False
             try:
@@ -310,14 +406,24 @@ class StudioExtensionHost:
             old_ref = previous.get("artifact_ref")
             if old_ref and old_ref != reference:
                 store.unpin(old_ref, owner=installed_owner)
-            return self.record(manifest.extension_id)
+        return record_view(manifest.extension_id)
 
-    def _check_existing(self, manifest, previous):
+    def tool_record(self, extension_id):
+        from nous_runtime.extensions.work_tools import work_extension_records
+
+        rows = work_extension_records(self.root)
+        return next(
+            row for row in rows["records"] if row["extension_id"] == extension_id
+        )
+
+    def _check_existing(self, manifest, previous, *, tool_package=False):
         if previous:
             old = self.registry.verify(manifest.extension_id)
-            if "apeir_studio" not in old.metadata:
+            if (
+                "apeir_studio" in old.metadata
+            ) == tool_package or old.source_format != manifest.source_format:
                 raise PermissionError(
-                    "A non-UI extension identity requires an explicit migration"
+                    "An extension kind or protocol change requires an explicit migration"
                 )
             if (
                 old.version == manifest.version
@@ -558,6 +664,8 @@ class StudioExtensionHost:
             }
 
     def view(self):
+        from nous_runtime.extensions.work_tools import work_extension_records
+
         with self.registry._writer_lock():
             records, diagnostics = self.records()
             status = None
@@ -572,6 +680,7 @@ class StudioExtensionHost:
                 status = self._status()
             return {
                 "extensions": records,
+                "tool_extensions": work_extension_records(self.root),
                 "diagnostics": diagnostics,
                 "status": status,
                 "contract": host_contract(),

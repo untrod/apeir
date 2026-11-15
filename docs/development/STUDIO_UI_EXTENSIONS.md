@@ -6,6 +6,11 @@ review, install, enable and remove it without changing APEIR Core.
 A running authenticated Runtime and independent approval of lifecycle mutations
 are required. No model account or arbitrary JavaScript is involved.
 
+In Studio, open **Extensions → Discover → Import UI manifest**. After installation
+the **Installed** tab shows the package and its enable/disable controls. Filter
+by **Interface** to keep the list focused. The existing panel type `extensions`
+and saved layouts remain compatible.
+
 ## Make a small change
 
 1. Copy `examples/studio_system_monitor` outside the checkout. Keep its public
@@ -50,6 +55,56 @@ not availability, trust or a permission grant. Installation still requires a
 review of the exact bytes and independent approval. Keep the matching source
 revision for beta SDK development; a shared `0.1.0-rc1` display version alone does
 not prove that an older native package implements a new feature.
+
+## Tool packages
+
+**Extensions → Discover → Import tool configuration** accepts MCP configuration
+or OpenAPI JSON. Review the source and requested capabilities, then request
+installation. Installation records immutable source bytes, digest and provenance
+through the existing Registry/CAS. An update resets Work enablement and Kernel
+authorization. Embedded credentials are rejected; use protected references.
+Operational endpoint URLs cannot contain credentials, query strings or fragments;
+declare query parameters on the operation instead. Documentation links and schema
+examples are not treated as connection endpoints.
+
+The installed list distinguishes missing authorization, missing MCP discovery,
+unsupported protocols and the need for a Kernel check. An enabled switch records
+the user's choice to expose tools to Work; it does not certify a live server.
+Kernel admission and approval use the existing Extension CLI:
+
+```bash
+apeir extension admit --help
+apeir extension permissions --help
+apeir extension approve --help
+apeir extension discover-tools --help
+apeir extension work-enable --help
+```
+
+After the operator has admitted and authorized the exact package, use
+`discover-tools EXTENSION_ID` for an MCP server, then `work-enable EXTENSION_ID`.
+Pass `--registry /path/to/project/.nous/extensions` for a specific workspace.
+`work-enable EXTENSION_ID --disabled` stops new Work calls; explicit operator SDK
+calls still follow their own existing Kernel authorization. Revoking that
+authorization remains a separate operation. None of these switches cancels an
+already admitted effect.
+
+Work exposes the existing MCP/OpenAPI adapters only. Read-only Work excludes
+extension tools; package effect annotations cannot prove that a tool is read-only.
+Schema validation cannot retrieve remote references. Every invocation binds the
+original Work action, package version, parameters and Kernel permit. A lost
+response retains the original claim and requires reconciliation; it is not
+automatically retried under a new identity. Startup reads metadata without
+starting a server, fetching tools or invoking a model.
+
+The shared projection optionally includes `tool_extensions`. Older clients can
+ignore it. New clients show an unavailable state against older Runtimes rather
+than guessing that no tools are installed. Package lifecycle endpoints are
+`POST /api/v1/studio/extensions/tools/{review,install,configure,remove}`; mutations
+use the same original Governance/nonce path and exact digest/version binding.
+
+This software interface does not qualify arbitrary third-party servers, missing
+sandbox backends, real model use or Windows installation. Public publisher trust
+and executable third-party JavaScript remain separate gates.
 
 ## Workflow Monitor
 

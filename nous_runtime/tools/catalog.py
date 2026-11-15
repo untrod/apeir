@@ -74,6 +74,7 @@ class ToolCatalog:
         extension_id = str(extension_id or "").strip()
         if not extension_id:
             raise ValueError("extension_id is required")
+        entries = []
         for tool in tools:
             errors = tool.validate()
             if errors:
@@ -109,6 +110,13 @@ class ToolCatalog:
                     "operation": tool.operation,
                 },
             )
+            entries.append((definition, invoke))
+        identifiers = [definition.tool_id for definition, _ in entries]
+        if len(identifiers) != len(set(identifiers)) or any(
+            key in self._entries for key in identifiers
+        ):
+            raise ValueError("extension tool identifiers collide; no tools registered")
+        for definition, invoke in entries:
             self.register(definition, executor=invoke)
 
     def categories(self) -> tuple[dict[str, Any], ...]:

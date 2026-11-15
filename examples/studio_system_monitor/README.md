@@ -9,7 +9,7 @@ Start the model-disabled local Runtime and Studio using the official
 [Quick Start](../../docs/operations/getting-started/QUICK_START.md).
 Copy this directory outside the checkout to work on your own extension.
 
-In Studio, **Add panel → UI Extensions → Review manifest**, select
+In Studio, **Add panel → Extensions → Discover → Import UI manifest**, select
 `nous.extension.json`, review the identity, SHA-256 and permission requests,
 then **Request install**. A pending request is not an installation. Use the
 existing authenticated human approval surface, or the local owner's CLI:
