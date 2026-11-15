@@ -37,6 +37,8 @@ import {
   workflowDraft,
   workflowStepTypes,
   sameWorkflowDefinition,
+  sameWorkflowInputs,
+  workflowRequestFingerprint,
   createWorkflowTemplate,
   WORKFLOW_TEMPLATES,
   type WorkflowDefinition,
@@ -403,7 +405,7 @@ export function StudioWorkflow({
     }
   }
   let inputsMatchRun = false;
-  try { inputsMatchRun = JSON.stringify(JSON.parse(inputs)) === JSON.stringify(run?.inputs || {}); } catch { /* Invalid input remains an unsubmitted draft. */ }
+  try { inputsMatchRun = sameWorkflowInputs(JSON.parse(inputs), run?.inputs || {}); } catch { /* Invalid input remains an unsubmitted draft. */ }
   const graphMatchesRun =
     !!runGraph && sameWorkflowDefinition(runGraph, draft.definition) && inputsMatchRun;
   const selectedRun = run?.run_id;
@@ -697,7 +699,7 @@ export function StudioWorkflow({
               if (run && graphMatchesRun) return;
               workflowDefinition(draft.definition);
               const parsed = JSON.parse(inputs);
-              const fingerprint = JSON.stringify([draft.definition, parsed]);
+              const fingerprint = workflowRequestFingerprint(draft.definition, parsed);
               const original =
                 attempt?.fingerprint === fingerprint
                   ? attempt

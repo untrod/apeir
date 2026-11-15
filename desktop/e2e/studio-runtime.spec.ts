@@ -759,6 +759,9 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   await expect(builder.getByLabel("Step data bindings", { exact: true })).toHaveValue(JSON.stringify(typedContract));
   await builder.getByRole("button", { name: "Apply parameters", exact: true }).click();
   await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
+  await builder.locator("summary").filter({ hasText: /^Inputs & history/ }).click();
+  await builder.getByLabel("Workflow inputs", { exact: true }).fill('{"z":{"second":2,"first":1},"a":[1,2]}');
+  await builder.locator("summary").filter({ hasText: /^Inputs & history/ }).click();
   await builder.locator("summary").filter({ hasText: /^Draft/ }).click();
   const draftDownload = page.waitForEvent("download");
   await builder.getByRole("button", { name: "Save draft", exact: true }).click();

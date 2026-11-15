@@ -42,7 +42,7 @@ APEIR_TEST_PYTHON="$(pwd)/../.venv/bin/python" npm run test:e2e
 ```
 
 The Python selection passed 1,349 tests with 18 platform-limited skips in Linux.
-Desktop typecheck/lint/build and 553 unit tests passed. All 25 real-Runtime
+Desktop typecheck/lint/build and unit tests passed. All 25 real-Runtime
 Chromium cases passed, including the new request template and new-run guards.
 Three selected cases also passed against the production Vite build.
 Browser cases start real model-disabled CLI/HTTP Runtime processes, use the

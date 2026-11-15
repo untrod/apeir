@@ -203,6 +203,15 @@ describe("canonical workflow graph and portable drafts", () => {
 });
 
 describe("task workflow templates and original graph identity", () => {
+  it("ignores persisted object key order while keeping request and array identities distinct", async () => {
+    const { sameWorkflowInputs, workflowRequestFingerprint } = await import("../lib/studioWorkflow");
+    const input = { z: { second: 2, first: 1 }, a: [1, 2] };
+    const restored = { a: [1, 2], z: { first: 1, second: 2 } };
+    expect(sameWorkflowInputs(input, restored)).toBe(true);
+    expect(sameWorkflowInputs(input, { ...restored, a: [2, 1] })).toBe(false);
+    expect(workflowRequestFingerprint(initialWorkflow().definition, input)).toBe(workflowRequestFingerprint(initialWorkflow().definition, restored));
+    expect(workflowRequestFingerprint(initialWorkflow().definition, input)).not.toBe(workflowRequestFingerprint(initialWorkflow().definition, { ...restored, a: [2, 1] }));
+  });
   it("round-trips private input drafts while preserving legacy files and execution definitions", () => {
     const original = initialWorkflow();
     const inputText = '{"request":"Review this change"}';

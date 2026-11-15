@@ -303,15 +303,25 @@ export const initialWorkflow = (): WorkflowDraft => ({
   positions: {},
 });
 
-/** Display comparison only; execution admission and digests stay with Runtime. */
-export function sameWorkflowDefinition(a: WorkflowDefinition, b: WorkflowDefinition): boolean {
-  const normalize = (d: WorkflowDefinition) => ({
+function normalizedWorkflow(d: WorkflowDefinition) {
+  return {
     workflow_id: d.workflow_id, version: d.version, trigger: d.trigger,
     steps: d.steps.map(s => ({ action: "", depends_on: [], condition: "", retries: 0, timeout_seconds: 60, approval_required: false, compensation: "", params: {}, ...s })),
     inputs_schema: d.inputs_schema || {}, outputs_schema: d.outputs_schema || {}, audit_metadata: d.audit_metadata || {},
-  });
-  const stable = (value: unknown): unknown => Array.isArray(value) ? value.map(stable) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, stable(v)])) : value;
-  return JSON.stringify(stable(normalize(a))) === JSON.stringify(stable(normalize(b)));
+  };
+}
+function stableWorkflowValue(value: unknown): unknown {
+  return Array.isArray(value) ? value.map(stableWorkflowValue) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, stableWorkflowValue(v)])) : value;
+}
+/** Local comparison/request identity only; Runtime owns admission and durable digests. */
+export function sameWorkflowDefinition(a: WorkflowDefinition, b: WorkflowDefinition): boolean {
+  return JSON.stringify(stableWorkflowValue(normalizedWorkflow(a))) === JSON.stringify(stableWorkflowValue(normalizedWorkflow(b)));
+}
+export function sameWorkflowInputs(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
+  return JSON.stringify(stableWorkflowValue(a)) === JSON.stringify(stableWorkflowValue(b));
+}
+export function workflowRequestFingerprint(definition: WorkflowDefinition, inputs: Record<string, unknown>): string {
+  return JSON.stringify(stableWorkflowValue([normalizedWorkflow(definition), inputs]));
 }
 
 export const WORKFLOW_TEMPLATES = [
