@@ -121,3 +121,23 @@ def test_wrong_source_identity_and_missing_auth_cannot_install(client, tmp_path)
     }
     assert not call("POST", BASE + "/install", body, approve=True)["ok"]
     assert not ExtensionRegistry(root / ".nous" / "extensions").list()
+
+
+def test_openapi_documentation_and_example_urls_are_not_operational_endpoints(
+    client, tmp_path
+):
+    call, _, _ = client
+    source = tmp_path / "documented-api.json"
+    make_openapi(source)
+    value = json.loads(source.read_text())
+    value["externalDocs"] = {"url": "https://docs.example.test/api?view=stable#items"}
+    value["components"] = {
+        "schemas": {
+            "Status": {
+                "type": "object",
+                "example": {"endpoint": "logical-service-name"},
+            }
+        }
+    }
+    reviewed = call("POST", BASE + "/review", {"source_manifest": json.dumps(value)})
+    assert reviewed["ok"], reviewed

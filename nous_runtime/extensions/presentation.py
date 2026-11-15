@@ -246,28 +246,57 @@ class StudioExtensionHost:
             raise ValueError(
                 "Tool configuration must be an object without embedded credentials"
             )
-        pending = [value]
-        while pending:
-            item = pending.pop()
-            if isinstance(item, dict):
-                for key, field in item.items():
-                    if key.lower() in {"url", "endpoint", "base_url"} and isinstance(
-                        field, str
-                    ):
-                        url = urlsplit(field)
-                        if (
-                            url.username
-                            or url.password
-                            or url.query
-                            or url.fragment
-                            or url.scheme not in {"https", "http"}
-                        ):
-                            raise ValueError(
-                                "Tool URLs must use HTTP(S) without embedded credentials, query or fragment"
-                            )
-                    pending.append(field)
-            elif isinstance(item, list):
-                pending.extend(item)
+        # Inspect executable endpoints, not documentation links or schema examples.
+        # Query values belong in the declared operation parameters, and secrets
+        # stay in protected references instead of endpoint strings.
+        endpoints = []
+        mcp_servers = value.get("mcpServers", {})
+        if isinstance(mcp_servers, dict):
+            endpoints.extend(
+                server.get("url")
+                for server in mcp_servers.values()
+                if isinstance(server, dict)
+            )
+        operations = [value]
+        paths = value.get("paths", {})
+        if isinstance(paths, dict):
+            for item in paths.values():
+                if isinstance(item, dict):
+                    operations.append(item)
+                    operations.extend(
+                        item[method]
+                        for method in (
+                            "get",
+                            "head",
+                            "post",
+                            "put",
+                            "patch",
+                            "delete",
+                            "options",
+                            "trace",
+                        )
+                        if isinstance(item.get(method), dict)
+                    )
+        for operation in operations:
+            servers = operation.get("servers", [])
+            if isinstance(servers, list):
+                endpoints.extend(
+                    server.get("url") for server in servers if isinstance(server, dict)
+                )
+        for field in endpoints:
+            if not isinstance(field, str):
+                continue
+            url = urlsplit(field)
+            if (
+                url.username
+                or url.password
+                or url.query
+                or url.fragment
+                or url.scheme not in {"https", "http"}
+            ):
+                raise ValueError(
+                    "Tool endpoint URLs must use HTTP(S) without embedded credentials, query or fragment"
+                )
         with tempfile.TemporaryDirectory(prefix="apeir-studio-tools-") as temporary:
             path = Path(temporary) / "tools.json"
             path.write_text(source_manifest, encoding="utf-8")

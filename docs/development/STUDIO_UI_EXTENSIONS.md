@@ -63,6 +63,9 @@ or OpenAPI JSON. Review the source and requested capabilities, then request
 installation. Installation records immutable source bytes, digest and provenance
 through the existing Registry/CAS. An update resets Work enablement and Kernel
 authorization. Embedded credentials are rejected; use protected references.
+Operational endpoint URLs cannot contain credentials, query strings or fragments;
+declare query parameters on the operation instead. Documentation links and schema
+examples are not treated as connection endpoints.
 
 The installed list distinguishes missing authorization, missing MCP discovery,
 unsupported protocols and the need for a Kernel check. An enabled switch records
