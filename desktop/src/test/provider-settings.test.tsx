@@ -92,7 +92,8 @@ describe("Studio Provider configuration", () => {
     const protection = vi.fn();
     const props = { models, onChanged: changed, onDraftChange: protection };
     const view = render(<ProviderSettings {...props} locale="en" />);
-    fireEvent.click(await screen.findByRole("button", { name: "Add model" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add model" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Add model" }));
     fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "my-model" } });
     fireEvent.change(screen.getByLabelText("Credential reference"), { target: { value: "env:FAKE_OWNER_KEY" } });
     view.rerender(<ProviderSettings {...props} locale="zh" />);

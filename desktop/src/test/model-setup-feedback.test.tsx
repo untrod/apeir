@@ -60,7 +60,7 @@ it("waits for current saved connections before continuing a key setup and choose
 
 it("manages model connections inside settings instead of requiring a second window", async () => {
   render(<ThemeProvider><SettingsPage initialSection="models" /></ThemeProvider>);
-  expect(await screen.findByRole("button", { name: "Add model" })).toBeEnabled();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Add model" })).toBeEnabled());
   await waitFor(() => expect(screen.getByRole("table", { name: "Registered models" })).toHaveTextContent("deepseek/deepseek-chat"));
   expect(invoke.mock.calls.some(([name]) => name === "store_provider_credential")).toBe(false);
 });
@@ -196,7 +196,8 @@ it("reports a verified removal on the API keys page without offering the removed
 it("selects a newly saved local reference without exposing the actual API key to Provider configuration", async () => {
   invoke.mockImplementation(async command => command === "get_runtime_process_status" ? { endpoint: "http://127.0.0.1:9017", ready: true, session_available: true } : [{ environment_name: "DEEPSEEK_API_KEY_2", stored: true }]);
   render(<ProviderSettings models={[model]} onChanged={async () => {}} preferredCredential={{ environmentName: "DEEPSEEK_API_KEY_2", providerId: "deepseek", endpoint: "http://127.0.0.1:9017", version: (await import("../lib/api")).getRuntimeConfigVersion() }} />);
-  fireEvent.click(await screen.findByRole("button", { name: "Add model" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Add model" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Add model" }));
   await waitFor(() => expect(screen.getByLabelText("Saved API key")).toHaveValue("env:DEEPSEEK_API_KEY_2"));
   expect(screen.getByLabelText("Vendor model ID")).toHaveValue("deepseek-chat");
   expect(screen.getByLabelText("Credential reference")).toHaveValue("env:DEEPSEEK_API_KEY_2");
@@ -241,7 +242,8 @@ it("starts native model setup with credentials before creating a protected conne
     throw new Error("Unexpected native request");
   });
   render(<ThemeProvider><SettingsPage initialSection="models" /></ThemeProvider>);
-  fireEvent.click(await screen.findByRole("button", { name: "Add model" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Add model" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Add model" }));
   const setup = await screen.findByRole("group", { name: "Add model" });
   fireEvent.change(within(setup).getByLabelText("Model service"), { target: { value: "deepseek" } });
   fireEvent.click(within(setup).getByRole("button", { name: "Continue" }));

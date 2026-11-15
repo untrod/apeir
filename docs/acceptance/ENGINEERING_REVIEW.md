@@ -16,7 +16,7 @@ change dependencies, component hashes, authority or layout schemas.
 | Workflow interaction | FIX / EXTEND | Two supported templates, simple input fields, private draft export, readable outputs, original graph restoration and deliberate new-run preparation |
 | Cloud/local model accounts, native key store and Windows 10 GUI | PENDING | No live model or target-system qualification is inferred from software fixtures |
 
-Baseline regressions demonstrated the native credential-navigation dead end,
+Qualification regressions exposed the native credential-navigation dead end,
 reopened history showing the default graph, service presets inferred from a new
 profile ID, cross-service key preselection and an enabled Run button on a
 waiting original Run. Failure logs were retained during qualification. Tests
