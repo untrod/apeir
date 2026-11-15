@@ -16,6 +16,9 @@ CLI/HTTP/Chromium cases, and three production-frontend cases. The first-use
 browser case uses an explicit native host fixture; it is not Windows installation
 qualification. Visual review caught an invisible SVG fragment and dark-theme
 control contrast; both were corrected and exercised in the production build.
+The dark-mode reveal originally measured 1.35:1 frame/background contrast;
+animated fragments now use the existing theme text token, with a 4.5:1 minimum
+in the browser check. Static/native artwork retains its approved paper/ink colors.
 No new native package or model request is part of this change.
 
 Candidate `d8e74b6456a2089cf4067051196a86ce3af24eda` retained a Windows

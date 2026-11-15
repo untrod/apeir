@@ -19,6 +19,7 @@
 .studio-entrance { position:relative; display:flex; flex-direction:column; height:100%; min-height:0; flex:1; overflow:hidden; }
 .studio-entrance-mask { position:absolute; inset:0; z-index:20; pointer-events:none; background:var(--nous-bg); animation:studio-uncover .3s ease-out both; }
 .studio-entrance-mask .app-mark { position:absolute; left:50%; top:50%; }
+.studio-entrance-mask path { fill:var(--nous-text); }
 .studio-entrance-left { animation:studio-frame-left .3s ease-in-out both; }
 .studio-entrance-right { animation:studio-frame-right .3s ease-in-out both; }
 @keyframes studio-uncover { 0%,15% { opacity:1; } 100% { opacity:0; visibility:hidden; } }

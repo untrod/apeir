@@ -1488,13 +1488,29 @@ test("First-use opens the actual workspace once, defers models and respects redu
     await page.screenshot({ path: info.outputPath("first-use-zh-dark-small-source-host-contract.png") });
     await page.getByRole("combobox", { name: "语言" }).selectOption("en");
     await page.setViewportSize({ width: 1600, height: 1000 });
-    await page.emulateMedia({ colorScheme: "light", reducedMotion: "no-preference" });
+    await page.emulateMedia({ colorScheme: "dark", reducedMotion: "no-preference" });
     await expect(setup.getByRole("button", { name: "Open Studio" })).toBeEnabled();
     await setup.getByRole("button", { name: "Open Studio" }).click();
     await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
     await expect(page.locator(".studio-entrance-mask")).toBeHidden();
+    const frameContrast = await page.locator(".studio-entrance-mask path").evaluateAll(paths => {
+      const luminance = (color: string) => {
+        const rgb = color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map(value => {
+          const channel = value / 255; return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+        });
+        return .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
+      };
+      return paths.map(path => {
+        const foreground = luminance(getComputedStyle(path).fill);
+        const background = luminance(getComputedStyle(path.closest(".studio-entrance-mask")!).backgroundColor);
+        return (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
+      });
+    });
+    expect(frameContrast).toHaveLength(2);
+    for (const ratio of frameContrast) expect(ratio).toBeGreaterThanOrEqual(4.5);
     expect(await page.evaluate(() => localStorage.getItem("nous_workspace_path"))).toBe(runtimes[0].directory);
     expect(mutations).toEqual([]);
+    await page.emulateMedia({ colorScheme: "light", reducedMotion: "no-preference" });
     await page.reload();
     await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: "First-use setup" })).toHaveCount(0);
