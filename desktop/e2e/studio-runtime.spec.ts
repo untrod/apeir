@@ -1428,3 +1428,63 @@ test("Settings lists saved model connections and preserves them after reload wit
   expect(inference).toEqual([]);
   await info.attach("settings-model-connection-acceptance", { body: JSON.stringify({ scope: "actual model-disabled Runtime HTTP and Chromium; not native credential or live inference qualification", configured_model: "settings-model-demo", saved_profile: true, reload_restored: true, inference_requests: inference.length, kernel_traversed: false }), contentType: "application/json" });
 });
+
+// Browser UI + actual HTTP Runtime; native commands below are explicitly host fixtures.
+test("First-use opens the actual workspace once, defers models and respects reduced-motion entry", async ({ page }, info) => {
+  const mutations: string[] = [];
+  page.on("request", request => { if (request.method() === "POST") mutations.push(new URL(request.url()).pathname); });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/v1/status", async route => { await held; await route.continue(); }, { times: 1 });
+  await page.addInitScript(({ url, token, workspace }) => {
+    sessionStorage.setItem("nous_server_url", url); sessionStorage.setItem("nous_server_token", token);
+    localStorage.setItem("apeir.locale", "en");
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {
+      invoke: async (command: string, args?: { path?: string }) => {
+        if (command === "get_runtime_process_status") return { endpoint: url, ready: true, session_available: true };
+        if (command === "init_app_config") return null;
+        if (command === "get_default_workspace_path") return workspace;
+        if (command === "load_runtime_session_token") return token;
+        // Bootstrap may ensure its existing directory; this fixture creates no files.
+        if (command === "create_default_workspace" && args?.path === workspace) return workspace;
+        throw new Error(`Unqualified native operation refused: ${command}`);
+      },
+    } });
+  }, { url: runtimes[0].url, token, workspace: runtimes[0].directory });
+  try {
+    await page.goto("/");
+    await expect(page.getByRole("status")).toHaveText("Opening your workspace…");
+    await expect(page.getByText("Checking Runtime API...", { exact: true })).not.toBeVisible();
+    expect(await page.locator(".app-mark-left").evaluate(node => getComputedStyle(node).animationName)).toBe("none");
+    await page.screenshot({ path: info.outputPath("quiet-startup-source-host-contract.png") });
+    release();
+    const setup = page.getByRole("region", { name: "First-use setup" });
+    await expect(setup.getByRole("button", { name: "Open Studio" })).toBeEnabled();
+    await expect(setup.getByRole("heading", { name: "Model Provider" })).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath("one-page-first-use-source-host-contract.png") });
+    const favicon = await page.locator('link[rel="icon"]').getAttribute("href");
+    const icon = await page.request.get(new URL(favicon!, page.url()).toString());
+    expect(icon.ok()).toBe(true); expect(await icon.text()).toContain('fill="#ece8df"');
+    await setup.getByRole("combobox", { name: "Language" }).selectOption("zh-CN");
+    await page.setViewportSize({ width: 900, height: 600 });
+    await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+    await expect(page.getByRole("button", { name: "进入 Studio" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "进入 Studio" })).toBeInViewport();
+    await page.screenshot({ path: info.outputPath("first-use-zh-dark-small-source-host-contract.png") });
+    await page.getByRole("combobox", { name: "语言" }).selectOption("en");
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    await page.emulateMedia({ colorScheme: "light", reducedMotion: "no-preference" });
+    await expect(setup.getByRole("button", { name: "Open Studio" })).toBeEnabled();
+    await setup.getByRole("button", { name: "Open Studio" }).click();
+    await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
+    await expect(page.locator(".studio-entrance-mask")).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem("nous_workspace_path"))).toBe(runtimes[0].directory);
+    expect(mutations).toEqual([]);
+    await page.reload();
+    await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "First-use setup" })).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath("paper-mark-studio-source-host-contract.png") });
+    await info.attach("first-use-scope", { body: JSON.stringify({ runtime: "actual authenticated model-disabled HTTP Runtime", native_ipc: "explicit fixture; existing directory only", native_installation: "NOT_RUN", model_inference: "NOT_RUN", runtime_mutations: mutations.length, workspace: "original owned test workspace", reduced_motion: true, setup_restored_after_reload: false }), contentType: "application/json" });
+  } finally { release(); }
+});

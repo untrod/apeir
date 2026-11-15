@@ -38,7 +38,7 @@
 .studio-toolbar { min-height:48px; gap:12px; padding:0 16px; flex-wrap:nowrap; background:var(--nous-surface); }
 .studio-brand { display:flex; align-items:center; gap:10px; min-width:0; }
 .studio-brand strong { font-size:14px; letter-spacing:-.3px; }
-.studio-brand-mark { display:grid; place-items:center; width:24px; height:24px; border:1px solid var(--nous-border); border-radius:5px; font-weight:700; color:var(--nous-accent); }
+.studio-brand-mark { width:24px; height:24px; flex:0 0 24px; }
 .studio-workspace-name { max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-left:12px; border-left:1px solid var(--nous-border); color:var(--nous-text-secondary); }
 .studio-controller { font-size:11px; max-width:180px; margin-right:auto; }
 .studio-toolbar-actions { display:flex; align-items:center; gap:6px; margin-left:auto; }

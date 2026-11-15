@@ -20,6 +20,15 @@ Use the existing panel registry, layout library and design tokens when extending
 the interface. Layout configuration describes presentation; task state stays in
 the Runtime.
 
+First launch asks for a workspace, then opens Studio. Model connections can be
+added in **Settings → Models & credentials**; **More options → Full setup** keeps
+the detailed configuration flow available. Connection checks and recovery details
+are expandable. The opening transition respects reduced-motion preferences and
+does not delay loading or submit work.
+
+首次使用只需选择工作空间。模型可稍后在设置中添加；连接详情和完整设置按需展开。
+跳过设置不会把未连接的 Runtime 标记为在线。
+
 - [Studio guide](../operations/guides/USER_GUIDE.md): navigation, panels and saved layouts.
 - [Project changes](../operations/guides/USER_GUIDE.md#reviewing-workspace-changes): editor, diffs and approval.
 - [Task activity](../operations/guides/USER_GUIDE.md#watching-a-request): requests, tools and results.

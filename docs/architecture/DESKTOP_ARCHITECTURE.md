@@ -17,6 +17,14 @@ tool, not a separately hosted production website.
 - Shared API client in `desktop/src/lib/api.ts`
 - Runtime entity and event state under `desktop/src/store/`
 
+The paper/ink open-frame mark has one vector source at
+`desktop/src-tauri/app-icon.svg`. The UI and favicon consume that source;
+`npm run tauri:icon` generates the existing native icon resources. Startup uses
+the original bootstrap state machine. Its brief frame-opening transition is
+presentation-only, respects reduced motion and keeps the workspace mounted.
+First-use workspace confirmation precedes saving completion markers. Skipping
+setup can expose the interface but does not establish an authenticated connection.
+
 ## APEIR Studio presentation shell
 
 Studio is the default Desktop workspace after the existing native bootstrap

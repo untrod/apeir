@@ -60,6 +60,7 @@ import { usageMoney, usageNumber } from "./lib/usageAccounting";
 const StudioShell = React.lazy(() => import("./components/studio/StudioShell").then(module => ({ default: module.StudioShell })));
 
 import { bindNativeRuntimeSession, isLocalRuntimeSelected, nativeRuntimeStatus } from "./lib/nativeRuntime";
+import { StudioEntrance } from "./components/StudioEntrance";
 
 // Design token injection (run once)
 injectDesignTokens();
@@ -665,6 +666,7 @@ function AppShell() {
   const [bootstrapStatus, setBootstrapStatus] = useState<BootstrapStatus>(createInitialStatus());
   const [fatalDiag, setFatalDiag] = useState<DiagnosticState | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [setupDismissed, setSetupDismissed] = useState(false);
   const [connected, setConnected] = useState(false);
   const runtimeConfigVersion = useRuntimeConfigVersion();
   const [page, setPageState] = useState<NavPage>("studio");
@@ -687,6 +689,12 @@ function AppShell() {
   const hydrated = useStoreHydrated();
   const tasks = useTasks();
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
+  const studioEntered = useRef(false);
+  const markStudioEntered = useCallback(() => { studioEntered.current = true; }, []);
+  const closeSetup = useCallback(() => {
+    setShowOnboarding(false);
+    setSetupDismissed(true);
+  }, []);
 
   // Register global error handlers
   useEffect(() => {
@@ -728,6 +736,7 @@ function AppShell() {
   const retryBootstrap = useCallback(() => {
     bootstrapRan.current = false;
     setConnected(false);
+    setSetupDismissed(false);
     setBootstrapStatus(createInitialStatus());
     setBootstrapAttempt((attempt) => attempt + 1);
   }, []);
@@ -737,9 +746,10 @@ function AppShell() {
     let active = true;
     const current = captureRuntimeConnection();
     const native = "__TAURI_INTERNALS__" in window;
-    if (bootstrapStatus.state === "ready" || !native) {
+    setConnected(false);
+    if (bootstrapStatus.state === "ready" || !native || setupDismissed) {
       // Hydrate store and load data
-      const ready = native ? Promise.resolve(true) : testConnection();
+      const ready = testConnection();
       ready.then(async reachable => {
         current();
         if (!active || !reachable) return;
@@ -774,13 +784,13 @@ function AppShell() {
           setConnected(true);
         });
       }).catch(() => { /* Stale snapshots cannot publish into a replacement session. */ });
-    } else if (bootstrapStatus.state === "onboarding_required") {
+    } else if (bootstrapStatus.state === "onboarding_required" && !setupDismissed) {
       setShowOnboarding(true);
       // Still attempt store hydration
       entityStore.hydrate().catch(() => {});
     }
     return () => { active = false; };
-  }, [bootstrapStatus.state, runtimeConfigVersion]);
+  }, [bootstrapStatus.state, runtimeConfigVersion, setupDismissed]);
 
   // Poll for updates when connected
   useEffect(() => {
@@ -862,103 +872,46 @@ function AppShell() {
   if (showOnboarding) {
     return (
       <OnboardingWizard
-        onComplete={() => {
-          setShowOnboarding(false);
-          setConnected(true);
-          // Re-run store hydration
-          entityStore.hydrate().then(() => {
-            Promise.allSettled([fetchTasks("", 100), fetchNodes(), fetchModels(), fetchApprovals(), fetchConversations()])
-              .then(([tasksData, nodesData, modelsData, approvalsData, conversationsData]) => {
-                if (tasksData.status === "fulfilled" && tasksData.value?.tasks) entityStore.upsertTasks(tasksData.value.tasks as any);
-                if (nodesData.status === "fulfilled" && Array.isArray(nodesData.value)) entityStore.upsertNodes(nodesData.value as any);
-                if (modelsData.status === "fulfilled" && modelsData.value?.models) entityStore.upsertModels(modelsData.value.models as any);
-                if (approvalsData.status === "fulfilled" && approvalsData.value?.approvals) entityStore.upsertApprovals(approvalsData.value.approvals as any);
-                if (conversationsData.status === "fulfilled" && conversationsData.value?.conversations) entityStore.upsertConversations(conversationsData.value.conversations);
-                eventClient.start({ mode: "polling", onError: () => toast.error("Event history unavailable", "Reload current Runtime state before resuming.") });
-              });
-          });
-        }}
-        onSkip={() => {
-          setShowOnboarding(false);
-          setConnected(true);
-          entityStore.hydrate().catch(() => {});
-        }}
+        onComplete={closeSetup}
+        onSkip={closeSetup}
       />
     );
   }
 
-  // Render: Bootstrap / Error
-  if (bootstrapStatus.state === "recoverable_error" || bootstrapStatus.state === "fatal_error") {
-    return (
-      <BootstrapScreen
-        status={bootstrapStatus}
-        onRetry={retryBootstrap}
-        onStartRuntime={async () => {
-          if ("__TAURI_INTERNALS__" in window) {
-            try {
-              await bindNativeRuntimeSession("start_runtime_api");
-              retryBootstrap();
-            } catch { /* Shown in UI */ }
-          }
-        }}
-        onResetSession={async () => {
-          if ("__TAURI_INTERNALS__" in window) {
-            try {
-              await bindNativeRuntimeSession("load_runtime_session_token");
-              retryBootstrap();
-            } catch { /* Shown in UI */ }
-          }
-        }}
-        onCreateWorkspace={retryBootstrap}
-        onOpenLogs={openRuntimeLogs}
-        onResetUI={() => { resetUIState(); retryBootstrap(); }}
-        onProceedToOnboarding={() => setShowOnboarding(true)}
-        onProceedToDashboard={() => setConnected(true)}
-      />
-    );
-  }
+  const recoverNativeSession = async (command: "start_runtime_api" | "load_runtime_session_token") => {
+    const version = getRuntimeConfigVersion();
+    try {
+      await bindNativeRuntimeSession(command);
+      retryBootstrap();
+    } catch (error) {
+      if (version === getRuntimeConfigVersion()) setBootstrapStatus(previous => ({
+        ...previous, state: "recoverable_error", recoverable: true,
+        errorMessage: errorMessage(error, "The local service could not be connected."),
+      }));
+    }
+  };
+  const startup = <BootstrapScreen status={bootstrapStatus} onRetry={retryBootstrap}
+    onStartRuntime={() => void recoverNativeSession("start_runtime_api")}
+    onResetSession={() => void recoverNativeSession("load_runtime_session_token")}
+    onCreateWorkspace={retryBootstrap} onOpenLogs={openRuntimeLogs}
+    onResetUI={() => { resetUIState(); retryBootstrap(); }}
+    onProceedToOnboarding={() => setShowOnboarding(true)} onProceedToDashboard={closeSetup} />;
+  const studio = <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+    <React.Suspense fallback={startup}>
+      <StudioEntrance animate={!studioEntered.current} onEntered={markStudioEntered}>
+        <StudioShell onProtectedChange={protectStudio} onExit={() => setPage("operations")} />
+      </StudioEntrance>
+    </React.Suspense>
+  </div>;
 
-  if (page === "operations" && !("__TAURI_INTERNALS__" in window)) {
-    return <OperationsConsole onOpenStudio={() => setPage("studio")} />;
-  }
-  if (page === "studio" && !("__TAURI_INTERNALS__" in window)) {
-    return <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}><div style={{ flex: 1, minHeight: 0 }}><React.Suspense fallback={<p role="status">Loading APEIR Studio…</p>}><StudioShell onProtectedChange={protectStudio} onExit={() => setPage("operations")} /></React.Suspense></div></div>;
-  }
+  if (bootstrapStatus.state === "recoverable_error" || bootstrapStatus.state === "fatal_error") return startup;
+  const native = "__TAURI_INTERNALS__" in window;
+  if (page === "operations" && !native) return <OperationsConsole onOpenStudio={() => setPage("studio")} />;
+  if (page === "studio" && !native) return studio;
+  if (bootstrapStatus.state !== "ready" && !connected && !setupDismissed) return startup;
 
-  if (bootstrapStatus.state !== "ready" && !connected) {
-    return (
-      <BootstrapScreen
-        status={bootstrapStatus}
-        onRetry={retryBootstrap}
-        onStartRuntime={async () => {
-          if ("__TAURI_INTERNALS__" in window) {
-            try {
-              await bindNativeRuntimeSession("start_runtime_api");
-              retryBootstrap();
-            } catch { /* Shown in UI */ }
-          }
-        }}
-        onResetSession={async () => {
-          if ("__TAURI_INTERNALS__" in window) {
-            try {
-              await bindNativeRuntimeSession("load_runtime_session_token");
-            } catch { /* Shown in UI */ }
-          }
-        }}
-        onCreateWorkspace={() => {}}
-        onOpenLogs={openRuntimeLogs}
-        onResetUI={() => { resetUIState(); retryBootstrap(); }}
-        onProceedToOnboarding={() => setShowOnboarding(true)}
-        onProceedToDashboard={() => setConnected(true)}
-      />
-    );
-  }
-
-  // Studio owns its navigation, search and inspector in both web and native
-  // hosts. Bootstrap/security gates above still apply to the native host.
-  if (page === "studio") {
-    return <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}><React.Suspense fallback={<p role="status">Loading APEIR Studio…</p>}><StudioShell onProtectedChange={protectStudio} onExit={() => setPage("operations")} /></React.Suspense></div>;
-  }
+  // Studio owns navigation in both hosts; native startup gates still apply above.
+  if (page === "studio") return studio;
 
   // Render: Main Dashboard
   return (
