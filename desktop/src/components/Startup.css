@@ -25,6 +25,7 @@
 @keyframes studio-frame-left { from { transform:translate(-50%,-50%); } to { transform:translate(calc(-50% - 50vw),-50%); } }
 @keyframes studio-frame-right { from { transform:translate(-50%,-50%); } to { transform:translate(calc(-50% + 50vw),-50%); } }
 @media (prefers-reduced-motion:reduce) {
+  .first-use-setup *, .startup-screen * { animation:none !important; transition:none !important; }
   .app-mark--opening .app-mark-left,.app-mark--opening .app-mark-right { animation:none; }
   .studio-entrance-mask { display:none; }
 }

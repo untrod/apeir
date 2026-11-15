@@ -666,6 +666,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   const container: React.CSSProperties = {
     minHeight: "100vh",
     background: colors.bg,
+    color: colors.text,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -709,6 +710,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       ] as const).map(option => <button key={option.action} aria-pressed={workspaceAction === option.action}
         disabled={credentialSaving || !setupCurrent || (option.action !== "default" && !canManageWorkspace)}
         onClick={() => void chooseWorkspace(option.action)} style={{ ...btnSecondary, textAlign: "left", justifyContent: "flex-start", padding: space.md,
+          transition: "border-color .12s ease",
           borderColor: workspaceAction === option.action ? colors.accent : colors.border,
           background: workspaceAction === option.action ? colors.accentSoft : colors.surface }}>
         <span style={{ minWidth: 0, overflowWrap: "anywhere" }}><span style={{ display: "block", fontWeight: typo.medium }}>{option.title}</span>
@@ -726,7 +728,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   </>;
 
   if (quickSetup) {
-    return <main style={container}>
+    return <main className="first-use-setup" style={container}>
       <section aria-label={t("First-use setup", "首次使用设置")} style={contentBox}>
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: space.md, marginBottom: space.lg }}>
           <AppMark size={44} />
@@ -745,7 +747,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
         {envChecks.some(check => check.status === "error") && <p role="alert" style={{ color: colors.danger, fontSize: typo.sm }}>
           {t("Workspace details could not be read. Check the connection under More options.", "无法读取工作空间信息，请在更多选项中检查连接。")}
         </p>}
-        <button disabled={!canContinue || credentialSaving} onClick={() => void advanceStep()} style={{ ...btnPrimary, width: "100%", marginTop: space.lg }}>
+        <button disabled={!canContinue || credentialSaving} onClick={() => void advanceStep()} style={{ ...btnPrimary, width: "100%", marginTop: space.lg, transition: "none" }}>
           {credentialSaving ? t("Opening…", "正在打开…") : environmentChecking ? t("Reading workspace…", "正在读取工作空间…") : t("Open Studio", "进入 Studio")}
         </button>
         <details className="startup-details">
@@ -763,7 +765,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   // Step 1: Welcome
   if (step === 1) {
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           {stepIndicator}
           <div style={{ textAlign: "center" }}>
@@ -844,7 +846,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   // Step 2: Environment Check
   if (step === 2) {
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           {stepIndicator}
           {stepHeader(
@@ -889,7 +891,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   // Step 3: Workspace
   if (step === 3) {
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           {stepIndicator}
           {stepHeader(
@@ -906,7 +908,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   // Step 4: Provider Selection
   if (step === 4) {
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={{ ...contentBox, maxWidth: 640 }}>
           {stepIndicator}
           {stepHeader(
@@ -1009,7 +1011,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     const template = PROVIDER_TEMPLATES.find((p) => p.providerId === selectedProviderId);
     const credentialRequired = template?.credentialType !== "none";
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           {stepIndicator}
           {stepHeader(
@@ -1132,7 +1134,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     const recommendedModels = Object.values(PROVIDER_DEFAULT_MODELS[selectedProviderId] || {});
     const modelOptions = Array.from(new Set([...availableModels, ...recommendedModels].filter(Boolean)));
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={{ ...contentBox, maxWidth: 720 }}>
           {stepIndicator}
           {stepHeader(
@@ -1196,7 +1198,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   // Step 7: Connection Test
   if (step === 7) {
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           {stepIndicator}
           {stepHeader(
@@ -1250,7 +1252,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       .filter(([, v]) => v)
       .map(([k, v]) => `${CAPABILITY_LABELS[k] || k}: ${v}`);
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           {stepIndicator}
           {stepHeader(
@@ -1309,7 +1311,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   // Step 9: Complete
   if (step === 9) {
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: typo.sm, letterSpacing: 2, color: colors.accent, marginBottom: space.lg }}>

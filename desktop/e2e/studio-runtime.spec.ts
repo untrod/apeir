@@ -1471,6 +1471,20 @@ test("First-use opens the actual workspace once, defers models and respects redu
     await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
     await expect(page.getByRole("button", { name: "进入 Studio" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "进入 Studio" })).toBeInViewport();
+    const contrasts = await page.getByRole("region", { name: "首次使用设置" }).evaluate(region => {
+      const luminance = (color: string) => {
+        const rgb = color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map(value => {
+          const channel = value / 255; return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+        });
+        return .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
+      };
+      return [...region.querySelectorAll("button")].filter(button => button.checkVisibility()).map(button => {
+        const style = getComputedStyle(button); const foreground = luminance(style.color), background = luminance(style.backgroundColor);
+        return { label: button.textContent, ratio: (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05), transition: style.transitionDuration };
+      });
+    });
+    for (const value of contrasts) { expect(value.ratio, value.label || "button").toBeGreaterThanOrEqual(4.5); expect(value.transition).toBe("0s"); }
+    await info.attach("first-use-dark-contrast", { body: JSON.stringify(contrasts), contentType: "application/json" });
     await page.screenshot({ path: info.outputPath("first-use-zh-dark-small-source-host-contract.png") });
     await page.getByRole("combobox", { name: "语言" }).selectOption("en");
     await page.setViewportSize({ width: 1600, height: 1000 });
