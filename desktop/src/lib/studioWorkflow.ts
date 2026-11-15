@@ -45,6 +45,8 @@ export type WorkflowCanvas = Record<string, { x: number; y: number }>;
 export type WorkflowDraft = {
   definition: WorkflowDefinition;
   positions: WorkflowCanvas;
+  /** Optional private draft-file content; never part of a layout or execution definition. */
+  inputText?: string;
 };
 const identifier = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 export const modelWorkflowStep = (step: WorkflowStep) =>
@@ -232,7 +234,7 @@ export function workflowDraft(value: unknown): WorkflowDraft {
   if (
     data.schemaVersion !== 1 ||
     Object.keys(data).some(
-      (key) => !["schemaVersion", "definition", "positions"].includes(key),
+      (key) => !["schemaVersion", "definition", "positions", "inputText"].includes(key),
     )
   )
     throw new Error("Unsupported draft schema");
@@ -258,7 +260,9 @@ export function workflowDraft(value: unknown): WorkflowDraft {
       throw new Error("Invalid canvas position");
     positions[id] = { x: p.x, y: p.y };
   }
-  return { definition, positions };
+  if (data.inputText !== undefined && (typeof data.inputText !== "string" || new TextEncoder().encode(data.inputText).length > 32 * 1024))
+    throw new Error("Invalid or oversized draft inputs");
+  return { definition, positions, ...(data.inputText === undefined ? {} : { inputText: data.inputText as string }) };
 }
 export function arrangeWorkflow(
   definition: WorkflowDefinition,
@@ -298,3 +302,40 @@ export const initialWorkflow = (): WorkflowDraft => ({
   },
   positions: {},
 });
+
+/** Display comparison only; execution admission and digests stay with Runtime. */
+export function sameWorkflowDefinition(a: WorkflowDefinition, b: WorkflowDefinition): boolean {
+  const normalize = (d: WorkflowDefinition) => ({
+    workflow_id: d.workflow_id, version: d.version, trigger: d.trigger,
+    steps: d.steps.map(s => ({ action: "", depends_on: [], condition: "", retries: 0, timeout_seconds: 60, approval_required: false, compensation: "", params: {}, ...s })),
+    inputs_schema: d.inputs_schema || {}, outputs_schema: d.outputs_schema || {}, audit_metadata: d.audit_metadata || {},
+  });
+  const stable = (value: unknown): unknown => Array.isArray(value) ? value.map(stable) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, stable(v)])) : value;
+  return JSON.stringify(stable(normalize(a))) === JSON.stringify(stable(normalize(b)));
+}
+
+export const WORKFLOW_TEMPLATES = [
+  { id: "approval-review", en: "Review a request", zh: "审批一份请求", descriptionEn: "Collect a brief, request human approval and keep the result. No model needed.", descriptionZh: "填写需求、人工审批并保存结果，无需模型。" },
+  { id: "model-review", en: "Draft and review", zh: "模型分析与复核", descriptionEn: "One model proposes a plan; another reviews it. Select models and approve each call.", descriptionZh: "一个模型提出方案，另一个复核；模型选择和每次调用均需确认。" },
+] as const;
+
+/** Configuration over supported Runtime handlers; choosing a template executes nothing. */
+export function createWorkflowTemplate(id: typeof WORKFLOW_TEMPLATES[number]["id"]): WorkflowDraft {
+  const inputs_schema = { type: "object", properties: { request: { type: "string", title: "Request / 需求", minLength: 1, maxLength: 16000 } }, required: ["request"], additionalProperties: false };
+  let definition: WorkflowDefinition;
+  if (id === "approval-review") {
+    definition = { workflow_id: "studio.request-review", version: "1.0.0", trigger: "manual", inputs_schema, steps: [
+      { step_id: "request", step_type: "transform", data_bindings: { schema_version: 1, inputs: { value: { source: "inputs", pointer: "/request" } } } },
+      { step_id: "approval", step_type: "approval", depends_on: ["request"] },
+      { step_id: "result", step_type: "transform", depends_on: ["approval", "request"], data_bindings: { schema_version: 1, inputs: { value: { source: "step", step_id: "request", pointer: "/value" } } } },
+    ] };
+  } else if (id === "model-review") {
+    const model = (step_id: string, instruction: string): WorkflowStep => ({ step_id, step_type: "agent", action: "model.invoke", approval_required: true, params: { model_id: "", instruction, max_tokens: 768, max_cost_usd: 0.01 } });
+    definition = { workflow_id: "studio.model-review", version: "1.0.0", trigger: "manual", inputs_schema, steps: [
+      { ...model("analysis", "Analyze the supplied request. Propose a concise plan, assumptions and checks. Do not claim to have read files or executed tools."), data_bindings: { schema_version: 1, inputs: { input: { source: "inputs", pointer: "/request" } } } },
+      { ...model("review", "Review the supplied analysis. Identify mistakes, risks and missing checks. Return a concise review; do not execute any operation."), depends_on: ["analysis"], data_bindings: { schema_version: 1, inputs: { input: { source: "step", step_id: "analysis", pointer: "/content" } } } },
+    ] };
+  } else throw new Error("Unknown Workflow template");
+  workflowDefinition(definition);
+  return { definition, positions: arrangeWorkflow(definition) };
+}

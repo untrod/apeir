@@ -25,6 +25,8 @@ export function SettingsPage({ onOpenModels, onOpenLayouts, onOpenApprovals, onC
   const [modelsVisited, setModelsVisited] = useState(initialSection === "models" && initialModelSection === "models");
   const [credentialsVisited, setCredentialsVisited] = useState(initialSection === "models" && initialModelSection === "credentials");
   const [recentCredential, setRecentCredential] = useState<NativeCredentialNotice | null>(null);
+  const [requestedKeyProvider, setRequestedKeyProvider] = useState("deepseek");
+  const [setupCredential, setSetupCredential] = useState<NativeCredentialNotice | null>(null);
   const [developer, setDeveloper] = useState(() => localStorage.getItem("nous_developer_mode") === "1");
   const [message, setMessage] = useState("");
   const [credentialDraft, setCredentialDraft] = useState(false);
@@ -54,6 +56,10 @@ export function SettingsPage({ onOpenModels, onOpenLayouts, onOpenApprovals, onC
   const credentialStored = (value: NativeCredentialNotice) => {
     if (value.version !== getRuntimeConfigVersion()) return;
     setRecentCredential(value); onCredentialStored?.(value);
+  };
+  const openCredentials = (providerId?: string) => {
+    if (providerId) setRequestedKeyProvider(providerId);
+    showModelSection("credentials");
   };
   const navigate = (next: typeof section) => {
     setSection(next); onSectionChange?.(next, modelSection);
@@ -99,12 +105,12 @@ export function SettingsPage({ onOpenModels, onOpenLayouts, onOpenApprovals, onC
             }}>{item === "models" ? t("Models", "模型") : t("API keys", "API 密钥")}</button>)}
           </div>
           <div role="tabpanel" id={`${id}-models-settings`} aria-labelledby={`${id}-models-tab`} hidden={modelSection !== "models"}>
-            {modelsVisited && <Suspense fallback={<p role="status">{t("Loading models…", "正在加载模型…")}</p>}><DeveloperPlatform modelsOnly manageProviders modelConnectionsOnly locale={locale} onDraftChange={protectModel} onOpenCredentials={() => showModelSection("credentials")} onOpenApprovals={onOpenApprovals} preferredCredential={currentCredential?.operation === "removed" ? null : currentCredential} /></Suspense>}
+            {modelsVisited && <Suspense fallback={<p role="status">{t("Loading models…", "正在加载模型…")}</p>}><DeveloperPlatform modelsOnly manageProviders modelConnectionsOnly locale={locale} onDraftChange={protectModel} onOpenCredentials={openCredentials} onOpenApprovals={onOpenApprovals} preferredCredential={currentCredential?.operation === "removed" ? null : currentCredential} setupCredential={setupCredential?.version === getRuntimeConfigVersion() ? setupCredential : null} /></Suspense>}
             {onOpenModels && <button onClick={onOpenModels}>{t("Open Models workspace", "打开模型工作区")}</button>}
           </div>
           <div role="tabpanel" id={`${id}-credentials-settings`} aria-labelledby={`${id}-credentials-tab`} hidden={modelSection !== "credentials"}>
-            {currentCredential && <div className="app-settings-completion" role="status"><span>{currentCredential.operation === "removed" ? t("Key removed. Local Runtime reconnected.", "密钥已移除，本地运行时已重新连接。") : t("Key saved. Local Runtime reconnected.", "密钥已保存，本地运行时已重新连接。")}</span>{currentCredential.operation !== "removed" && <button onClick={() => showModelSection("models")}>{t("Continue to Models", "继续配置模型")}</button>}</div>}
-            {credentialsVisited && <CredentialSettings locale={locale} onDraftChange={protect} hasOtherDrafts={() => modelDraft || !!hasOtherDrafts?.()} onStored={credentialStored} onBusyChange={credentialOperation} />}</div>
+            {currentCredential && <div className="app-settings-completion" role="status"><span>{currentCredential.operation === "removed" ? t("Key removed. Local Runtime reconnected.", "密钥已移除，本地运行时已重新连接。") : t("Key saved. Local Runtime reconnected.", "密钥已保存，本地运行时已重新连接。")}</span>{currentCredential.operation !== "removed" && <button onClick={() => { setSetupCredential(currentCredential); showModelSection("models"); }}>{t("Continue to Models", "继续配置模型")}</button>}</div>}
+            {credentialsVisited && <CredentialSettings locale={locale} initialProviderId={requestedKeyProvider} onDraftChange={protect} hasOtherDrafts={() => modelDraft || !!hasOtherDrafts?.()} onStored={credentialStored} onBusyChange={credentialOperation} />}</div>
         </section>
         <section role="tabpanel" id={`${id}-advanced-body`} aria-labelledby={`${id}-advanced`} hidden={section !== "advanced"}>
           <h3>{t("Advanced", "高级")}</h3>

@@ -10,6 +10,13 @@ additional account, budget, approval and Kernel prerequisites.
 Choose **Add panel → Workflow Builder**. The graph edits the same
 WorkflowDefinition used by the Compiler, WorkflowStore and public CLI.
 
+Choose **New → Review a request** for a model-free request, human approval and
+retained result, or **New → Draft and review** for two explicit model turns.
+The latter requires selecting registered models and approving each call. Neither
+template reads or edits files; these remain separately governed operations.
+Choosing a template executes nothing. **Task inputs** presents simple input
+schemas as fields; complex data stays in the JSON editor.
+
 Right-click an empty part of the canvas to add a module at that position. Keyboard
 users can focus the canvas and press **Shift+F10**, then use arrows and Enter;
 Escape closes the menu. The existing step selector and **Add step** button remain
@@ -21,8 +28,9 @@ to accept the change. **Advanced parameters** retains the original JSON editor
 for structured values and all existing parameters. **Inputs & history** contains
 Run inputs, registered definitions and original Run records.
 
-**中文提示：** 画布空白处右键可添加模块；触屏可使用左侧“添加节点”。常用内容
-直接填写，高级参数与数据绑定按需展开。保存草稿、注册定义和运行仍是三个独立操作。
+**中文提示：** 从“新建”选择审批或模型复核模板，先填写任务输入。画布空白处右键可添加模块；
+触屏可使用左侧“添加节点”。常用内容直接填写，高级参数与数据绑定按需展开。
+注册后才能运行；执行区直接显示节点结果，原始 ID、事件和 JSON 在详情中。
 
 ![Workflow module context menu with unsupported handlers disabled](../../media/studio-workflow-module-menu-source.png)
 
@@ -33,7 +41,8 @@ Run inputs, registered definitions and original Run records.
 2. **Apply parameters**, then **Validate** with the existing Compiler.
 3. **Register** an immutable `workflow_id@version`. Change its version to change
    an already registered definition.
-4. **Run** the reviewed version. Inspect its original Run, step outputs, digests
+4. **Run** the reviewed registered version. Inspect readable step output cards, the
+   original Run, digests
    and EventStream history. A lost response calls for history inspection, not
    another submission.
 
@@ -95,13 +104,24 @@ A result-schema failure preserves original completed steps and checkpoints,
 reports FAILED and does not replay or automatically compensate them. Named
 custom actions require a real host handler.
 
-**Save draft** downloads a private version1 bundle with the definition and
-separate canvas positions. **Export definition** omits coordinates and remains
+**Save draft** (or **Ctrl/Cmd+S** inside the panel) downloads a private version1
+bundle with the definition, separate canvas positions and optional `inputText`
+for the current task input draft. Existing version1 files without that field
+still load. Inputs and parameters may contain private information; these are
+explicit local exports, never part of a Studio layout. **Export definition** omits coordinates and remains
 CLI-compatible. **Import** confirms replacement of an unsaved draft. These files
 may contain private parameters; review before sharing. Drafts survive panel
 movement in memory, not browser restart. Export before closing. Controller
 switching retires the draft rather than sending it to the new Controller.
-Registered definitions and Run history persist through Runtime restart.
+A displayed original Run cannot be submitted again with the main **Run** button.
+For a completed Run, **New run** confirms preparing a separate attempt; preparation
+executes nothing. Waiting and UNKNOWN runs use their original approval, cancel
+or recovery controls.
+
+Registered definitions and Run history persist through Runtime restart. Opening
+a Run restores its digest-bound original graph and inputs. Edited drafts do not
+inherit the old completed badges. Missing or changed definitions leave the
+original results inspectable without presenting a replacement graph as verified.
 
 Mutation admission uses the actual server workspace, never a body-selected
 target. Missing policy or human identity remains BLOCKED. Ordinary resume does
@@ -114,7 +134,10 @@ apeir --no-intelligence approval approve APPROVAL_ID
 ```
 
 Replace the placeholder with the original pending ID, then retry only that
-reviewed request. A service bearer cannot approve itself. Cancel/recover operates
+reviewed request. A service bearer cannot approve itself. **Open approval controls** leads to the
+existing Operations console. Workflow step approval needs a currently authorized
+human session; approving an outer registration/run proposal does not also
+approve a step. Cancel/recover operates
 on the original Run; UNKNOWN does not authorize replay of uncertain effects.
 Records use `execution_scope=runtime-service`, not fabricated Kernel traversal.
 
@@ -125,7 +148,8 @@ same exported definition with the public CLI:
 apeir --no-intelligence workflow validate workflow.json --json
 ```
 
-![Workflow Builder with a registered pure workflow and its original Run](../../media/studio-workflow-source.png)
+![Workflow request template with its original inputs, graph and approval state](../../media/studio-workflow-source.png)
 
 
-*A model-free workflow and its saved execution record in the source build.*
+*A real model-free request waiting for human approval in the source build.
+No file modification or model inference is claimed by this record.*

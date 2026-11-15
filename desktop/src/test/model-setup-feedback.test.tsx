@@ -6,7 +6,7 @@ import { SettingsPage } from "../components/SettingsPage";
 import { ThemeProvider } from "../theme";
 import { ToastProvider } from "../components/Toast";
 import { StudioShell } from "../components/studio/StudioShell";
-import { api, fetchModelLab, getConfig, setConfig } from "../lib/api";
+import { api, fetchModelLab, getConfig, getRuntimeConfigVersion, setConfig } from "../lib/api";
 
 vi.mock("../lib/api", async original => ({ ...await original<typeof import("../lib/api")>(), api: vi.fn(), fetchModelLab: vi.fn() }));
 const invoke = vi.fn();
@@ -42,10 +42,38 @@ it("lists registered model identities independently of a saved key", async () =>
   expect(list).toHaveTextContent(/unknown/i);
 });
 
+it("waits for current saved connections before continuing a key setup and chooses a new profile ID", async () => {
+  let release!: (value: unknown) => void;
+  vi.mocked(api).mockReturnValue(new Promise(resolve => { release = resolve; }) as never);
+  invoke.mockImplementation(async command => command === "get_runtime_process_status" ? { endpoint: "http://127.0.0.1:9017", ready: true, session_available: true } : [{ environment_name: "DEEPSEEK_API_KEY", stored: true }]);
+  const credential = { environmentName: "DEEPSEEK_API_KEY", providerId: "deepseek", endpoint: "http://127.0.0.1:9017", version: getRuntimeConfigVersion() };
+  render(<ProviderSettings models={[model]} onChanged={async () => {}} setupCredential={credential} />);
+  expect(screen.getByRole("button", { name: "Add model" })).toBeDisabled();
+  expect(screen.queryByLabelText("Vendor model ID")).not.toBeInTheDocument();
+  await waitFor(() => expect(release).toBeDefined());
+  await act(async () => { release([{ id: "deepseek", name: "Existing DeepSeek" }]); });
+  await waitFor(() => expect(screen.getByLabelText("Vendor model ID")).toHaveValue("deepseek-chat"));
+  expect(screen.getByLabelText("Provider ID")).toHaveValue("deepseek-2");
+  expect(screen.getByLabelText("Credential reference")).toHaveValue("env:DEEPSEEK_API_KEY");
+  expect(invoke.mock.calls.some(([name]) => name === "store_provider_credential")).toBe(false);
+});
+
 it("manages model connections inside settings instead of requiring a second window", async () => {
   render(<ThemeProvider><SettingsPage initialSection="models" /></ThemeProvider>);
-  expect(await screen.findByRole("button", { name: "Add Provider" })).toBeEnabled();
+  expect(await screen.findByRole("button", { name: "Add model" })).toBeEnabled();
   await waitFor(() => expect(screen.getByRole("table", { name: "Registered models" })).toHaveTextContent("deepseek/deepseek-chat"));
+  expect(invoke.mock.calls.some(([name]) => name === "store_provider_credential")).toBe(false);
+});
+
+it("does not select another service's API key when starting a connection", async () => {
+  invoke.mockImplementation(async command => command === "get_runtime_process_status" ? { endpoint: "http://127.0.0.1:9017", ready: true, session_available: true } : [{ environment_name: "OPENAI_API_KEY", stored: true }]);
+  render(<ProviderSettings models={[model]} onChanged={async () => {}} onOpenCredentials={() => {}} />);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Add model" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Add model" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  expect(await screen.findByLabelText("Saved API key")).toHaveValue("");
+  expect(screen.getByLabelText("Credential reference")).toHaveValue("");
   expect(invoke.mock.calls.some(([name]) => name === "store_provider_credential")).toBe(false);
 });
 
@@ -168,7 +196,7 @@ it("reports a verified removal on the API keys page without offering the removed
 it("selects a newly saved local reference without exposing the actual API key to Provider configuration", async () => {
   invoke.mockImplementation(async command => command === "get_runtime_process_status" ? { endpoint: "http://127.0.0.1:9017", ready: true, session_available: true } : [{ environment_name: "DEEPSEEK_API_KEY_2", stored: true }]);
   render(<ProviderSettings models={[model]} onChanged={async () => {}} preferredCredential={{ environmentName: "DEEPSEEK_API_KEY_2", providerId: "deepseek", endpoint: "http://127.0.0.1:9017", version: (await import("../lib/api")).getRuntimeConfigVersion() }} />);
-  fireEvent.click(await screen.findByRole("button", { name: "Add Provider" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Add model" }));
   await waitFor(() => expect(screen.getByLabelText("Saved API key")).toHaveValue("env:DEEPSEEK_API_KEY_2"));
   expect(screen.getByLabelText("Vendor model ID")).toHaveValue("deepseek-chat");
   expect(screen.getByLabelText("Credential reference")).toHaveValue("env:DEEPSEEK_API_KEY_2");
@@ -204,4 +232,21 @@ it("retains an unconfirmed save as uncertain and refuses another submission", as
   fireEvent.submit(screen.getByRole("form", { name: "API key form" }));
   expect(invoke.mock.calls.filter(([name]) => name === "store_provider_credential")).toHaveLength(1);
   expect(getConfig().token).toBe("fixture.model.setup");
+});
+
+it("starts native model setup with credentials before creating a protected connection draft", async () => {
+  invoke.mockImplementation(async command => {
+    if (command === "get_runtime_process_status") return { endpoint: "http://127.0.0.1:9017", ready: true, session_available: true };
+    if (command === "list_provider_credentials") return [];
+    throw new Error("Unexpected native request");
+  });
+  render(<ThemeProvider><SettingsPage initialSection="models" /></ThemeProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: "Add model" }));
+  const setup = await screen.findByRole("group", { name: "Add model" });
+  fireEvent.change(within(setup).getByLabelText("Model service"), { target: { value: "deepseek" } });
+  fireEvent.click(within(setup).getByRole("button", { name: "Continue" }));
+  await waitFor(() => expect(screen.getByRole("tab", { name: "API keys" })).toHaveAttribute("aria-selected", "true"));
+  expect(screen.getByLabelText("Key Provider")).toHaveValue("deepseek");
+  expect(screen.queryByText(/Save or cancel the current changes/)).not.toBeInTheDocument();
+  expect(invoke.mock.calls.some(([name]) => name === "store_provider_credential")).toBe(false);
 });

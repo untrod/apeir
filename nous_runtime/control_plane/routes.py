@@ -478,6 +478,8 @@ def handle_create_provider(body: dict) -> dict[str, Any]:
             capabilities=capabilities,
             model=body.get("model"),
             capability_models=body.get("capability_models"),
+            service=body.get("service"),
+            replace_existing=False,
         )
         if success:
             return ok_response(
@@ -490,29 +492,12 @@ def handle_create_provider(body: dict) -> dict[str, Any]:
         return err_response(
             "NOUS_INTERNAL_ERROR", f"Failed to register provider {provider_id}"
         )
+    except ValueError as exc:
+        return err_response("NOUS_VALIDATION_ERROR", str(exc))
     except ImportError:
-        # Direct registration fallback
-        try:
-            from nous_runtime.provider.registry import ProviderRegistry
-            from nous_runtime.compat.provider import create_simple_provider
-
-            provider = create_simple_provider(
-                provider_id,
-                name,
-                body.get("api_base_url", ""),
-                capabilities=body.get("capabilities", []),
-                credential_ref=body.get("credential_ref"),
-            )
-            ProviderRegistry().install(provider)
-            return ok_response(
-                {
-                    "provider_id": provider_id,
-                    "name": name,
-                    "message": f"Provider {provider_id} registered",
-                }
-            )
-        except Exception as e:
-            return err_response("NOUS_INTERNAL_ERROR", str(e))
+        return err_response(
+            "NOUS_INTERNAL_ERROR", "Provider configuration service is unavailable"
+        )
     except Exception as e:
         return err_response("NOUS_INTERNAL_ERROR", str(e))
 
@@ -536,6 +521,7 @@ def handle_validate_provider(body: dict) -> dict[str, Any]:
             capabilities=body.get("capabilities") or (),
             model=str(body.get("model") or ""),
             capability_models=body.get("capability_models") or {},
+            service=body.get("service"),
         )
         return ok_response(result)
     except ValueError as exc:

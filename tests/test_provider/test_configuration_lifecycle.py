@@ -9,6 +9,7 @@ from nous_runtime.cli.provider_setup import (
     register_provider_from_config,
 )
 from nous_runtime.control_plane.routes import (
+    handle_create_provider,
     handle_delete_provider,
     handle_update_provider,
 )
@@ -49,6 +50,82 @@ def configured_workspace(tmp_path, monkeypatch):
 def _models():
     return {
         record.descriptor.model_id for record in gateway_service.get().registry.list()
+    }
+
+
+def test_create_cannot_replace_a_connection_added_by_another_client(
+    configured_workspace,
+):
+    original = configured_workspace.read_bytes()
+    provider = get_provider("example")
+    gateway = gateway_service.get()
+    result = handle_create_provider(
+        {
+            "provider_id": "example",
+            "name": "Replacement",
+            "service": "deepseek",
+            "api_base_url": "https://api.deepseek.com/v1",
+            "model": "different-model",
+        }
+    )
+    assert result["ok"] is False
+    assert "already exists" in result["error"]["message"]
+    assert configured_workspace.read_bytes() == original
+    assert get_provider("example") is provider
+    assert gateway_service.get() is gateway
+    assert _models() == {"example/original-model"}
+
+
+def test_create_does_not_claim_saved_state_when_configuration_service_is_missing(
+    configured_workspace, monkeypatch
+):
+    def unavailable(**_):
+        raise ImportError("fixture-only unavailable dependency")
+
+    monkeypatch.setattr(
+        "nous_runtime.cli.provider_setup.register_provider_from_config", unavailable
+    )
+    original = configured_workspace.read_bytes()
+    result = handle_create_provider(
+        {
+            "provider_id": "missing-service",
+            "name": "Unavailable",
+            "api_base_url": "https://example.test/v1",
+        }
+    )
+    assert result["ok"] is False
+    assert "fixture-only" not in json.dumps(result)
+    assert get_provider("missing-service") is None
+    assert configured_workspace.read_bytes() == original
+
+
+def test_multiple_saved_models_keep_their_service_after_restart(configured_workspace):
+    for profile in ("deepseek", "deepseek-2"):
+        result = handle_create_provider(
+            {
+                "provider_id": profile,
+                "service": "deepseek",
+                "name": profile,
+                "api_base_url": "https://api.deepseek.com/v1",
+                "credential_ref": "env:FAKE_DEEPSEEK_KEY",
+                "model": "deepseek-chat"
+                if profile == "deepseek"
+                else "deepseek-reasoner",
+            }
+        )
+        assert result["ok"] is True
+    saved = json.loads(configured_workspace.read_text())
+    assert saved["example"]["model"] == "original-model"
+    for profile in ("deepseek", "deepseek-2"):
+        assert saved[profile]["service"] == "deepseek"
+        assert saved[profile]["kind"] == "openai-compatible"
+        assert saved[profile]["structured_output_mode"] == "json_object"
+    clear_providers()
+    assert load_providers_from_config(configured_workspace.parent) == 3
+    assert _models() == {
+        "example/original-model",
+        "deepseek/deepseek-chat",
+        "deepseek-2/deepseek-reasoner",
     }
 
 

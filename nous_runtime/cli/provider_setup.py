@@ -465,6 +465,8 @@ def register_provider_from_config(
     capabilities: Sequence[str] | None = None,
     model: str | None = None,
     capability_models: dict[str, str] | None = None,
+    service: str | None = None,
+    replace_existing: bool = True,
 ) -> bool:
     """Persist and register a Provider from a trusted control-plane request.
 
@@ -480,9 +482,16 @@ def register_provider_from_config(
         capabilities=capabilities,
         model=model,
         capability_models=capability_models,
+        service=service,
     )
     provider_id = str(config["provider_id"])
-    _change_provider_config(provider_id, lambda _: config, publish=True)
+
+    def change(previous: dict[str, Any] | None) -> dict[str, Any]:
+        if previous is not None and not replace_existing:
+            raise ValueError("Connection already exists; edit it or choose another ID")
+        return config
+
+    _change_provider_config(provider_id, change, publish=True)
     return True
 
 
@@ -579,6 +588,7 @@ def build_provider_config(
     capabilities: Sequence[str] | None = None,
     model: str | None = None,
     capability_models: dict[str, str] | None = None,
+    service: str | None = None,
 ) -> dict[str, Any]:
     """Build a validated, secret-free Provider configuration."""
     provider_id = provider_id.strip()
@@ -594,9 +604,12 @@ def build_provider_config(
     elif reference and not reference.startswith("secret:"):
         raise ValueError("credential_ref must use env: or secret:")
 
-    service = "claude" if provider_id == "anthropic" else provider_id
-    if service not in SERVICE_PRESETS:
-        service = "custom"
+    if service is None:
+        service = "claude" if provider_id == "anthropic" else provider_id
+        if service not in SERVICE_PRESETS:
+            service = "custom"
+    elif not isinstance(service, str) or service not in SERVICE_PRESETS:
+        raise ValueError("Unknown provider service template")
     preset = SERVICE_PRESETS[service]
     base_endpoint = str(api_base_url or preset["base_endpoint"]).strip().rstrip("/")
     try:
@@ -665,6 +678,7 @@ def validate_provider_from_config(
     capabilities: Sequence[str] | None = None,
     model: str | None = None,
     capability_models: dict[str, str] | None = None,
+    service: str | None = None,
 ) -> dict[str, Any]:
     """Validate reference-only configuration without inference or network I/O."""
     config = build_provider_config(
@@ -675,6 +689,7 @@ def validate_provider_from_config(
         capabilities=capabilities,
         model=model,
         capability_models=capability_models,
+        service=service,
     )
     return {
         "ok": True,

@@ -1,5 +1,60 @@
 # Engineering review and research comparison
 
+## Model setup and practical Workflow use — 2026-11-15
+
+Baseline: Distribution `f720715149b0f374d1e3a3906a154c1b0e003563`, frozen Kernel
+`87fd1b2ff28ef14ab1a515a58162592b452fda2e`. This work changes source UI and the
+existing Provider/Workflow adapters. It does not rebuild native packages or
+change dependencies, component hashes, authority or layout schemas.
+
+| Area | Decision | Exercised scope |
+| --- | --- | --- |
+| Studio Shell, registry, themes, native credential manager | REUSE | Existing panel lifecycle, session rotation, key references and dirty guards |
+| Model setup | FIX / EXTEND | Service → key → model → explicit test; current metadata before creation; distinct profile IDs; one service's key is not selected for another |
+| Provider configuration | FIX | Explicit preset survives multiple profiles; create rejects an existing ID under the original file lock; unavailable persistence cannot become an ephemeral success |
+| Workflow Runtime, Store, Compiler, Governance, AgentSession | REUSE | Original definitions, run IDs, result bindings, human approval and recovery |
+| Workflow interaction | FIX / EXTEND | Two supported templates, simple input fields, private draft export, readable outputs, original graph restoration and deliberate new-run preparation |
+| Cloud/local model accounts, native key store and Windows 10 GUI | PENDING | No live model or target-system qualification is inferred from software fixtures |
+
+Baseline regressions demonstrated the native credential-navigation dead end,
+reopened history showing the default graph, service presets inferred from a new
+profile ID, cross-service key preselection and an enabled Run button on a
+waiting original Run. Failure logs were retained during qualification. Tests
+also cover rejected duplicate creation, missing/changed original definitions,
+untrusted output rendered as text, Controller retirement and draft input bounds.
+
+`workflow-draft.json` remains a private version1 file. Optional `inputText`
+preserves task input drafts without adding values to a Studio layout or changing
+`WorkflowDefinition`. Legacy files still read. A graph returned by the detail
+API is shown as original only when its durable definition digest matches and it
+fits Studio's contract. Unavailable graphs leave recorded outputs inspectable.
+
+Local qualification uses the following existing tools and test owners:
+
+```bash
+.venv/bin/python -m pytest tests/test_provider tests/test_provider_credential.py tests/control_plane/test_routes.py tests/test_workflow* tests/model_runtime tests/governance tests/repository -q
+cd desktop
+npm run typecheck
+npm run lint
+npm test
+npm run build
+APEIR_TEST_PYTHON="$(pwd)/../.venv/bin/python" npm run test:e2e
+```
+
+The Python selection passed 1,349 tests with 18 platform-limited skips in Linux.
+Desktop typecheck/lint/build and 553 unit tests passed. All 25 real-Runtime
+Chromium cases passed, including the new request template and new-run guards.
+Three selected cases also passed against the production Vite build.
+Browser cases start real model-disabled CLI/HTTP Runtime processes, use the
+independent existing owner CLI to approve outer proposals, restart the original
+Runtime, and reject a service token's step approval. The step-approval regression
+uses the existing signed test-IdP fixture with real Governance and Workflow
+persistence; it is not qualification of an external identity service. Templates
+are configuration, not file-editing or command executors. Actual model turns
+still require their Provider, authenticated Kernel, account/budget authorization
+and current human step approval. Windows native installation, live inference,
+strong-sandbox project tests and formal release remain independently qualified.
+
 ## Studio interaction continuity — 2026-11-14
 
 Baseline: Distribution `47c55db95ba79f8761037fa43dd14fb485a9ba11`, frozen

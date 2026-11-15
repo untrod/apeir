@@ -1,5 +1,5 @@
 /** Actual CLI/HTTP/Chromium integration; explicit model-disabled scope, no native claim. */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -97,6 +97,16 @@ async function dashboardMenu(page: Page) {
   if (!(await summary.evaluate(node => (node.parentElement as HTMLDetailsElement).open))) await summary.click();
 }
 
+async function approveRecordedWorkflowProposal(builder: Locator) {
+  const message = await builder.getByRole("alert").textContent();
+  const requestId = message?.match(/Approval: ([A-Za-z0-9_-]+)/)?.[1];
+  expect(requestId).toBeTruthy();
+  // Existing OS-owner CLI approval is independent of the browser/service caller.
+  const child = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-m", "nous_runtime.cli.main", "--no-intelligence", "approval", "approve", requestId!], { cwd: runtimes[0].directory, env: { ...globalThis.process.env, PYTHONPATH: resolve(".."), NOUS_WORKSPACE_ROOT: runtimes[0].directory }, stdio: "ignore" });
+  producers.push(child);
+  expect(await new Promise<number | null>((resolve, reject) => { child.once("exit", resolve); child.once("error", reject); })).toBe(0);
+}
+
 test("Studio opens one utility at a time and keeps settings in the workspace", async ({ page }, info) => {
   await open(page);
   await page.getByRole("button", { name: "Add panel", exact: true }).click();
@@ -122,7 +132,7 @@ test("Studio opens one utility at a time and keeps settings in the workspace", a
   await expect(page.getByRole("dialog", { name: "Search and commands" })).toBeHidden();
   await expect(page.getByRole("region", { name: "Application settings", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Models & credentials", exact: true }).click();
-  await page.getByRole("button", { name: "Add Provider", exact: true }).click();
+  await page.getByRole("button", { name: "Add model", exact: true }).click();
   const provider = page.getByRole("region", { name: "Provider settings", exact: true });
   await provider.getByLabel("Vendor model ID", { exact: true }).fill("preserved-settings-draft");
   await page.getByRole("navigation", { name: "Studio panels", exact: true }).getByRole("button", { name: "Develop", exact: true }).click();
@@ -312,7 +322,7 @@ test("Studio loads a saved hidden module on first use and preserves its configur
   const connections = page.getByRole("region", { name: "Provider settings", exact: true });
   await expect(connections).toBeVisible();
   await expect.poll(() => modelReads).toBe(1);
-  await connections.getByRole("button", { name: "Add Provider", exact: true }).click();
+  await connections.getByRole("button", { name: "Add model", exact: true }).click();
   await connections.getByLabel("Vendor model ID", { exact: true }).fill("unsaved-review-model");
   await page.getByRole("tab", { name: "Usage", exact: true }).click();
   await expect(connections).toBeHidden();
@@ -336,7 +346,7 @@ test("Studio configures and inspects saved Providers through the real model-disa
   await page.getByRole("button", { name: "Models", exact: true }).click();
   const settings = page.getByRole("region", { name: "Provider settings", exact: true });
   await expect(settings).toBeVisible();
-  await settings.getByRole("button", { name: "Add Provider", exact: true }).click();
+  await settings.getByRole("button", { name: "Add model", exact: true }).click();
   await settings.getByLabel("Protocol template", { exact: true }).selectOption("openai_compatible");
   await settings.getByLabel("Provider ID", { exact: true }).fill("studio-example");
   await settings.getByLabel("Name", { exact: true }).fill("Studio reference");
@@ -732,7 +742,7 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   await expect(builder.getByRole("alert")).toBeVisible();
   await builder.getByRole("textbox", { name: "Step parameters", exact: true }).fill('{"value":"Hello APEIR"}');
   await builder.getByRole("button", { name: "Apply parameters", exact: true }).click();
-  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
+  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
   await builder.locator(".react-flow__node").nth(1).click();
   await builder.locator("summary").filter({ hasText: /^Data bindings/ }).click();
   await builder.getByLabel("Binding source", { exact: true }).selectOption("step:transform");
@@ -748,7 +758,7 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   await expect(builder.locator(".react-flow__node")).toHaveCount(2);
   await expect(builder.getByLabel("Step data bindings", { exact: true })).toHaveValue(JSON.stringify(typedContract));
   await builder.getByRole("button", { name: "Apply parameters", exact: true }).click();
-  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
+  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
   await builder.locator("summary").filter({ hasText: /^Draft/ }).click();
   const draftDownload = page.waitForEvent("download");
   await builder.getByRole("button", { name: "Save draft", exact: true }).click();
@@ -767,25 +777,15 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   const cli = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-m", "nous_runtime.cli.main", "--no-intelligence", "workflow", "validate", definitionPath, "--json"], { cwd: runtimes[0].directory, env: { ...globalThis.process.env, PYTHONPATH: resolve(".."), NOUS_WORKSPACE_ROOT: runtimes[0].directory }, stdio: "ignore" });
   producers.push(cli); expect(await new Promise<number | null>((resolve, reject) => { cli.once("exit", resolve); cli.once("error", reject); })).toBe(0);
 
-  async function approveRecordedProposal() {
-    const message = await builder.getByRole("alert").textContent();
-    const requestId = message?.match(/Approval: ([A-Za-z0-9_-]+)/)?.[1];
-    expect(requestId).toBeTruthy();
-    // The actual public CLI supplies the attested local OS-owner approval.
-    // It remains separate from the browser/service subject, not a real-IdP claim.
-    const child = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-m", "nous_runtime.cli.main", "--no-intelligence", "approval", "approve", requestId!], { cwd: runtimes[0].directory, env: { ...globalThis.process.env, PYTHONPATH: resolve(".."), NOUS_WORKSPACE_ROOT: runtimes[0].directory }, stdio: "ignore" });
-    producers.push(child);
-    const result = await new Promise<number | null>((resolve, reject) => { child.once("exit", resolve); child.once("error", reject); });
-    expect(result).toBe(0);
-  }
   await builder.getByRole("button", { name: "Register", exact: true }).click();
   await expect(builder.getByRole("alert")).toContainText("Approval:");
-  await approveRecordedProposal();
+  await approveRecordedWorkflowProposal(builder);
   await builder.getByRole("button", { name: "Register", exact: true }).click();
   await expect(builder.getByRole("status")).toContainText("REGISTERED");
+  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
   await builder.getByRole("button", { name: "Run", exact: true }).click();
   await expect(builder.getByRole("alert")).toContainText("Approval:");
-  await approveRecordedProposal();
+  await approveRecordedWorkflowProposal(builder);
   await builder.getByRole("button", { name: "Run", exact: true }).click();
   await expect(builder.locator(".studio-workflow-result pre")).toContainText('"state": "completed"');
   await builder.getByText("Raw record / events", { exact: true }).click();
@@ -798,6 +798,7 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   expect(originalRecord.step_bindings[consumerId].data_binding.params_digest).toMatch(/^[a-f0-9]{64}$/);
   await builder.getByText("Raw record / events", { exact: true }).click();
   await expect(builder.locator(".react-flow__node").first()).toContainText("completed");
+  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
   await expect.poll(async () => {
     const canvas = await builder.locator(".studio-workflow-canvas").boundingBox();
     const nodes = await builder.locator(".react-flow__node").evaluateAll(nodes => nodes.map(node => { const rect = node.getBoundingClientRect(); return { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom }; }));
@@ -830,7 +831,67 @@ test("Workflow Builder registers and runs the canonical definition, retains the 
   const recoveredRecord = JSON.parse((await page.locator(".studio-workflow-result pre").textContent())!);
   expect(recoveredRecord.step_bindings).toEqual(originalRecord.step_bindings);
   expect(recoveredRecord.run.outputs[consumerId].value).toBe("Hello APEIR");
+  await expect(builder.locator(".react-flow__node")).toHaveCount(2);
+  await expect(builder.locator(".react-flow__node").first()).toContainText("completed");
+  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
+  const mutations: string[] = [];
+  page.on("request", request => { if (request.method() === "POST" && request.url().includes("/api/v1/workflow")) mutations.push(request.url()); });
+  page.once("dialog", dialog => void dialog.dismiss());
+  await builder.getByRole("button", { name: "New run", exact: true }).click();
+  await expect(builder.locator(".studio-workflow-result pre")).toContainText(runId);
+  page.once("dialog", dialog => void dialog.accept());
+  await builder.getByRole("button", { name: "New run", exact: true }).click();
+  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
+  expect(mutations).toEqual([]);
   expect(errors).toEqual([]);
+});
+
+test("Workflow request template collects real inputs, waits for human authority and recovers its original graph", async ({ page }, info) => {
+  await open(page);
+  await revealView(page, "Workflow Builder");
+  const builder = page.getByRole("region", { name: "Workflow Builder", exact: true });
+  await builder.getByLabel("New Workflow", { exact: true }).click();
+  await builder.getByRole("button", { name: /Review a request/ }).click();
+  await expect(builder.locator(".react-flow__node")).toHaveCount(3);
+  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
+  await builder.getByRole("textbox", { name: "Workflow ID", exact: true }).fill("studio.request-review");
+  await builder.getByRole("textbox", { name: "request", exact: true }).fill("Review a two-file change before applying it.");
+  const download = page.waitForEvent("download");
+  await builder.getByRole("textbox", { name: "request", exact: true }).press("Control+s");
+  const draftFile = await download, privateDraftPath = info.outputPath("request-review-draft.json");
+  await draftFile.saveAs(privateDraftPath);
+  expect(JSON.parse((JSON.parse(await readFile(privateDraftPath, "utf8"))).inputText)).toEqual({ request: "Review a two-file change before applying it." });
+  await builder.getByRole("button", { name: "Validate", exact: true }).click();
+  await expect(builder.getByRole("status")).toContainText("VALID");
+  await builder.getByRole("button", { name: "Register", exact: true }).click();
+  await expect(builder.getByRole("alert")).toContainText("Approval:");
+  await approveRecordedWorkflowProposal(builder);
+  await builder.getByRole("button", { name: "Register", exact: true }).click();
+  await expect(builder.getByRole("status")).toContainText("REGISTERED");
+  await builder.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(builder.getByRole("alert")).toContainText("Approval:");
+  await approveRecordedWorkflowProposal(builder);
+  await builder.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(builder.locator(".studio-workflow-result")).toContainText("waiting_approval");
+  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
+  await expect(builder.getByRole("region", { name: "Step outputs" })).toContainText("Review a two-file change before applying it.");
+  await builder.getByRole("button", { name: /Approve original step/ }).click();
+  await expect(builder.getByRole("alert").filter({ hasText: "Human identity, permission or authority binding" })).toBeVisible();
+  // The browser service token cannot impersonate a human or approve the step.
+  await expect(builder.locator(".studio-workflow-result")).toContainText("waiting_approval");
+  await builder.getByText("Raw record / events", { exact: true }).click();
+  const original = JSON.parse((await builder.locator(".studio-workflow-result pre").textContent())!);
+  expect(original.run.outputs.result).toBeUndefined();
+  await page.reload();
+  await revealView(page, "Workflow Builder");
+  await builder.locator("summary").filter({ hasText: /^Inputs & history/ }).click();
+  await builder.getByRole("button", { name: new RegExp(original.run.run_id) }).click();
+  await expect(builder.locator(".react-flow__node")).toHaveCount(3);
+  await expect(builder.getByRole("textbox", { name: "request", exact: true })).toHaveValue("Review a two-file change before applying it.");
+  await expect(builder.locator(".studio-workflow-result")).toContainText("waiting_approval");
+  await expect(builder.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
+  await expect(builder.locator(".react-flow__node").last()).toContainText("pending");
+  await builder.screenshot({ path: info.outputPath("workflow-request-review-source-browser.png") });
 });
 
 for (const profile of [
@@ -1158,7 +1219,7 @@ test("Grouped Studio controls preserve bilingual Provider drafts and add real Wo
   await library.locator("summary").filter({ hasText: "资源" }).click();
   await library.getByRole("button", { name: "模型", exact: true }).click();
   const providers = page.getByRole("region", { name: "服务商设置", exact: true });
-  await providers.getByRole("button", { name: "添加服务商" }).click();
+  await providers.getByRole("button", { name: "添加模型" }).click();
   await providers.getByLabel("协议模板", { exact: true }).selectOption("deepseek");
   await expect(providers.getByLabel("端点", { exact: true })).toBeHidden();
   await providers.getByLabel("厂商模型 ID", { exact: true }).fill("deepseek-chat");
@@ -1285,7 +1346,7 @@ test("Settings lists saved model connections and preserves them after reload wit
   await dialog.getByRole("tab", { name: "Models & credentials", exact: true }).click();
   const connections = dialog.getByRole("region", { name: "Provider settings", exact: true });
   await expect(connections.getByRole("table", { name: "Registered models" })).toBeVisible();
-  await connections.getByRole("button", { name: "Add Provider", exact: true }).click();
+  await connections.getByRole("button", { name: "Add model", exact: true }).click();
   await connections.getByLabel("Protocol template", { exact: true }).selectOption("openai_compatible");
   await connections.getByLabel("Provider ID", { exact: true }).fill("settings-quickstart");
   await connections.getByLabel("Name", { exact: true }).fill("Settings reference");
@@ -1295,7 +1356,7 @@ test("Settings lists saved model connections and preserves them after reload wit
   await expect(connections.getByRole("button", { name: "Edit settings-quickstart" })).toBeVisible();
   await expect(connections.getByText("settings-model-demo · http://127.0.0.1:9/v1")).toBeVisible();
   await dialog.locator(".app-settings-body > main").evaluate(element => { element.scrollTop = 0; });
-  await dialog.screenshot({ path: info.outputPath("settings-model-connections-source.png") });
+  await connections.screenshot({ path: info.outputPath("settings-model-connections-source.png") });
   await closeSettings(page);
   await page.reload();
   await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
