@@ -1,5 +1,36 @@
 # Engineering review and research comparison
 
+## Quiet first launch and paper-frame identity — 2026-11-15
+
+Baseline: Distribution `c78b09d3ce5b28971ed1c6bf4ec9242c35d3a5a1`; the frozen
+Kernel and component lock are unchanged. First use reuses the existing setup
+and native workspace/session verification, with one workspace page by default
+and the original detailed path under More options. Deferring models preserves
+saved Provider preferences. Skipping setup does not establish a connection.
+The short frame reveal is presentation only, does not remount Studio, and
+respects reduced motion. One canonical SVG supplies the paper/ink mark and the
+existing Tauri icon formats.
+
+Linux verification passed 568 Desktop unit cases, 27 real model-disabled
+CLI/HTTP/Chromium cases, and three production-frontend cases. The first-use
+browser case uses an explicit native host fixture; it is not Windows installation
+qualification. Visual review caught an invisible SVG fragment and dark-theme
+control contrast; both were corrected and exercised in the production build.
+The dark-mode reveal originally measured 1.35:1 frame/background contrast;
+animated fragments now use the existing theme text token, with a 4.5:1 minimum
+in the browser check. Static/native artwork retains its approved paper/ink colors.
+No new native package or model request is part of this change.
+
+Candidate `d8e74b6456a2089cf4067051196a86ce3af24eda` retained a Windows
+Multi-Arch failure in [run 43735427824](https://github.com/untrod/apeir/actions/runs/43735427824):
+`test_cancelled_transport_preserves_inflight_effect_and_delivers_original_result`
+raised `PermissionError` when the test read `workloads.json` directly while the
+original handler committed its result. The test now reads the same durable
+record under the existing writer lock. Its EXECUTING/RECOVERY_REQUIRED checks,
+single-effect count, original result and signature assertions remain intact;
+no Runtime code, timeout or access policy changes. This does not establish a
+shared cause for other historical Windows failures or close their Issues.
+
 ## Model setup and practical Workflow use — 2026-11-15
 
 Baseline: Distribution `f720715149b0f374d1e3a3906a154c1b0e003563`, frozen Kernel

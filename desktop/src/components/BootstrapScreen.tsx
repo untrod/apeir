@@ -1,14 +1,8 @@
-/**
- * BootstrapScreen — Visual startup sequence for Nous Desktop.
- *
- * Displays each bootstrap state with progress bar, status messages,
- * and contextual action buttons. No state renders blank.
- */
-
-import React from "react";
-import { colors, typo, radius, space, btnPrimary, btnSecondary } from "../design";
-import type { BootstrapStatus, BootstrapState } from "../lib/bootstrap";
+import { btnPrimary, btnSecondary } from "../design";
+import type { BootstrapStatus } from "../lib/bootstrap";
 import { STATE_MESSAGES } from "../lib/bootstrap";
+import { useTheme } from "../theme";
+import { AppMark } from "./AppMark";
 
 interface BootstrapScreenProps {
   status: BootstrapStatus;
@@ -22,269 +16,52 @@ interface BootstrapScreenProps {
   onProceedToDashboard: () => void;
 }
 
-function statusDot(ok: boolean, label: string) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        fontSize: typo.sm,
-        color: ok ? colors.success : colors.textTertiary,
-      }}
-    >
-      <span
-        style={{
-          width: 7,
-          height: 7,
-          borderRadius: "50%",
-          background: ok ? colors.success : colors.borderLight,
-          flexShrink: 0,
-        }}
-      />
-      {label}
-    </div>
-  );
-}
+export function BootstrapScreen({ status, onRetry, onStartRuntime, onResetSession,
+  onOpenLogs, onResetUI, onProceedToOnboarding, onProceedToDashboard }: BootstrapScreenProps) {
+  const { locale } = useTheme();
+  const t = (en: string, zh: string) => locale === "zh" ? zh : en;
+  const isError = status.state === "recoverable_error" || status.state === "fatal_error";
+  const needsSetup = status.state === "onboarding_required";
+  const busy = !isError && !needsSetup && status.state !== "ready";
+  const unknown = t("Not confirmed", "尚未确认");
 
-export function BootstrapScreen({
-  status,
-  onRetry,
-  onStartRuntime,
-  onResetSession,
-  onCreateWorkspace,
-  onOpenLogs,
-  onResetUI,
-  onProceedToOnboarding,
-  onProceedToDashboard,
-}: BootstrapScreenProps) {
-  const isError =
-    status.state === "recoverable_error" || status.state === "fatal_error";
-  const isReady = status.state === "ready";
-  const needsOnboarding = status.state === "onboarding_required";
-
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: colors.bg,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: space.xl,
-      }}
-    >
-      <div
-        style={{
-          width: 420,
-          maxWidth: "90vw",
-          textAlign: "center",
-        }}
-      >
-        {/* Logo */}
-        <div
-          style={{
-            fontSize: 36,
-            marginBottom: space.lg,
-            opacity: isError ? 0.6 : 1,
-          }}
-        >
-          ●
-        </div>
-
-        <h1
-          style={{
-            fontSize: typo.xxl,
-            fontWeight: typo.bold,
-            color: colors.text,
-            margin: `0 0 ${space.xs} 0`,
-          }}
-        >
-          APEIR
-        </h1>
-
-        {/* State message */}
-        <p
-          style={{
-            fontSize: typo.md,
-            color: isError ? colors.danger : colors.textSecondary,
-            margin: `0 0 ${space.xl} 0`,
-            lineHeight: typo.relaxed,
-          }}
-        >
-          {status.errorMessage ||
-            STATE_MESSAGES[status.state] ||
-            status.progressMessage}
-        </p>
-
-        {/* Progress bar */}
-        {!isError && !isReady && !needsOnboarding && (
-          <div
-            style={{
-              height: 3,
-              background: colors.borderLight,
-              borderRadius: 2,
-              marginBottom: space.xl,
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                height: "100%",
-                width: `${Math.max(2, status.progress)}%`,
-                background: colors.accent,
-                borderRadius: 2,
-                transition: "width 0.4s ease",
-              }}
-            />
-          </div>
-        )}
-
-        {/* Checklist */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: space.sm,
-            alignItems: "center",
-            marginBottom: space.xl,
-          }}
-        >
-          {statusDot(status.runtime.reachable, "Runtime reachable")}
-          {statusDot(status.session.established, "Session established")}
-          {statusDot(status.workspace.exists, "Workspace ready")}
-          {statusDot(status.provider.configured, "Providers configured")}
-        </div>
-
-        {/* Warnings */}
-        {status.warnings.length > 0 && (
-          <div
-            style={{
-              textAlign: "left",
-              marginBottom: space.lg,
-              padding: space.md,
-              background: colors.warningSoft,
-              borderRadius: radius.md,
-              fontSize: typo.sm,
-              color: colors.warning,
-            }}
-          >
-            {status.warnings.map((w, i) => (
-              <div key={i}>Warning: {w}</div>
-            ))}
-          </div>
-        )}
-
-        {/* Error details */}
-        {isError && status.errorCode && (
-          <div
-            style={{
-              textAlign: "center",
-              marginBottom: space.lg,
-            }}
-          >
-            <code
-              style={{
-                fontSize: typo.xs,
-                fontFamily: typo.mono,
-                color: colors.textTertiary,
-                background: colors.inlineCodeBg,
-                padding: "2px 8px",
-                borderRadius: radius.sm,
-              }}
-            >
-              {status.errorCode}
-            </code>
-          </div>
-        )}
-
-        {/* Action buttons */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: space.sm,
-          }}
-        >
-          {/* Ready state */}
-          {isReady && (
-            <button onClick={onProceedToDashboard} style={btnPrimary}>
-              Enter Dashboard →
-            </button>
-          )}
-
-          {/* Onboarding needed */}
-          {needsOnboarding && (
-            <button onClick={onProceedToOnboarding} style={btnPrimary}>
-              Start Setup →
-            </button>
-          )}
-
-          {/* Error recovery */}
-          {isError && status.recoverable && (
-            <>
-              <button onClick={onRetry} style={btnPrimary}>
-                Retry
-              </button>
-              <button onClick={onStartRuntime} style={btnSecondary}>
-                Restart Runtime
-              </button>
-              <button onClick={onResetSession} style={btnSecondary}>
-                Re-establish Session
-              </button>
-            </>
-          )}
-
-          {isError && !status.recoverable && (
-            <div
-              style={{
-                padding: space.md,
-                background: colors.dangerSoft,
-                borderRadius: radius.md,
-                color: colors.danger,
-                fontSize: typo.sm,
-                marginBottom: space.sm,
-              }}
-            >
-              This error cannot be automatically recovered. Please check the logs
-              for more information.
-            </div>
-          )}
-
-          {/* Always available */}
-          <button onClick={onOpenLogs} style={btnSecondary}>
-            Open Logs
-          </button>
-
-          <button onClick={onResetUI} style={btnSecondary}>
-            Reset UI State
-          </button>
-
-          {needsOnboarding && !isError && (
-            <button
-              onClick={onProceedToDashboard}
-              style={{
-                ...btnSecondary,
-                fontSize: typo.sm,
-                color: colors.textTertiary,
-              }}
-            >
-              Skip setup (limited mode)
-            </button>
-          )}
-        </div>
-
-        {/* Version */}
-        <p
-          style={{
-            marginTop: space.xxl,
-            fontSize: typo.xs,
-            color: colors.textTertiary,
-          }}
-        >
-          APEIR Runtime v0.1.0-rc1
-        </p>
+  return <main className="startup-screen">
+    <div className="startup-content">
+      <AppMark size={72} opening={busy} />
+      <h1>APEIR Studio</h1>
+      <p role={isError ? "alert" : "status"} className={`startup-message ${isError ? "startup-error" : ""}`}>
+        {isError ? t("Your workspace could not be opened.", "暂时无法打开工作空间。") :
+          needsSetup ? t("Choose a workspace to begin.", "选择工作空间，即可开始。") :
+            t("Opening your workspace…", "正在打开工作空间…")}
+      </p>
+      <div className="startup-actions">
+        {isError && status.recoverable && <button onClick={onRetry} style={btnPrimary}>{t("Try again", "重试")}</button>}
+        {isError && <button onClick={onOpenLogs} style={btnSecondary}>{t("Open logs", "查看日志")}</button>}
+        {needsSetup && <button onClick={onProceedToOnboarding} style={btnPrimary}>{t("Choose workspace", "选择工作空间")}</button>}
+        {status.state === "ready" && <button onClick={onProceedToDashboard} style={btnPrimary}>{t("Open Studio", "进入 Studio")}</button>}
       </div>
+      <details className="startup-details">
+        <summary>{t("Connection details", "连接详情")}</summary>
+        <dl>
+          <dt>{t("Startup", "启动阶段")}</dt><dd>{status.progressMessage || STATE_MESSAGES[status.state]}</dd>
+          <dt>Runtime</dt><dd>{status.runtime.reachable ? t("Connected", "已连接") : unknown}</dd>
+          <dt>{t("Session", "会话")}</dt><dd>{status.session.established ? t("Authenticated", "已认证") : unknown}</dd>
+          <dt>{t("Workspace", "工作空间")}</dt><dd>{status.workspace.valid ? status.workspace.path : unknown}</dd>
+          <dt>{t("Models", "模型")}</dt><dd>{status.provider.configured ? t("Configured; inference not tested", "已配置，尚未测试推理") : t("Not configured", "未配置")}</dd>
+        </dl>
+        {status.errorCode && <p><code>{status.errorCode}</code></p>}
+        {status.errorMessage && <p>{status.errorMessage}</p>}
+        {status.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
+        {isError && status.recoverable && <div className="startup-actions">
+          <button onClick={onStartRuntime} style={btnSecondary}>{t("Start local service", "启动本地服务")}</button>
+          <button onClick={onResetSession} style={btnSecondary}>{t("Reconnect session", "重新连接会话")}</button>
+        </div>}
+        {isError && <div className="startup-actions">
+          <button onClick={() => {
+            if (window.confirm(t("Reset saved interface settings?", "重置已保存的界面设置？"))) onResetUI();
+          }} style={btnSecondary}>{t("Reset interface settings", "重置界面设置")}</button>
+        </div>}
+      </details>
     </div>
-  );
+  </main>;
 }

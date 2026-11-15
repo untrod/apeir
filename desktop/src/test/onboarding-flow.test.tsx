@@ -40,11 +40,95 @@ afterEach(() => {
 
 function begin(onComplete = vi.fn()) {
   render(<OnboardingWizard onComplete={onComplete} onSkip={vi.fn()} />);
+  fireEvent.click(screen.getByText(/^(More options|更多选项)$/));
+  fireEvent.click(screen.getByRole("button", { name: /Full setup|完整设置/ }));
   fireEvent.click(screen.getByRole("button", { name: "English" }));
   fireEvent.click(screen.getByRole("button", { name: /Start Setup/ }));
 }
 
 describe("first-use setup uses Runtime records", () => {
+  it("opens the verified current workspace in one step without configuring or calling a model", async () => {
+    const completed = vi.fn();
+    localStorage.setItem("nous_provider_id", "saved-provider");
+    render(<OnboardingWizard onComplete={completed} onSkip={vi.fn()} />);
+    const open = await screen.findByRole("button", { name: /Open Studio|进入 Studio/ });
+    await waitFor(() => expect(open).toBeEnabled());
+    expect(screen.queryByRole("heading", { name: /Environment Check|环境检查/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Model Provider|模型服务商/ })).not.toBeInTheDocument();
+    fireEvent.click(open);
+    fireEvent.click(open);
+    await waitFor(() => expect(completed).toHaveBeenCalledTimes(1));
+    expect(localStorage.getItem("nous_onboarding_completed")).toBe("1");
+    expect(localStorage.getItem("nous_workspace_path")).toBe(workspace);
+    expect(localStorage.getItem("nous_provider_id")).toBe("saved-provider");
+    expect(vi.mocked(fetch).mock.calls.some(([, options]) => options?.method === "POST")).toBe(false);
+    expect(native.mock.calls.some(([command]) => command === "restart_runtime_api" || command === "store_provider_credential")).toBe(false);
+  });
+
+  it("returns to the original default path after editing a new workspace and preserves the draft across languages", async () => {
+    render(<OnboardingWizard onComplete={vi.fn()} onSkip={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Open Studio|进入 Studio/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Create New|新建工作空间/ }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "/qualification/draft" } });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "zh-CN" } });
+    expect(screen.getByRole("textbox")).toHaveValue("/qualification/draft");
+    await waitFor(() => expect(screen.getByRole("button", { name: "进入 Studio" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /^当前位置/ }));
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([, options]) => options?.method === "POST")).toBe(false);
+  });
+
+  it("does not publish completion when workspace activation readback disagrees", async () => {
+    const completed = vi.fn();
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (url, options) => String(url).endsWith("/workspace/status") ?
+      new Response(JSON.stringify({ ok: true, data: { exists: true, valid: true, path: "/qualification/other" } })) : original(url, options));
+    render(<OnboardingWizard onComplete={completed} onSkip={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Open Studio|进入 Studio/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Create New|新建工作空间/ }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "/qualification/selected" } });
+    fireEvent.click(screen.getByRole("button", { name: /Open Studio|进入 Studio/ }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/did not confirm/));
+    expect(completed).not.toHaveBeenCalled();
+    expect(localStorage.getItem("nous_onboarding_completed")).toBeNull();
+    expect(native.mock.calls.filter(([command]) => command === "restart_runtime_api")).toHaveLength(1);
+  });
+
+  it("finishes quick setup after the selected workspace and rotated native session are confirmed", async () => {
+    const original = native.getMockImplementation()!;
+    native.mockImplementation(async (command: string, args?: { path?: string }) => command === "restart_runtime_api" ? "setup.fake.rotated-session" : original(command, args));
+    const completed = vi.fn();
+    render(<OnboardingWizard onComplete={completed} onSkip={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Open Studio|进入 Studio/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Create New|新建工作空间/ }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "/qualification/selected" } });
+    fireEvent.click(screen.getByRole("button", { name: /Open Studio|进入 Studio/ }));
+    await waitFor(() => expect(completed).toHaveBeenCalledTimes(1));
+    expect(localStorage.getItem("nous_workspace_path")).toBe("/qualification/selected");
+    expect(native.mock.calls.filter(([command]) => command === "create_default_workspace")).toHaveLength(1);
+    expect(native.mock.calls.filter(([command]) => command === "restart_runtime_api")).toHaveLength(1);
+    const readback = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith("/workspace/status")).at(-1);
+    expect((readback?.[1]?.headers as Record<string, string>).Authorization).toBe("Bearer setup.fake.rotated-session");
+  });
+
+  it("retires a pending quick-setup read after Controller ABA without activating or completing it", async () => {
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    let finish!: (value: Response) => void;
+    vi.mocked(fetch).mockImplementation(async (url, options) => String(url).endsWith("/workspace/status") ? new Promise<Response>(resolve => { finish = resolve; }) : original(url, options));
+    const completed = vi.fn();
+    render(<OnboardingWizard onComplete={completed} onSkip={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Open Studio|进入 Studio/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Open Studio|进入 Studio/ }));
+    await waitFor(() => expect(finish).toBeDefined());
+    setConfig({ url: "https://other.example.test", token: "setup.fake.other" });
+    setConfig({ url: endpoint, token: session });
+    finish(new Response(JSON.stringify({ ok: true, data: { exists: true, valid: true, path: workspace } })));
+    await waitFor(() => expect(screen.getAllByRole("alert").some(node => /changed|更改/.test(node.textContent || ""))).toBe(true));
+    expect(completed).not.toHaveBeenCalled();
+    expect(localStorage.getItem("nous_onboarding_completed")).toBeNull();
+    expect(native.mock.calls.some(([command]) => command === "create_default_workspace" || command === "restart_runtime_api")).toBe(false);
+  });
+
   it("offers only this Provider's exact vendor model IDs, preserving namespaces", async () => {
     const original = vi.mocked(fetch).getMockImplementation()!;
     vi.mocked(fetch).mockImplementation(async (url, options) => new URL(String(url)).pathname.endsWith("/models") ?

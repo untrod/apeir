@@ -470,15 +470,21 @@ def test_cancelled_transport_preserves_inflight_effect_and_delivers_original_res
         )
         task = asyncio.create_task(client.run_forever(stop))
         resumed = None
+
+        def recorded_workload():
+            # Observe the durable commit under its writer's existing lock. A raw
+            # CRT read can race Windows replacement while the handler finishes.
+            with service._state_lock:
+                return json.loads(service.workloads_path.read_text(encoding="utf-8"))[
+                    workload_id
+                ]
+
         try:
             await _wait_for(entered.is_set)
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
-            assert (
-                json.loads(service.workloads_path.read_text())[workload_id]["state"]
-                == "EXECUTING"
-            )
+            assert recorded_workload()["state"] == "EXECUTING"
             uncertain = service.execute_workload(
                 workload_id,
                 "system.echo",
@@ -490,13 +496,8 @@ def test_cancelled_transport_preserves_inflight_effect_and_delivers_original_res
             assert uncertain["error_code"] == "NOUS_NODE_UNCERTAIN_EFFECT"
             assert executions == 1
             release.set()
-            await _wait_for(
-                lambda: (
-                    json.loads(service.workloads_path.read_text())[workload_id]["state"]
-                    == "COMPLETED"
-                )
-            )
-            original = json.loads(service.workloads_path.read_text())[workload_id]
+            await _wait_for(lambda: recorded_workload()["state"] == "COMPLETED")
+            original = recorded_workload()
             resumed = asyncio.create_task(client.run_forever(stop))
             await _wait_for(lambda: workload_id in server.results)
             assert server.results[workload_id] == original

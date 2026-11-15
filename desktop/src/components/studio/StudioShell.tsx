@@ -17,6 +17,7 @@ import { useStudioSnapshot } from "./StudioData";
 import { StudioLayoutLibrary } from "./StudioLayoutLibrary";
 import { DetailDrawer, type DrawerView } from "../DetailDrawer";
 import { SettingsPage } from "../SettingsPage";
+import { AppMark } from "../AppMark";
 import type { NativeCredentialNotice } from "../../lib/nativeRuntime";
 import "flexlayout-react/style/light.css";
 import "./StudioShell.css";
@@ -335,7 +336,7 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit, settings
   };
   return <StudioPresentation.Provider value={{ editing }}><section className={`studio-session ${editing ? "studio-editing" : "studio-browsing"} ${compact ? "studio-compact" : ""}`} aria-label="APEIR Studio">
     <header className="studio-toolbar">
-      <div className="studio-brand"><span className="studio-brand-mark" aria-hidden="true">A</span><strong>APEIR Studio</strong><span className="studio-workspace-name">{document.name}</span></div>
+      <div className="studio-brand"><AppMark className="studio-brand-mark" /><strong>APEIR Studio</strong><span className="studio-workspace-name">{document.name}</span></div>
       {compact && <span className="studio-compact-label" title={t("Panels stay open. Widen the window to restore your splits.", "面板继续保留；增大窗口可还原分屏。")}>{t("Compact view", "紧凑视图")}</span>}
       <div className="studio-toolbar-actions">
       {maximized && !compact && <button onClick={() => { model.doAction(Actions.maximizeToggle(maximized.getId())); setRevision(value => value + 1); }}><StudioIcon name="restore" />{t("Show all panels", "还原所有面板")}</button>}

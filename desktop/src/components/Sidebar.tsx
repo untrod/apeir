@@ -6,6 +6,7 @@
 import React from "react";
 import { colors, typo, radius, space } from "../design";
 import { useTheme } from "../theme";
+import { AppMark } from "./AppMark";
 
 export type NavPage = "studio" | "operations" | "chat" | "tasks" | "develop" | "documents" | "environments" | "simulations" | "nodes" | "models" | "workspace" | "settings";
 
@@ -58,8 +59,8 @@ export function Sidebar({
         borderBottom: `1px solid ${colors.borderLight}`,
         textAlign: "center",
       }}>
-        <div style={{ fontSize: typo.md, fontWeight: typo.bold, color: colors.text, letterSpacing: "-0.5px" }}>
-          {collapsed ? "A" : "APEIR"}
+        <div aria-label="APEIR" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: space.sm, fontSize: typo.md, fontWeight: typo.bold, color: colors.text, letterSpacing: "-0.5px" }}>
+          <AppMark />{!collapsed && "APEIR"}
         </div>
       </div>
 

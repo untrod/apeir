@@ -1,5 +1,5 @@
 /**
- * OnboardingWizard — First-use setup wizard for Nous Desktop.
+ * First-use workspace selection, with the existing detailed setup available on demand.
  *
  * Steps:
  *   1. Welcome — product intro, language selection
@@ -15,10 +15,11 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { colors, typo, radius, space, card, input, btnPrimary, btnSecondary } from "../design";
-import { api, fetchModels, getRuntimeConfigVersion } from "../lib/api";
+import { api, fetchModels, getConfig, getRuntimeConfigVersion } from "../lib/api";
 import { useRuntimeConfigVersion } from "../store";
 import { useTheme } from "../theme";
 import { bindNativeRuntimeSession, isLocalRuntimeSelected, nativeRuntimeStatus } from "../lib/nativeRuntime";
+import { AppMark } from "./AppMark";
 
 /** Lazy-load Tauri invoke — never top-level import to avoid module-load crashes. */
 async function tauriInvoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -259,7 +260,7 @@ interface OnboardingWizardProps {
 type WizardStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) {
-  const { setLocale } = useTheme();
+  const { locale, setLocale } = useTheme();
   const active = useRef(false);
   useEffect(() => {
     active.current = true;
@@ -269,8 +270,12 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   const [setupVersion, setSetupVersion] = useState(getRuntimeConfigVersion);
   const setupCurrent = setupVersion === connectionVersion;
   const [canManageWorkspace, setCanManageWorkspace] = useState(false);
-  const [step, setStep] = useState<WizardStep>(1);
-  const [language, setLanguage] = useState<"zh-CN" | "en">("zh-CN");
+  const [quickSetup, setQuickSetup] = useState(true);
+  const [step, setStep] = useState<WizardStep>(3);
+  const [language, setLanguage] = useState<"zh-CN" | "en">(() => locale === "zh" ? "zh-CN" : "en");
+  const workspaceEdited = useRef(false);
+  const mutationInFlight = useRef(false);
+  const [defaultWorkspacePath, setDefaultWorkspacePath] = useState("");
 
   // Step 1: Welcome
   // Step 2: Environment checks
@@ -310,7 +315,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   // Read the selected Runtime's facts. A rendered WebView or a user-agent
   // string does not establish native architecture or execution isolation.
   useEffect(() => {
-    if (step !== 2) return;
+    if (step !== 2 && !(quickSetup && step === 3)) return;
     let current = true;
     const version = getRuntimeConfigVersion();
     const valid = () => current && active.current && version === getRuntimeConfigVersion();
@@ -333,14 +338,16 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
           { label: "Provider", status: "warning", detail: health.provider_configured === true ? t("Configured; inference not tested", "已配置；尚未测试推理") : "UNCONFIGURED", fixable: false },
           { label: t("Execution sandbox", "执行沙箱"), status: "warning", detail: t("NOT_RUN — each execution must pass its actual isolation admission.", "NOT_RUN — 每次执行仍须通过实际隔离准入。"), fixable: false },
         ]);
-        setWorkspacePath(health.workspace_path || "");
+        setDefaultWorkspacePath(health.workspace_path || "");
+        if (!workspaceEdited.current) setWorkspacePath(health.workspace_path || "");
         if ("__TAURI_INTERNALS__" in window) {
           const local = await nativeRuntimeStatus();
           if (!valid()) return;
           if (isLocalRuntimeSelected(local.endpoint)) {
             const path = await tauriInvoke<string>("get_default_workspace_path");
             if (!valid()) return;
-            setWorkspacePath(path);
+            setDefaultWorkspacePath(path);
+            if (!workspaceEdited.current) setWorkspacePath(path);
             setCanManageWorkspace(true);
           }
         }
@@ -351,7 +358,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       }
     })();
     return () => { current = false; };
-  }, [step, t]);
+  }, [step, t, quickSetup]);
 
   // Use the original bounded catalog reader. Gateway IDs are not vendor model
   // parameters, and another Provider's models cannot configure this adapter.
@@ -462,10 +469,10 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   }, [step, runConnectionTest]);
 
   // Save configuration
-  const saveConfiguration = async (): Promise<boolean> => {
+  const saveConfiguration = async (version = setupVersion, confirmedPath = workspacePath): Promise<boolean> => {
     const template = PROVIDER_TEMPLATES.find((provider) => provider.providerId === selectedProviderId);
     setSetupError("");
-    if (!setupCurrent || !active.current) {
+    if (version !== getRuntimeConfigVersion() || !active.current) {
       setSetupError(t("Controller changed. Reopen setup before saving.", "Controller 已更改，请重新打开设置。"));
       return false;
     }
@@ -495,12 +502,12 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       }
     }
 
-    if (!active.current || setupVersion !== getRuntimeConfigVersion()) return false;
+    if (!active.current || version !== getRuntimeConfigVersion()) return false;
     try {
       localStorage.setItem("nous_onboarding_completed", "1");
       localStorage.setItem("nous_setup_complete", "1");
-      localStorage.setItem("nous_provider_id", selectedProviderId);
-      localStorage.setItem("nous_workspace_path", workspacePath);
+      if (selectedProviderId) localStorage.setItem("nous_provider_id", selectedProviderId);
+      localStorage.setItem("nous_workspace_path", confirmedPath);
       localStorage.setItem("nous_language", language);
       setLocale(language === "zh-CN" ? "zh" : "en");
     } catch {
@@ -558,74 +565,81 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     : "";
   const canContinue =
     setupCurrent &&
-    (step !== 2 || (!environmentChecking && !envChecks.some(check => check.status === "checking"))) &&
+    ((step !== 2 && !(quickSetup && step === 3)) || (!environmentChecking && !envChecks.some(check => check.status === "checking"))) &&
     (step !== 3 || Boolean(workspacePath.trim())) &&
     (step !== 4 || Boolean(selectedProviderId && baseUrl.trim())) &&
     (step !== 5 || (!credentialError && !credentialSecretError)) &&
     (step !== 7 || (!testing && testResults.some((result) => result.name === t("Provider configuration", "服务商配置") && result.ok)));
 
   const advanceStep = async () => {
-    if (!canContinue || credentialSaving) return;
-    if (step === 3) {
-      setCredentialSaving(true);
-      setSetupError("");
-      try {
-        const current = await api<{ exists?: boolean; valid?: boolean; path?: string }>("/api/v1/workspace/status");
-        if (!active.current || setupVersion !== getRuntimeConfigVersion()) throw new Error("Controller changed; workspace was not activated.");
-        if (current.exists !== true || current.valid !== true || current.path !== workspacePath) {
-          const local = await nativeRuntimeStatus();
-          if (!canManageWorkspace || !isLocalRuntimeSelected(local.endpoint) || setupVersion !== getRuntimeConfigVersion()) {
-            throw new Error("Configure the selected Controller workspace through its existing management path.");
+    if (!canContinue || credentialSaving || mutationInFlight.current) return;
+    mutationInFlight.current = true;
+    setCredentialSaving(true);
+    let confirmedVersion = setupVersion;
+    let confirmedPath = workspacePath;
+    try {
+      if (step === 3) {
+        setSetupError("");
+        try {
+          const current = await api<{ exists?: boolean; valid?: boolean; path?: string }>("/api/v1/workspace/status");
+          if (!active.current || setupVersion !== getRuntimeConfigVersion()) throw new Error("Controller changed; workspace was not activated.");
+          if (current.exists !== true || current.valid !== true || current.path !== workspacePath) {
+            const local = await nativeRuntimeStatus();
+            if (!canManageWorkspace || !isLocalRuntimeSelected(local.endpoint) || setupVersion !== getRuntimeConfigVersion()) {
+              throw new Error("Configure the selected Controller workspace through its existing management path.");
+            }
+            const activated = await tauriInvoke<string>("create_default_workspace", { path: workspacePath });
+            if (!active.current || setupVersion !== getRuntimeConfigVersion()) throw new Error("Connection changed; inspect original local workspace settings before retrying.");
+            const session = await bindNativeRuntimeSession("restart_runtime_api", undefined, { isActive: () => active.current });
+            if (!active.current || session.version !== getRuntimeConfigVersion()) throw new Error("Controller changed; inspect original local workspace settings.");
+            setSetupVersion(session.version);
+            confirmedVersion = session.version;
+            const observed = await api<{ exists?: boolean; valid?: boolean; path?: string }>("/api/v1/workspace/status");
+            if (observed.exists !== true || observed.valid !== true || observed.path !== activated) {
+              throw new Error("Runtime did not confirm the selected workspace. Inspect diagnostics before retrying.");
+            }
+            setWorkspacePath(activated);
+            confirmedPath = activated;
           }
-          const activated = await tauriInvoke<string>("create_default_workspace", { path: workspacePath });
-          if (!active.current || setupVersion !== getRuntimeConfigVersion()) throw new Error("Connection changed; inspect original local workspace settings before retrying.");
-          const session = await bindNativeRuntimeSession("restart_runtime_api", undefined, { isActive: () => active.current });
-          if (!active.current || session.version !== getRuntimeConfigVersion()) throw new Error("Controller changed; inspect original local workspace settings.");
-          setSetupVersion(session.version);
-          const observed = await api<{ exists?: boolean; valid?: boolean; path?: string }>("/api/v1/workspace/status");
-          if (observed.exists !== true || observed.valid !== true || observed.path !== activated) {
-            throw new Error("Runtime did not confirm the selected workspace. Inspect diagnostics before retrying.");
-          }
-          setWorkspacePath(activated);
+        } catch (error) {
+          setSetupError(error instanceof Error ? error.message : "Workspace activation failed.");
+          return;
         }
-      } catch (error) {
-        setSetupError(error instanceof Error ? error.message : "Workspace activation failed.");
-        return;
-      } finally {
-        setCredentialSaving(false);
+        if (quickSetup) {
+          if (await saveConfiguration(confirmedVersion, confirmedPath)) onComplete();
+          return;
+        }
       }
-    }
-    if (step === 8) {
-      setCredentialSaving(true);
-      const saved = await saveConfiguration();
-      setCredentialSaving(false);
-      if (!saved) return;
-    }
-    if (step === 5 && credentialRequired && credentialMode === "system") {
-      setCredentialSaving(true);
-      setSetupError("");
-      try {
-        const pending = bindNativeRuntimeSession("store_provider_credential", {
-          environmentName: credentialEnvName,
-          secret: credentialSecret,
-        }, { isActive: () => active.current });
-        setCredentialSecret("");
-        const session = await pending;
-        if (!active.current || session.version !== getRuntimeConfigVersion()) throw new Error("Controller changed; inspect original credential state.");
-        setSetupVersion(session.version);
-        setCredentialStored(true);
-      } catch (error) {
-        setSetupError(
-          error instanceof Error
-            ? error.message
-            : t("Credential could not be stored.", "无法保存凭据。"),
-        );
-        setCredentialSaving(false);
-        return;
+      if (step === 8) {
+        const saved = await saveConfiguration();
+        if (!saved) return;
       }
-      setCredentialSaving(false);
+      if (step === 5 && credentialRequired && credentialMode === "system") {
+        setSetupError("");
+        try {
+          const pending = bindNativeRuntimeSession("store_provider_credential", {
+            environmentName: credentialEnvName,
+            secret: credentialSecret,
+          }, { isActive: () => active.current });
+          setCredentialSecret("");
+          const session = await pending;
+          if (!active.current || session.version !== getRuntimeConfigVersion()) throw new Error("Controller changed; inspect original credential state.");
+          setSetupVersion(session.version);
+          setCredentialStored(true);
+        } catch (error) {
+          setSetupError(
+            error instanceof Error
+              ? error.message
+              : t("Credential could not be stored.", "无法保存凭据。"),
+          );
+          return;
+        }
+      }
+      setStep((current) => (current + 1) as WizardStep);
+    } finally {
+      mutationInFlight.current = false;
+      if (active.current) setCredentialSaving(false);
     }
-    setStep((current) => (current + 1) as WizardStep);
   };
 
   const navButtons = (
@@ -652,6 +666,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   const container: React.CSSProperties = {
     minHeight: "100vh",
     background: colors.bg,
+    color: colors.text,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -666,14 +681,95 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     overflowY: "auto",
   };
 
+  const chooseWorkspace = async (action: "default" | "existing" | "new") => {
+    if (credentialSaving || !setupCurrent) return;
+    const previousAction = workspaceAction;
+    workspaceEdited.current = action !== "default";
+    setWorkspaceAction(action);
+    if (action === "default") setWorkspacePath(defaultWorkspacePath);
+    if (action === "new") setWorkspacePath("");
+    if (action === "existing" && canManageWorkspace) {
+      const version = getRuntimeConfigVersion();
+      try {
+        const selected = await tauriInvoke<string | null>("select_workspace_directory");
+        if (!active.current || version !== getRuntimeConfigVersion()) return;
+        if (selected) setWorkspacePath(selected);
+        else setWorkspaceAction(previousAction);
+      } catch {
+        if (active.current && version === getRuntimeConfigVersion()) setSetupError(t("Workspace selection failed.", "工作区选择失败。"));
+      }
+    }
+  };
+
+  const workspaceFields = <>
+    <div style={{ display: "flex", flexDirection: "column", gap: space.sm }}>
+      {([
+        { action: "default", title: t("Default Location", "当前位置"), description: defaultWorkspacePath },
+        { action: "existing", title: t("Select Existing", "打开文件夹"), description: "" },
+        { action: "new", title: t("Create New", "新建工作空间"), description: "" },
+      ] as const).map(option => <button key={option.action} aria-pressed={workspaceAction === option.action}
+        disabled={credentialSaving || !setupCurrent || (option.action !== "default" && !canManageWorkspace)}
+        onClick={() => void chooseWorkspace(option.action)} style={{ ...btnSecondary, textAlign: "left", justifyContent: "flex-start", padding: space.md,
+          transition: "border-color .12s ease",
+          borderColor: workspaceAction === option.action ? colors.accent : colors.border,
+          background: workspaceAction === option.action ? colors.accentSoft : colors.surface }}>
+        <span style={{ minWidth: 0, overflowWrap: "anywhere" }}><span style={{ display: "block", fontWeight: typo.medium }}>{option.title}</span>
+          {option.description && <span style={{ display: "block", marginTop: 3, fontSize: typo.xs, color: colors.textSecondary }}>{option.description}</span>}
+        </span>
+      </button>)}
+    </div>
+    {workspaceAction === "new" && <label style={{ display: "block", marginTop: space.md, fontSize: typo.sm }}>
+      {t("Workspace path", "工作空间路径")}
+      <input type="text" value={workspacePath} disabled={credentialSaving || !canManageWorkspace || !setupCurrent}
+        onChange={event => { workspaceEdited.current = true; setWorkspacePath(event.target.value); }}
+        placeholder={t("Enter workspace path...", "输入工作区路径...")} style={{ ...input, marginTop: space.sm }} />
+    </label>}
+    {workspaceAction === "existing" && workspacePath && <p style={{ fontSize: typo.xs, color: colors.textSecondary, overflowWrap: "anywhere" }}>{workspacePath}</p>}
+  </>;
+
+  if (quickSetup) {
+    return <main className="first-use-setup" style={container}>
+      <section aria-label={t("First-use setup", "首次使用设置")} style={contentBox}>
+        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: space.md, marginBottom: space.lg }}>
+          <AppMark size={44} />
+          <select aria-label={t("Language", "语言")} value={language} disabled={credentialSaving}
+            onChange={event => { const value = event.target.value === "zh-CN" ? "zh-CN" : "en"; setLanguage(value); setLocale(value === "zh-CN" ? "zh" : "en"); }} style={{ ...input, width: "auto" }}>
+            <option value="en">English</option><option value="zh-CN">中文</option>
+          </select>
+        </header>
+        <h1 style={{ fontSize: typo.xl, fontWeight: typo.semibold, margin: 0 }}>{t("Welcome to APEIR", "欢迎使用 APEIR")}</h1>
+        <p style={{ fontSize: typo.sm, color: colors.textSecondary, margin: `${space.sm} 0 ${space.lg}` }}>
+          {t("Choose a workspace. Models can be added in Settings.", "选择工作空间。模型可以稍后在设置中添加。")}
+        </p>
+        {workspaceFields}
+        {!setupCurrent && <p role="alert">{t("Controller changed. Reopen setup before continuing.", "连接已更改，请重新打开设置。")}</p>}
+        {setupError && <p role="alert" style={{ color: colors.danger, fontSize: typo.sm }}>{setupError}</p>}
+        {envChecks.some(check => check.status === "error") && <p role="alert" style={{ color: colors.danger, fontSize: typo.sm }}>
+          {t("Workspace details could not be read. Check the connection under More options.", "无法读取工作空间信息，请在更多选项中检查连接。")}
+        </p>}
+        <button disabled={!canContinue || credentialSaving} onClick={() => void advanceStep()} style={{ ...btnPrimary, width: "100%", marginTop: space.lg, transition: "none" }}>
+          {credentialSaving ? t("Opening…", "正在打开…") : environmentChecking ? t("Reading workspace…", "正在读取工作空间…") : t("Open Studio", "进入 Studio")}
+        </button>
+        <details className="startup-details">
+          <summary>{t("More options", "更多选项")}</summary>
+          <div className="startup-actions">
+            <button disabled={credentialSaving || !setupCurrent} style={btnSecondary} onClick={() => { setQuickSetup(false); setStep(1); }}>{t("Full setup", "完整设置")}</button>
+            <button disabled={credentialSaving || !setupCurrent} style={btnSecondary} onClick={onSkip}>{t("Explore without connecting", "离线查看界面")}</button>
+          </div>
+          <dl>{envChecks.map(check => <div key={check.label} style={{ display: "contents" }}><dt>{check.label}</dt><dd>{check.detail}</dd></div>)}</dl>
+        </details>
+      </section>
+    </main>;
+  }
+
   // Step 1: Welcome
   if (step === 1) {
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           {stepIndicator}
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 48, marginBottom: space.lg }}>●</div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: space.lg }}><AppMark size={56} /></div>
             <h1 style={{ fontSize: typo.xxl, fontWeight: typo.bold, color: colors.text, margin: 0 }}>
               {t("Welcome to APEIR", "欢迎使用 APEIR")}
             </h1>
@@ -686,8 +782,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               }}
             >
               {t(
-                "Local-first, governed engineering. Cloud model use transfers only admitted input.",
-                "本地优先、受治理的工程工作台。云端模型仅接收获准发送的输入。",
+                "Set your workspace and an optional model connection.",
+                "设置工作空间，并按需连接模型。",
               )}
             </p>
 
@@ -721,40 +817,6 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               </button>
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: space.md,
-                marginBottom: space.xl,
-                textAlign: "left",
-              }}
-            >
-              {[
-                { icon: "01", title: t("Local First", "本地优先"), desc: t("Data remains under your control", "数据始终由您控制") },
-                { icon: "02", title: t("Secure", "安全"), desc: t("Reference-based credentials", "基于引用的凭据管理") },
-                { icon: "03", title: t("Auditable", "可审计"), desc: t("Full execution trace", "完整执行追踪") },
-                { icon: "04", title: t("Offline Ready", "离线可用"), desc: t("Core Runtime works offline", "核心运行时支持离线使用") },
-              ].map((item) => (
-                <div
-                  key={item.title}
-                  style={{
-                    padding: space.md,
-                    background: colors.bg,
-                    borderRadius: radius.md,
-                  }}
-                >
-                  <div style={{ fontSize: 20, marginBottom: space.xs }}>{item.icon}</div>
-                  <div style={{ fontSize: typo.sm, fontWeight: typo.semibold, color: colors.text }}>
-                    {item.title}
-                  </div>
-                  <div style={{ fontSize: typo.xs, color: colors.textTertiary }}>
-                    {item.desc}
-                  </div>
-                </div>
-              ))}
-            </div>
-
             <button onClick={() => setStep(2)} style={{ ...btnPrimary, padding: `${space.md} ${space.xxl}`, fontSize: typo.md }}>
               {t("Start Setup", "开始设置")} →
             </button>
@@ -784,7 +846,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   // Step 2: Environment Check
   if (step === 2) {
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           {stepIndicator}
           {stepHeader(
@@ -829,82 +891,14 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   // Step 3: Workspace
   if (step === 3) {
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           {stepIndicator}
           {stepHeader(
             t("Workspace", "工作区"),
             t("Choose where to store your conversations, tasks, and files", "选择存储对话、任务和文件的位置"),
           )}
-          <div style={{ display: "flex", flexDirection: "column", gap: space.md }}>
-            {[
-              {
-                action: "default" as const,
-                title: t("Default Location", "默认位置"),
-                desc: workspacePath,
-                icon: "01",
-              },
-              {
-                action: "existing" as const,
-                title: t("Select Existing", "选择已有工作区"),
-                desc: t("Use an existing workspace", "使用已有工作区"),
-                icon: "02",
-              },
-              {
-                action: "new" as const,
-                title: t("Create New", "创建新工作区"),
-                desc: t("Specify a custom path", "指定自定义路径"),
-                icon: "03",
-              },
-            ].map((opt) => (
-              <button
-                key={opt.action}
-                disabled={credentialSaving || (opt.action !== "default" && !canManageWorkspace)}
-                onClick={async () => {
-                  setWorkspaceAction(opt.action);
-                  if (opt.action === "existing" && canManageWorkspace) {
-                    try {
-                      const version = getRuntimeConfigVersion();
-                      const selected = await tauriInvoke<string | null>("select_workspace_directory");
-                      if (selected && active.current && version === getRuntimeConfigVersion()) setWorkspacePath(selected);
-                    } catch {
-                      setSetupError(t("Workspace selection failed.", "工作区选择失败。"));
-                    }
-                  }
-                }}
-                style={{
-                  ...btnSecondary,
-                  justifyContent: "flex-start",
-                  padding: space.lg,
-                  textAlign: "left",
-                  border: `1px solid ${workspaceAction === opt.action ? colors.accent : colors.border}`,
-                  background: workspaceAction === opt.action ? colors.accentSoft : colors.surface,
-                }}
-              >
-                <span style={{ fontSize: 24, marginRight: space.md }}>{opt.icon}</span>
-                <div>
-                  <div style={{ fontSize: typo.base, fontWeight: typo.medium, color: colors.text }}>
-                    {opt.title}
-                  </div>
-                  <div style={{ fontSize: typo.xs, color: colors.textTertiary, marginTop: 2 }}>
-                    {opt.desc}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-          {workspaceAction === "new" && (
-            <div style={{ marginTop: space.md }}>
-              <input
-                type="text"
-                disabled={credentialSaving || !canManageWorkspace}
-                value={workspacePath}
-                onChange={(e) => setWorkspacePath(e.target.value)}
-                placeholder={t("Enter workspace path...", "输入工作区路径...")}
-                style={{ ...input, marginTop: space.sm }}
-              />
-            </div>
-          )}
+          {workspaceFields}
           {navButtons}
         </div>
       </div>
@@ -914,7 +908,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   // Step 4: Provider Selection
   if (step === 4) {
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={{ ...contentBox, maxWidth: 640 }}>
           {stepIndicator}
           {stepHeader(
@@ -1017,7 +1011,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     const template = PROVIDER_TEMPLATES.find((p) => p.providerId === selectedProviderId);
     const credentialRequired = template?.credentialType !== "none";
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           {stepIndicator}
           {stepHeader(
@@ -1140,7 +1134,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     const recommendedModels = Object.values(PROVIDER_DEFAULT_MODELS[selectedProviderId] || {});
     const modelOptions = Array.from(new Set([...availableModels, ...recommendedModels].filter(Boolean)));
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={{ ...contentBox, maxWidth: 720 }}>
           {stepIndicator}
           {stepHeader(
@@ -1204,7 +1198,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   // Step 7: Connection Test
   if (step === 7) {
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           {stepIndicator}
           {stepHeader(
@@ -1258,7 +1252,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       .filter(([, v]) => v)
       .map(([k, v]) => `${CAPABILITY_LABELS[k] || k}: ${v}`);
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           {stepIndicator}
           {stepHeader(
@@ -1279,12 +1273,12 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               { label: t("Base URL", "Base URL"), value: baseUrl || t("Not set", "未设置") },
               {
                 label: t("Credential", "凭据"),
-                value: credentialMode === "system"
-                  ? t("Windows Credential Manager", "Windows 凭据管理器")
+                value: !template || template.credentialType === "none" ? t("Not required", "不需要") : credentialMode === "system"
+                  ? credentialStored ? t("Saved securely", "已安全保存") : t("Not saved", "未保存")
                   : credentialEnvName ? `env:${credentialEnvName}` : t("Not set", "未设置"),
               },
-              { label: t("Models", "模型"), value: modelList.length > 0 ? modelList.join(", ") : t("Auto", "自动") },
-              { label: t("Runtime", "运行时"), value: "http://127.0.0.1:8770" },
+              { label: t("Models", "模型"), value: modelList.length > 0 ? modelList.join(", ") : t("Not configured", "未配置") },
+              { label: t("Runtime", "运行时"), value: getConfig().url },
               { label: t("Language", "语言"), value: language === "zh-CN" ? "中文" : "English" },
             ].map((item) => (
               <div
@@ -1317,7 +1311,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   // Step 9: Complete
   if (step === 9) {
     return (
-      <div style={container}>
+      <div className="first-use-setup" style={container}>
         <div style={contentBox}>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: typo.sm, letterSpacing: 2, color: colors.accent, marginBottom: space.lg }}>

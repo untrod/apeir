@@ -246,6 +246,43 @@ describe("native Runtime session destination", () => {
     expect(native.invoke.mock.calls.some(([command]) => command === "store_provider_credential")).toBe(false);
   });
 
+  it("does not start the connected event client when first-use setup is dismissed offline", async () => {
+    // Native IPC is a fixture; this verifies the UI's connection semantics only.
+    setConfig({ url: "https://controller.example.test", token: remoteSession });
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: false }), { status: 401 })));
+    const events = vi.spyOn(eventClient, "start");
+    try {
+      render(<App />);
+      await screen.findByRole("heading", { name: /Welcome to APEIR|欢迎使用 APEIR/ });
+      fireEvent.click(screen.getByText(/^(More options|更多选项)$/));
+      fireEvent.click(screen.getByRole("button", { name: /Explore without connecting|离线查看界面/ }));
+      await screen.findByRole("region", { name: "APEIR Studio" });
+      await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith("/api/v1/status")).length).toBeGreaterThanOrEqual(2));
+      expect(events).not.toHaveBeenCalled();
+      expect(localStorage.getItem("nous_onboarding_completed")).toBeNull();
+      expect(native.invoke.mock.calls.some(([command]) => command === "create_default_workspace" || command === "start_runtime_api")).toBe(false);
+    } finally { events.mockRestore(); }
+  });
+
+  it("retains a failed explicit startup recovery in diagnostics instead of swallowing it", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("fixture connection unavailable")));
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "get_runtime_process_status") return status;
+      if (command === "start_runtime_api") throw new Error("Original service startup refused");
+      if (command === "load_runtime_session_token") throw new Error("No initial session");
+      return localSession;
+    });
+    render(<App />);
+    await screen.findByRole("button", { name: "Try again" });
+    fireEvent.click(screen.getByText("Connection details"));
+    expect(screen.getByText("Original service startup refused")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Start local service" }));
+    await waitFor(() => expect(native.invoke.mock.calls.filter(([command]) => command === "start_runtime_api")).toHaveLength(2));
+    expect(screen.getByText("Original service startup refused")).toBeVisible();
+    expect(screen.queryByRole("region", { name: "APEIR Studio" })).not.toBeInTheDocument();
+  });
+
   it("uses the original authenticated HTTP client against only the native endpoint on real loopback sockets", async () => {
     const calls: string[] = [];
     const otherCalls: string[] = [];

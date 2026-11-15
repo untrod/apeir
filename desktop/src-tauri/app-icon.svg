@@ -1,8 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" rx="220" fill="#0f3d32"/>
-  <path
-    d="M260 760V264h118l268 300V264h118v496H646L378 460v300H260Z"
-    fill="#f5f1e8"
-  />
-  <circle cx="794" cy="230" r="42" fill="#4fc08d"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect id="paper-tile" x="1" y="1" width="1022" height="1022" rx="219" fill="#ece8df" stroke="#d3cfc6" stroke-width="2"/>
+  <path id="frame-left" d="M224 224H576V336H336V576H224Z" fill="#29302e"/>
+  <path id="frame-right" d="M800 800H448V688H688V448H800Z" fill="#29302e"/>
 </svg>
