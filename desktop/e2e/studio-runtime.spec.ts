@@ -1067,7 +1067,7 @@ test(`Declarative UI extension uses public review and approval, real status, rev
       await console.getByRole("textbox", { name: "API URL" }).fill(runtimes[index].url);
       await console.getByLabel("Service session token", { exact: true }).fill(token);
       await console.getByRole("button", { name: "Connect", exact: true }).click();
-      await expect(console.getByText("Controller connection changed.", { exact: false })).toBeVisible();
+      await expect(page.getByRole("status").filter({ hasText: "Controller connection changed." })).toBeVisible();
     }
     await switchController(1);
     await page.locator(".flexlayout__tab_button").filter({ hasText: "Dashboard" }).first().click();
