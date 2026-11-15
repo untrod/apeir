@@ -228,6 +228,80 @@ async def _with_services(registry_path: Path, endpoint: str):
     return registry, client, admission, permissions
 
 
+@extension_app.command("discover-tools")
+def discover_tools(
+    extension_id: str,
+    registry: Path = typer.Option(default_workspace_path("extensions"), "--registry"),
+    endpoint: str = typer.Option("", "--kernel-endpoint"),
+    as_json: bool = typer.Option(False, "--json"),
+):
+    """Discover an admitted MCP catalog through the existing Kernel executor."""
+
+    async def run():
+        from dataclasses import asdict
+        from nous_runtime.extensions.executor import UnifiedExtensionExecutor
+        from nous_runtime.extensions.mcp_sdk import McpSdkExecutionAdapter
+
+        store, client, _, _ = await _with_services(registry, _endpoint(endpoint))
+        try:
+            record = store.get_record(extension_id) or {}
+            tools = await UnifiedExtensionExecutor(
+                store, client, {"mcp": McpSdkExecutionAdapter()}
+            ).discover_mcp_tools(
+                extension_id,
+                idempotency_key=f"discover:{extension_id}:{record.get('digest', '')}",
+            )
+            return {
+                "extension_id": extension_id,
+                "tools": [asdict(tool) for tool in tools],
+                "work_enabled": record.get("work_enabled", False),
+            }
+        finally:
+            await client.close()
+
+    try:
+        _emit(asyncio.run(run()), as_json)
+    except Exception as error:
+        typer.echo(
+            f"Discovery not confirmed: {error}. Inspect original receipts before retrying.",
+            err=True,
+        )
+        raise typer.Exit(1) from error
+
+
+@extension_app.command("work-enable")
+def work_enable(
+    extension_id: str,
+    registry: Path = typer.Option(default_workspace_path("extensions"), "--registry"),
+    disabled: bool = typer.Option(
+        False, "--disabled", help="Disable new Work calls instead"
+    ),
+    as_json: bool = typer.Option(False, "--json"),
+):
+    """Opt reviewed tools into Work; execution still requires Kernel permission."""
+    store = ExtensionRegistry(registry)
+    try:
+        store.verify(extension_id)
+        record = store.get_record(extension_id) or {}
+        result = store.set_work_enabled(
+            extension_id,
+            not disabled,
+            expected_digest=record["digest"],
+            expected_version=record["version"],
+        )
+        _emit(
+            {
+                "extension_id": extension_id,
+                "work_enabled": result["work_enabled"],
+                "authority": result["authority"],
+            },
+            as_json,
+        )
+    except (OSError, ValueError, PermissionError) as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(1) from error
+
+
 @extension_app.command("admit")
 def admit_extension(
     extension_id: str,

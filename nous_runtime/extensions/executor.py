@@ -7,9 +7,11 @@ import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
-from jsonschema import ValidationError, validate
+from jsonschema import SchemaError, ValidationError, validate
+from referencing import Registry
+from referencing.exceptions import Unresolvable
 
 from nous_runtime.extensions.models import ToolSpec
 from nous_runtime.extensions.registry import ExtensionRegistry
@@ -111,7 +113,9 @@ class UnifiedExtensionExecutor:
         self, protocol: str, adapter: GovernedExtensionAdapter
     ) -> None:
         if not protocol or protocol in self.adapters:
-            raise ValueError("extension protocol adapter is empty or already registered")
+            raise ValueError(
+                "extension protocol adapter is empty or already registered"
+            )
         self.adapters[protocol] = adapter
 
     async def execute_tool(
@@ -121,6 +125,7 @@ class UnifiedExtensionExecutor:
         arguments: dict[str, Any],
         *,
         idempotency_key: str,
+        before_execute: Callable[[], None] | None = None,
     ) -> ExtensionExecutionResult:
         manifest, record, admission = self._authorized_extension(extension_id)
         tools = list(manifest.tools)
@@ -131,15 +136,19 @@ class UnifiedExtensionExecutor:
                     for item in self.registry.read_discovered_tools(extension_id)
                 )
             except (TypeError, ValueError) as exc:
-                raise ExtensionExecutionError(f"MCP tool catalog is invalid: {exc}") from exc
+                raise ExtensionExecutionError(
+                    f"MCP tool catalog is invalid: {exc}"
+                ) from exc
         tool = next((item for item in tools if item.name == tool_name), None)
         if tool is None:
-            raise ExtensionExecutionError(f"extension tool is not declared: {tool_name}")
-        try:
-            validate(instance=arguments, schema=tool.input_schema)
-        except ValidationError as exc:
             raise ExtensionExecutionError(
-                f"tool arguments do not match declared schema: {exc.message}"
+                f"extension tool is not declared: {tool_name}"
+            )
+        try:
+            validate(instance=arguments, schema=tool.input_schema, registry=Registry())
+        except (ValidationError, SchemaError, Unresolvable) as exc:
+            raise ExtensionExecutionError(
+                f"tool arguments do not match declared schema: {getattr(exc, 'message', str(exc))}"
             ) from exc
         protocol = tool.protocol or "native"
         capability = (
@@ -157,6 +166,7 @@ class UnifiedExtensionExecutor:
             capability=capability,
             arguments=arguments,
             idempotency_key=idempotency_key,
+            before_execute=before_execute,
         )
 
     async def discover_mcp_tools(
@@ -178,7 +188,9 @@ class UnifiedExtensionExecutor:
             arguments={},
             idempotency_key=idempotency_key,
         )
-        raw_tools = result.output.get("tools") if isinstance(result.output, dict) else None
+        raw_tools = (
+            result.output.get("tools") if isinstance(result.output, dict) else None
+        )
         if not isinstance(raw_tools, list):
             raise ExtensionExecutionError("MCP discovery returned no tool catalog")
         tools: list[ToolSpec] = []
@@ -196,7 +208,9 @@ class UnifiedExtensionExecutor:
             )
             errors = tool.validate()
             if errors:
-                raise ExtensionExecutionError("invalid discovered MCP tool: " + "; ".join(errors))
+                raise ExtensionExecutionError(
+                    "invalid discovered MCP tool: " + "; ".join(errors)
+                )
             tools.append(tool)
         self.registry.record_discovered_tools(
             extension_id,
@@ -220,7 +234,9 @@ class UnifiedExtensionExecutor:
         try:
             manifest = self.registry.verify(extension_id)
         except (OSError, ValueError) as exc:
-            raise ExtensionExecutionError(f"extension integrity check failed: {exc}") from exc
+            raise ExtensionExecutionError(
+                f"extension integrity check failed: {exc}"
+            ) from exc
         record = self.registry.get_record(extension_id)
         admission = self.registry.read_admission(extension_id)
         if record is None or admission is None:
@@ -241,6 +257,7 @@ class UnifiedExtensionExecutor:
         capability: str,
         arguments: dict[str, Any],
         idempotency_key: str,
+        before_execute: Callable[[], None] | None = None,
     ) -> ExtensionExecutionResult:
         if not idempotency_key.strip():
             raise ExtensionExecutionError("idempotency key is required")
@@ -308,18 +325,33 @@ class UnifiedExtensionExecutor:
             ),
         )
         try:
-            self.registry.claim_execution(
-                extension_id,
-                operation_id,
-                {
-                    "schema": "nous.extension-execution-claim/v1",
-                    "state": "claimed",
-                    "operation_id": operation_id,
-                    "permit_id": permit_id,
-                    "content_digest": manifest.provenance.digest,
-                    "input_digest": parameter_hash,
-                },
-            )
+            with self.registry._writer_lock():
+                current_manifest, current_record, current_admission = (
+                    self._authorized_extension(extension_id)
+                )
+                if (
+                    current_manifest.provenance.digest != manifest.provenance.digest
+                    or current_admission.get("receipt_id")
+                    != admission.get("receipt_id")
+                    or capability not in current_record.get("granted_capabilities", ())
+                ):
+                    raise ExtensionExecutionError(
+                        "Extension authorization changed before execution"
+                    )
+                if before_execute is not None:
+                    before_execute()
+                self.registry.claim_execution(
+                    extension_id,
+                    operation_id,
+                    {
+                        "schema": "nous.extension-execution-claim/v1",
+                        "state": "claimed",
+                        "operation_id": operation_id,
+                        "permit_id": permit_id,
+                        "content_digest": manifest.provenance.digest,
+                        "input_digest": parameter_hash,
+                    },
+                )
         except (OSError, ValueError) as exc:
             raise ExtensionExecutionError(str(exc)) from exc
         started = time.monotonic()
@@ -333,7 +365,9 @@ class UnifiedExtensionExecutor:
                 duration_ms=int((time.monotonic() - started) * 1000),
             )
         if not isinstance(adapter_result, AdapterResult):
-            raise ExtensionExecutionError("governed executor returned an invalid result")
+            raise ExtensionExecutionError(
+                "governed executor returned an invalid result"
+            )
         if adapter_result.verification_status not in {
             "unverified_executor_report",
             "protocol_and_schema_validated",
@@ -455,11 +489,17 @@ def _validate_permit(raw: Any, request: dict[str, Any]) -> dict[str, Any]:
             )
     permit_id = str(raw.get("permit_id") or "")
     if not permit_id:
-        raise ExtensionExecutionError("Kernel execution permit is missing its identifier")
+        raise ExtensionExecutionError(
+            "Kernel execution permit is missing its identifier"
+        )
     if not str(raw.get("actor") or "").strip():
         raise ExtensionExecutionError("Kernel execution permit is missing its actor")
     if not str(raw.get("policy_version") or "").strip():
-        raise ExtensionExecutionError("Kernel execution permit is missing its policy version")
+        raise ExtensionExecutionError(
+            "Kernel execution permit is missing its policy version"
+        )
     if int(raw.get("issued_at_us") or 0) <= 0:
-        raise ExtensionExecutionError("Kernel execution permit has an invalid timestamp")
+        raise ExtensionExecutionError(
+            "Kernel execution permit has an invalid timestamp"
+        )
     return raw

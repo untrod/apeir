@@ -192,6 +192,7 @@ class ExtensionRegistry:
             "compatibility_level": int(manifest.compatibility_level),
             "state": "installed",
             "presentation_enabled": False,
+            "work_enabled": False,
             "authority": "none",
             "previous_digest": str(previous.get("digest") or ""),
             "previous_granted_capabilities": list(
@@ -256,6 +257,10 @@ class ExtensionRegistry:
             "presentation_enabled", False
         ) != record.get("presentation_enabled", False):
             raise ValueError("Extension presentation state does not match its lock")
+        if type(record.get("work_enabled", False)) is not bool or locked.get(
+            "work_enabled", False
+        ) != record.get("work_enabled", False):
+            raise ValueError("Extension Work state does not match its lock")
         if locked.get("artifact_ref", "") != record.get("artifact_ref", ""):
             raise ValueError(
                 "extension lock artifact reference does not match registry"
@@ -305,6 +310,39 @@ class ExtensionRegistry:
             before_publish()
         index = self._index()
         index["extensions"][extension_id]["presentation_enabled"] = enabled
+        _write_json(self.index_path, index)
+        self._write_lock(index)
+        self.verify(extension_id)
+        return self.get_record(extension_id) or {}
+
+    @_registry_writer
+    def set_work_enabled(
+        self,
+        extension_id: str,
+        enabled: bool,
+        *,
+        expected_digest: str,
+        expected_version: str,
+        before_publish: Callable[[], None] | None = None,
+    ) -> dict[str, Any]:
+        """Select tools for Work discovery without granting execution authority."""
+        if type(enabled) is not bool or not expected_digest or not expected_version:
+            raise ValueError("A reviewed Work tool content binding is required")
+        manifest = self.verify(extension_id)
+        record = self.get_record(extension_id) or {}
+        if record.get("state") == "revoked":
+            raise PermissionError("Revoked extension cannot be enabled for Work")
+        if not manifest.tools and manifest.source_format != "mcp-config":
+            raise ValueError("Extension has no executable tools")
+        if (
+            record.get("digest") != expected_digest
+            or record.get("version") != expected_version
+        ):
+            raise PermissionError("Extension changed; review its content again")
+        if before_publish is not None:
+            before_publish()
+        index = self._index()
+        index["extensions"][extension_id]["work_enabled"] = enabled
         _write_json(self.index_path, index)
         self._write_lock(index)
         self.verify(extension_id)
@@ -400,6 +438,7 @@ class ExtensionRegistry:
         if revoked:
             record["state"] = "revoked"
             record["authority"] = "none"
+            record["work_enabled"] = False
             record.pop("pending_permission_request", None)
         _write_json(self.index_path, index)
         self._write_lock(index)
@@ -748,6 +787,7 @@ class ExtensionRegistry:
                     "source_format": record["source_format"],
                     "authority": record.get("authority", "none"),
                     "presentation_enabled": record.get("presentation_enabled", False),
+                    "work_enabled": record.get("work_enabled", False),
                     "granted_capabilities": list(
                         record.get("granted_capabilities") or ()
                     ),

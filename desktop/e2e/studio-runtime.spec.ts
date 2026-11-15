@@ -10,6 +10,55 @@ const token = "APEIR_FAKE_ONLY_STUDIO_BROWSER_9342";
 const producers: ChildProcess[] = [];
 const runtimes: Array<{ process: ChildProcess; directory: string; url: string }> = [];
 
+test("extension library installs a real tool document without granting it execution authority", async ({ page }, info) => {
+  await open(page);
+  await page.getByRole("button", { name: /Add panel/ }).click();
+  await page.getByRole("textbox", { name: "Search panels" }).fill("Extensions");
+  await page.getByRole("button", { name: "Extensions", exact: true }).click();
+  const library = page.getByRole("region", { name: "Extensions", exact: true });
+  await library.getByLabel("Type", { exact: true }).selectOption("tools");
+  await library.getByRole("tab", { name: "Discover", exact: true }).click();
+  const manager = library.getByRole("region", { name: "Tool Extensions", exact: true });
+  const path = join(runtimes[0].directory, "reviewed-api.json");
+  await writeFile(path, JSON.stringify({ openapi: "3.1.0", info: { title: "Readonly Reference", version: "1.0.0" }, servers: [{ url: "https://reference.example.invalid" }], paths: { "/status": { get: { operationId: "readStatus" } } } }));
+  await manager.getByLabel("Import tool extension", { exact: true }).setInputFiles(path);
+  await expect(manager.getByRole("button", { name: "Request install", exact: true })).toBeVisible();
+  async function approve(button: string) {
+    if (button === "Uninstall") page.once("dialog", dialog => void dialog.accept());
+    await manager.getByRole("button", { name: button, exact: true }).click();
+    const pending = manager.getByRole("status").filter({ hasText: "NOUS_APPROVAL_REQUIRED" });
+    await expect(pending).toBeVisible();
+    const request = (await pending.textContent())?.match(/"approval_request_id":"([A-Za-z0-9_-]+)"/)?.[1]; expect(request).toBeTruthy();
+    const child = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-m", "nous_runtime.cli.main", "--no-intelligence", "approval", "approve", request!], { cwd: runtimes[0].directory, env: { ...globalThis.process.env, PYTHONPATH: resolve(".."), NOUS_WORKSPACE_ROOT: runtimes[0].directory }, stdio: "ignore" });
+    producers.push(child);
+    expect(await new Promise<number | null>((resolve, reject) => { child.once("exit", resolve); child.once("error", reject); })).toBe(0);
+    if (button === "Uninstall") page.once("dialog", dialog => void dialog.accept());
+    await manager.getByRole("button", { name: button, exact: true }).click();
+    await expect(manager.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+  }
+  await approve("Request install");
+  await expect(library.getByRole("tab", { name: "Installed", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(manager.getByText("Kernel authorization required", { exact: true })).toBeVisible();
+  await expect(manager.getByText("Disabled for tasks", { exact: true })).toBeVisible();
+  await approve("Enable for tasks");
+  await expect(manager.getByText("Enabled for tasks", { exact: true })).toBeVisible();
+  await expect(manager.getByText("Kernel authorization required", { exact: true })).toBeVisible();
+  const result = await fetch(`${runtimes[0].url}/api/v1/studio/extensions`, { headers: { Authorization: `Bearer ${token}` } });
+  const record = (await result.json()).data.tool_extensions.records[0];
+  expect(record.authority).toBe("none"); expect(record.tools).toEqual([{ name: "readStatus", protocol: "openapi" }]);
+  const forged = await fetch(`${runtimes[0].url}/api/v1/studio/extensions/tools/configure`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ extension_id: record.extension_id, enabled: "true", expected_digest: record.digest, expected_version: record.version }) });
+  expect((await forged.json()).ok).toBe(false);
+  await page.screenshot({ path: info.outputPath("extensions-library-source.png") });
+  await approve("Disable for tasks");
+  await expect(manager.getByText("Disabled for tasks", { exact: true })).toBeVisible();
+  await approve("Uninstall");
+  await expect(manager.getByText("Nothing installed here yet", { exact: true })).toBeVisible();
+  await page.reload(); await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
+  await page.locator(".flexlayout__tab_button").filter({ hasText: "Extensions" }).first().click();
+  await library.getByLabel("Type", { exact: true }).selectOption("tools");
+  await expect(manager.getByText("Nothing installed here yet", { exact: true })).toBeVisible();
+});
+
 async function port() {
   const server = createServer();
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -926,11 +975,13 @@ test(`Declarative UI extension uses public review and approval, real status, rev
   try {
     await open(page);
     await page.getByRole("button", { name: /Add panel/ }).click();
-    await page.getByRole("textbox", { name: "Search panels" }).fill("UI Extensions");
-    await page.getByRole("button", { name: "UI Extensions", exact: true }).click();
+    await page.getByRole("textbox", { name: "Search panels" }).fill("Extensions");
+    await page.getByRole("button", { name: "Extensions", exact: true }).click();
+    const library = page.getByRole("region", { name: "Extensions", exact: true });
+    await library.getByRole("tab", { name: "Discover", exact: true }).click();
     const manager = page.getByRole("region", { name: "UI Extensions", exact: true });
     async function approveAndRetry(buttonName: string) {
-      if (buttonName === "Remove") page.once("dialog", dialog => void dialog.accept());
+      if (buttonName === "Uninstall") page.once("dialog", dialog => void dialog.accept());
       await manager.getByRole("button", { name: buttonName, exact: true }).click();
       await expect(manager.getByRole("status").filter({ hasText: "NOUS_APPROVAL_REQUIRED" })).toBeVisible();
       const message = await manager.getByRole("status").filter({ hasText: "NOUS_APPROVAL_REQUIRED" }).textContent();
@@ -938,16 +989,17 @@ test(`Declarative UI extension uses public review and approval, real status, rev
       const child = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", ["-m", "nous_runtime.cli.main", "--no-intelligence", "approval", "approve", id!], { cwd: runtimes[0].directory, env: { ...globalThis.process.env, PYTHONPATH: resolve(".."), NOUS_WORKSPACE_ROOT: runtimes[0].directory }, stdio: "ignore" });
       producers.push(child);
       expect(await new Promise<number | null>((resolve, reject) => { child.once("exit", resolve); child.once("error", reject); })).toBe(0);
-      if (buttonName === "Remove") page.once("dialog", dialog => void dialog.accept());
+      if (buttonName === "Uninstall") page.once("dialog", dialog => void dialog.accept());
       await manager.getByRole("button", { name: buttonName, exact: true }).click();
       await expect(manager.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
     }
+    await library.getByRole("tab", { name: "Discover", exact: true }).click();
     await manager.getByLabel("Import UI extension", { exact: true }).setInputFiles(manifestPath);
     await expect(manager.getByRole("button", { name: "Request install", exact: true })).toBeVisible();
     await approveAndRetry("Request install");
-    await expect(manager.getByText("DISABLED", { exact: true })).toBeVisible();
+    await expect(manager.getByText("Disabled", { exact: true })).toBeVisible();
     await approveAndRetry("Enable");
-    await expect(manager.getByText("ENABLED", { exact: true })).toBeVisible();
+    await expect(manager.getByText("Enabled", { exact: true })).toBeVisible();
     const response = await fetch(`${runtimes[0].url}/api/v1/studio/extensions`, { headers: { Authorization: `Bearer ${token}` } });
     const view = (await response.json()).data;
     const record = view.extensions.find((item: { extension_id: string }) => item.extension_id === original.extension_id);
@@ -975,22 +1027,24 @@ test(`Declarative UI extension uses public review and approval, real status, rev
     const layout = await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"));
     expect(layout).toContain(widgetType); expect(layout).not.toContain(record.digest); expect(layout).not.toContain(token);
     await page.screenshot({ path: info.outputPath("extension-runtime-dashboard-source-browser.png"), fullPage: true });
-    await page.locator(".flexlayout__tab_button").filter({ hasText: "UI Extensions" }).first().click();
+    await page.locator(".flexlayout__tab_button").filter({ hasText: "Extensions" }).first().click();
     await approveAndRetry("Disable");
     const denied = await fetch(`${runtimes[0].url}/api/v1/studio/extensions/data?${new URLSearchParams({ component_type: widgetType, expected_digest: record.digest, source: profile.source })}`, { headers: { Authorization: `Bearer ${token}` } });
     expect((await denied.json()).ok).toBe(false);
     await page.locator(".flexlayout__tab_button").filter({ hasText: "Dashboard" }).first().click();
     await expect(page.getByRole("status").filter({ hasText: "DISABLED" })).toBeVisible();
-    await page.locator(".flexlayout__tab_button").filter({ hasText: "UI Extensions" }).first().click();
+    await page.locator(".flexlayout__tab_button").filter({ hasText: "Extensions" }).first().click();
     await approveAndRetry("Enable");
     await writeFile(manifestPath, JSON.stringify({ ...original, description: "Conflicting same-version content" }));
+    await library.getByRole("tab", { name: "Discover", exact: true }).click();
     await manager.getByLabel("Import UI extension", { exact: true }).setInputFiles(manifestPath);
     await expect(manager.getByRole("status").filter({ hasText: /immutable|different|version/ })).toBeVisible();
-    await manager.getByRole("button", { name: "Discard review", exact: true }).click();
+    await manager.getByRole("button", { name: "Cancel", exact: true }).click();
     await writeFile(manifestPath, JSON.stringify({ ...original, version: "1.1.0" }));
+    await library.getByRole("tab", { name: "Discover", exact: true }).click();
     await manager.getByLabel("Import UI extension", { exact: true }).setInputFiles(manifestPath);
     await approveAndRetry("Request install");
-    await expect(manager.getByText("DISABLED", { exact: true })).toBeVisible();
+    await expect(manager.getByText("Disabled", { exact: true })).toBeVisible();
     await approveAndRetry("Enable");
     await expect.poll(() => page.evaluate(() => {
       const saved = JSON.parse(localStorage.getItem("apeir.studio.layout.v1") || "null");
@@ -1002,24 +1056,25 @@ test(`Declarative UI extension uses public review and approval, real status, rev
     expect(content(latestLayout)).toEqual(content(layout));
     await page.reload(); await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"))).toBe(latestLayout);
-    await page.locator(".flexlayout__tab_button").filter({ hasText: "UI Extensions" }).first().click();
-    await expect(manager.getByText(/1.1.0 · UNVERIFIED/)).toBeVisible();
+    await page.locator(".flexlayout__tab_button").filter({ hasText: "Extensions" }).first().click();
+    await expect(manager.getByText(/1.1.0 · Interface/)).toBeVisible();
     async function switchController(index: number) {
       await page.getByRole("button", { name: /Add panel/ }).click();
       await page.getByRole("textbox", { name: "Search panels" }).fill("Operations Console");
       await page.getByRole("button", { name: "Operations Console", exact: true }).click();
-      await page.getByText("Controller connection", { exact: true }).click();
-      await page.getByRole("textbox", { name: "API URL" }).fill(runtimes[index].url);
-      await page.getByLabel("Service session token", { exact: true }).fill(token);
-      await page.getByRole("button", { name: "Connect", exact: true }).click();
-      await expect(page.getByText("Controller connection changed.", { exact: false })).toBeVisible();
+      const console = page.getByRole("main", { name: "Operations console", exact: true });
+      await console.getByText("Controller connection", { exact: true }).click();
+      await console.getByRole("textbox", { name: "API URL" }).fill(runtimes[index].url);
+      await console.getByLabel("Service session token", { exact: true }).fill(token);
+      await console.getByRole("button", { name: "Connect", exact: true }).click();
+      await expect(console.getByText("Controller connection changed.", { exact: false })).toBeVisible();
     }
     await switchController(1);
     await page.locator(".flexlayout__tab_button").filter({ hasText: "Dashboard" }).first().click();
     await expect(page.getByRole("status").filter({ hasText: "Missing Extension" })).toBeVisible();
     await switchController(0);
-    await page.locator(".flexlayout__tab_button").filter({ hasText: "UI Extensions" }).first().click();
-    await expect(manager.getByText(/1.1.0 · UNVERIFIED/)).toBeVisible();
+    await page.locator(".flexlayout__tab_button").filter({ hasText: "Extensions" }).first().click();
+    await expect(manager.getByText(/1.1.0 · Interface/)).toBeVisible();
     const runtime = runtimes[0];
     const exited = new Promise<void>((resolve, reject) => {
       const deadline = setTimeout(() => reject(new Error("Original extension Runtime did not stop")), 5000);
@@ -1034,13 +1089,13 @@ test(`Declarative UI extension uses public review and approval, real status, rev
       if (runtime.process.exitCode !== null) throw new Error(`Original extension Runtime restart failed (${runtime.process.exitCode}): ${restartDiagnostics}`);
       try { return (await fetch(`${runtime.url}/api/v1/status`, { headers: { Authorization: `Bearer ${token}` } })).ok; } catch { return false; }
     }, { timeout: 10000 }).toBe(true);
-    await manager.getByRole("button", { name: "Refresh", exact: true }).click();
-    await expect(manager.getByText(/1.1.0 · UNVERIFIED/)).toBeVisible();
+    await library.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(manager.getByText(/1.1.0 · Interface/)).toBeVisible();
     if (profile.source === "workflow.summary") {
       const restored = await fetch(`${runtime.url}/api/v1/studio/extensions`, { headers: { Authorization: `Bearer ${token}` } });
       expect((await restored.json()).data.sources["workflow.summary"].values).toEqual(sdkRead.values);
     }
-    await approveAndRetry("Remove");
+    await approveAndRetry("Uninstall");
     await page.locator(".flexlayout__tab_button").filter({ hasText: "Dashboard" }).first().click();
     await expect(page.getByRole("status").filter({ hasText: "Missing Extension" })).toBeVisible();
     const foreign = await fetch(`${runtimes[1].url}/api/v1/studio/extensions/data?${new URLSearchParams({ component_type: widgetType, expected_digest: record.digest, source: profile.source })}`, { headers: { Authorization: `Bearer ${token}` } });

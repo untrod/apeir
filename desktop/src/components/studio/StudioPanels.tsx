@@ -47,7 +47,7 @@ function Projection({ collection }: { collection: keyof OperationsSnapshot | "ru
 
 // This registry owns presentation only. Contributions cannot create Capability grants.
 export const STUDIO_PANELS: readonly PanelContribution[] = [
-  { type: "extensions", en: "UI Extensions", zh: "界面扩展", owner: "ExtensionRegistry / Governance", render: props => <StudioExtensions {...props} /> },
+  { type: "extensions", en: "Extensions", zh: "扩展", owner: "ExtensionRegistry / Governance", render: props => <StudioExtensions {...props} /> },
   { type: "dashboard", en: "Dashboard", zh: "仪表盘", owner: "Existing Runtime projections / read-only", render: props => <StudioDashboard {...props} /> },
   { type: "chat", en: "Chat", zh: "对话", owner: "Conversation / Model Gateway", render: p => <StudioChat {...p} /> },
   { type: "files", en: "Project Files", zh: "项目文件", owner: "Workspace API / Governance", render: p => <DeveloperWorkbench navigation={p.navigation} locale={p.locale} embeddedConversation={false} onDraftChange={p.onDraftChange} onDraftSnapshot={p.onDraftSnapshot} onOpenEnvironments={() => p.open("environment")} /> },

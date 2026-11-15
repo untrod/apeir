@@ -16,8 +16,10 @@ export type StudioView =
   | { kind: "action"; label: string; action: "workflow.run"; params: { workflow_id: string; version: string; inputs?: Record<string, unknown> } };
 export type StudioUIContribution = { id: string; type: string; kind: "panel" | "widget"; title: string; description?: string; subscriptions?: string[]; events?: string[]; view: StudioView };
 export type StudioUIExtension = { extension_id: string; version: string; digest: string; enabled: boolean; state: string; authority: string; publisher_trust: string; signature_status: string; contributions: StudioUIContribution[] };
-export type StudioUIView = { sources?: { "workflow.summary"?: StudioWorkflowSource }; extensions: StudioUIExtension[]; diagnostics: { extension_id: string; state: string; reason: string }[]; status: Partial<Record<StudioField, string | number | boolean | null>> | null; received_at: string; executable_ui: "BLOCKED"; execution_scope: "runtime-service" };
+export type StudioUIView = { tool_extensions?: StudioToolCatalog; sources?: { "workflow.summary"?: StudioWorkflowSource }; extensions: StudioUIExtension[]; diagnostics: { extension_id: string; state: string; reason: string }[]; status: Partial<Record<StudioField, string | number | boolean | null>> | null; received_at: string; executable_ui: "BLOCKED"; execution_scope: "runtime-service" };
 export type StudioUIReview = { extension_id: string; version: string; digest: string; previous_digest: string; manifest: Record<string, unknown> };
+export type StudioToolExtension = { extension_id: string; version: string; digest: string; enabled: boolean; state: string; authority: string; status: "REVOKED" | "NEEDS_AUTHORIZATION" | "NEEDS_DISCOVERY" | "UNSUPPORTED" | "KERNEL_CHECK_REQUIRED" | "DISABLED"; tools: { name: string; protocol: string }[]; verification: "NOT_PHYSICAL_VERIFICATION" };
+export type StudioToolCatalog = { records: StudioToolExtension[]; diagnostics: { extension_id: string; state: string; reason: string }[] };
 const component = /^ui:[0-9a-f]{32}:[a-z][a-z0-9-]{0,31}$/;
 const digest = /^sha256:[0-9a-f]{64}$/;
 const object = (value: unknown): Record<string, unknown> => {
@@ -46,6 +48,17 @@ function validateView(value: unknown, depth = 0): value is StudioView {
 export function parseStudioUIView(input: unknown): StudioUIView {
   const value = object(input);
   if (new TextEncoder().encode(JSON.stringify(input)).byteLength > MAX_STUDIO_UI_PROJECTION_BYTES || !Array.isArray(value.extensions) || value.extensions.length > 64 || value.execution_scope !== "runtime-service" || value.executable_ui !== "BLOCKED" || !boundedText(value.received_at, 64)) throw new Error("Unsupported Studio host response");
+  if (value.tool_extensions !== undefined) {
+    const tools = object(value.tool_extensions);
+    if (!Array.isArray(tools.records) || tools.records.length > 64 || !Array.isArray(tools.diagnostics) || tools.diagnostics.length > 512) throw new Error("Invalid Work extension catalog");
+    const identities = new Set<string>();
+    for (const raw of tools.records) {
+      const record = object(raw);
+      if (!boundedText(record.extension_id, 256) || identities.has(String(record.extension_id)) || !boundedText(record.version, 128) || typeof record.digest !== "string" || !digest.test(record.digest) || typeof record.enabled !== "boolean" || !boundedText(record.state, 256) || !boundedText(record.authority, 256) || !["REVOKED", "NEEDS_AUTHORIZATION", "NEEDS_DISCOVERY", "UNSUPPORTED", "KERNEL_CHECK_REQUIRED", "DISABLED"].includes(String(record.status)) || record.verification !== "NOT_PHYSICAL_VERIFICATION" || !Array.isArray(record.tools) || record.tools.length > 128 || record.tools.some(tool => { const item = object(tool); return !boundedText(item.name, 128) || !["mcp", "openapi"].includes(String(item.protocol)); })) throw new Error("Invalid Work extension identity");
+      identities.add(String(record.extension_id));
+    }
+    if (tools.diagnostics.some(raw => { const row = object(raw); return ![row.extension_id, row.state, row.reason].every(field => boundedText(field, 256)); })) throw new Error("Invalid Work extension diagnostics");
+  }
   const types = new Set<string>();
   for (const item of value.extensions) {
     const record = object(item);

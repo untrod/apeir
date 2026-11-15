@@ -62,14 +62,23 @@ these contributions; arbitrary third-party JavaScript is not enabled.
 
 ### Skills and tools
 
-Use **Operations Console → Skills** to review a local or supported HTTPS package,
-then install, load or enable it. Source, version, digest and requested
-capabilities are shown before installation. Follow
+Open **Studio → Extensions**. **Installed** lists Skills, interface widgets and
+tool packages; **Discover** offers registered Skill catalogs and package import.
+Search or filter by type, review the package, then install it. Skills support
+updates, instruction loading, enable/disable and uninstall. Source and permission
+details stay available without filling the main list. Follow
 [Hello Skill](../../examples/hello_skill/README.md) for a local catalog example.
 
 An instruction Skill supplies text. Executable tools need a supported handler
 and execution permission. Installing a package does not grant either.
 [Extension formats](ECOSYSTEM.md) covers the available integration paths.
+
+MCP/OpenAPI packages can be imported as JSON, then separately opted into Work.
+The existing Extension CLI owns Kernel admission, capability approval and MCP
+tool discovery. Work loads enabled, authorized tool schemas on demand and
+rechecks the exact installed version before each call. A missing Kernel or
+executor remains blocked. See [tool setup](STUDIO_UI_EXTENSIONS.md#tool-packages).
+There is no qualified public publisher marketplace yet.
 
 ## SDK
 

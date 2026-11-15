@@ -1,54 +1,51 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, api, captureRuntimeConnection, governedStudioMutation } from "../../lib/api";
-import type { StudioUIReview } from "../../lib/studioExtensions";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
+import type { WorkbenchDraft } from "../DeveloperWorkbench";
 import type { PanelProps } from "./StudioPanels";
+import { StudioPackages } from "./StudioPackages";
+import { StudioSkills } from "./StudioSkills";
 import { useStudioSnapshot } from "./StudioData";
 
-/** Existing ExtensionRegistry review/install/lifecycle, with no executable UI loading. */
-export function StudioExtensions({ locale, isVisible, onDraftChange, onDraftSnapshot }: PanelProps) {
-  const { extensions, invalidateExtensions, refresh, subscribeLive } = useStudioSnapshot();
-  const [guard] = useState(captureRuntimeConnection), alive = useRef(true);
-  const [source, setSource] = useState(""), [review, setReview] = useState<StudioUIReview | null>(null);
-  const [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [uncertain, setUncertain] = useState(false);
-  const input = useRef<HTMLInputElement>(null), operation = useRef(false);
-  const active = useCallback(() => isVisible() && document.visibilityState !== "hidden", [isVisible]);
-  useEffect(() => subscribeLive(active, ["extensions"]), [active, subscribeLive]);
-  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  useEffect(() => { onDraftChange(!!source || busy || uncertain); onDraftSnapshot(source ? [{ path: "extension-review.json", content: source, originalSha256: "" }] : []); }, [source, busy, uncertain, onDraftChange, onDraftSnapshot]);
+type Kind = "skills" | "ui" | "tools";
+const kinds: Kind[] = ["skills", "ui", "tools"];
+
+/** Presentation only. Skills/ExtensionRegistry/Governance retain all state. */
+export function StudioExtensions(props: PanelProps) {
+  const { locale, onDraftChange, onDraftSnapshot, isVisible } = props;
+  const { refresh } = useStudioSnapshot();
+  const [mode, setMode] = useState<"installed" | "discover">("installed");
+  const [kind, setKind] = useState<Kind | "all">("all"), [query, setQuery] = useState("");
+  const dirty = useRef<Record<string, boolean>>({}), drafts = useRef<Record<string, WorkbenchDraft[]>>({});
+  const identity = useId();
   const t = (en: string, zh: string) => locale === "zh" ? zh : en;
-  const check = () => { guard(); if (!alive.current) throw new Error("Controller presentation retired"); };
-  const mutate = async (action: "install" | "configure" | "remove", body: Record<string, unknown>) => {
-    if (operation.current || uncertain) return;
-    operation.current = true; setBusy(true); setMessage("");
-    try {
-      await governedStudioMutation(`/api/v1/studio/extensions/${action}`, body, check);
-      check(); invalidateExtensions(); setMessage(t("Saved", "已保存"));
-      if (action === "install") { setSource(""); setReview(null); }
-    } catch (error) {
-      try {
-        check(); setMessage(error instanceof ApiError ? `${error.code} · ${error.message} · ${JSON.stringify(error.details || {})}` : String(error));
-        // A lost response is reconciled by reading the Registry, never an automatic retry.
-        if (!(error instanceof ApiError) || !["NOUS_APPROVAL_REQUIRED", "NOUS_FORBIDDEN", "NOUS_INVALID_REQUEST", "NOUS_NOT_AVAILABLE"].includes(error.code)) { setUncertain(true); invalidateExtensions(); }
-      } catch { /* Original request and effects remain managed by Runtime. */ }
-    } finally { operation.current = false; if (alive.current) setBusy(false); }
-  };
-  return <section className="studio-extensions studio-projection" aria-label="UI Extensions">
-    <header><strong>{t("UI Extensions", "界面扩展")}</strong><button disabled={busy} onClick={() => refresh(["extensions"])}>{t("Refresh", "刷新")}</button><button disabled={busy} onClick={() => input.current?.click()}>{t("Review manifest", "审查清单")}</button></header>
-    <input type="file" hidden ref={input} accept="application/json,.json" aria-label="Import UI extension" onChange={async event => {
-      const file = event.target.files?.[0]; event.target.value = ""; if (!file || operation.current || uncertain) return;
-      operation.current = true; setBusy(true); setMessage(""); setReview(null);
-      try {
-        check(); if (file.size > 128 * 1024) throw new Error("Manifest exceeds 128 KiB");
-        const text = await file.text(); check(); setSource(text);
-        const result = await api<StudioUIReview>("/api/v1/studio/extensions/review", { method: "POST", body: JSON.stringify({ source_manifest: text }) });
-        check(); if (!result || typeof result.digest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(result.digest)) throw new Error("Invalid reviewed package digest"); setReview(result);
-      } catch (error) { try { check(); setMessage(String(error)); } catch { /* Retired Controller. */ } }
-      finally { operation.current = false; if (alive.current) setBusy(false); }
-    }} />
-    {message && <p role="status" className="studio-extension-message">{message}</p>}
-    {uncertain && <div role="alert">UNKNOWN · {t("Refresh and inspect the original package state before continuing. No operation was retried.", "请刷新并核对原始包状态后继续，未重试操作。")}<button onClick={() => { setUncertain(false); setMessage(""); }}>{t("I inspected the original state", "已核对原始状态")}</button></div>}
-    {source && <article className="studio-extension-review"><h3>{review?.extension_id || t("Manifest review", "清单审查")}</h3>{review && <><dl><dt>{t("Version", "版本")}</dt><dd>{review.version}</dd><dt>SHA-256</dt><dd>{review.digest}</dd><dt>{t("Publisher", "发布者")}</dt><dd>UNVERIFIED</dd></dl><details><summary>{t("Permissions & contributions", "请求权限与组件")}</summary><pre>{JSON.stringify(review.manifest, null, 2)}</pre></details><button disabled={busy || uncertain} onClick={() => void mutate("install", { source_manifest: source, expected_digest: review.digest, expected_previous_digest: review.previous_digest })}>{t("Request install", "请求安装")}</button></>}<button disabled={busy} onClick={() => { setSource(""); setReview(null); }}>{t("Discard review", "放弃审查")}</button></article>}
-    {extensions.error ? <p role="alert">UNAVAILABLE · {extensions.error}</p> : !extensions.data && extensions.loading ? <p role="status">LOADING</p> : <>{!extensions.data?.extensions.length && <p role="status">{t("No UI extensions installed", "尚未安装界面扩展")}</p>}{extensions.data?.extensions.map(record => <article className="studio-extension-record" key={record.extension_id}><div className="studio-row-heading"><strong>{record.extension_id}</strong><span className="studio-status studio-status-neutral">{record.enabled ? "ENABLED" : "DISABLED"}</span></div><small>{record.version} · {record.publisher_trust} · {record.authority}</small><details><summary>{t("Package details", "包详情")}</summary><p>{record.digest}</p><p>{record.signature_status}</p><p>{record.contributions.map(item => item.title).join(" · ")}</p></details><button disabled={busy || uncertain || record.state === "revoked"} onClick={() => void mutate("configure", { extension_id: record.extension_id, enabled: !record.enabled, expected_digest: record.digest, expected_version: record.version })}>{record.enabled ? t("Disable", "禁用") : t("Enable", "启用")}</button><button disabled={busy || uncertain} onClick={() => { if (window.confirm(t(`Remove ${record.extension_id}? Existing layout slots will remain.`, `卸载 ${record.extension_id}？现有布局槽位将保留。`))) void mutate("remove", { extension_id: record.extension_id, expected_digest: record.digest, expected_version: record.version }); }}>{t("Remove", "卸载")}</button></article>)}{extensions.data?.diagnostics.map((item, i) => <p role="alert" key={i}>{item.state} · {item.extension_id} · {item.reason}</p>)}</>}
-    <details className="studio-card-details"><summary>{t("Compatibility", "兼容性")}</summary>apeir.studio-ui/v1 · {t("Declarative UI only. Executable JavaScript UI: BLOCKED. Installation and display do not grant tool permissions.", "仅声明式界面。可执行 JavaScript 界面：BLOCKED。安装与展示不授予工具权限。")}</details>
+  const callbacks = useMemo(() => Object.fromEntries(kinds.map(key => [key, {
+    onDraftChange: (value: boolean) => {
+      const previous = Object.values(dirty.current).some(Boolean);
+      dirty.current[key] = value;
+      const next = Object.values(dirty.current).some(Boolean);
+      if (next !== previous) onDraftChange(next);
+    },
+    onDraftSnapshot: (value: WorkbenchDraft[]) => {
+      if (JSON.stringify(drafts.current[key] || []) === JSON.stringify(value)) return;
+      drafts.current[key] = value; onDraftSnapshot(Object.values(drafts.current).flat());
+    },
+  }])) as Record<Kind, Pick<PanelProps, "onDraftChange" | "onDraftSnapshot">>, [onDraftChange, onDraftSnapshot]);
+  const skillsVisible = useCallback(() => isVisible() && (kind === "all" || kind === "skills"), [isVisible, kind]);
+  const uiVisible = useCallback(() => isVisible() && (kind === "all" || kind === "ui"), [isVisible, kind]);
+  const toolsVisible = useCallback(() => isVisible() && (kind === "all" || kind === "tools"), [isVisible, kind]);
+  return <section className="studio-extensions studio-projection" aria-label="Extensions">
+    <header><strong>{t("Extensions", "扩展")}</strong><button onClick={() => refresh(["operations", "extensions"])}>{t("Refresh", "刷新")}</button></header>
+    <div className="studio-extension-tabs" role="tablist" aria-label={t("Extension library", "扩展库")}>
+      {(["installed", "discover"] as const).map((tab, index) => <button key={tab} id={`${identity}-${tab}`} role="tab" aria-selected={mode === tab} aria-controls={`${identity}-content`} tabIndex={mode === tab ? 0 : -1} onClick={() => setMode(tab)} onKeyDown={event => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault(); const next = event.key === "Home" ? "installed" : event.key === "End" ? "discover" : index === 0 ? "discover" : "installed";
+        setMode(next); document.getElementById(`${identity}-${next}`)?.focus();
+      }}>{tab === "installed" ? t("Installed", "已安装") : t("Discover", "发现与安装")}</button>)}
+    </div>
+    <div className="studio-extension-filters"><label className="studio-extension-search">{t("Search", "搜索")}<input type="search" placeholder={t("Find an extension", "查找扩展")} value={query} onChange={event => setQuery(event.target.value)} /></label><label>{t("Type", "类型")}<select aria-label={t("Type", "类型")} value={kind} onChange={event => setKind(event.target.value as Kind | "all")}><option value="all">{t("All", "全部")}</option><option value="skills">{t("Skills", "技能")}</option><option value="tools">{t("Tools", "工具")}</option><option value="ui">{t("Interface", "界面")}</option></select></label></div>
+    <div role="tabpanel" id={`${identity}-content`} aria-labelledby={`${identity}-${mode}`}>
+      <div hidden={kind !== "all" && kind !== "skills"}><StudioSkills {...props} {...callbacks.skills} mode={mode} query={query} onInstalled={() => setMode("installed")} isVisible={skillsVisible} /></div>
+      <div hidden={kind !== "all" && kind !== "ui"}><StudioPackages {...props} {...callbacks.ui} kind="ui" mode={mode} query={query} onInstalled={() => setMode("installed")} isVisible={uiVisible} /></div>
+      <div hidden={kind !== "all" && kind !== "tools"}><StudioPackages {...props} {...callbacks.tools} kind="tools" mode={mode} query={query} onInstalled={() => setMode("installed")} isVisible={toolsVisible} /></div>
+    </div>
   </section>;
 }

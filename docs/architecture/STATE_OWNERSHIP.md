@@ -67,6 +67,15 @@ failure rather than expose collectible installed evidence. Ambiguous historical
 holds and crash-left preparation holds require explicit review, not guessed GC.
 Retention never grants execution authority.
 
+Extension Work exposure uses the same Registry and lock's optional `work_enabled`
+flag. Missing historical fields mean disabled; updates reset it. This is a host
+selection preference, not a Kernel grant. Work reloads current package integrity,
+version and enablement before admission, then uses the existing parameter-bound
+Kernel execution permit and receipt. Final enablement/revocation checks and the
+original claim share the Registry writer fence. Disabling stops later Work calls;
+it does not assert that an already admitted effect stopped. Direct operator SDK
+execution retains its separate original Kernel authorization requirements.
+
 Long-lived CAS readers also reload the existing atomically published index before
 get/list/resolve/verify. Evidence published by another store instance is visible
 without recreating the reader; corrupt current metadata raises an Artifact error

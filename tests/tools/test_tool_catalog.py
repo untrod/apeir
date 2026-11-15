@@ -132,6 +132,19 @@ def test_extension_and_mcp_tools_are_normalized_and_still_delegated():
     assert calls == [("example.mcp", "lookup", {"key": "a"})]
 
 
+def test_colliding_extension_names_never_leave_a_partly_registered_catalog():
+    import pytest
+
+    catalog = ToolCatalog()
+    with pytest.raises(ValueError, match="collide"):
+        catalog.register_extension_tools(
+            "example.mcp",
+            (ToolSpec(name="read-item"), ToolSpec(name="read_item")),
+            executor=lambda *_: {"ok": True},
+        )
+    assert catalog.discover() == ()
+
+
 def test_work_loop_can_expand_then_invoke_a_catalog_tool(tmp_path):
     runtime = StubRuntime()
     catalog = ToolCatalog()
