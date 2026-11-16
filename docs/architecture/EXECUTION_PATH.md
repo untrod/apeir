@@ -279,9 +279,24 @@ not expose the currently unsupported `shell_start` tool or qualify a live PTY.
 Unplanned tool Work still passes the existing recorded-work completion gate.
 Coding verification uses current Plan evidence: tests and diff review must follow
 the latest recorded change, and a process started before it does not gain
-freshness from later polling. Test success requires EXITED with exact integer
-exit code zero. These records remain software evidence, not an independent
-Reality Observation or physical-effect commitment.
+freshness from later polling. The default Work catalog exposes
+`run_project_tests`, not an unrestricted terminal. Its fixed read-only profile
+still requires the current authenticated caller and original Governance approval.
+Completion inspects the original Work observation, unique test completion receipt,
+positive test counts, input snapshot and registered CAS result. A model's PASS,
+zero exit code alone, foreign Work or stale/corrupt Artifact is insufficient.
+The immutable, human-approved Proposal can establish diff review when its original
+Work/Plan binding and current file readback match; another Git process is not
+required for that path. Explicit Work resume can reconcile a completed failed
+read-only unittest run using that same canonical receipt/CAS proof and the current
+host-bound Workspace runtime. It retains FAIL and returns to inspection, never
+replays the test or grants another operation. Missing/foreign evidence, timeouts,
+unqualified backends and other uncertain effects remain RECOVERY_REQUIRED.
+The latest test result supersedes earlier passing evidence; a verified failed
+suite requires source inspection before another reviewed edit. Existing
+ProcessSession receipts retain their EXITED and exact integer zero-exit checks.
+These records remain software evidence, not an independent Reality Observation
+or physical-effect commitment.
 
 Tool discovery is progressive:
 

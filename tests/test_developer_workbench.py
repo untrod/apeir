@@ -77,7 +77,9 @@ def test_unittest_profile_requests_a_read_only_project_and_retains_snapshot_evid
     monkeypatch.setattr("nous_runtime.workspace.workbench.run_process_strict", execute)
     result = DeveloperWorkbench(tmp_path).run_profile("python-unittest", target="tests")
     assert received["read_only_workspace"] is True
-    assert received["argv"][1:] == ["-I", "-m", "unittest", "discover", "-s", "tests"]
+    from nous_runtime.workspace.workbench import _UNITTEST_BOOTSTRAP
+
+    assert received["argv"][1:] == ["-I", "-c", _UNITTEST_BOOTSTRAP, "tests"]
     assert result["input_snapshot_sha256"] == "a" * 64
     from nous_runtime.events import EventStream
 
@@ -87,6 +89,46 @@ def test_unittest_profile_requests_a_read_only_project_and_retains_snapshot_evid
         and event.payload["input_snapshot_sha256"] == "a" * 64
         for event in events
     )
+
+
+@pytest.mark.parametrize("directory", ["tests", "test suite"])
+@pytest.mark.parametrize("packaged", [False, True])
+def test_fixed_unittest_bootstrap_imports_project_without_external_pythonpath(
+    tmp_path, monkeypatch, directory, packaged
+):
+    """Trusted runner contract only; real VM qualification is a separate gate."""
+    import subprocess
+
+    (tmp_path / "example_project.py").write_text("VALUE = 7\n")
+    outside = tmp_path / "outside-imports"
+    outside.mkdir()
+    (outside / "outside_marker.py").write_text(
+        "raise AssertionError('PYTHONPATH leaked')\n"
+    )
+    monkeypatch.setenv("PYTHONPATH", str(outside))
+    tests = tmp_path / directory
+    tests.mkdir()
+    if packaged:
+        (tests / "__init__.py").write_text("")
+        (tests / "shared_data.py").write_text("VALUE = 7\n")
+    (tests / "test_example.py").write_text(
+        "import importlib.util, unittest\n"
+        "import example_project\n"
+        + ("from .shared_data import VALUE\n" if packaged else "VALUE = 7\n")
+        + "class TestProject(unittest.TestCase):\n"
+        "    def test_local_import(self):\n"
+        "        self.assertEqual(example_project.VALUE, VALUE)\n"
+        "        self.assertIsNone(importlib.util.find_spec('outside_marker'))\n"
+    )
+    argv, target, is_test = DeveloperWorkbench(tmp_path)._profile_command(
+        "python-unittest", directory
+    )
+    assert target == directory and is_test
+    result = subprocess.run(
+        argv, cwd=tmp_path, capture_output=True, text=True, timeout=10
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Ran 1 test" in result.stderr and result.stderr.rstrip().endswith("OK")
 
 
 def test_unittest_profile_rejects_a_file_instead_of_a_test_directory(tmp_path):

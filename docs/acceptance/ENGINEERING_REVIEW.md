@@ -7364,3 +7364,118 @@ establish a general CPU, Token or latency saving. Kernel/model memory, native
 process-tree startup and Windows first-use performance remain independently
 unmeasured here. The historical test recording's scripted locale/theme/viewport
 changes are not normal application behavior or a polished product demo.
+
+## Governed Work test consumption and current P0 qualification — 2026-11-16
+
+Baseline: `2aa4f94c80ebe2f66800888c3aed711ef5bc3395` (PR161).
+Its resulting-main Core, Desktop, Multi-Arch and Security runs all passed:
+[43819169285](https://github.com/untrod/apeir/actions/runs/43819169285),
+[43819169334](https://github.com/untrod/apeir/actions/runs/43819169334),
+[43819169288](https://github.com/untrod/apeir/actions/runs/43819169288),
+[43819169407](https://github.com/untrod/apeir/actions/runs/43819169407).
+Kernel, component lock and historical tags are unchanged.
+
+The production Work catalog already contained `run_project_tests`, but the model
+VERIFY transition selected only `shell_start`, which that catalog deliberately
+excludes. It now selects the existing fixed test consumer when loaded. Completion
+checks the original durable Work observation, canonical TestValidator receipt,
+positive counts, input snapshot and registered CAS content. Old/foreign results,
+changed plan revisions, missing input digests and corrupted artifacts cannot pass.
+An original approved Proposal with matching Work/Plan identity and current file
+readback establishes its reviewed Diff without requiring a separate Git process.
+No approval, executor, task database or privileged shell was added.
+
+### Actual project and isolation
+
+On Debian 13 x86_64 / CPython 3.12.14, a fresh copy of upstream IDNA 3.10 completed:
+source reads → two comment-only file proposals → independent human approval →
+original proposal application/readback → separate test approval → real read-only
+VM test → original Work completion → restart/history recovery. The operator
+authored the decisions; this is **not** autonomous model-generated code or full
+GUI qualification. All upstream test files/assertions remained byte-identical.
+
+- Original Work: `work_ba52bd675528435caef4971eb948e82f`.
+- Original test Run: `workbench-exec-ca337aeeecbe44f0`, exit 0, `strong_vm`.
+- 6256 tests: 5771 passed, 485 upstream conditional skips. One admitted test
+  execution and one original Proposal application; no recovery replay.
+- Result digest: `sha256:97ca5dc0e7478d792263b1d042ad1b834f9ed807d6931e955477d6fc8b7a9177`.
+- Reviewed VM profile SHA-256:
+  `cacb28316c48872fbb81f595d516dd304c87f6c38e2d0b8a9c3a1e7d0154d8a8`.
+  Official signed Debian inputs include QEMU 10.0.13 and guest Linux
+  6.12.117+deb13-cloud-amd64. Hashes, toolchain inputs and raw probe records remain
+  with the private qualification evidence; this is not a redistributable VM image.
+
+Actual negative runs exposed two unittest discovery defects: `-I` plus a `tests`
+start directory omitted project imports; adding that root without preserving
+package identity still broke relative test imports. The fixed literal bootstrap
+loads trusted stdlib unittest first, keeps `-I`, and chooses the original project
+as top level for package tests. Plain test directories remain supported. User
+targets remain separate argv values. Neither isolation nor the original 30-second
+test budget changed. Both failed Work records initially remained
+RECOVERY_REQUIRED; qualification used explicit fresh project copies, not blind
+replay. The earlier cowsay attempt also remains failed because this stdlib guest
+does not contain its pytest dependency.
+
+An explicit local OS-owner resume subsequently reconciled both original failed
+read-only tests. Each Work reached WAITING_USER for inspection; its test Run,
+FAIL counts, CAS result and project files stayed unchanged. No model, proposal or
+test was replayed, and completion verification still failed. The narrow host
+reader requires the exact pending action, current canonical Workspace owner and
+original Work/Plan/receipt/Artifact bindings. Timeout, missing/foreign proof,
+unqualified backend and cancellation cases still refuse continuation. After a
+known failed suite, Work returns to source inspection and a reviewed edit rather
+than forcing the same test again. An older PASS cannot cover a later UNKNOWN.
+
+The unchanged VM probe passed host filesystem/environment isolation, network
+denial, memory/output limits, cancellation and descendant cleanup. This scope
+does not qualify interactive PTY, Git writes, third-party Python environments,
+Windows installation or physical effects.
+
+### Actual local model and reviewed extension
+
+Verified public Ollama v0.40.15 and Qwen3-0.6B Q2 inputs ran on CPU in a task-owned
+read-only container, with only a loopback host port and no account credentials.
+The ordinary ModelWorkDeliberator returned an invalid plan decision and Work
+correctly failed. Its original failure is retained; model reachability does not
+establish useful autonomous execution.
+
+A separate narrow operator-controlled selector used the canonical Gateway,
+frozen Kernel and Worker. The real model selected the reviewed `readRepository`
+OpenAPI tool with `owner=untrod, repo=apeir`. The Kernel issued the actual permit
+and an execution receipt, but the external HTTP connection failed in this managed
+environment (`NETWORK_CONNECT_FAILED`). The exact original Work remained
+RECOVERY_REQUIRED after restart. Disabling the extension rejected new access;
+Kernel revocation and original Work cancellation passed with zero model/tool
+replay. This is **PARTIAL**, not a successful public API, MCP or general Agent task.
+
+The bounded selector reported 365 input / 64 output tokens, including three
+reported cached input tokens; cost remained unknown. Its one-model, no-fallback
+qualification explicitly selected token-only budgeting. An earlier attempt was
+refused before inference by the unchanged unknown-pricing monetary policy. No
+paid/cloud credentials, general Token-saving percentage or fee claim is implied.
+Owned service, process tree and temporary network were removed normally.
+
+### Regression and remaining gates
+
+Work, Proposal, fixed test consumer, Workbench and sandbox contracts: **338 passed**.
+Ruff, changed-file formatting and all 234 current-document local links passed.
+The existing security scan retained seven medium fixture-IP findings and no high
+finding; fixtures were not removed to obtain green output. VM/model acceptance
+results above are separate from fixture-based source tests.
+
+The isolated installed source wheel at `1ac8e5239c484811e6f2b768b4cfce0148ee87c6`
+has SHA-256 `2d7dfa00d70fef34ad0e76beb5f65092040b18f27bcb4ac8277211a6eced5f5e`;
+all 897 RECORD entries and 877 packaged Python files matched its immutable source
+archive. Its production frontend and real HTTP Runtime passed all 28 browser
+scenarios. A separate sandboxed Chromium session read the actual IDNA source,
+retained an unsaved draft through maximize/restore/snap and displayed the original
+completed Work: 19 API reads, zero mutations/page errors. A fresh Runtime process
+restored the same test/Artifact with zero extra inference or test execution.
+These source-browser records precede the failed-test reconciliation follow-up;
+the final host follow-up has its own targeted and required-CI regression.
+
+Full model-driven GUI execution, successful real MCP/OpenAPI services, an
+authorized cloud Provider, Windows Context timeout root cause, interactive
+PTY/Git writes, native first-use performance and physical Jetson→ESP32 effects
+remain independently unqualified. Windows ten-second assertions and open timing
+issues are preserved. No Native package, signature or Release was produced here.

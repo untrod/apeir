@@ -114,6 +114,15 @@ def test_approve_once_restart_resumes_exact_original_proposal(scenario):
         and item["result"]["proposal_id"] == original["proposal_id"]
         for item in result.observations
     )
+    from nous_runtime.work.deliberation import _execution_progress
+
+    progress = _execution_progress(restarted.context_for(result))
+    assert progress["workspace_changed"] is True
+    assert progress["diff_reviewed"] is True
+    assert progress["tests_run"] is False
+    # An approved manifest cannot verify files changed by another writer later.
+    (harness.root / "first.txt").write_text("external edit\n")
+    assert _execution_progress(restarted.context_for(result))["diff_reviewed"] is False
 
 
 def test_deny_never_calls_model_or_changes_files(scenario):

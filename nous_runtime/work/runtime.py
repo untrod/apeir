@@ -424,6 +424,40 @@ class WorkHarness:
             and str(snapshot.pending_action.get("recovery_policy") or "")
             == "kernel_or_manual"
         ):
+            recovered_test = self._completed_readonly_test_failure(snapshot, tools)
+            if recovered_test is not None:
+                latest = self.require(run_id)
+                if latest.last_checkpoint_id != snapshot.last_checkpoint_id:
+                    return latest
+                original_action = dict(snapshot.pending_action)
+                snapshot.pending_action.clear()
+                if snapshot.goal.status.value in {"paused", "blocked", "waiting_user"}:
+                    snapshot.goal.resume()
+                else:
+                    snapshot.goal.start_understanding()
+                snapshot.state = RunState.RECOVERING
+                snapshot.error = ""
+                snapshot.reanalysis_reason = (
+                    "Original read-only test completed with FAIL; inspect its evidence "
+                    "before proposing another operation. No test was replayed."
+                )
+                self._persist(
+                    snapshot,
+                    "work.test.reconciled",
+                    {
+                        "test_run_id": recovered_test["run_id"],
+                        "test_outcome": "FAIL",
+                        "original_action": original_action,
+                        "automatic_replay": False,
+                    },
+                )
+                return self.run(
+                    run_id,
+                    deliberator=deliberator,
+                    tools=tools,
+                    verifier=verifier,
+                    max_iterations=max_iterations,
+                )
             reason = (
                 "an effectful tool call has an uncertain outcome; "
                 "Kernel or manual recovery evidence is required"
@@ -474,6 +508,51 @@ class WorkHarness:
             verifier=verifier,
             max_iterations=max_iterations,
         )
+
+    def _completed_readonly_test_failure(self, snapshot, tools):
+        """Observe only a canonical, completed test failure during explicit resume."""
+        from nous_runtime.chat.agent_tools import WorkspaceToolRuntime
+        from nous_runtime.tools import ToolCatalog
+        from nous_runtime.work.deliberation import _recorded_project_test
+
+        pending = snapshot.pending_action
+        if (
+            pending.get("tool") != "run_project_tests"
+            or pending.get("capability_id") != "project.run_tests"
+            or type(pending.get("action_sequence")) is not int
+            or pending["action_sequence"] < 1
+            or type(tools) is not ToolCatalog
+        ):
+            return None
+        try:
+            owner = tools.executor_owner("run_project_tests")
+        except KeyError:
+            return None
+        if (
+            type(owner) is not WorkspaceToolRuntime
+            or owner.root != self.root
+            or owner.source_work_id != snapshot.run_id
+            or not owner.authorization_context
+        ):
+            return None
+        candidates = [
+            item
+            for item in snapshot.observations
+            if item.get("kind") == "tool"
+            and item.get("tool") == "run_project_tests"
+            and item.get("ok") is False
+            and item.get("action_sequence") == pending["action_sequence"]
+            and item.get("arguments_digest") == pending.get("arguments_digest")
+            and isinstance(item.get("result"), Mapping)
+        ]
+        if len(candidates) != 1:
+            return None
+        item = candidates[0]
+        if _recorded_project_test(
+            self.context_for(snapshot), item, (), expected_outcome="FAIL"
+        ):
+            return item["result"]
+        return None
 
     @staticmethod
     def is_recoverable_runtime_failure(reason: str) -> bool:
