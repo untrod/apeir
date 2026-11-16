@@ -7293,3 +7293,74 @@ Core/Desktop/Multi-Arch/Security checks are recorded separately. The later
 download-metadata-only change updates README, Quick Start and platform links;
 it does not rebuild or relabel those files. Previous producers remain in this
 review, the native build record and immutable Git history. No tag is moved.
+
+## Persistent UTC Automation and GUI admission — 2026-11-16
+
+Baseline: `8d7be25f4feee37bd7dca6b5fd882ffb50330989`.
+Implementation: `128bd09188358b29a5c63666e163a4c4827899e2`.
+Kernel remains `87fd1b2ff28ef14ab1a515a58162592b452fda2e`; component-lock
+SHA-256 remains `fd838086f82ac875823da73d1e2e01026ebdc70d1bed22f6132b36a5615de94b`.
+No Native rebuild, tag movement or Release is part of this change.
+
+| Path | Treatment | Qualified scope / remaining boundary |
+| --- | --- | --- |
+| WorkflowStore, Runtime, Governance, Work, CAS and simulated Reality handlers | REUSE | Original identities, approvals, checkpoints, receipts and effect reconciliation remain authoritative. |
+| Automation | EXTEND | Persistent five-field numeric UTC Cron, coalesced missed occurrences, atomic monotonic cursor/non-overlap, local foreground timer, pure registered Workflows and explicit simulated firmware. No unattended service installation or persisted human authority. |
+| Studio Automation pane | EXTEND / FIX | Register a reviewed version, configure a schedule, inspect original history and cancel/resume; current human nonce, Controller retirement, duplicate-submit guard and bilingual controls. |
+| Human login | FIX | Browser testing found the authorization redirect replaced by the generic redactor. Only the typed HTTP challenge response now delivers the host-generated URL; ordinary serialization and global redaction remain protected. |
+| Extension tools | REUSE | Work catalog and Gateway decision paths already exist. Actual Linux Kernel permit test passes; its IntegrationAdapter remains a fixture, not real inference or MCP/network execution. |
+| Full model-driven GUI/VM loop, Windows Context root cause, interactive PTY/Git writes and physical Mesh | Separate gates | This Cron/GUI qualification does not establish these results. Original Windows ten-second assertions, strong isolation requirements and physical-effect boundaries remain intact. |
+
+`croniter` 7.0.0 is MIT-licensed, supports Python 3.10+, and uses python-dateutil;
+its published wheel digest was verified. OSV returned no listed vulnerability for
+that version at the dependency review; this is not a general security guarantee.
+Only bounded numeric five-field UTC syntax is admitted. Recurring intent does not
+authorize a model, command, device mutation or compensation handler.
+
+Local verification on Debian 13 x86_64 / Python 3.12.14 / Node 24.19.0:
+
+- Existing Work/extension/Automation baseline: 163 passed. Related Workflow,
+  Automation and human-control regression: 394 passed. Additional Workflow and
+  repository contracts: 486 passed, seven existing prerequisite/platform skips.
+- New Cron/HTTP contracts: 43 passed, including original pending/started recovery,
+  exhausted retry budget, clock rollback, missed ticks, per-effect approval,
+  tampering, nonce replay and authority revocation. Deterministic failures before
+  the clock-snapshot/stale-tick fixes are retained privately, not skipped.
+- Desktop: 573 tests across 70 files; final targeted Automation checks: 32 passed.
+  Ruff, ESLint, TypeScript and production frontend build passed.
+- Production frontend plus an isolated installed validation wheel: all 28 real
+  HTTP/Chromium cases passed. The Cron case uses the actual wall clock and CLI
+  timer, a cryptographic fake IdP, the original Workflow database, timer restart
+  deduplication and HTTP-host restart recovery. First-use native IPC remains a
+  host-contract fixture; these are source-browser results, not Windows installation.
+- Local validation wheel SHA-256:
+  `f07952df2a0baf8d7a2ced1c84e4e12ab61fe2396898a770be45f5f8d2c9699e`.
+  All wheel RECORD digests and 850 packaged Python files match the implementation
+  archive. Dependencies were shared read-only with the existing source consumer;
+  this is not a claim of a fresh independent dependency installation.
+- The existing Markdown checker passed all 234 current documents. Guide commands
+  were exercised against the real CLI and isolated writable workspace.
+
+### Source startup measurements
+
+Three samples per variant on the same two-CPU / 8 GiB environment, production
+frontend, fixed shared dependencies and installed package. New browser contexts
+use warm OS caches; this is not OS-cold or native Windows startup. Values below
+are medians, not an optimization claim or performance target.
+
+| Measurement | Baseline 8d7be25f | Candidate 128bd09 |
+| --- | ---: | ---: |
+| Observed authenticated HTTP readiness | 1125 ms | 1058 ms |
+| New browser context to Studio visible | 144 ms | 149 ms |
+| Warm reload to Studio visible | 111 ms | 98 ms |
+| Overview selection | 309 ms | 236 ms |
+| Editor selection | 101 ms | 100 ms |
+| Entire headless Chromium RSS | 422.6 MiB | 420.4 MiB |
+| Runtime process RSS | 79.4 MiB | 80.5 MiB |
+
+Raw per-sample API counts, one-second idle CPU windows and environment metadata
+are retained with the qualification evidence. The sample size/window cannot
+establish a general CPU, Token or latency saving. Kernel/model memory, native
+process-tree startup and Windows first-use performance remain independently
+unmeasured here. The historical test recording's scripted locale/theme/viewport
+changes are not normal application behavior or a polished product demo.
