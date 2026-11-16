@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AutomationInspector } from "../components/AutomationInspector";
 import { OperationsConsole } from "../components/OperationsConsole";
 import { setConfig, type AutomationRun, type AutomationView } from "../lib/api";
+import { ThemeProvider } from "../theme";
 const human = { subject_id: "human-original", expires_at: Date.now() / 1000 + 300 };
 const item: AutomationView = { id: "auto-original", name: "Firmware simulation", trigger: "manual", action: "device.firmware.update", enabled: true, created_at: "2026-10-13", adapter: "simulated-reality", qualification: "SIMULATED_TEMPLATE", simulated: true, execution_scope: "runtime-service", kernel_traversed: false, workflow_id: "workflow-original", definition_digest: "digest-original" };
 const run: AutomationRun = { automation_id: item.id, run_id: "run-original", state: "waiting_approval", trigger_key: "manual:original", cancellation_requested: false, reconciliation_required: false, outputs: { mutate: { approval_request_id: "approval-original", work_id: "work-original" } }, works: [{ work_id: "work-original" }], simulated: true, execution_scope: "runtime-service", kernel_traversed: false };
@@ -28,6 +29,65 @@ function backend(initial: AutomationRun[] = [run]) {
 }
 const mutations = (fetcher: ReturnType<typeof backend>) => fetcher.mock.calls.filter(([url]) => url.endsWith("/action") || url.includes("/approvals/")).map(([url, options]) => ({ url, body: JSON.parse(String(options.body)) }));
 describe("Automation Desktop original-state consumer", () => {
+  it("creates a registered pure Cron schedule without executing on save, then checks the server's original occurrence", async () => {
+    const binding = { ...item, id: "auto-pure", name: "Workflow schedule", adapter: "workflow", qualification: "PURE_WORKFLOW", simulated: false, workflow_id: "periodic", version: "1", trigger: "cron", cron: "*/5 * * * *" };
+    const pureRun: AutomationRun = { ...run, automation_id: binding.id, run_id: "pure-original", state: "completed", outputs: { result: {} }, works: [], simulated: false, adapter: "workflow", qualification: "PURE_WORKFLOW" };
+    let installed = false;
+    let history: AutomationRun[] = [];
+    const fetcher = vi.fn().mockImplementation(async (url: string, options: RequestInit = {}) => {
+      if (url.endsWith("/nonce")) return ok({ nonce: "current-body" });
+      if (url.endsWith("/automations")) return ok({ automations: installed ? [binding] : [], total: installed ? 1 : 0 });
+      if (url.endsWith("/workflow")) return ok({ definitions: [{ workflow_id: "periodic", version: "1" }], execution_scope: "runtime-service" });
+      if (url.endsWith("/automations/add")) { installed = true; return ok(binding); }
+      if (url.includes("/history?")) return ok({ automation_id: binding.id, history, total: history.length });
+      if (url.endsWith("/action")) {
+        expect(JSON.parse(String(options.body))).toEqual({ action: "tick", automation_id: binding.id });
+        history = [pureRun]; return ok({ runs: history });
+      }
+      throw new Error(`Unexpected request ${url}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<AutomationInspector human={human} approvals={[]} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create simulated Automation" })).toBeEnabled());
+    fireEvent.change(screen.getByLabelText("Automation source"), { target: { value: "workflow" } });
+    await screen.findByRole("option", { name: "periodic@1" });
+    fireEvent.change(screen.getByLabelText("Registered Workflow"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("Automation trigger"), { target: { value: "cron" } });
+    fireEvent.change(screen.getByLabelText("UTC Cron expression"), { target: { value: "*/5 * * * *" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create Workflow schedule" }));
+    const checkDue = await screen.findByRole("button", { name: "Check due occurrence" });
+    expect(history).toHaveLength(0);
+    const create = fetcher.mock.calls.find(([url]) => url.endsWith("/automations/add"));
+    expect(JSON.parse(String(create![1].body))).toEqual({ adapter: "workflow", name: "Workflow schedule", workflow_id: "periodic", version: "1", inputs: {}, trigger: "cron", cron: "*/5 * * * *" });
+    expect(fetcher.mock.calls.some(([url]) => url.endsWith("/action") || url.includes("/workflow/run"))).toBe(false);
+    await waitFor(() => expect(checkDue).toBeEnabled()); fireEvent.click(checkDue);
+    await screen.findByLabelText("Automation run pure-original");
+    expect(history).toHaveLength(1);
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/action"))).toHaveLength(1);
+  });
+
+  it("discards a pending private Workflow catalog after a Controller switch", async () => {
+    const fetcher = backend([]);
+    let release: (result: unknown) => void = () => {};
+    const original = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation((url: string, options: RequestInit = {}) => url.endsWith("/workflow") ? new Promise(resolve => { release = resolve; }) : original(url, options));
+    render(<AutomationInspector human={human} approvals={[]} />);
+    fireEvent.change(screen.getByLabelText("Automation source"), { target: { value: "workflow" } });
+    await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith("/workflow"))).toBe(true));
+    act(() => setConfig({ url: "https://controller-b.example.test", token: "fake-b" }));
+    await act(async () => release(ok({ definitions: [{ workflow_id: "private-controller-a", version: "1" }], execution_scope: "runtime-service" })));
+    expect(screen.queryByRole("option", { name: "private-controller-a@1" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create Workflow schedule" })).toBeDisabled();
+  });
+
+  it("uses the existing application locale for source and recurring controls", async () => {
+    localStorage.setItem("apeir.locale", "zh"); backend([]);
+    render(<ThemeProvider><AutomationInspector human={human} approvals={[]} /></ThemeProvider>);
+    expect(screen.getByRole("heading", { name: "自动化" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Automation trigger"), { target: { value: "cron" } });
+    expect(screen.getByText("Cron 表达式（UTC）")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "创建模拟计划" })).toBeInTheDocument();
+  });
   it("opens the real Console pane without reading private Automations while signed out", () => {
     const snapshot = { agents: [], works: [], workflows: [], nodes: [], devices: [], approvals: [], grants: [], credential_leases: [], artifacts: [], evidence: [], activity: [], incidents: [], health: { degraded: true, components: [] }, controls: { actions: [] } };
     const fetcher = vi.fn().mockImplementation(async (url: string) => { if (url.endsWith("/human/session")) throw new Error("signed out"); return ok(snapshot); });

@@ -153,3 +153,60 @@ apeir --no-intelligence workflow validate workflow.json --json
 
 *A real model-free request waiting for human approval in the source build.
 No file modification or model inference is claimed by this record.*
+
+## Schedule a registered Workflow
+
+In **Operations Console → automations**, choose **Registered pure Workflow**, a
+registered version and **Recurring Cron (UTC)**. Saving the schedule does not run
+it. **Check due occurrence** consumes only the selected plan's current due
+occurrence. The original Run appears in its history.
+
+The first timer host accepts pure TRANSFORM, WAIT and CONDITION steps. WAIT is
+an immediate barrier. Models, approval nodes, commands, compensation and device
+operations require their own qualified hosts; they cannot acquire permission by
+being added to a schedule. The separate firmware simulator retains its original
+per-Work human approval.
+
+From a selected writable workspace, register the existing Hello Workflow and
+start the local timer:
+
+```bash
+apeir --no-intelligence workflow register /path/to/apeir/examples/hello_workflow/workflow.json --json
+apeir --no-intelligence automation bind-workflow "Hourly result" example.workflow 1.0.0 --cron "0 * * * *"
+apeir --no-intelligence automation watch --workflow
+```
+
+Use an actual checkout path in the first command. Run these commands in the
+workspace used by your Runtime; if `NOUS_WORKSPACE_ROOT` is set, it must refer to
+that same directory. For structured task inputs, add `--inputs inputs.json` to
+`bind-workflow`. The definition's original input schema is enforced.
+
+Cron uses five numeric UTC fields: minute, hour, day, month, weekday. `*/5 * * * *`
+means every five minutes. Day-of-month and weekday follow conventional OR
+semantics. Time zones, seconds, `@reboot` and executable expressions are not
+accepted. Missed occurrences coalesce to the latest due minute; runs do not
+overlap or replay after a clock rollback.
+
+Stop the timer with Ctrl+C. Restart the same command against the same workspace
+to restore schedules and original Run identities. No user session or approval is
+saved in the plan, and the application does not silently install a background
+service. To consume one tick, add `--ticks 1`.
+
+```bash
+apeir --no-intelligence automation list --workflow
+apeir --no-intelligence automation history AUTO_ID --workflow
+apeir --no-intelligence automation set-enabled AUTO_ID false --workflow
+apeir --no-intelligence automation cancel AUTO_ID RUN_ID --workflow
+apeir --no-intelligence automation resume AUTO_ID RUN_ID --workflow
+```
+
+Replace the placeholders with the original IDs. Disabling prevents future
+triggers; it does not cancel the current Run. Pending claims recover in place.
+Started pure steps retain their original retry budget; an exhausted budget leaves
+UNKNOWN for review. Failed or UNKNOWN runs block later Cron occurrences until
+the original is resolved or cancelled. Cancellation is not proof that an
+external effect did not happen.
+
+**中文提示：** 计划保存在现有工作流数据库中。需要明确启动定时器，重启时仍使用原工作区。
+漏触发只合并到最近一次，不补跑一长串历史任务。停用计划、停止定时器和取消任务是三个不同的操作；
+模拟设备每次新修改仍需独立审批，真实设备不在此验收范围内。

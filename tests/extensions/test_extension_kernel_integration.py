@@ -81,8 +81,9 @@ def kernel_binaries() -> tuple[Path, Path, Path] | None:
 
     for root in roots:
         for profile in ("debug", "release"):
-            nousd = root / "target" / profile / "nousd.exe"
-            worker = root / "target" / profile / "nous-provider-worker.exe"
+            suffix = ".exe" if os.name == "nt" else ""
+            nousd = root / "target" / profile / ("nousd" + suffix)
+            worker = root / "target" / profile / ("nous-provider-worker" + suffix)
             if nousd.is_file() and worker.is_file():
                 return root, nousd, worker
     return None

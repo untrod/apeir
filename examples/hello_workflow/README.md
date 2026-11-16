@@ -91,7 +91,9 @@ effect stopped or never happened.
 
 For a single due proposal, add `--due-at 2026-10-12T12:00:00Z`, then invoke
 `automation run-due --limit 1 --simulation`. Due polling consumes each proposal
-once; there is no background timer or recurring Cron support. Legacy free-text
+once. For a foreground recurring timer, use `automation watch --simulation` and
+create the template with `--cron "0 * * * *"` instead of `--due-at`. Each new
+firmware Work still needs its own independent approval. Legacy free-text
 Automation configuration remains UNQUALIFIED. Read the
 [Automation execution contract](../../docs/architecture/EXECUTION_PATH.md#bounded-automation-consumer)
 for API identity/permission requirements and scope limits.

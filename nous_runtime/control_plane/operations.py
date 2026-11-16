@@ -895,6 +895,19 @@ class PairingInvitationResponse(dict):
         super().__init__(ok_response(public))
 
 
+class HumanChallengeResponse(dict):
+    """Deliver the IdP redirect only at the dedicated HTTP handshake boundary.
+
+    Ordinary JSON/audit serialization must not expose the authorization URL.
+    Do not whitelist authorization-shaped keys in the general redactor.
+    """
+
+    def __init__(self, result):
+        public = dict(result)
+        self.authorization_url = public.pop("authorization_url")
+        super().__init__(ok_response(public))
+
+
 def action_route(body, *, authorization_context):
     result = get_operations().action(body, authorization_context)
     if body.get("kind") == "pairings" and body.get("action") == "create":
@@ -903,7 +916,9 @@ def action_route(body, *, authorization_context):
 
 
 def human_challenge_route(body):
-    return ok_response(get_human_auth().challenge(body.get("code_challenge", "")))
+    return HumanChallengeResponse(
+        get_human_auth().challenge(body.get("code_challenge", ""))
+    )
 
 
 def human_login_route(body):

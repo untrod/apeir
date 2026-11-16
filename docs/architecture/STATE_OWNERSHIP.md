@@ -22,7 +22,7 @@ journal and do not imply Kernel traversal.
 | --- | --- | --- |
 | AgentSession coordination | `AgentSessionCoordinator` / session store | `.nous/agent_sessions.db` |
 | Plan execution, run, pause/resume | existing Workflow Runtime / WorkflowStore | `.nous/workflows.db` and its checkpoints |
-| Automation definition binding and trigger-to-original run relation | existing WorkflowStore | Additional tables in `.nous/workflows.db`; execution state remains original Workflow/Work |
+| Automation definition binding, Cron occurrence cursor and trigger-to-original run relation | existing WorkflowStore | Existing tables in `.nous/workflows.db`; cursor derives from original occurrence keys, execution state remains original Workflow/Work; no saved session or second scheduler database |
 | Distributed Work lifecycle, placement and dispatch | `DistributedWorkStore` / `NodeRelayServer` | Controller `distributed-works.json` and relay spool |
 | Node identity, delivery and terminal execution evidence | Node Runtime | Node identity and workload journals |
 | Device lifecycle and stable identity | Reality `DeviceRegistry` | existing Reality device store |

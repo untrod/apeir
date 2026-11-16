@@ -1,9 +1,31 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addAutomation, approvalAction, automationAction, fetchAutomationHistory, fetchAutomations, getConfig, setConfig } from "../lib/api";
+import { addAutomation, approvalAction, automationAction, consumeAutomationDue, fetchAutomationHistory, fetchAutomations, getConfig, setConfig } from "../lib/api";
 
 const response = (data: unknown) => ({ ok: true, json: async () => ({ ok: true, data }) });
 afterEach(() => { vi.unstubAllGlobals(); sessionStorage.clear(); setConfig({ url: "http://localhost:8770", token: "" }); });
 describe("Automation current human API", () => {
+  it("binds pure Workflow Cron creation and server-owned occurrence checks to current human nonces", async () => {
+    const fetcher = vi.fn().mockImplementation(async (url: string) => response(url.endsWith("/nonce") ? { nonce: "exact-body" } : {}));
+    vi.stubGlobal("fetch", fetcher);
+    const body = { adapter: "workflow" as const, name: "Periodic result", workflow_id: "pure", version: "1", inputs: { request: "recorded" }, trigger: "cron" as const, cron: "*/5 * * * *" };
+    await addAutomation(body);
+    await consumeAutomationDue("auto-original");
+    expect(JSON.parse(fetcher.mock.calls[0][1].body).body).toEqual(body);
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual(body);
+    expect(JSON.parse(fetcher.mock.calls[3][1].body)).toEqual({ action: "tick", automation_id: "auto-original" });
+    expect(fetcher.mock.calls.every(([url]) => !url.includes("/workflow/run"))).toBe(true);
+  });
+
+  it("accepts original pure Workflow history but rejects an unqualified or Kernel-mislabeled record", async () => {
+    const original = { automation_id: "auto", run_id: "original", trigger_key: "cron:2026-11-16T12:00:00.000000+00:00", state: "completed", cancellation_requested: false, reconciliation_required: false, outputs: { result: { value: "recorded" } }, works: [], simulated: false, adapter: "workflow", qualification: "PURE_WORKFLOW", execution_scope: "runtime-service", kernel_traversed: false };
+    const fetcher = vi.fn().mockResolvedValue(response({ automation_id: "auto", history: [original], total: 1 }));
+    vi.stubGlobal("fetch", fetcher);
+    expect((await fetchAutomationHistory("auto")).history[0].run_id).toBe("original");
+    for (const change of [{ qualification: "AVAILABLE" }, { adapter: "arbitrary" }, { kernel_traversed: true }, { execution_scope: "kernel" }]) {
+      fetcher.mockResolvedValueOnce(response({ automation_id: "auto", history: [{ ...original, ...change }], total: 1 }));
+      await expect(fetchAutomationHistory("auto")).rejects.toThrow("execution scope");
+    }
+  });
   it("nonce-binds exact structured create and original trigger/run bodies and reads bounded original history", async () => {
     const fetcher = vi.fn().mockImplementation(async (url: string) => response(url.endsWith("/nonce") ? { nonce: "bound-nonce" } : {}));
     vi.stubGlobal("fetch", fetcher);

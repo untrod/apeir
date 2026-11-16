@@ -5,10 +5,93 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "node:net";
+import { createHash } from "node:crypto";
 
 const token = "APEIR_FAKE_ONLY_STUDIO_BROWSER_9342";
 const producers: ChildProcess[] = [];
 const runtimes: Array<{ process: ChildProcess; directory: string; url: string }> = [];
+
+test("Automation creates a real Cron Workflow, consumes one wall-clock occurrence and restores the original run after host restart", async ({ page }, info) => {
+  // This bound includes one real calendar minute. Existing startup/HTTP
+  // deadlines remain unchanged; no fake clock or replacement executor is used.
+  test.setTimeout(100000);
+  const directory = await mkdtemp(join(tmpdir(), "apeir-automation-browser-"));
+  const selected = await port();
+  const url = `http://127.0.0.1:${selected}`;
+  const environment = { ...globalThis.process.env, NOUS_WORKSPACE_ROOT: directory, NOUS_API_TOKEN: token, PYTHONPATH: resolve("..") };
+  const python = globalThis.process.env.APEIR_TEST_PYTHON || "python";
+  const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+  async function cli(args: string[]) {
+    const child = spawn(python, ["-m", "nous_runtime.cli.main", "--no-intelligence", ...args], { cwd: directory, env: environment, stdio: ["ignore", "pipe", "pipe"] });
+    producers.push(child); let stdout = "", stderr = "";
+    child.stdout?.on("data", chunk => { stdout += String(chunk); }); child.stderr?.on("data", chunk => { stderr += String(chunk); });
+    expect(await new Promise<number | null>((done, reject) => { child.once("exit", done); child.once("error", reject); }), stderr).toBe(0);
+    return JSON.parse(stdout);
+  }
+  await cli(["workflow", "register", resolve("../examples/hello_workflow/workflow.json"), "--json"]);
+  async function host() {
+    const child = spawn(python, [resolve("e2e/automation_host.py"), "--workspace", directory, "--port", String(selected)], { cwd: directory, env: environment, stdio: "ignore" });
+    const runtime = { process: child, directory, url }; runtimes.push(runtime);
+    await expect.poll(async () => {
+      if (child.exitCode !== null) throw new Error("Owned fake-IdP HTTP host exited before readiness");
+      try { return (await fetch(url + "/api/v1/status", { headers: { Authorization: `Bearer ${token}` } })).ok; } catch { return false; }
+    }, { timeout: 10000 }).toBe(true);
+    return runtime;
+  }
+  const originalHost = await host();
+  const verifier = "fake-automation-browser-pkce-" + "x".repeat(64);
+  const challenge = await page.request.post(url + "/api/v1/control/human/challenge", { headers: { Authorization: `Bearer ${token}` }, data: { code_challenge: createHash("sha256").update(verifier).digest("base64url") } });
+  const challengeBody = await challenge.json(); expect(challengeBody.ok).toBe(true);
+  const nonce = new URL(challengeBody.data.authorization_url).searchParams.get("nonce");
+  const login = await page.request.post(url + "/api/v1/control/human/session", { headers: { Authorization: `Bearer ${token}` }, data: { challenge_id: challengeBody.data.challenge_id, code: `fake-automation-code:${nonce}`, code_verifier: verifier } });
+  expect((await login.json()).ok).toBe(true);
+  await page.addInitScript(({ url, token }) => { sessionStorage.setItem("nous_server_url", url); sessionStorage.setItem("nous_server_token", token); }, { url, token });
+  await page.goto("/");
+  await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /Add panel/ }).click();
+  await page.getByRole("textbox", { name: "Search panels" }).fill("Operations Console");
+  await page.getByRole("button", { name: "Operations Console", exact: true }).click();
+  const console = page.getByRole("main", { name: "Operations console" });
+  await console.getByRole("button", { name: "automations", exact: true }).click();
+  const automation = page.getByLabel("Automation inspector");
+  await expect(automation.getByRole("button", { name: "Create simulated Automation" })).toBeEnabled();
+  await automation.getByLabel("Automation source").selectOption("workflow");
+  await automation.getByLabel("Registered Workflow", { exact: true }).selectOption({ label: "example.workflow@1.0.0" });
+  await automation.getByLabel("Automation trigger").selectOption("cron");
+  await automation.getByLabel("UTC Cron expression").fill("* * * * *");
+  await automation.getByRole("button", { name: "Create Workflow schedule" }).click();
+  await expect(automation.getByRole("button", { name: "Check due occurrence" })).toBeEnabled();
+  const configured = await cli(["automation", "list", "--workflow"]);
+  expect(configured).toHaveLength(1); const id = configured[0].id;
+  expect((await cli(["automation", "history", id, "--workflow"])).history).toEqual([]);
+  const timer = spawn(python, ["-m", "nous_runtime.cli.main", "--no-intelligence", "automation", "watch", "--workflow", "--interval", "1", "--ticks", "70"], { cwd: directory, env: environment, stdio: ["ignore", "pipe", "pipe"] });
+  let timerOutput = "";
+  for (const stream of [timer.stdout, timer.stderr]) stream?.on("data", chunk => { timerOutput = (timerOutput + String(chunk)).slice(-256 * 1024); });
+  producers.push(timer);
+  const readHistory = async () => {
+    const result = await page.request.get(`${url}/api/v1/automations/${id}/history`, { headers: { Authorization: `Bearer ${token}` } });
+    const body = await result.json(); expect(body.ok).toBe(true); return body.data.history;
+  };
+  await expect.poll(async () => (await readHistory()).some((run: { state: string }) => run.state === "completed"), { timeout: 65000, intervals: [500] }).toBe(true);
+  timer.kill("SIGINT");
+  await new Promise<void>(done => timer.exitCode !== null || timer.signalCode !== null ? done() : timer.once("exit", () => done()));
+  const history = await readHistory(); expect(history).toHaveLength(1);
+  await info.attach("original-timer-output", { body: timerOutput, contentType: "text/plain" });
+  expect((await cli(["automation", "watch", "--workflow", "--ticks", "1"])).runs).toEqual([]);
+  expect(history[0].outputs.hello.value).toBe("Hello from APEIR");
+  expect(history[0].simulated).toBe(false); expect(history[0].kernel_traversed).toBe(false);
+  await automation.getByRole("button", { name: "Refresh Automation history" }).click();
+  await expect(automation.getByLabel(`Automation run ${history[0].run_id}`)).toBeVisible();
+  await automation.screenshot({ path: info.outputPath("automation-cron-source-browser.png") });
+  const stopped = new Promise<void>(done => originalHost.process.once("exit", () => done())); originalHost.process.kill("SIGTERM"); await stopped;
+  await host();
+  await page.reload();
+  await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible();
+  await expect(automation.getByLabel(`Automation run ${history[0].run_id}`)).toBeVisible();
+  expect((await readHistory())[0].run_id).toBe(history[0].run_id);
+  await info.attach("automation-acceptance-scope", { body: JSON.stringify({ real_wall_clock: true, real_workflow: true, original_run: history[0].run_id, fake_oidc: true, model_calls: 0, physical_effects: 0, native_installation: false }), contentType: "application/json" });
+  expect(errors).toEqual([]);
+});
 
 test("extension library installs a real tool document without granting it execution authority", async ({ page }, info) => {
   await open(page);
