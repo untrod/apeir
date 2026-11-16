@@ -285,6 +285,11 @@ the same approval path and keeps the original test result; a second terminal or
 Git command is not needed to verify that Proposal. A missing VM, failed suite or
 uncertain response remains visible and cannot be cleared by a model's summary.
 
+A completed read-only unittest failure can be inspected by explicitly resuming
+its original Work. This retains the failed result and lets the host return to
+source analysis; it does not repeat the test. A new edit or test still requires
+its own admission. Missing receipts, timeouts and uncertain effects remain blocked.
+
 ![Installed Source Preview showing the original completed Work beside its unchanged project test file](../../media/studio-original-work-source.png)
 
 *Saved task results in the source build.*

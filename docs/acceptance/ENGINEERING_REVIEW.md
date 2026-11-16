@@ -7411,10 +7411,20 @@ package identity still broke relative test imports. The fixed literal bootstrap
 loads trusted stdlib unittest first, keeps `-I`, and chooses the original project
 as top level for package tests. Plain test directories remain supported. User
 targets remain separate argv values. Neither isolation nor the original 30-second
-test budget changed. Both failed Work/Run records and stderr are retained as
+test budget changed. Both failed Work records initially remained
 RECOVERY_REQUIRED; qualification used explicit fresh project copies, not blind
 replay. The earlier cowsay attempt also remains failed because this stdlib guest
 does not contain its pytest dependency.
+
+An explicit local OS-owner resume subsequently reconciled both original failed
+read-only tests. Each Work reached WAITING_USER for inspection; its test Run,
+FAIL counts, CAS result and project files stayed unchanged. No model, proposal or
+test was replayed, and completion verification still failed. The narrow host
+reader requires the exact pending action, current canonical Workspace owner and
+original Work/Plan/receipt/Artifact bindings. Timeout, missing/foreign proof,
+unqualified backend and cancellation cases still refuse continuation. After a
+known failed suite, Work returns to source inspection and a reviewed edit rather
+than forcing the same test again. An older PASS cannot cover a later UNKNOWN.
 
 The unchanged VM probe passed host filesystem/environment isolation, network
 denial, memory/output limits, cancellation and descendant cleanup. This scope
@@ -7432,8 +7442,8 @@ establish useful autonomous execution.
 A separate narrow operator-controlled selector used the canonical Gateway,
 frozen Kernel and Worker. The real model selected the reviewed `readRepository`
 OpenAPI tool with `owner=untrod, repo=apeir`. The Kernel issued the actual permit
-and an execution receipt, but the managed network rejected the external HTTP
-connection (`NETWORK_CONNECT_FAILED`). The exact original Work remained
+and an execution receipt, but the external HTTP connection failed in this managed
+environment (`NETWORK_CONNECT_FAILED`). The exact original Work remained
 RECOVERY_REQUIRED after restart. Disabling the extension rejected new access;
 Kernel revocation and original Work cancellation passed with zero model/tool
 replay. This is **PARTIAL**, not a successful public API, MCP or general Agent task.
@@ -7447,11 +7457,22 @@ Owned service, process tree and temporary network were removed normally.
 
 ### Regression and remaining gates
 
-Work, Proposal, fixed test consumer, Workbench and sandbox contracts: **325 passed**.
+Work, Proposal, fixed test consumer, Workbench and sandbox contracts: **338 passed**.
 Ruff, changed-file formatting and all 234 current-document local links passed.
 The existing security scan retained seven medium fixture-IP findings and no high
 finding; fixtures were not removed to obtain green output. VM/model acceptance
 results above are separate from fixture-based source tests.
+
+The isolated installed source wheel at `1ac8e5239c484811e6f2b768b4cfce0148ee87c6`
+has SHA-256 `2d7dfa00d70fef34ad0e76beb5f65092040b18f27bcb4ac8277211a6eced5f5e`;
+all 897 RECORD entries and 877 packaged Python files matched its immutable source
+archive. Its production frontend and real HTTP Runtime passed all 28 browser
+scenarios. A separate sandboxed Chromium session read the actual IDNA source,
+retained an unsaved draft through maximize/restore/snap and displayed the original
+completed Work: 19 API reads, zero mutations/page errors. A fresh Runtime process
+restored the same test/Artifact with zero extra inference or test execution.
+These source-browser records precede the failed-test reconciliation follow-up;
+the final host follow-up has its own targeted and required-CI regression.
 
 Full model-driven GUI execution, successful real MCP/OpenAPI services, an
 authorized cloud Provider, Windows Context timeout root cause, interactive

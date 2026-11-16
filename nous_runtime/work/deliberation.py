@@ -465,18 +465,33 @@ def _execution_progress(context: WorkContext) -> dict[str, Any]:
         for item in observations
         if item.get("kind") == "tool"
         and item.get("tool") == "run_project_tests"
-        and item.get("ok") is True
         and isinstance(item.get("result"), Mapping)
         and after_current_change(item)
     ]
-    recorded_project_tests = any(
-        _recorded_project_test(context, item, changes) for item in project_test_results
+    latest_project_test = max(
+        project_test_results, key=lambda item: item["action_sequence"], default=None
     )
+    recorded_project_tests = (
+        latest_project_test is not None
+        and latest_project_test.get("ok") is True
+        and _recorded_project_test(context, latest_project_test, changes)
+    )
+    failed_test_sequences = [
+        item["action_sequence"]
+        for item in (latest_project_test,)
+        if item is not None
+        and item.get("ok") is False
+        and _recorded_project_test(context, item, changes, expected_outcome="FAIL")
+    ]
     execution_started = bool(shell_results) or recorded_project_tests
-    tests_run = recorded_project_tests or any(
-        after_current_change(item, process=True)
-        and _completed_test_result(item["result"])
-        for item in shell_results
+    tests_run = (
+        recorded_project_tests
+        if latest_project_test is not None
+        else any(
+            after_current_change(item, process=True)
+            and _completed_test_result(item["result"])
+            for item in shell_results
+        )
     )
     diff_reviewed = any(
         _approved_proposal_diff(context, item) for item in changes
@@ -506,6 +521,22 @@ def _execution_progress(context: WorkContext) -> dict[str, Any]:
     )
     if verification_passed:
         phase = "COMPLETE"
+    elif failed_test_sequences and not recorded_project_tests:
+        # A known failed suite needs analysis and another reviewed edit, not a
+        # forced repeat of the same test. The explicit-resume boundary remains
+        # with WorkHarness; this projection grants no execution authority.
+        last_failed_test = max(failed_test_sequences)
+        inspected_failure = any(
+            item.get("kind") == "tool"
+            and item.get("tool") == "read_file"
+            and item.get("ok") is True
+            and type(item.get("action_sequence")) is int
+            and item["action_sequence"] > last_failed_test
+            and isinstance(item.get("result"), Mapping)
+            and _read_evidence_kind(str(item["result"].get("path") or "")) == "source"
+            for item in observations
+        )
+        phase = "ACT" if inspected_failure else "INSPECT"
     elif workspace_changed:
         phase = "VERIFY"
     elif evidence_sufficient:
@@ -523,7 +554,9 @@ def _execution_progress(context: WorkContext) -> dict[str, Any]:
     }
 
 
-def _recorded_project_test(context, observation, changes) -> bool:
+def _recorded_project_test(
+    context, observation, changes, *, expected_outcome="PASS"
+) -> bool:
     """Inspect original Work, test receipt and CAS; never trust a model's PASS."""
     from datetime import datetime
     from pathlib import Path
@@ -552,13 +585,18 @@ def _recorded_project_test(context, observation, changes) -> bool:
             or observation not in original.observations
             or (original.plan.revision if original.plan else 0)
             != int((context.plan or {}).get("revision") or 0)
+            or type(observation.get("plan_revision")) is not int
+            or observation["plan_revision"]
+            != (original.plan.revision if original.plan else 0)
         ):
             return False
         evidence = TestValidator(workspace=str(root)).validate(
             None, {"test_run_id": result.get("run_id")}
         )[0]
+        if expected_outcome not in {"PASS", "FAIL"}:
+            return False
         if (
-            not evidence.passed
+            evidence.detail.get("test_outcome") != expected_outcome
             or evidence.detail.get("test_counts") != result.get("test_counts")
             or evidence.detail.get("input_snapshot_sha256")
             != result["input_snapshot_sha256"]
@@ -598,7 +636,23 @@ def _recorded_project_test(context, observation, changes) -> bool:
             )
         ):
             return False
-        if stored.get("test_outcome") != "PASS" or stored.get("ok") is not True:
+        if stored.get("test_outcome") != expected_outcome:
+            return False
+        if expected_outcome == "FAIL":
+            # Explicit resume can observe a completed failed read-only test.
+            # It does not authorize a retry or turn that failed suite into PASS.
+            counts = evidence.detail.get("test_counts") or {}
+            return (
+                stored.get("ok") is False
+                and type(stored.get("exit_code")) is int
+                and stored["exit_code"] > 0
+                and not stored.get("limit_exceeded")
+                and any(
+                    counts.get(key, 0)
+                    for key in ("failures", "errors", "unexpected successes")
+                )
+            )
+        if stored.get("ok") is not True or not evidence.passed:
             return False
         # The result must describe a test started after this Work's latest edit.
         # Sequence alone cannot make an older test Run current after a restart.
