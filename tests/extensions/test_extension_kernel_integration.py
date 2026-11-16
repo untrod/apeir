@@ -233,8 +233,11 @@ def test_real_nousd_permit_drives_real_mcp_sandbox_execution(tmp_path: Path):
     port = free_port()
     process = subprocess.Popen(
         [
-            str(nousd), "serve", str(tmp_path / "kernel-mcp.journal"),
-            str(worker), f"127.0.0.1:{port}",
+            str(nousd),
+            "serve",
+            str(tmp_path / "kernel-mcp.journal"),
+            str(worker),
+            f"127.0.0.1:{port}",
         ],
         cwd=kernel,
         stdout=subprocess.PIPE,
