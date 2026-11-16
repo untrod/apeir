@@ -31,6 +31,17 @@ _MAX_FILES = 500
 _MAX_SCAN_FILES = 5_000
 _MAX_MATCHES = 200
 _MAX_OUTPUT_BYTES = 256 * 1024
+# Load the trusted stdlib runner before exposing the staged project to imports.
+# -I ignores PYTHONPATH and startup hooks; the literal runs only through the
+# existing strict sandbox. A target is a separate argv item, never Python text.
+_UNITTEST_BOOTSTRAP = (
+    "import os, sys, unittest\n"
+    "sys.path.insert(0, os.getcwd())\n"
+    "argv = ['unittest', 'discover', '-s', sys.argv[1]]\n"
+    "if os.path.isfile(os.path.join(sys.argv[1], '__init__.py')):\n"
+    "    argv += ['-t', os.getcwd()]\n"
+    "unittest.main(module=None, argv=argv)\n"
+)
 _IGNORED = {
     ".git",
     ".nous",
@@ -717,7 +728,7 @@ class DeveloperWorkbench:
                     "The python-unittest profile requires Python and an existing test directory."
                 )
             return (
-                [executable, "-I", "-m", "unittest", "discover", "-s", relative],
+                [executable, "-I", "-c", _UNITTEST_BOOTSTRAP, relative],
                 relative,
                 True,
             )

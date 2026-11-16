@@ -34,6 +34,11 @@ does not delay loading or submit work.
 - [Task activity](../operations/guides/USER_GUIDE.md#watching-a-request): requests, tools and results.
 - [Project tests](../operations/guides/USER_GUIDE.md#professional-workbench): the governed test profile and its environment requirements.
 
+The Work host uses the existing `run_project_tests` capability after file approval.
+Its read-only unittest profile supports local project imports and package-relative
+tests. Approval, original test records and Artifact integrity are separate checks;
+there is no unrestricted terminal fallback.
+
 ## Models and Providers
 
 <a name="first-use-configuration-and-model-tests"></a>

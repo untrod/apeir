@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -188,8 +189,11 @@ class ModelWorkDeliberator:
                         "observes governed validation. COMPLETE is valid only after "
                         "verification_passed. When phase is ACT, do not request more "
                         "covered source; call the supplied mutation tool. When phase is "
-                        "VERIFY and tests_run is false, advance the persistent shell "
-                        "instead of returning to source inspection."
+                        "VERIFY and tests_run is false, use run_project_tests when "
+                        "its schema is loaded; it requests the fixed, governed "
+                        "read-only test profile. A pending approval is not execution. "
+                        "Only observe a persistent shell if that backend is actually "
+                        "available; never invent shell_start or a host-shell fallback."
                     ),
                 },
                 {
@@ -285,6 +289,13 @@ class ModelWorkDeliberator:
             )
         if phase == "VERIFY" and not bool(progress.get("tests_run")):
             if not bool(progress.get("execution_started")):
+                project_tests = tuple(
+                    self._model_tool_specification(item)
+                    for item in loaded
+                    if self._tool_name(item) == "run_project_tests"
+                )
+                if project_tests:
+                    return project_tests
                 return tuple(
                     self._model_tool_specification(item)
                     for item in loaded
@@ -449,13 +460,27 @@ def _execution_progress(context: WorkContext) -> dict[str, Any]:
         and item.get("ok") is True
         and isinstance(item.get("result"), Mapping)
     ]
-    execution_started = bool(shell_results)
-    tests_run = any(
+    project_test_results = [
+        item
+        for item in observations
+        if item.get("kind") == "tool"
+        and item.get("tool") == "run_project_tests"
+        and item.get("ok") is True
+        and isinstance(item.get("result"), Mapping)
+        and after_current_change(item)
+    ]
+    recorded_project_tests = any(
+        _recorded_project_test(context, item, changes) for item in project_test_results
+    )
+    execution_started = bool(shell_results) or recorded_project_tests
+    tests_run = recorded_project_tests or any(
         after_current_change(item, process=True)
         and _completed_test_result(item["result"])
         for item in shell_results
     )
     diff_reviewed = any(
+        _approved_proposal_diff(context, item) for item in changes
+    ) or any(
         item.get("kind") == "tool"
         and item.get("tool") == "git_diff"
         and item.get("ok") is True
@@ -496,6 +521,142 @@ def _execution_progress(context: WorkContext) -> dict[str, Any]:
         "diff_reviewed": diff_reviewed,
         "verification_passed": verification_passed,
     }
+
+
+def _recorded_project_test(context, observation, changes) -> bool:
+    """Inspect original Work, test receipt and CAS; never trust a model's PASS."""
+    from datetime import datetime
+    from pathlib import Path
+
+    from nous_runtime.artifact import ArtifactRegistry, ContentAddressedArtifactStore
+    from nous_runtime.core.errors import ArtifactError
+    from nous_runtime.evaluation.validators.test_validator import TestValidator
+    from nous_runtime.events import EventStream
+    from nous_runtime.work.runtime import WorkHarness
+
+    result = observation["result"]
+    root_value = context.workspace.get("execution_root")
+    if (
+        not root_value
+        or result.get("security_grade") != "strong_vm"
+        or result.get("profile") != "python-unittest"
+        or not isinstance(result.get("input_snapshot_sha256"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", result["input_snapshot_sha256"]) is None
+    ):
+        return False
+    try:
+        root = Path(root_value).resolve()
+        original = WorkHarness(root).require(context.run_id)
+        if (
+            original.workspace_root != str(root)
+            or observation not in original.observations
+            or (original.plan.revision if original.plan else 0)
+            != int((context.plan or {}).get("revision") or 0)
+        ):
+            return False
+        evidence = TestValidator(workspace=str(root)).validate(
+            None, {"test_run_id": result.get("run_id")}
+        )[0]
+        if (
+            not evidence.passed
+            or evidence.detail.get("test_counts") != result.get("test_counts")
+            or evidence.detail.get("input_snapshot_sha256")
+            != result["input_snapshot_sha256"]
+        ):
+            return False
+        artifact = ArtifactRegistry(root / ".nous/artifacts.jsonl").get(
+            str(result.get("artifact_id") or "")
+        )
+        digest = result.get("artifact_digest")
+        if (
+            artifact is None
+            or artifact.creator != "developer.workbench"
+            or artifact.metadata.get("run_id") != result.get("run_id")
+            or artifact.metadata.get("digest") != digest
+        ):
+            return False
+        store = ContentAddressedArtifactStore(root / ".nous/artifacts")
+        record = store.get(digest)
+        if record is None or record.size_bytes > 4 * 1024 * 1024:
+            return False
+        content = store.resolve(digest, verify=True)
+        if content != (root / artifact.location).resolve():
+            return False
+        stored = json.loads(content.read_bytes())
+        if not isinstance(stored, dict) or any(
+            stored.get(key) != result.get(key)
+            for key in (
+                "run_id",
+                "profile",
+                "target",
+                "ok",
+                "exit_code",
+                "security_grade",
+                "input_snapshot_sha256",
+                "test_counts",
+                "test_outcome",
+            )
+        ):
+            return False
+        if stored.get("test_outcome") != "PASS" or stored.get("ok") is not True:
+            return False
+        # The result must describe a test started after this Work's latest edit.
+        # Sequence alone cannot make an older test Run current after a restart.
+        latest_change = max(changes, key=lambda item: item["action_sequence"])
+        changed_at = datetime.fromisoformat(
+            latest_change["observed_at"].replace("Z", "+00:00")
+        )
+        starts = [
+            event
+            for event in EventStream(str(root)).load_events(result["run_id"])
+            if event.actor == "developer.workbench"
+            and event.event_type == "command.started"
+        ]
+        return (
+            len(starts) == 1
+            and datetime.fromisoformat(starts[0].timestamp.replace("Z", "+00:00"))
+            >= changed_at
+        )
+    except (OSError, ValueError, TypeError, KeyError, ArtifactError):
+        return False
+
+
+def _approved_proposal_diff(context, observation) -> bool:
+    """A human-approved immutable proposal is the existing governed diff review."""
+    from nous_runtime.core.errors import ArtifactError
+    from nous_runtime.workspace.proposals import WorkspaceProposalService
+    from nous_runtime.workspace.workbench import WorkbenchError
+
+    result = observation.get("result") or {}
+    root = context.workspace.get("execution_root")
+    if not root or not result.get("proposal_id"):
+        return False
+    try:
+        proposal = WorkspaceProposalService(root).read(result["proposal_id"])
+        return (
+            proposal["source_work_id"] == context.run_id
+            and proposal["subject_id"] == "agent.apeir.work"
+            and proposal["plan_id"] == str((context.plan or {}).get("plan_id") or "")
+            and proposal["approval_status"] == "APPROVED"
+            and proposal["applied"] is True
+            and proposal["verification"].get("verdict") == "MATCH"
+            and all(
+                proposal[key] == result.get(key)
+                for key in (
+                    "manifest_ref",
+                    "authorization_id",
+                    "approval_request_id",
+                )
+            )
+            and any(item["changed"] for item in proposal["files"])
+            and all(
+                item["current_exists"] is True
+                and item["current_sha256"] == item["after_sha256"]
+                for item in proposal["files"]
+            )
+        )
+    except (OSError, ValueError, TypeError, KeyError, WorkbenchError, ArtifactError):
+        return False
 
 
 def _result_has_change(value: Any) -> bool:

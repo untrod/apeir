@@ -108,6 +108,13 @@ semantics and remain BLOCKED on this read-only backend. Existing Governance
 approval still applies. Results contain the actual exit code, bounded output
 and the tested input snapshot digest; a file SHA match is not a test result.
 
+The fixed profile keeps Python isolated from `PYTHONPATH` and startup hooks. Its
+trusted bootstrap loads stdlib unittest first, then exposes only the staged
+project for local imports. Package tests retain their project-relative module
+names; a plain test directory does not need an added `__init__.py`. The directory
+is an argv value, never executable configuration. Project dependencies beyond
+the pinned stdlib environment still require a separately qualified image.
+
 ### Desktop (experimental)
 
 Source Studio can use a browser. Native Linux Desktop needs the
