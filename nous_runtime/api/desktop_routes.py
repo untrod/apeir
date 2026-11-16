@@ -528,21 +528,37 @@ def handle_automations_add(
         import uuid
 
         if body.get("adapter") or body.get("workflow_id"):
-            if (
-                set(body) - {"adapter", "name", "trigger", "due_at", "firmware_version"}
-                or body.get("adapter") != "simulated-reality"
-            ):
+            adapter = body.get("adapter")
+            allowed = {"adapter", "name", "trigger", "due_at", "cron"} | (
+                {"workflow_id", "version", "inputs"}
+                if adapter == "workflow"
+                else {"firmware_version"}
+            )
+            if set(body) - allowed or adapter not in {"workflow", "simulated-reality"}:
                 return err(
                     "AUTOMATION_UNQUALIFIED",
-                    "Only the explicit structured simulated-reality template is supported",
+                    "Choose a registered pure Workflow or the explicit simulated-reality template",
                 )
             service = _automation_service(authorization_context, permission="manage")
+            if adapter == "workflow":
+                return ok(
+                    service.add_workflow(
+                        name=body.get("name", "Workflow schedule"),
+                        workflow_id=body.get("workflow_id", ""),
+                        version=body.get("version", ""),
+                        inputs=body.get("inputs", {}),
+                        trigger=body.get("trigger", "manual"),
+                        due_at=body.get("due_at", ""),
+                        cron=body.get("cron", ""),
+                    )
+                )
             return ok(
                 service.add_simulation(
                     name=body.get("name", "Governed simulated firmware"),
                     trigger=body.get("trigger", "manual"),
                     due_at=body.get("due_at", ""),
                     firmware_version=body.get("firmware_version", "2.0.0"),
+                    cron=body.get("cron", ""),
                 )
             )
         if authorization_context is not None:
@@ -583,10 +599,12 @@ def handle_automations_action(
                     "AUTOMATION_INVALID_REQUEST", "run_due accepts only a bounded limit"
                 )
             service = _automation_service(authorization_context, permission="manage")
+            runs = service.run_due(limit=body.get("limit", 10))
             return ok(
                 {
-                    "runs": service.run_due(limit=body.get("limit", 10)),
-                    "simulated": True,
+                    "runs": runs,
+                    "simulated": all(run["simulated"] for run in runs),
+                    "execution_scope": "runtime-service",
                 }
             )
         try:
@@ -615,6 +633,8 @@ def handle_automations_action(
                         before_publish=service.before_consume,
                     )
                 )
+            if action == "tick":
+                return ok({"runs": service.run_due(automation_id=automation_id)})
             if action == "trigger":
                 return ok(service.trigger(automation_id, body.get("trigger_key", "")))
             if action in {"resume", "reconcile", "cancel"}:

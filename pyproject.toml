@@ -31,6 +31,7 @@ dependencies = [
     "typer>=0.9",
     "pyyaml>=6.0",
     "jsonschema>=4.20",
+    "croniter>=7.0,<8",
     "packaging>=24.2,<27",
     "pydantic>=2.0,<3",
     "PyJWT>=2.10,<3",

@@ -457,6 +457,11 @@ required. Runtime host configuration
 must be owner-controlled; Windows file enrollment fails closed pending verified
 ACL support. Real external IdP deployment is not Cloud-qualified.
 
+The host-generated authorization redirect leaves the challenge route only via
+its typed HTTP response. Ordinary JSON, logs and audit records omit that URL;
+the general redactor still rejects authorization-shaped fields. The browser
+receives the real redirect without treating imported/body-supplied URLs as trusted.
+
 Every authenticated human mutation (except login/challenge/nonce issuance)
 requires a durable, 60-second, one-use nonce bound to session, method, canonical
 route and exact JSON body. Changed targets, bodies, paths, sessions and replay

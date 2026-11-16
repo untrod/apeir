@@ -31,6 +31,14 @@ class WorkflowConflictError(ValueError):
     """A Workflow update used a stale revision."""
 
 
+class AutomationBusyError(WorkflowConflictError):
+    """A recurring trigger still has an original run requiring attention."""
+
+
+class AutomationStaleError(WorkflowConflictError):
+    """Another admitted tick has already advanced the occurrence cursor."""
+
+
 def binding_digest(value: Any) -> str:
     encoded = json.dumps(
         value,
@@ -328,6 +336,7 @@ class WorkflowStore:
         trigger_key: str,
         *,
         before_publish: Callable[[], None] | None = None,
+        serial: bool = False,
     ) -> WorkflowRun:
         """Atomically save the original run before a consumer can invoke handlers."""
         with self._db() as connection:
@@ -340,13 +349,18 @@ class WorkflowStore:
                 raise KeyError(automation_id)
             binding = self._automation(row)
             self._validate_automation_definition(connection, binding)
-            inputs = {
-                **binding["inputs"],
-                "_automation_id": automation_id,
-                "_agent_id": "automation:" + automation_id,
-                "_plan_id": binding["plan_id"],
-                "_workflow_id": binding["workflow_id"],
-            }
+            inputs = dict(binding["inputs"])
+            if binding["adapter"] == "simulated-reality":
+                # Preserve historical simulation input digests. Generic Workflow
+                # inputs remain exactly the user's schema-validated input object.
+                inputs.update(
+                    {
+                        "_automation_id": automation_id,
+                        "_agent_id": "automation:" + automation_id,
+                        "_plan_id": binding["plan_id"],
+                        "_workflow_id": binding["workflow_id"],
+                    }
+                )
             previous = connection.execute(
                 "SELECT run_id FROM workflow_automation_triggers WHERE automation_id=? AND trigger_key=?",
                 (automation_id, trigger_key),
@@ -373,6 +387,42 @@ class WorkflowStore:
                 raise ValueError("Automation is disabled")
             if before_publish is not None:
                 before_publish()
+            if serial or binding["trigger"] == "cron":
+                prior = connection.execute(
+                    "SELECT trigger_key, run_id FROM workflow_automation_triggers WHERE automation_id=? ORDER BY trigger_key DESC LIMIT 1",
+                    (automation_id,),
+                ).fetchone()
+                if prior:
+                    if trigger_key <= prior[0]:
+                        raise AutomationStaleError(
+                            "Cron occurrence is older than the original cursor"
+                        )
+                    original = self._require_run(connection, prior[1])
+                    self._validate_run(
+                        original,
+                        definition=self._definition_for_run(connection, original),
+                    )
+                    if (
+                        original.workflow_id != binding["workflow_id"]
+                        or original.workflow_version != binding["version"]
+                        or original.definition_digest != binding["definition_digest"]
+                        or original.inputs_digest != self.inputs_digest(inputs)
+                        or original.idempotency_key
+                        != "automation:"
+                        + automation_id
+                        + ":"
+                        + binding_digest(prior[0])
+                    ):
+                        raise WorkflowBindingError(
+                            "Original Cron cursor binding changed"
+                        )
+                    if original.state not in {
+                        WorkflowState.COMPLETED,
+                        WorkflowState.CANCELLED,
+                    }:
+                        raise AutomationBusyError(
+                            "Original Cron run must finish, be cancelled or reconciled first"
+                        )
             self._require_unredacted(inputs)
             run = self._create_run(
                 connection,
@@ -418,6 +468,17 @@ class WorkflowStore:
         if row is None:
             raise WorkflowBindingError("Run is not the original Automation trigger")
         return self.claim_automation_run(automation_id, row[0])
+
+    def automation_trigger_run(
+        self, automation_id: str, trigger_key: str
+    ) -> WorkflowRun | None:
+        """Look up an original occurrence, including history older than a page."""
+        with self._db() as connection:
+            row = connection.execute(
+                "SELECT run_id FROM workflow_automation_triggers WHERE automation_id=? AND trigger_key=?",
+                (automation_id, trigger_key),
+            ).fetchone()
+        return self.automation_run(automation_id, row[0]) if row else None
 
     def _validate_automation_definition(self, connection, binding):
         definition = self._definition_for_run(

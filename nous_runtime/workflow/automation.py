@@ -1,7 +1,7 @@
 """Bounded trigger consumption through the existing governed Workflow/Work path.
 
-Only the explicit built-in simulated Reality template is qualified here. A
-trigger records intent, never approval, a grant, or proof of a physical effect.
+Pure registered Workflows and the explicit simulated Reality template share
+the original store. A trigger records intent, never approval or effect proof.
 """
 
 from __future__ import annotations
@@ -24,9 +24,15 @@ from nous_runtime.node_runtime.distributed_work import (
     DistributedWorkState,
     DistributedWorkStore,
 )
-from nous_runtime.workflow.models import WorkflowState
+from nous_runtime.workflow.models import StepType, WorkflowState
 from nous_runtime.workflow.runtime import WorkflowRuntime
-from nous_runtime.workflow.store import WorkflowBindingError, WorkflowStore
+from nous_runtime.workflow.schedule import cron_expression, latest_occurrence
+from nous_runtime.workflow.store import (
+    AutomationBusyError,
+    AutomationStaleError,
+    WorkflowBindingError,
+    WorkflowStore,
+)
 
 ADAPTER = "simulated-reality"
 MAX_DUE = 10
@@ -45,7 +51,7 @@ def utc_timestamp(value: str) -> str:
 class AutomationConsumer:
     """A trigger adapter; canonical owners retain all execution and authority."""
 
-    def __init__(self, root: str | Path, *, gate=None):
+    def __init__(self, root: str | Path, *, gate=None, clock=None):
         self.root = Path(root).expanduser().resolve()
         self.store = WorkflowStore(self.root)
         self.gate = (
@@ -62,6 +68,105 @@ class AutomationConsumer:
         self.controller_state = self.root / ".nous" / "automation-simulation" / "relay"
         self.before_consume = None
         self.management_context = None
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
+
+    @staticmethod
+    def _trigger_fields(trigger, due_at, cron):
+        if trigger not in {"manual", "schedule", "cron"}:
+            raise ValueError("Supported triggers are manual, schedule and cron")
+        if trigger == "cron":
+            if due_at:
+                raise ValueError("Cron cannot have a one-shot due_at")
+            return {
+                "trigger": trigger,
+                "due_at": "",
+                "cron": cron_expression(cron),
+                "cron_schema_version": 1,
+                "timezone": "UTC",
+                "misfire_policy": "coalesce",
+                "overlap_policy": "forbid",
+            }
+        if cron:
+            raise ValueError("Only a Cron trigger can have a cron expression")
+        if trigger == "schedule":
+            due_at = utc_timestamp(due_at)
+        elif due_at:
+            raise ValueError("Manual automation cannot have due_at")
+        return {"trigger": trigger, "due_at": due_at}
+
+    @staticmethod
+    def _name(name):
+        if not isinstance(name, str) or not name.strip() or len(name) > 200:
+            raise ValueError(
+                "Automation name is required and bounded to 200 characters"
+            )
+        return name.strip()
+
+    def _pure_definition(self, workflow_id, version):
+        runtime = WorkflowRuntime(str(self.root))
+        definition = self.store.get_definition(workflow_id, version)
+        if definition is None:
+            raise ValueError("Register the original Workflow version first")
+        runtime._validate_definition(definition)
+        if not 1 <= len(definition.steps) <= 64 or any(
+            step.step_type
+            not in {StepType.TRANSFORM, StepType.WAIT, StepType.CONDITION}
+            or step.approval_required
+            or step.compensation
+            or runtime._handler(step)[0] is None
+            for step in definition.steps
+        ):
+            raise ValueError(
+                "Scheduled Workflow requires qualified pure TRANSFORM, WAIT or CONDITION handlers; effects require their own governed host"
+            )
+        return definition
+
+    def add_workflow(
+        self,
+        *,
+        name,
+        workflow_id,
+        version,
+        inputs=None,
+        trigger="manual",
+        due_at="",
+        cron="",
+    ):
+        """Bind a registered pure definition, without creating an execution host."""
+        name = self._name(name)
+        fields = self._trigger_fields(trigger, due_at, cron)
+        definition = self._pure_definition(workflow_id, version)
+        if inputs is None:
+            inputs = {}
+        if not isinstance(inputs, dict) or any(
+            not isinstance(key, str) or key.startswith("_") for key in inputs
+        ):
+            raise ValueError(
+                "Workflow inputs must be an object without reserved fields"
+            )
+        if len(json.dumps(inputs, allow_nan=False).encode()) > 96 * 1024:
+            raise ValueError("Workflow inputs exceed 96 KiB")
+        WorkflowRuntime(str(self.root)).compiler.validate_data(definition, inputs)
+        return self.store.put_automation(
+            {
+                "id": "auto_" + uuid.uuid4().hex,
+                "name": name,
+                "adapter": "workflow",
+                "workflow_id": workflow_id,
+                "version": version,
+                "definition_digest": self.store.definition_digest(definition),
+                "inputs": inputs,
+                **fields,
+                "created_at": self.clock().isoformat(),
+                "simulated": False,
+                "execution_scope": "runtime-service",
+                "kernel_traversed": False,
+                "qualification": "PURE_WORKFLOW",
+                "schedule": cron or due_at,
+                "action": "workflow.run",
+            },
+            before_publish=self.before_consume,
+        )
 
     def admit_management(self, context, *, permission="manage", audit=True):
         """Revalidate the existing live human boundary; issue no authority."""
@@ -114,21 +219,20 @@ class AutomationConsumer:
             self.management_context = context
 
     def add_simulation(
-        self, *, name: str, trigger="manual", due_at="", firmware_version="2.0.0"
+        self,
+        *,
+        name: str,
+        trigger="manual",
+        due_at="",
+        firmware_version="2.0.0",
+        cron="",
     ):
         from nous_runtime.reality.preview import DEFINITION
         from nous_runtime.reality.provider import SimulatedDeviceProvider
 
-        if not isinstance(name, str) or not name.strip() or len(name) > 200:
-            raise ValueError(
-                "Automation name is required and bounded to 200 characters"
-            )
-        if trigger not in {"manual", "schedule"}:
-            raise ValueError("Only manual and one-shot due triggers are supported")
-        if trigger == "schedule":
-            due_at = utc_timestamp(due_at)
-        elif due_at:
-            raise ValueError("Manual automation cannot have due_at")
+        name = self._name(name)
+        fields = self._trigger_fields(trigger, due_at, cron)
+        due_at = fields["due_at"]
         SimulatedDeviceProvider.validate_firmware_mutation(
             {"state": {"firmware_version": firmware_version}}
         )
@@ -184,14 +288,13 @@ class AutomationConsumer:
                 "definition_digest": self.store.definition_digest(definition),
                 "plan_id": plan_id,
                 "inputs": {},
-                "trigger": trigger,
-                "due_at": due_at,
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                **fields,
+                "created_at": self.clock().isoformat(),
                 "simulated": True,
                 "execution_scope": "runtime-service",
                 "kernel_traversed": False,
                 "qualification": "SIMULATED_TEMPLATE",
-                "schedule": due_at,
+                "schedule": cron or due_at,
                 "action": "device.firmware.update",
             },
             before_publish=self.before_consume,
@@ -210,44 +313,123 @@ class AutomationConsumer:
             "total": len(history),
         }
 
-    def trigger(self, automation_id: str, trigger_key: str):
+    def trigger(self, automation_id: str, trigger_key: str, *, _tick_at=None):
         binding = self._binding(automation_id)
+        now = self.clock() if _tick_at is None else _tick_at
         if not isinstance(trigger_key, str) or not re.fullmatch(
             r"[A-Za-z0-9_.:+-]{1,128}", trigger_key
         ):
             raise ValueError("An explicit bounded trigger_key is required")
         if binding["trigger"] == "schedule":
-            if trigger_key != "due:" + binding["due_at"] or datetime.fromisoformat(
-                binding["due_at"]
-            ) > datetime.now(timezone.utc):
+            if (
+                trigger_key != "due:" + binding["due_at"]
+                or datetime.fromisoformat(binding["due_at"]) > now
+            ):
                 raise ValueError(
                     "One-shot scheduled trigger is not due or has a changed key"
                 )
+        if binding["trigger"] == "cron":
+            if not trigger_key.startswith("cron:"):
+                raise ValueError(
+                    "Cron trigger requires its original UTC occurrence key"
+                )
+            occurrence = utc_timestamp(trigger_key.removeprefix("cron:"))
+            history = self.store.automation_history(automation_id, limit=1)
+            if self.store.automation_trigger_run(automation_id, trigger_key) is None:
+                if trigger_key != "cron:" + (
+                    self._due_occurrence(binding, now=now) or ""
+                ):
+                    raise ValueError(
+                        "Cron trigger is not the latest due UTC occurrence"
+                    )
+                if (
+                    history
+                    and self._projection(automation_id, history[0]["run"]["run_id"])[
+                        "reconciliation_required"
+                    ]
+                ):
+                    raise AutomationBusyError(
+                        "Original effect still requires reconciliation"
+                    )
+            if trigger_key != "cron:" + occurrence:
+                raise ValueError("Cron occurrence key must use canonical UTC precision")
         # Creation, relation and immutable inputs commit before the original run
         # can start. Repeating a started trigger only projects persisted state.
         run = self.store.claim_automation_run(
-            automation_id, trigger_key, before_publish=self.before_consume
+            automation_id,
+            trigger_key,
+            before_publish=self.before_consume,
+            serial=binding["trigger"] == "cron",
         )
         if run.state is not WorkflowState.PENDING or not binding["enabled"]:
             return self._projection(automation_id, run.run_id)
         return self._consume(automation_id, run.run_id, "start")
 
-    def run_due(self, *, limit=MAX_DUE):
+    def run_due(self, *, limit=MAX_DUE, include_simulation=True, automation_id=""):
         if type(limit) is not int or not 1 <= limit <= MAX_DUE:
             raise ValueError("run_due limit must be between 1 and 10")
-        now = datetime.now(timezone.utc)
+        now = self.clock()
+        bindings = [self._binding(automation_id)] if automation_id else self.list()
         due = sorted(
             (
                 binding
-                for binding in self.list()
+                for binding in bindings
                 if binding["enabled"]
+                and (include_simulation or binding["adapter"] != ADAPTER)
                 and binding["trigger"] == "schedule"
                 and datetime.fromisoformat(binding["due_at"]) <= now
                 and not self.store.automation_history(binding["id"], limit=1)
             ),
             key=lambda b: b["due_at"],
         )
-        return [self.trigger(b["id"], "due:" + b["due_at"]) for b in due[:limit]]
+        results = [
+            self.trigger(b["id"], "due:" + b["due_at"], _tick_at=now)
+            for b in due[:limit]
+        ]
+        for binding in sorted(bindings, key=lambda value: value["id"]):
+            if len(results) >= limit:
+                break
+            if not binding["enabled"] or binding["trigger"] != "cron":
+                continue
+            if not include_simulation and binding["adapter"] == ADAPTER:
+                continue
+            self._binding(binding["id"])
+            history = self.store.automation_history(binding["id"], limit=1)
+            if history:
+                original = history[0]["run"]
+                if original["state"] == "pending" or (
+                    binding["adapter"] == "workflow" and original["state"] == "running"
+                ):
+                    results.append(self.resume(binding["id"], original["run_id"]))
+                    continue
+                if original["state"] not in {"completed", "cancelled"}:
+                    continue
+                if self._projection(binding["id"], original["run_id"])[
+                    "reconciliation_required"
+                ]:
+                    continue
+            occurrence = self._due_occurrence(binding, now=now)
+            if (
+                occurrence is None
+                or history
+                and "cron:" + occurrence <= history[0]["trigger_key"]
+            ):
+                continue
+            try:
+                results.append(
+                    self.trigger(binding["id"], "cron:" + occurrence, _tick_at=now)
+                )
+            except (AutomationBusyError, AutomationStaleError):
+                # Another admitted consumer owns the original run. Do not enqueue.
+                continue
+        return results
+
+    def _due_occurrence(self, binding, *, now=None):
+        return latest_occurrence(
+            binding["cron"],
+            self.clock() if now is None else now,
+            datetime.fromisoformat(binding["created_at"]),
+        )
 
     def resume(self, automation_id: str, run_id: str):
         self._binding(automation_id)
@@ -289,6 +471,20 @@ class AutomationConsumer:
 
     def _binding(self, automation_id):
         binding = self.store.get_automation(automation_id)
+        if binding["trigger"] == "cron":
+            expected = self._trigger_fields("cron", "", binding.get("cron"))
+            if type(binding.get("cron_schema_version")) is not int or any(
+                binding.get(key) != value for key, value in expected.items()
+            ):
+                raise WorkflowBindingError("Cron calendar policy changed")
+            utc_timestamp(binding["created_at"])
+        if (
+            binding["adapter"] == "workflow"
+            and binding.get("qualification") == "PURE_WORKFLOW"
+            and binding.get("simulated") is False
+        ):
+            self._pure_definition(binding["workflow_id"], binding["version"])
+            return binding
         if (
             binding["adapter"] != ADAPTER
             or binding["qualification"] != "SIMULATED_TEMPLATE"
@@ -298,6 +494,24 @@ class AutomationConsumer:
         return binding
 
     def _consume(self, automation_id, run_id, phase):
+        binding = self._binding(automation_id)
+        if binding["adapter"] == "workflow":
+            self._projection(automation_id, run_id)
+            if self.before_consume is not None:
+                self.before_consume()
+            runtime = WorkflowRuntime(str(self.root))
+            run = self.store.automation_run(automation_id, run_id)
+            if phase != "reconcile":
+                if run.state is WorkflowState.PENDING:
+                    runtime.start(
+                        run.workflow_id,
+                        run.workflow_version,
+                        run.inputs,
+                        idempotency_key=run.idempotency_key,
+                    )
+                else:
+                    runtime.resume(run_id)
+            return self._projection(automation_id, run_id)
         from nous_runtime.reality.preview import create_automation_simulation_components
 
         async def consume():
@@ -787,6 +1001,61 @@ class AutomationConsumer:
 
     def _projection(self, automation_id, run_id, *, provider=None):
         run = self.store.automation_run(automation_id, run_id)
+        binding = self._binding(automation_id)
+        if binding["adapter"] == "workflow":
+            definition = self._pure_definition(run.workflow_id, run.workflow_version)
+            checkpoints = self.store.checkpoints(run_id)
+            validator = WorkflowRuntime(str(self.root))
+            if run.state is WorkflowState.COMPLETED:
+                steps = {step.step_id: step for step in definition.steps}
+                completed = {
+                    key
+                    for key, state in run.step_states.items()
+                    if state == "completed"
+                }
+                if set(run.outputs) != completed or set(run.step_states) != set(steps):
+                    raise WorkflowBindingError(
+                        "Completed Automation has incomplete original step evidence"
+                    )
+                for step_id, step in steps.items():
+                    checkpoint = checkpoints.get(step_id, {})
+                    if (
+                        run.step_states[step_id] not in {"completed", "skipped"}
+                        or checkpoint.get("status") != run.step_states[step_id]
+                        or (
+                            run.step_states[step_id] == "completed"
+                            and checkpoint.get("output") != run.outputs[step_id]
+                        )
+                        or (
+                            run.step_states[step_id] == "skipped"
+                            and (
+                                step.step_type is not StepType.CONDITION
+                                or checkpoint.get("output") != {}
+                            )
+                        )
+                    ):
+                        raise WorkflowBindingError(
+                            "Completed Automation original step output changed"
+                        )
+                    validator._validate_checkpoint(run, step, checkpoint)
+            return {
+                "automation_id": automation_id,
+                "run_id": run_id,
+                "workflow_id": run.workflow_id,
+                "state": run.state.value,
+                "step_states": run.step_states,
+                "outputs": run.outputs,
+                "cancellation_requested": run.cancellation_requested,
+                "error": run.error,
+                "works": [],
+                "reconciliation_required": False,
+                "simulated": False,
+                "adapter": "workflow",
+                "qualification": "PURE_WORKFLOW",
+                "execution_scope": "runtime-service",
+                "kernel_traversed": False,
+                "effect_counts": {},
+            }
         works = DistributedWorkStore(self.controller_state)
         records = []
         cas = ContentAddressedArtifactStore(self.controller_state / "artifacts")

@@ -125,12 +125,33 @@ factory or consumer. This is runtime-service simulation, not physical acceptance
 `AutomationConsumer` stores an immutable definition digest and trigger-to-original
 Workflow run relation in the existing `WorkflowStore`. The relation, original
 run, inputs and idempotency key commit together before handlers can run. A manual
-trigger requires an explicit bounded key. `run_due` consumes at most ten one-shot
-UTC due proposals; it never resumes an already consumed due trigger. Repeated
+trigger requires an explicit bounded key. `run_due` consumes at most ten due
+proposals per tick. One-shot UTC proposals are consumed once. Five-field numeric
+UTC Cron bindings coalesce missed ticks to the latest due minute, with a stable
+`cron:UTC_TIMESTAMP` key. Claim, monotonic cursor and non-overlap checks share the
+original Workflow writer transaction. Repeated
 keys and restart reuse the original run and Work. Every distinct firmware Work
 requires its own current approval; prior Approve Once cannot authorize another.
 
-CLI execution requires `--simulation`. HTTP management uses the existing live
+Simulated CLI execution requires `--simulation`. `bind-workflow` also accepts
+already registered pure TRANSFORM, WAIT and CONDITION handlers; inputs retain
+their original schema and no simulation bookkeeping is injected. Approval steps,
+effectful or unbound handlers and compensation are rejected in this pure host.
+WAIT remains an immediate barrier, not a sleep instruction. The original Runtime
+retains retry limits, typed bindings and checkpoint validation. A started pure
+step without remaining retry budget remains UNKNOWN.
+
+`automation watch --workflow` is an explicit local foreground timer; add
+`--simulation` to include simulated device schedules. Every tick authenticates
+the local OS-user boundary and rechecks current management permissions. No human
+context, credential or approval is stored in a schedule. Restarting the timer
+reloads original bindings and runs. A pending claim resumes its original Run;
+started pure handlers use the original Runtime policy. Waiting, failed and
+UNKNOWN effects are not automatically resumed. Disabling a schedule prevents
+future occurrences; stopping the timer does not cancel Work. Cancellation and
+reconciliation continue to address the original Run.
+
+HTTP management uses the existing live
 trusted human session, exact mutation nonce and `control.automation.manage`
 permission; listing and history require `control.automation.read`, including
 empty, legacy-only and mixed HTTP stores. The existing Governance
@@ -171,7 +192,7 @@ through the existing signed Node result path and independently observed; the
 preflight issues no authority and cannot commit an effect.
 
 The existing Operations Console now consumes these same HTTP endpoints. Its
-Automation pane displays structured simulated definitions, original run history,
+Automation pane displays qualified pure/simulated definitions, Cron configuration, original run history,
 pending approvals and receipt/observation/verification evidence. Approve Once or
 Deny addresses the original approval, then resumes that exact run. An uncertain
 trigger response retains its original key and queries persisted history instead
@@ -180,9 +201,9 @@ changes invalidate retained views and mutations, including an address/token ABA
 change. The browser stores no private run or identity state; simulator and
 runtime-service labels do not imply Kernel or physical execution.
 
-The existing free-text Automation JSON stays `UNQUALIFIED` configuration. A
-background timer, recurring Cron/event/webhook triggers, general executable Skill
-workflows and a semantic action recorder are unimplemented. Other production
+The existing free-text Automation JSON stays `UNQUALIFIED` configuration.
+Unattended OS-service installation, event/webhook triggers, general executable
+Skill workflows and a semantic action recorder are unimplemented. Other production
 Workflow handlers require their own trusted factory and exercised contracts;
 the consumer introduces no general capability executor or model fallback. See
 the [runnable Workflow example](../../examples/hello_workflow/README.md).

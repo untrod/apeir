@@ -160,6 +160,9 @@ export interface AutomationView {
   trigger: string;
   schedule?: string;
   due_at?: string;
+  cron?: string;
+  timezone?: "UTC";
+  version?: string;
   action: string;
   enabled: boolean;
   created_at: string;
@@ -172,13 +175,20 @@ export interface AutomationView {
   definition_digest?: string;
 }
 
-export interface AutomationCreateRequest {
-  adapter: "simulated-reality";
+export type AutomationCreateRequest = {
   name: string;
-  trigger: "manual" | "schedule";
+  trigger: "manual" | "schedule" | "cron";
   due_at?: string;
+  cron?: string;
+} & ({
+  adapter: "simulated-reality";
   firmware_version: string;
-}
+} | {
+  adapter: "workflow";
+  workflow_id: string;
+  version: string;
+  inputs: Record<string, unknown>;
+});
 /** Compatibility configuration only: free-text records remain UNQUALIFIED. */
 export interface LegacyAutomationCreateRequest {
   name: string;
@@ -198,6 +208,8 @@ export interface AutomationRun {
   simulated: boolean;
   execution_scope: string;
   kernel_traversed: boolean;
+  adapter?: string;
+  qualification?: string;
 }
 export interface AutomationHistory {
   automation_id: string;
@@ -610,6 +622,9 @@ export const addAutomation = (data: AutomationCreateRequest | LegacyAutomationCr
 export const automationAction = (action: string, automationId: string, original: { trigger_key?: string; run_id?: string } = {}, guard?: () => void) =>
   humanMutation<AutomationRun>("/api/v1/automations/action", { action, automation_id: automationId, ...original }, guard);
 
+export const consumeAutomationDue = (automationId: string, guard?: () => void) =>
+  humanMutation<{ runs: AutomationRun[] }>("/api/v1/automations/action", { action: "tick", automation_id: automationId }, guard);
+
 export async function fetchAutomationHistory(automationId: string, guard: () => void = () => {}) {
   const current = captureRuntimeConnection();
   const result = await api<AutomationHistory>(`/api/v1/automations/${encodeURIComponent(automationId)}/history?limit=50`);
@@ -620,8 +635,9 @@ export async function fetchAutomationHistory(automationId: string, guard: () => 
     typeof run.cancellation_requested === "boolean" && typeof run.reconciliation_required === "boolean" &&
     run.outputs && typeof run.outputs === "object" && !Array.isArray(run.outputs) &&
     Object.values(run.outputs).every(output => output && typeof output === "object") && Array.isArray(run.works) &&
-    run.simulated === true && run.execution_scope === "runtime-service" && run.kernel_traversed === false
-  )) throw new ApiError("AUTOMATION_HISTORY_INVALID", "Original Automation history binding or simulated scope is unavailable");
+    (run.simulated === true || (run.simulated === false && run.adapter === "workflow" && run.qualification === "PURE_WORKFLOW")) &&
+    run.execution_scope === "runtime-service" && run.kernel_traversed === false
+  )) throw new ApiError("AUTOMATION_HISTORY_INVALID", "Original Automation history binding or execution scope is unavailable");
   return result;
 }
 

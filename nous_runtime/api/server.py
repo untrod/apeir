@@ -303,7 +303,10 @@ class RuntimeAPIHandler(BaseHTTPRequestHandler):
         return data
 
     def _write(self, status: int, data: dict[str, Any]) -> None:
-        from nous_runtime.control_plane.operations import PairingInvitationResponse
+        from nous_runtime.control_plane.operations import (
+            HumanChallengeResponse,
+            PairingInvitationResponse,
+        )
 
         wire_data = data
         if status == 200 and isinstance(data, PairingInvitationResponse):
@@ -312,6 +315,13 @@ class RuntimeAPIHandler(BaseHTTPRequestHandler):
             wire_data = {
                 **data,
                 "data": {**data["data"], "pairing_code": data.pairing_code},
+            }
+        elif status == 200 and isinstance(data, HumanChallengeResponse):
+            # Only the actual challenge route carries this type. Keep the raw
+            # IdP URL out of ordinary JSON, logs, events and durable records.
+            wire_data = {
+                **data,
+                "data": {**data["data"], "authorization_url": data.authorization_url},
             }
         payload = json.dumps(wire_data, ensure_ascii=False).encode("utf-8")
         try:
