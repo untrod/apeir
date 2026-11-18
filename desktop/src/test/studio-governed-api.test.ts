@@ -1,8 +1,22 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { governedStudioMutation, humanMutation, setConfig } from "../lib/api";
+import { governedStudioMutation, humanMutation, setConfig, submitWork, taskAction } from "../lib/api";
 const response = (data: unknown) => ({ ok: true, json: async () => ({ ok: true, data }) });
 const forbidden = () => ({ ok: true, json: async () => ({ ok: false, error: { code: "NOUS_FORBIDDEN", message: "No human session" } }) });
 afterEach(() => { vi.unstubAllGlobals(); sessionStorage.clear(); });
+it("keeps Work execution requests on the service channel without borrowing human cookies or retrying", async () => {
+  setConfig({ url: "http://localhost:8770", token: "APEIR_FAKE_ONLY_TASK_SERVICE" });
+  const fetcher = vi.fn().mockResolvedValue(response({ state: "waiting_user" }));
+  vi.stubGlobal("fetch", fetcher);
+  await submitWork({ objective: "Inspect the project", preferred_model: "local/model", read_only: true });
+  await taskAction("resume", "work_original");
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(fetcher.mock.calls[0][1]).toMatchObject({ credentials: "omit", method: "POST", headers: { Authorization: "Bearer APEIR_FAKE_ONLY_TASK_SERVICE" } });
+  expect(JSON.parse(fetcher.mock.calls[0][1].body).preferred_model).toBe("local/model");
+  expect(fetcher.mock.calls[1][1]).toMatchObject({ credentials: "omit", method: "POST", body: '{"action":"resume","task_id":"work_original"}' });
+  fetcher.mockClear(); fetcher.mockRejectedValue(new Error("Response lost"));
+  await expect(taskAction("resume", "work_original")).rejects.toThrow("Response lost");
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
 it("probes identity without a mutation, uses a service request or exact human nonce", async () => {
   setConfig({ url: "http://localhost:8770", token: "APEIR_FAKE_ONLY_STUDIO_GOV" });
   const fetcher = vi.fn().mockResolvedValueOnce(forbidden()).mockResolvedValueOnce(response({ saved: true })); vi.stubGlobal("fetch", fetcher);

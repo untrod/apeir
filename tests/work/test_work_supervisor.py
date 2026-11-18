@@ -87,6 +87,53 @@ def test_pause_is_durable_and_discards_inflight_decision(tmp_path):
         supervisor.close()
 
 
+@pytest.mark.parametrize("action", ["pause", "cancel", "steer"])
+@pytest.mark.parametrize("failure", ["invalid decision", "connection refused"])
+def test_user_action_wins_over_a_stale_model_failure(tmp_path, action, failure):
+    entered = threading.Event()
+    release = threading.Event()
+    calls = []
+
+    def deliberate(_context):
+        calls.append(True)
+        entered.set()
+        assert release.wait(5)
+        if len(calls) == 1:
+            raise RuntimeError(failure)
+        return WorkDecision(DecisionStatus.ASK_USER, "Read the new instructions")
+
+    supervisor = WorkSupervisor(
+        tmp_path,
+        component_factory=lambda _root, _snapshot: _components(deliberate),
+    )
+    try:
+        created = supervisor.start("Explain a bounded concept")
+        assert entered.wait(5)
+        if action == "steer":
+            supervisor.steer(created.run_id, "Explain it for a beginner")
+        else:
+            getattr(supervisor, action)(created.run_id, reason="user requested stop")
+        release.set()
+        settled = supervisor.wait(created.run_id, timeout=5)
+        expected = {
+            "pause": RunState.PAUSED,
+            "cancel": RunState.CANCELLED,
+            "steer": RunState.WAITING_USER,
+        }[action]
+        assert settled.state is expected
+        assert len(calls) == (2 if action == "steer" else 1)
+        assert settled.error == ("user requested stop" if action == "cancel" else "")
+        if action == "pause":
+            supervisor.resume(created.run_id)
+            resumed = supervisor.wait(created.run_id, timeout=5)
+            assert resumed.state is RunState.WAITING_USER
+            assert resumed.run_id == created.run_id
+            assert len(calls) == 2
+    finally:
+        release.set()
+        supervisor.close()
+
+
 def test_new_supervisor_recovers_checkpoint_through_reassessment(tmp_path):
     first = WorkSupervisor(
         tmp_path,
@@ -120,8 +167,8 @@ def test_new_supervisor_recovers_checkpoint_through_reassessment(tmp_path):
 
     restarted = WorkSupervisor(
         tmp_path,
-        component_factory=lambda _root, snapshot: (
-            _assert_recovery_options(snapshot, finish)
+        component_factory=lambda _root, snapshot: _assert_recovery_options(
+            snapshot, finish
         ),
     )
     try:

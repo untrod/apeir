@@ -39,6 +39,12 @@ Its read-only unittest profile supports local project imports and package-relati
 tests. Approval, original test records and Artifact integrity are separate checks;
 there is no unrestricted terminal fallback.
 
+Model decisions are validated before tool dispatch, including loaded tool schemas
+and replacement-plan dependencies. Invalid or truncated responses pause the
+original Work for explicit recovery; they do not grant an action or trigger an
+automatic inference retry. Task controls keep the service request separate from
+human approval, using the existing Inspector and Governance broker.
+
 ## Models and Providers
 
 <a name="first-use-configuration-and-model-tests"></a>

@@ -16,6 +16,7 @@ from nous_runtime.events import RunState
 from nous_runtime.planner.plan import PlanStatus, TaskStatus
 from nous_runtime.work.models import (
     DecisionStatus,
+    InvalidModelDecision,
     WorkContext,
     WorkDecision,
     WorkSnapshot,
@@ -165,6 +166,9 @@ class AgentLoop:
                 return snapshot
 
             snapshot.state = RunState.UNDERSTANDING
+            agent_run_id = self.harness.ensure_agent(
+                snapshot, tools=tools, max_iterations=maximum
+            )
             self._reconcile_plan_progress(snapshot)
             self.harness.persist_progress(
                 snapshot,
@@ -185,7 +189,11 @@ class AgentLoop:
             captured: dict[str, Any] = {}
 
             def deliberate(_request: Any) -> Any:
-                value = deliberator(context)
+                try:
+                    value = deliberator(context)
+                except InvalidModelDecision as exc:
+                    captured["invalid_model_decision"] = exc
+                    raise
                 captured["decision"] = value
                 return value
 
@@ -195,20 +203,23 @@ class AgentLoop:
                 capability_id="model.work.deliberate",
                 handler=deliberate,
             )
-            if invocation.status is not InvocationStatus.COMPLETED:
-                reason = invocation.message or "work deliberation failed"
-                if self.harness.is_recoverable_runtime_failure(reason):
-                    return self.harness.require_runtime_recovery(
-                        snapshot,
-                        reason=reason,
-                    )
-                return self._fail(snapshot, reason)
-
             latest = self.harness.require(snapshot.run_id)
             if latest.last_checkpoint_id != decision_checkpoint_id:
                 snapshot = latest
                 if snapshot.terminal:
                     return snapshot
+                if invocation.status is not InvocationStatus.COMPLETED:
+                    snapshot.agent_run_id = ""
+                    snapshot.agent_checkpoint_id = ""
+                    self.harness.persist_progress(
+                        snapshot,
+                        "work.model.discarded",
+                        {
+                            "previous_agent_run_id": agent_run_id,
+                            "reason": "Work changed during the failed model request",
+                            "automatic_replay": False,
+                        },
+                    )
                 if snapshot.state in {
                     RunState.PAUSED,
                     RunState.WAITING_USER,
@@ -224,6 +235,40 @@ class AgentLoop:
                 )
                 recovering = False
                 continue
+            if invocation.status is not InvocationStatus.COMPLETED:
+                invalid = captured.get("invalid_model_decision")
+                if isinstance(invalid, InvalidModelDecision):
+                    reason = (
+                        f"{invalid.code}: {invalid}. Review the selected model and "
+                        "request limits, then explicitly resume this original Work. "
+                        "No tool was dispatched from the rejected response."
+                    )
+                    snapshot.goal.wait_for_user(reason)
+                    snapshot.state = RunState.WAITING_USER
+                    snapshot.error = reason
+                    snapshot.reanalysis_reason = reason
+                    snapshot.agent_run_id = ""
+                    snapshot.agent_checkpoint_id = ""
+                    return self.harness.persist_progress(
+                        snapshot,
+                        "work.model.invalid",
+                        {
+                            "reason": reason,
+                            "error_code": invalid.code,
+                            "request_id": invalid.request_id,
+                            "provider_id": invalid.provider_id,
+                            "model_id": invalid.model_id,
+                            "previous_agent_run_id": agent_run_id,
+                            "automatic_replay": False,
+                            "tool_dispatched": False,
+                        },
+                    )
+                reason = invocation.message or "work deliberation failed"
+                if self.harness.is_recoverable_runtime_failure(reason):
+                    return self.harness.require_runtime_recovery(
+                        snapshot, reason=reason
+                    )
+                return self._fail(snapshot, reason)
             try:
                 decision = WorkDecision.from_value(captured.get("decision"))
             except (TypeError, ValueError) as exc:

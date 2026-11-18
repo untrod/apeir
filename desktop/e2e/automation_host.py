@@ -29,6 +29,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--decision-recovery", action="store_true")
     args = parser.parse_args()
     # Deterministic FAKE key and subject, restricted to this isolated test host.
     key = Ed25519PrivateKey.from_private_bytes(b"a" * 32)
@@ -77,6 +78,45 @@ def main():
             )
         ),
     )
+    supervisor = None
+    if args.decision_recovery:
+        from nous_runtime.model_runtime import GatewayResponse
+        from nous_runtime.work import WorkHarness, WorkSupervisor, ModelWorkDeliberator
+        from nous_runtime.work.components import WorkExecutionComponents
+        from nous_runtime.work.supervisor import _SUPERVISORS
+
+        class FixtureFacade:
+            """Deliberately invalid first response, not real model qualification."""
+
+            def try_invoke_sync(self, request):
+                events = WorkHarness(args.workspace).events.load_events(
+                    request.execution.session_id
+                )
+                rejected = any(
+                    event.event_type == "work.model.invalid" for event in events
+                )
+                return GatewayResponse(
+                    request_id="fixture-decision-request",
+                    model_id="fixture/recovery-model",
+                    structured_output={
+                        "status": "complete" if rejected else "replan",
+                        "summary": "Recovered the original request"
+                        if rejected
+                        else "Invalid plan",
+                        "confidence": "high",
+                        "output": "Original request restored" if rejected else None,
+                    },
+                )
+
+        supervisor = WorkSupervisor(
+            args.workspace,
+            component_factory=lambda *_: WorkExecutionComponents(
+                tools=None,
+                deliberator=ModelWorkDeliberator(FixtureFacade()),
+                verifier=None,
+            ),
+        )
+        _SUPERVISORS[str(Path(args.workspace).resolve())] = supervisor
     server = RuntimeHTTPServer(("127.0.0.1", args.port), RuntimeAPIHandler)
     thread = Thread(target=server.serve_forever, daemon=True)
     stop = Event()
@@ -89,6 +129,8 @@ def main():
         server.shutdown()
         thread.join(timeout=5)
         server.server_close()
+        if supervisor is not None:
+            supervisor.close()
         if thread.is_alive():
             raise RuntimeError("Owned test HTTP host did not stop normally")
 
