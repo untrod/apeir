@@ -7523,3 +7523,24 @@ formatting, repository contracts and all 234 current Markdown link checks passed
 The security scan reported zero high findings; its ten medium matches include
 seven retained baseline matches and three new explicit test-fixture strings.
 No scanner rule, timeout, security assertion or historical failure was removed.
+
+### Desktop dependency gate
+
+The first PR163 Desktop run failed at the unchanged high-severity npm audit:
+[run 44242911550](https://github.com/untrod/apeir/actions/runs/44242911550).
+The published minimatch advisory is addressed by TypeScript ESLint 8.73.0 within
+the existing major-version range, resolving its minimatch dependency to 11.0.9.
+Lint, typecheck, production build and all 576 Desktop tests pass with this lock.
+
+The separate [picomatch advisory](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)
+still affects the latest published version, 4.0.7, as checked on 2026-11-18; the
+advisory lists no patched release. npm reports ten high-severity affected entries
+through this dependency and its consumers. Integration remains **BLOCKED** under
+[issue 164](https://github.com/untrod/apeir/issues/164). The required audit and
+branch protection remain unchanged; local functional tests do not override them.
+
+An independently installed wheel from `165a18809bf103a95d5a1bdcab349929994b22f5`
+(SHA-256 `57eba32f8d6c35caa6664ebd130a8ca6c6f79089cb2aa31d4d24278a80a69104`)
+passed the production-frontend recovery case using isolated Python, real HTTP and
+the explicit fake model/IdP. All 897 wheel checksums and 877 packaged Python files
+matched. This is source qualification, not a public download or native installer.
