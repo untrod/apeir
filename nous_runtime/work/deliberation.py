@@ -5,11 +5,18 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping, Sequence
+from graphlib import CycleError, TopologicalSorter
 from typing import Any
+
+from jsonschema import Draft202012Validator, validators
+from jsonschema.exceptions import SchemaError
+from referencing import Registry
+from referencing.exceptions import Unresolvable
 
 from nous_runtime.model_runtime import (
     GatewayBudget,
     GatewayExecutionContext,
+    GatewayFallbackPolicy,
     GatewayOperation,
     GatewayRequest,
     GatewayTraceContext,
@@ -19,7 +26,12 @@ from nous_runtime.model_runtime import (
     ReasoningMode,
     RoutingMode,
 )
-from nous_runtime.work.models import DecisionStatus, WorkContext, WorkDecision
+from nous_runtime.work.models import (
+    DecisionStatus,
+    InvalidModelDecision,
+    WorkContext,
+    WorkDecision,
+)
 from nous_runtime.model_runtime.cost_control import Usage
 
 
@@ -48,7 +60,7 @@ _DECISION_SCHEMA: dict[str, Any] = {
                 "fail",
             ],
         },
-        "summary": {"type": "string", "minLength": 1},
+        "summary": {"type": "string", "minLength": 1, "pattern": r"\S"},
         "next_action": {"type": "string"},
         "reason": {"type": "string"},
         "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
@@ -63,9 +75,9 @@ _DECISION_SCHEMA: dict[str, Any] = {
                 "additionalProperties": False,
                 "required": ["description", "step_id"],
                 "properties": {
-                    "description": {"type": "string", "minLength": 1},
+                    "description": {"type": "string", "minLength": 1, "pattern": r"\S"},
                     "capability_id": {"type": "string"},
-                    "step_id": {"type": "string", "minLength": 1},
+                    "step_id": {"type": "string", "minLength": 1, "pattern": r"\S"},
                     "depends_on": {"type": "array", "items": {"type": "string"}},
                     "params": {"type": "object"},
                 },
@@ -78,6 +90,44 @@ _DECISION_SCHEMA: dict[str, Any] = {
         },
     },
 }
+# Conditional validation belongs to the host: Provider JSON-schema subsets do
+# not consistently support if/then. The request retains its portable shape.
+_DECISION_VALIDATOR = Draft202012Validator(
+    {
+        **_DECISION_SCHEMA,
+        "allOf": [
+            {
+                "if": {"properties": {"status": {"const": "continue"}}},
+                "then": {
+                    "anyOf": [
+                        {"required": [key], "properties": {key: {"pattern": r"\S"}}}
+                        for key in ("tool_name", "next_action")
+                    ]
+                },
+            },
+            {
+                "if": {"properties": {"status": {"const": "replan"}}},
+                "then": {
+                    "required": ["plan_revision_required", "replacement_steps"],
+                    "properties": {
+                        "plan_revision_required": {"const": True},
+                        "replacement_steps": {"minItems": 1},
+                    },
+                },
+            },
+            {
+                "if": {
+                    "required": ["plan_revision_required"],
+                    "properties": {"plan_revision_required": {"const": True}},
+                },
+                "then": {
+                    "required": ["replacement_steps"],
+                    "properties": {"replacement_steps": {"minItems": 1}},
+                },
+            },
+        ],
+    }
+)
 
 
 class ModelWorkDeliberator:
@@ -146,7 +196,10 @@ class ModelWorkDeliberator:
                         "object that conforms to the supplied decision schema; do not "
                         "return prose or hidden reasoning. Return only the top-level "
                         "decision fields defined by decision_schema; do not copy the "
-                        "input work, catalogs, or schema into the response. Use only "
+                        "input work, catalogs, or schema into the response. A replan "
+                        "requires plan_revision_required=true and a nonempty "
+                        "replacement_steps DAG with unique step_id values; otherwise "
+                        "ask_user or continue with an available action. Use only "
                         "tools listed here or schemas retained in work.loaded_tools "
                         "after catalog_expand. Skill summaries are discovery metadata; "
                         "use skill_load before following a Skill's instructions. Loaded "
@@ -203,10 +256,18 @@ class ModelWorkDeliberator:
             ),
             response_schema=_DECISION_SCHEMA,
             tools=native_tools,
+            required_capabilities=frozenset(
+                {"structured_output", "tool_calling"}
+                if native_tools
+                else {"structured_output"}
+            ),
             role=ModelRole.PLANNER,
             preferred_models=(self.preferred_model,) if self.preferred_model else (),
             routing_mode=(
-                RoutingMode.PREFERRED if self.preferred_model else RoutingMode.AUTO
+                RoutingMode.LOCKED if self.preferred_model else RoutingMode.AUTO
+            ),
+            fallback=GatewayFallbackPolicy(
+                allowed=False, max_models=1, max_retries_per_model=0
             ),
             timeout_s=self.timeout_s,
             budget=GatewayBudget(max_tokens=self.max_output_tokens),
@@ -226,24 +287,71 @@ class ModelWorkDeliberator:
         )
         response = self.facade.try_invoke_sync(request)
         if not response.ok:
+            configuration = {
+                401: (
+                    "MODEL_PROVIDER_AUTHENTICATION",
+                    "The selected Provider rejected authentication",
+                ),
+                402: (
+                    "MODEL_PROVIDER_ACCOUNT",
+                    "The selected Provider rejected the account or balance",
+                ),
+                403: (
+                    "MODEL_PROVIDER_ACCESS",
+                    "The selected Provider refused access to this model",
+                ),
+                404: (
+                    "MODEL_PROVIDER_ENDPOINT",
+                    "The selected Provider endpoint or model was not found",
+                ),
+            }.get(response.error.get("http_status"))
+            if response.error.get("type") == "ModelRoutingError":
+                configuration = (
+                    "MODEL_ROUTE_UNAVAILABLE",
+                    "No configured model satisfies this request",
+                )
+            if (
+                response.error.get("provider_error_code")
+                == "NOUS_MODEL_PARAMETER_UNSUPPORTED"
+            ):
+                configuration = (
+                    "MODEL_CONFIGURATION_UNSUPPORTED",
+                    "The selected model route does not support a requested parameter",
+                )
+            if configuration is not None:
+                code, message = configuration
+                raise InvalidModelDecision(message, code=code, response=response)
             raise RuntimeError(
                 str(response.error.get("message") or "work model invocation failed")
             )
         if response.tool_calls:
             if len(response.tool_calls) != 1:
-                raise RuntimeError(
-                    "work action envelope requires exactly one native tool call"
+                raise InvalidModelDecision(
+                    "work action envelope requires exactly one native tool call",
+                    code="MODEL_ACTION_COUNT_INVALID",
+                    response=response,
                 )
-            return self._native_action_decision(
-                response.tool_calls[0],
-                context=context,
-                phase=phase,
-                allowed_tools=native_tools,
-            )
+            try:
+                return self._native_action_decision(
+                    response.tool_calls[0],
+                    context=context,
+                    phase=phase,
+                    allowed_tools=native_tools,
+                )
+            except (RuntimeError, TypeError, ValueError) as exc:
+                raise InvalidModelDecision(
+                    "work model returned an invalid native action",
+                    code="MODEL_ACTION_INVALID",
+                    response=response,
+                ) from exc
         if native_tools:
             # The frozen Worker supports automatic selection only. Enforce the
             # required action at the original Work boundary, never through prose.
-            raise RuntimeError("work phase requires exactly one native tool call")
+            raise InvalidModelDecision(
+                "work phase requires exactly one native tool call",
+                code="MODEL_ACTION_REQUIRED",
+                response=response,
+            )
         value = response.structured_output
         if not isinstance(value, Mapping):
             if response.finish_reason == "length":
@@ -258,18 +366,81 @@ class ModelWorkDeliberator:
                     if usage.reasoning_tokens is not None
                     else "unknown"
                 )
-                raise RuntimeError(
+                raise InvalidModelDecision(
                     "work model exhausted the output budget before returning a "
                     "structured decision "
                     f"(max_output_tokens={self.max_output_tokens}, "
                     f"output_tokens={output_tokens}, "
-                    f"reasoning_tokens={reasoning_tokens})"
+                    f"reasoning_tokens={reasoning_tokens})",
+                    code="MODEL_OUTPUT_TRUNCATED",
+                    response=response,
                 )
-            raise RuntimeError("work model did not return a structured decision")
+            raise InvalidModelDecision(
+                "work model did not return a structured decision",
+                code="MODEL_DECISION_MISSING",
+                response=response,
+            )
+        try:
+            json.dumps(value, allow_nan=False)
+        except (TypeError, ValueError, RecursionError) as exc:
+            raise InvalidModelDecision(
+                "work model decision must contain finite JSON values",
+                code="MODEL_DECISION_INVALID",
+                response=response,
+            ) from exc
+        if next(_DECISION_VALIDATOR.iter_errors(value), None) is not None:
+            # ValidationError text embeds rejected values, including untrusted
+            # model content. Keep the diagnostic static and link the request.
+            raise InvalidModelDecision(
+                "work model decision does not conform to the decision schema",
+                code="MODEL_DECISION_INVALID",
+                response=response,
+            )
+        steps = value.get("replacement_steps") or ()
+        if steps:
+            ids = {item["step_id"] for item in steps}
+            graph = {item["step_id"]: item.get("depends_on", []) for item in steps}
+            try:
+                if len(ids) != len(steps) or any(
+                    set(deps) - ids for deps in graph.values()
+                ):
+                    raise ValueError("invalid plan references")
+                tuple(TopologicalSorter(graph).static_order())
+            except (ValueError, CycleError) as exc:
+                raise InvalidModelDecision(
+                    "work model replacement plan must be a DAG with unique, known step ids",
+                    code="MODEL_PLAN_INVALID",
+                    response=response,
+                ) from exc
+        tool_name = str(value.get("tool_name") or "")
+        if value["status"] == "continue" and tool_name:
+            available = [
+                *self.tools,
+                *(
+                    self._model_tool_specification(item)
+                    for item in context.loaded_tools
+                ),
+            ]
+            specification = next(
+                (item for item in available if self._tool_name(item) == tool_name), None
+            )
+            if specification is None:
+                raise InvalidModelDecision(
+                    "work model selected a tool whose schema is not loaded",
+                    code="MODEL_TOOL_UNAVAILABLE",
+                    response=response,
+                )
+            function = specification.get("function", specification)
+            schema = function.get("parameters", function.get("input_schema", {}))
+            if not _valid_tool_arguments(schema, value.get("tool_arguments", {})):
+                raise InvalidModelDecision(
+                    "work model arguments do not conform to the loaded tool schema",
+                    code="MODEL_TOOL_ARGUMENTS_INVALID",
+                    response=response,
+                )
         decision = WorkDecision.from_value(value)
-        if decision.phase:
-            return decision
         decision_value = decision.to_dict()
+        # The model can describe intent, not choose the authoritative phase.
         decision_value["phase"] = phase
         return WorkDecision.from_value(decision_value)
 
@@ -318,6 +489,8 @@ class ModelWorkDeliberator:
         phase: str,
         allowed_tools: Sequence[Mapping[str, Any]],
     ) -> WorkDecision:
+        if not isinstance(call, Mapping):
+            raise RuntimeError("native action must be an object")
         function = call.get("function")
         value = function if isinstance(function, Mapping) else call
         name = str(value.get("name") or call.get("name") or "")
@@ -328,9 +501,19 @@ class ModelWorkDeliberator:
             arguments = dict(raw_arguments)
         else:
             raise RuntimeError("native action arguments must be an object")
+        if not isinstance(arguments, Mapping):
+            raise RuntimeError("native action arguments must be an object")
         allowed = {cls._tool_name(item) for item in allowed_tools}
         if not name or name not in allowed:
             raise RuntimeError(f"native action tool is not allowed in {phase}: {name}")
+        specification = next(
+            item for item in allowed_tools if cls._tool_name(item) == name
+        )
+        schema = specification["function"]["parameters"]
+        if not _valid_tool_arguments(schema, arguments):
+            raise RuntimeError(
+                "native action arguments do not conform to the tool schema"
+            )
         return WorkDecision(
             status=DecisionStatus.CONTINUE,
             summary=f"Execute provider-native {phase} action: {name}",
@@ -381,6 +564,26 @@ class ModelWorkDeliberator:
             "description": str(specification.get("description") or ""),
             "parameters": dict(specification.get("input_schema") or {}),
         }
+
+
+def _valid_tool_arguments(schema: Any, arguments: Any) -> bool:
+    try:
+        json.dumps(arguments, allow_nan=False)
+        if not isinstance(schema, (Mapping, bool)):
+            return False
+        validator = (
+            validators.validator_for(schema, default=None)
+            if isinstance(schema, Mapping) and "$schema" in schema
+            else Draft202012Validator
+        )
+        if validator is None:
+            return False
+        validator.check_schema(schema)
+        # Match Extension/Workflow validation: schemas cannot acquire resources
+        # through remote or filesystem references outside governed execution.
+        return validator(schema, registry=Registry()).is_valid(arguments)
+    except (SchemaError, Unresolvable, TypeError, ValueError, RecursionError):
+        return False
 
 
 def _execution_progress(context: WorkContext) -> dict[str, Any]:

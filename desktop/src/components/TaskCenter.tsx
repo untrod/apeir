@@ -12,9 +12,10 @@
 import React, { useState, useMemo } from "react";
 import { colors, typo, radius, space, card as cardStyle, btnSecondary, btnPrimary, statusColor } from "../design";
 import { useTasks, useActiveTasks, useRuntimeConfigVersion, entityStore, type Task, type TaskStatus } from "../store";
-import { captureRuntimeConnection, taskAction } from "../lib/api";
+import { ApiError, captureRuntimeConnection, taskAction } from "../lib/api";
 import { toast } from "./Toast";
 import { Skeleton } from "./Skeleton";
+import { useTheme } from "../theme";
 
 
 // TaskCenter
@@ -24,13 +25,15 @@ interface TaskCenterProps {
   onTaskClick: (taskId: string) => void;
   onTraceClick: (traceId: string) => void;
   onConversationClick?: (conversationId: string) => void;
+  onApprovalClick?: (requestId: string) => void;
 }
 
 export function TaskCenter(props: TaskCenterProps) {
   const version = useRuntimeConfigVersion();
   return <TaskCenterSession key={version} {...props} />;
 }
-function TaskCenterSession({ onTaskClick, onTraceClick, onConversationClick }: TaskCenterProps) {
+function TaskCenterSession({ onTaskClick, onTraceClick, onConversationClick, onApprovalClick }: TaskCenterProps) {
+  const { locale } = useTheme();
   const allTasks = useTasks();
   const [filter, setFilter] = useState<string>("all");
 
@@ -52,7 +55,7 @@ function TaskCenterSession({ onTaskClick, onTraceClick, onConversationClick }: T
   const filtered = allTasks.filter(task => matches(task, filter));
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: colors.bg }}>
+    <div role="region" aria-label={locale === "zh" ? "任务" : "Tasks"} style={{ height: "100%", display: "flex", flexDirection: "column", background: colors.bg }}>
       {/* Header + tabs */}
       <div style={{ padding: `${space.lg} ${space.xl}`, background: colors.surface, borderBottom: `1px solid ${colors.borderLight}` }}>
         <h1 style={{ fontSize: typo.lg, fontWeight: typo.semibold, color: colors.text, margin: 0 }}>Tasks</h1>
@@ -95,6 +98,7 @@ function TaskCenterSession({ onTaskClick, onTraceClick, onConversationClick }: T
               onTaskClick={onTaskClick}
               onTraceClick={onTraceClick}
               onConversationClick={onConversationClick}
+              onApprovalClick={onApprovalClick}
             />
           ))
         )}
@@ -107,14 +111,18 @@ function TaskCenterSession({ onTaskClick, onTraceClick, onConversationClick }: T
 // Task Row
 
 
-function TaskRow({ task, onTaskClick, onTraceClick, onConversationClick }: {
+function TaskRow({ task, onTaskClick, onTraceClick, onConversationClick, onApprovalClick }: {
   task: Task;
   onTaskClick: (id: string) => void;
   onTraceClick: (id: string) => void;
   onConversationClick?: (id: string) => void;
+  onApprovalClick?: (requestId: string) => void;
 }) {
+  const { locale } = useTheme();
+  const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   const [expanded, setExpanded] = useState(false);
   const [acting, setActing] = useState(false);
+  const [approvalRequest, setApprovalRequest] = useState("");
   const [current] = useState(captureRuntimeConnection);
   const st = statusColor(task.status);
 
@@ -124,11 +132,16 @@ function TaskRow({ task, onTaskClick, onTraceClick, onConversationClick }: {
       current();
       await taskAction(action, task.id);
       current();
+      setApprovalRequest("");
       // Status changes arrive via runtime events — do NOT optimistically mutate local state.
       // entityStore.updateTaskStatus() removed per RC9 state ownership audit.
       toast.success(`Task ${action} requested`, `Task ${task.id.slice(0, 12)}... awaiting confirmation`);
     } catch (err) {
       try { current(); } catch { return; }
+      if (err instanceof ApiError && err.code === "NOUS_APPROVAL_REQUIRED" && typeof err.details?.approval_request_id === "string") {
+        setApprovalRequest(err.details.approval_request_id);
+        return;
+      }
       toast.error("Action failed", err instanceof Error ? err.message : "Unknown error");
     } finally {
       setActing(false);
@@ -137,7 +150,7 @@ function TaskRow({ task, onTaskClick, onTraceClick, onConversationClick }: {
 
   const canCancel = ["created", "queued", "planning", "dispatching", "running", "waiting_for_model", "waiting_for_node", "waiting_user", "blocked", "recovering", "paused"].includes(task.status);
   const canPause = ["planning", "running", "dispatching", "recovering"].includes(task.status);
-  const canResume = task.status === "paused" && task.recoverable;
+  const canResume = task.recoverable && (task.status === "paused" || task.task_kind === "work" && task.status === "waiting_user");
   const canRetry = task.status === "failed" && task.recoverable && task.task_kind !== "work";
   const navigate = (action: () => void) => { try { current(); action(); } catch { /* The retired view cannot retarget a new Controller. */ } };
 
@@ -190,6 +203,12 @@ function TaskRow({ task, onTaskClick, onTraceClick, onConversationClick }: {
       {/* Expanded: steps + actions */}
       {expanded && (
         <div style={{ marginTop: space.md, paddingTop: space.md, borderTop: `1px solid ${colors.borderLight}` }}>
+          {task.error && <div style={{ marginBottom: space.md }}>
+            {task.task_kind === "work" && task.status === "waiting_user" && task.error.startsWith("MODEL_") ? <>
+              <p role="status" style={{ color: colors.warning, fontSize: typo.sm }}>{t("Check the model settings or task instructions, then resume this task.", "请检查模型设置或任务说明，再恢复原任务。")}</p>
+              <details><summary>{t("Technical details", "技术详情")}</summary><p style={{ fontSize: typo.xs, overflowWrap: "anywhere" }}>{task.error}</p></details>
+            </> : <p role="alert" style={{ color: colors.danger, fontSize: typo.sm, overflowWrap: "anywhere" }}>{task.error}</p>}
+          </div>}
           {/* Steps timeline */}
           {task.steps.length > 0 && (
             <div style={{ marginBottom: space.md }}>
@@ -224,6 +243,10 @@ function TaskRow({ task, onTaskClick, onTraceClick, onConversationClick }: {
           )}
 
           {/* Actions */}
+          {approvalRequest && <div style={{ marginBottom: space.md }}>
+            <p role="status" style={{ fontSize: typo.sm }}>{t("Review the requested approval, then repeat the task action. Nothing has been resumed automatically.", "请先核对并批准这次操作，再次点击任务操作；系统不会自动恢复执行。")}</p>
+            <button disabled={!onApprovalClick || acting} onClick={() => navigate(() => onApprovalClick?.(approvalRequest))} style={btnSecondary}>{t("Review approval", "查看审批")}</button>
+          </div>}
           <div style={{ display: "flex", gap: space.sm, flexWrap: "wrap" }}>
             <button onClick={() => navigate(() => onTaskClick(task.id))} style={{ ...btnSecondary, fontSize: typo.xs, padding: `${space.xs} ${space.md}` }}>
               View Details
@@ -250,7 +273,7 @@ function TaskRow({ task, onTaskClick, onTraceClick, onConversationClick }: {
             )}
             {canResume && (
               <button onClick={() => handleAction("resume")} disabled={acting} style={{ ...btnPrimary, fontSize: typo.xs, padding: `${space.xs} ${space.md}` }}>
-                Resume
+                {task.task_kind === "work" ? t("Resume original task", "恢复原任务") : "Resume"}
               </button>
             )}
             {canRetry && (

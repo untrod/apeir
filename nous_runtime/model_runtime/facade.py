@@ -597,7 +597,7 @@ def _content_parts(
     tool_calls = tuple(dict(item) for item in raw.get("tool_calls") or ())
     structured = raw.get("structured_output")
     if structured is None and response_schema:
-        structured = raw.get("content", raw)
+        structured = _decode_structured(raw.get("content", raw))
     content = raw.get("content", raw.get("text", raw))
     return content, structured, tool_calls
 

@@ -536,7 +536,9 @@ export const fetchTasks = async (state?: string, limit = 50) => {
 };
 
 export const taskAction = (action: string, taskId: string) =>
-  api("/api/v1/tasks/action", { method: "POST", body: JSON.stringify({ action, task_id: taskId }) });
+  // Execution requests keep the service identity; a human reviews their
+  // bound approval separately, as with workspace proposals.
+  api("/api/v1/tasks/action", { credentials: "omit", method: "POST", body: JSON.stringify({ action, task_id: taskId }) });
 
 export const submitWork = (data: {
   objective: string;
@@ -545,7 +547,7 @@ export const submitWork = (data: {
   preferred_model?: string;
   read_only?: boolean;
   max_iterations?: number;
-}) => api("/api/v1/work", { method: "POST", body: JSON.stringify(data) });
+}) => api("/api/v1/work", { credentials: "omit", method: "POST", body: JSON.stringify(data) });
 
 export const inspectWork = (runId: string) =>
   api(`/api/v1/work/${encodeURIComponent(runId)}`);

@@ -82,7 +82,7 @@ def _work_task_projection(snapshot: Any) -> dict[str, Any]:
         "name": snapshot.goal.objective,
         "status": _WORK_TASK_STATES.get(state, state.casefold()),
         "priority": "normal",
-        "model_id": "auto",
+        "model_id": str(snapshot.execution_options.get("preferred_model") or "auto"),
         "plan_id": getattr(plan, "plan_id", "") if plan else "",
         "trace_id": snapshot.run_id,
         "steps": [

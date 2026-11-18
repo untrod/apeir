@@ -142,6 +142,96 @@ test("extension library installs a real tool document without granting it execut
   await expect(manager.getByText("Nothing installed here yet", { exact: true })).toBeVisible();
 });
 
+test("Rejected model decisions remain recoverable across restart and the GUI resumes the original Work after independent human approval", async ({ page }, info) => {
+  const directory = await mkdtemp(join(tmpdir(), "apeir-decision-browser-"));
+  const selected = await port();
+  const url = `http://127.0.0.1:${selected}`;
+  async function host() {
+    const child = spawn(globalThis.process.env.APEIR_TEST_PYTHON || "python", [resolve("e2e/automation_host.py"), "--workspace", directory, "--port", String(selected), "--decision-recovery"], {
+      cwd: directory, env: { ...globalThis.process.env, PYTHONPATH: resolve(".."), NOUS_WORKSPACE_ROOT: directory, NOUS_API_TOKEN: token, NOUS_NO_INTELLIGENCE: "1" }, stdio: "ignore",
+    });
+    const runtime = { process: child, directory, url }; runtimes.push(runtime);
+    await expect.poll(async () => {
+      if (child.exitCode !== null) throw new Error("Owned decision fixture exited before readiness");
+      try { return (await fetch(url + "/api/v1/status", { headers: { Authorization: `Bearer ${token}` } })).ok; } catch { return false; }
+    }, { timeout: 10000 }).toBe(true);
+    return child;
+  }
+  async function login() {
+    const verifier = "fake-decision-browser-pkce-" + "x".repeat(64);
+    const challenge = await page.request.post(url + "/api/v1/control/human/challenge", { headers: { Authorization: `Bearer ${token}` }, data: { code_challenge: createHash("sha256").update(verifier).digest("base64url") } });
+    const body = await challenge.json(); expect(body.ok).toBe(true);
+    const nonce = new URL(body.data.authorization_url).searchParams.get("nonce");
+    const response = await page.request.post(url + "/api/v1/control/human/session", { headers: { Authorization: `Bearer ${token}` }, data: { challenge_id: body.data.challenge_id, code: `fake-automation-code:${nonce}`, code_verifier: verifier } });
+    expect((await response.json()).ok).toBe(true);
+  }
+  async function mutate(path: string, body: Record<string, unknown>) {
+    const response = await page.request.post(url + "/api/v1/control/human/nonce", { headers: { Authorization: `Bearer ${token}` }, data: { method: "POST", path, body } });
+    const nonce = await response.json(); expect(nonce.ok).toBe(true);
+    return page.request.post(url + path, { headers: { Authorization: `Bearer ${token}`, "X-Control-Nonce": nonce.data.nonce }, data: body });
+  }
+  const first = await host();
+  await login();
+  const objective = "Explain a bounded concept for the recovery check";
+  const input = { objective, preferred_model: "fixture/recovery-model", read_only: true, idempotency_key: "decision-browser-original" };
+  const submit = () => fetch(url + "/api/v1/work", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(input) }).then(response => response.json());
+  const proposed = await submit();
+  expect(proposed.error.code).toBe("NOUS_APPROVAL_REQUIRED");
+  const approved = await (await mutate(`/api/v1/approvals/${proposed.error.details.approval_request_id}/approve`, {})).json();
+  expect(approved.ok, JSON.stringify(approved)).toBe(true);
+  const admitted = await submit(); expect(admitted.ok, JSON.stringify(admitted)).toBe(true);
+  const id = admitted.data.work.run_id;
+  async function original() {
+    const result = await page.request.get(`${url}/api/v1/work/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+    const body = await result.json(); expect(body.ok).toBe(true); return body.data;
+  }
+  await expect.poll(async () => (await original()).work.state).toBe("WAITING_USER");
+  const before = await original();
+  expect(before.events.filter((event: { event_type: string }) => event.event_type === "work.model.invalid")).toHaveLength(1);
+  const exited = new Promise<void>(done => first.once("exit", () => done())); first.kill("SIGTERM"); await exited;
+  await host();
+  await login();
+  expect((await original()).work.state).toBe("WAITING_USER");
+  await page.addInitScript(({ url, token }) => { sessionStorage.setItem("nous_server_url", url); sessionStorage.setItem("nous_server_token", token); }, { url, token });
+  const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+  const network: Array<{ path: string; status: number }> = [];
+  page.on("response", response => { if (response.url().startsWith(url + "/api/")) network.push({ path: new URL(response.url()).pathname, status: response.status() }); });
+  await page.goto("/");
+  try { await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible(); }
+  finally { await info.attach("decision-ui-startup-requests", { body: JSON.stringify({ network, errors }), contentType: "application/json" }); }
+  await page.getByRole("button", { name: /Add panel/ }).click();
+  await page.getByRole("textbox", { name: "Search panels" }).fill("Tasks");
+  await page.getByRole("button", { name: "Tasks", exact: true }).last().click();
+  const tasks = page.getByRole("region", { name: "Tasks", exact: true });
+  await expect(tasks).toBeVisible();
+  await tasks.getByText(objective, { exact: true }).click();
+  await expect(tasks.getByRole("status").filter({ hasText: "Check the model settings" })).toBeVisible();
+  await expect(tasks.getByText(/fixture\/recovery-model/)).toBeVisible();
+  const resume = tasks.getByRole("button", { name: "Resume original task" });
+  await expect(resume).toBeEnabled();
+  expect((await original()).events.filter((event: { event_type: string }) => event.event_type === "work.model.invalid")).toHaveLength(1);
+  const mutations: string[] = [];
+  page.on("request", request => { if (request.method() === "POST" && new URL(request.url()).pathname === "/api/v1/tasks/action") mutations.push(request.postData() || ""); });
+  await resume.click();
+  await tasks.getByRole("button", { name: "Review approval" }).click();
+  await page.getByRole("button", { name: "Approve Once", exact: true }).click();
+  await expect(resume).toBeEnabled();
+  await page.getByRole("button", { name: "Close inspector", exact: true }).click();
+  expect((await original()).work.state).toBe("WAITING_USER");
+  await resume.click();
+  await expect.poll(async () => (await original()).work.state).toBe("COMPLETED");
+  const after = await original();
+  expect(after.work.run_id).toBe(id);
+  expect(after.work.result).toBe("Original request restored");
+  expect(after.work.action_sequence).toBe(0);
+  expect(after.events.filter((event: { event_type: string }) => event.event_type === "work.model.invalid")).toHaveLength(1);
+  expect(mutations.map(value => JSON.parse(value))).toEqual([{ action: "resume", task_id: id }, { action: "resume", task_id: id }]);
+  const list = await page.request.get(`${url}/api/v1/tasks`, { headers: { Authorization: `Bearer ${token}` } });
+  expect((await list.json()).data.tasks.filter((task: { task_kind: string }) => task.task_kind === "work")).toHaveLength(1);
+  await info.attach("decision-recovery-scope", { body: JSON.stringify({ real_http: true, real_browser: true, fake_idp: true, fake_model: true, original_run: id, native_installation: false }), contentType: "application/json" });
+  expect(errors).toEqual([]);
+});
+
 async function port() {
   const server = createServer();
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));

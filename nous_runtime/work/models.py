@@ -32,6 +32,17 @@ class DecisionStatus(str, Enum):
     FAIL = "fail"
 
 
+class InvalidModelDecision(RuntimeError):
+    """A rejected model response; no tool action has been admitted from it."""
+
+    def __init__(self, message: str, *, code: str, response: Any) -> None:
+        super().__init__(message)
+        self.code = code
+        self.request_id = str(response.request_id or "")
+        self.provider_id = str(response.provider_id or "")
+        self.model_id = str(response.model_id or "")
+
+
 @dataclass(frozen=True)
 class PlanStepDraft:
     description: str

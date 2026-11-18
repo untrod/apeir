@@ -36,6 +36,7 @@ describe("runtime activity summary", () => {
     const events = [{ event_type: "model.invocation.failed", payload: { model_id: "cloud/vendor/model", iteration: 2 } }];
     expect(summarizeRuntimeActivity(events).current).toBe("cloud/vendor/model · iteration 2 failed");
     expect(summarizeRuntimeActivity([...events, { event_type: "approval.requested", payload: {} }]).current).toBe("Waiting for approval");
+    expect(summarizeRuntimeActivity([...events, { event_type: "work.model.invalid", payload: { reason: "untrusted response" } }]).current).toBe("Model response needs review · task paused");
   });
   it("keeps absent or explicitly unknown usage unknown and does not double count lane events", () => {
     expect(summarizeRuntimeActivity([]).tokens).toBeNull();

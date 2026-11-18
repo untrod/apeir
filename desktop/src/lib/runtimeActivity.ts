@@ -34,6 +34,7 @@ export function runtimeActivityLabel(event: ActivityEvent): string {
     case "review.completed": return payload.approved === false ? "Review found gaps" : "Review completed";
     case "verification.completed": return payload.accepted === true ? "Verification passed" : payload.accepted === false ? "Verification needs attention" : "Verification UNKNOWN";
     case "approval.requested": return "Waiting for approval";
+    case "work.model.invalid": return "Model response needs review · task paused";
     case "run.failed": return "Run failed";
     case "run.cancelled": return "Run cancelled";
     default: return String(event.event_type || "Working");
@@ -46,7 +47,7 @@ export function summarizeRuntimeActivity(events: ActivityEvent[]): RuntimeActivi
     "model.lane.started", "model.lane.completed", "model.invocation.started",
     "model.invocation.completed", "model.invocation.failed", "execution.budget.configured", "tool.started", "tool.completed", "artifact.created",
     "review.started", "review.completed", "verification.completed",
-    "approval.requested", "run.failed", "run.cancelled",
+    "approval.requested", "work.model.invalid", "run.failed", "run.cancelled",
   ]);
   const visible = events.filter((event) => visibleTypes.has(String(event.event_type || "")));
   const recent = visible.slice(-6).map(runtimeActivityLabel);
