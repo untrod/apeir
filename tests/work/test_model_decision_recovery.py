@@ -438,3 +438,39 @@ def test_explicit_model_never_falls_back_to_another_available_model(
         )
     finally:
         facade.gateway.close_sync_bridge()
+
+
+def test_original_work_records_private_input_manifests_and_unique_invocations(tmp_path):
+    harness = WorkHarness(tmp_path)
+    private_goal = "PRIVATE_QUALIFICATION_OBJECTIVE not for general telemetry"
+    original = harness.create(private_goal)
+    context = harness.context_for(original)
+    for _ in range(2):
+        # A host restart can reset an in-memory iteration count. Correlation must
+        # still distinguish the exact original invocation, not just iteration 1.
+        facade = StubFacade(
+            _decision(),
+            usage={"input_tokens": 13, "output_tokens": 2, "total_tokens": 15},
+        )
+        ModelWorkDeliberator(facade, event_stream=harness.events)(context)
+    events = harness.events.load_events(original.run_id)
+    starts = [
+        event for event in events if event.event_type == "model.invocation.started"
+    ]
+    ends = [
+        event for event in events if event.event_type == "model.invocation.completed"
+    ]
+    assert len(starts) == len(ends) == 2
+    assert starts[0].payload["invocation_id"] != starts[1].payload["invocation_id"]
+    assert [event.payload["invocation_id"] for event in starts] == [
+        event.payload["invocation_id"] for event in ends
+    ]
+    for event in starts:
+        manifest = event.payload["input_manifest"]
+        assert manifest["scope"] == "prepared-work-gateway-input"
+        assert manifest["raw_content_recorded"] is False
+        assert manifest["execution_authority"] is False
+        assert private_goal not in json.dumps(event.to_dict())
+    assert ends[-1].payload["usage"]["total_tokens"] == 15
+    assert ends[-1].payload["cost_usd"] is None
+    assert harness.require(original.run_id).run_id == original.run_id

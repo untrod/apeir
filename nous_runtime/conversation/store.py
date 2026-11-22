@@ -53,6 +53,9 @@ class ConversationStore:
         self.path = self.root / ".nous" / "conversations.db"
         self.active_window = max(1, active_window)
         self.context_budget_chars = max(1, context_budget_chars)
+        from nous_runtime.security.private_files import validate_private_database_path
+
+        validate_private_database_path(self.path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
@@ -72,6 +75,9 @@ class ConversationStore:
                 connection.close()
 
     def _connect(self) -> sqlite3.Connection:
+        from nous_runtime.security.private_files import validate_private_database_path
+
+        validate_private_database_path(self.path)
         connection = None
         try:
             with _sqlite_phase("connect"):
@@ -319,29 +325,49 @@ class ConversationStore:
         return [self._message(row) for row in rows]
 
     def context_window(self, conversation_id: str) -> dict[str, Any]:
-        conversation = self.get(conversation_id)
-        if conversation is None:
-            raise KeyError(conversation_id)
-        messages = list(
-            reversed(
-                self.history(
-                    conversation_id, limit=self.active_window, newest_first=True
-                )
-            )
-        )
+        # One WAL read snapshot binds the excerpt and recent messages to the
+        # same conversation revision, even while another request appends.
+        with self._db() as connection:
+            connection.execute("BEGIN")
+            row = connection.execute(
+                "SELECT * FROM conversations WHERE conversation_id = ? AND deleted_at = ''",
+                (conversation_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(conversation_id)
+            conversation = self._conversation(row)
+            rows = connection.execute(
+                "SELECT * FROM messages WHERE conversation_id = ? ORDER BY sequence DESC LIMIT ?",
+                (conversation_id, max(1, min(self.active_window, 500))),
+            ).fetchall()
+            messages = [self._message(item) for item in reversed(rows)]
         selected: list[ConversationMessage] = []
-        used = len(conversation.summary)
+        used = 0
         for message in reversed(messages):
             if selected and used + len(message.content) > self.context_budget_chars:
                 break
             selected.append(message)
             used += len(message.content)
         selected.reverse()
+        # Keep the latest intent whole. Historical excerpts are optional input,
+        # not a semantic memory or a substitute for the original stored messages.
+        remaining = max(0, self.context_budget_chars - used)
+        summary = conversation.summary[-remaining:] if remaining else ""
+        used += len(summary)
         return {
-            "summary": conversation.summary,
+            "summary": summary,
             "messages": [item.to_dict() for item in selected],
             "used_chars": used,
             "budget_chars": self.context_budget_chars,
+            "selection": {
+                "schema_version": 1,
+                "summary_kind": "historical_excerpt",
+                "summary_characters_total": len(conversation.summary),
+                "summary_characters_included": len(summary),
+                "omitted_recent_messages": len(messages) - len(selected),
+                "budget_exceeded": used > self.context_budget_chars,
+                "latest_message_preserved": True,
+            },
         }
 
     def iter_messages(

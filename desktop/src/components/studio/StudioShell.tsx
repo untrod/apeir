@@ -288,6 +288,14 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit, settings
     else open(type);
     return existing ?? activeStudioTab(model);
   };
+  const openWithNavigation = (type: string, request?: PanelNavigation) => {
+    const target = reveal(type);
+    if (!target || !request) return;
+    if (dirty.current.has(target.getId())) {
+      setMessage(t("Send or clear the current draft before changing its context.", "请先发送或清空当前草稿，再更换上下文。")); return;
+    }
+    setNavigation(previous => ({ ...previous, [target.getId()]: request }));
+  };
   const searchResult = (result: GlobalSearchResult) => {
     if (result.kind === "run") { setSelection({ kind: "run", runId: result.id }); return; }
     if (result.kind === "artifact") { setSelection({ kind: "artifact", artifactId: result.id }); return; }
@@ -407,7 +415,7 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit, settings
       <button role="menuitem" disabled={!!compact} onClick={() => { const group = model.getNodeById(windowMenu.id)?.getParent(); if (group?.getType() === "tabset") { model.doAction(Actions.maximizeToggle(group.getId())); setRevision(value => value + 1); } setWindowMenu(null); }}>{compact ? t("Compact view", "紧凑视图") : maximized ? t("Restore group", "还原面板组") : t("Maximize group", "最大化面板组")}</button>
       <button role="menuitem" onClick={() => { const close = Actions.deleteTab(windowMenu.id); if (action(close)) { model.doAction(close); setRevision(value => value + 1); } setWindowMenu(null); }}>{t("Close panel", "关闭面板")}</button>
     </div>}
-    {tabs.map(node => <StablePanel key={node.getId()} node={node} host={getHost(node.getId())} navigation={navigation[node.getId()]} dirty={dirty.current} onProtectionChange={onProtectionChange} onSnapshot={value => remember(`${epoch}:${node.getId()}`, value)} open={reveal} inspect={setSelection} config={node.getConfig()} locale={locale} saveLayout={save} updateConfig={config => { if (JSON.stringify(node.getConfig()) !== JSON.stringify(config)) { model.doAction(Actions.updateNodeAttributes(node.getId(), { config })); setRevision(value => value + 1); } }} />)}
+    {tabs.map(node => <StablePanel key={node.getId()} node={node} host={getHost(node.getId())} navigation={navigation[node.getId()]} dirty={dirty.current} onProtectionChange={onProtectionChange} onSnapshot={value => remember(`${epoch}:${node.getId()}`, value)} open={openWithNavigation} inspect={setSelection} config={node.getConfig()} locale={locale} saveLayout={save} updateConfig={config => { if (JSON.stringify(node.getConfig()) !== JSON.stringify(config)) { model.doAction(Actions.updateNodeAttributes(node.getId(), { config })); setRevision(value => value + 1); } }} />)}
     <CommandPalette commands={commands} open={utility === "commands"} onClose={closeUtility} onSearchResult={searchResult} />
     <footer className="studio-footer"><span role="status">{message === t("Layout saved.", "布局已保存。") ? message : `${tabs.length} ${t(tabs.length === 1 ? "panel" : "panels", "个面板")}`}</span><StudioConnectionStatus disabled={credentialBusy} locale={locale} open={() => reveal("dashboard")} /><span>{editing ? t("Editing layout", "正在编辑布局") : t("Workspace", "工作区")} · Ctrl/⌘ ⇧ P</span></footer>
   </section></StudioPresentation.Provider>;
@@ -423,12 +431,12 @@ function StudioConnectionStatus({ locale, open, disabled }: { disabled: boolean;
   return <button disabled={disabled} className="studio-connection-status" aria-label={t("Open connection status", "查看连接状态")} onClick={open} title={health.receivedAt ? `${t("Last received", "最近更新")}: ${new Date(health.receivedAt).toLocaleTimeString()}` : "UNKNOWN"}>Runtime {runtime} · Kernel {kernel}</button>;
 }
 
-function StablePanel({ node, host, navigation, dirty, onSnapshot, open, onProtectionChange, inspect, config, locale, updateConfig, saveLayout }: { navigation?: PanelNavigation; config: unknown; locale: "en" | "zh"; updateConfig: (config: unknown) => void; saveLayout: () => void; node: TabNode; host: HTMLElement; dirty: Set<string>; onSnapshot: (drafts: WorkbenchDraft[]) => void; open: (type: string) => void; onProtectionChange: (value: boolean) => void; inspect: (view: DrawerView) => void }) {
+function StablePanel({ node, host, navigation, dirty, onSnapshot, open, onProtectionChange, inspect, config, locale, updateConfig, saveLayout }: { navigation?: PanelNavigation; config: unknown; locale: "en" | "zh"; updateConfig: (config: unknown) => void; saveLayout: () => void; node: TabNode; host: HTMLElement; dirty: Set<string>; onSnapshot: (drafts: WorkbenchDraft[]) => void; open: (type: string, navigation?: PanelNavigation) => void; onProtectionChange: (value: boolean) => void; inspect: (view: DrawerView) => void }) {
   const callbacks = useRef({ onSnapshot, open }); callbacks.current = { onSnapshot, open };
   const id = node.getId();
   const onDraftChange = useCallback((value: boolean) => { if (value) dirty.add(id); else dirty.delete(id); onProtectionChange(dirty.size > 0); }, [dirty, id, onProtectionChange]);
   const onDraftSnapshot = useCallback((value: WorkbenchDraft[]) => callbacks.current.onSnapshot(value), []);
-  const openPanel = useCallback((type: string) => callbacks.current.open(type), []);
+  const openPanel = useCallback((type: string, request?: PanelNavigation) => callbacks.current.open(type, request), []);
   const hasOtherDrafts = useCallback(() => [...dirty].some(panelId => panelId !== id), [dirty, id]);
   const isVisible = useCallback(() => host.isConnected && host.getClientRects().length > 0 && getComputedStyle(host).visibility !== "hidden", [host]);
   const [activated, setActivated] = useState(false);

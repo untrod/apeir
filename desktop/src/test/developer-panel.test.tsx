@@ -236,6 +236,18 @@ describe("existing workspace developer panel", () => {
     expect(approvalAction).not.toHaveBeenCalled(); expect(writeWorkbenchFile).toHaveBeenCalledTimes(1);
   });
 
+  it("hands saved context to Studio without creating a second conversation or losing drafts", async () => {
+    const discuss = vi.fn();
+    render(<DeveloperWorkbench embeddedConversation={false} onDiscussSavedFile={discuss} />);
+    fireEvent.click(await screen.findByRole("button", { name: "a.py" }));
+    const button = screen.getByRole("button", { name: "Discuss saved file" });
+    await waitFor(() => expect(button).toBeEnabled()); fireEvent.click(button);
+    expect(discuss).toHaveBeenCalledWith({ path: "a.py", sha256: before, controller: "http://localhost:8770" });
+    expect(screen.queryByLabelText("Collaboration contract")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Code editor" }), { target: { value: "unsaved content" } });
+    expect(button).toBeDisabled(); expect(discuss).toHaveBeenCalledTimes(1);
+    expect(writeWorkbenchFile).not.toHaveBeenCalled(); expect(runWorkbenchProfile).not.toHaveBeenCalled();
+  });
   it("shares only a saved file reference and persists only bounded layout preferences", async () => {
     render(<DeveloperWorkbench />);
     fireEvent.click(await screen.findByRole("button", { name: "a.py" }));

@@ -11,6 +11,23 @@ beforeEach(() => { vi.useFakeTimers(); setConfig({ url: "http://localhost:8770",
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); sessionStorage.clear(); });
 
 describe.each(subscriptions)("$name subscription lifetime", ({ open }) => {
+  it("pauses hidden-page reads and resumes the original cursor without replaying a task", async () => {
+    let visible = "visible";
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visible as DocumentVisibilityState);
+    const fetcher = vi.fn().mockResolvedValue(response()); vi.stubGlobal("fetch", fetcher);
+    const sub = open(vi.fn());
+    try {
+      await vi.advanceTimersByTimeAsync(0); const cursor = sub.position();
+      visible = "hidden"; document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(fetcher).toHaveBeenCalledTimes(1); expect(sub.position()).toBe(cursor);
+      visible = "visible"; document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0); expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(fetcher.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
+      sub.close(); document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(5000); expect(fetcher).toHaveBeenCalledTimes(2);
+    } finally { sub.close(); visibility.mockRestore(); }
+  });
   it("discards an in-flight page after close without advancing its cursor", async () => {
     let finish!: (value: unknown) => void;
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(resolve => { finish = resolve; })));

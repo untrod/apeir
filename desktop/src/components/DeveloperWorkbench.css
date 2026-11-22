@@ -10,3 +10,5 @@
 .developer-panel > section, .developer-panel > details { min-width:0; overflow-wrap:anywhere; }
 @media(max-width:1100px) { .developer-columns.with-collaboration { grid-template-columns:minmax(170px,220px) minmax(0,1fr); }.developer-collaboration { grid-column:1/-1; } }
 @media(max-width:650px) { .developer-columns, .developer-columns.with-collaboration { display:flex; flex-direction:column; }.developer-columns > * { width:100%; box-sizing:border-box; }.developer-collaboration { height:580px; }.developer-panel button { white-space:normal; } }
+
+.developer-file-browser > details > summary { padding:12px 16px; cursor:pointer; color:var(--nous-text); border-bottom:1px solid var(--nous-border); font-size:12px; }

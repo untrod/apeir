@@ -65,8 +65,8 @@ const input: React.CSSProperties = {
 };
 
 export type WorkbenchDraft = { path: string; content: string; originalSha256: string };
-export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChange, onDraftSnapshot, embeddedConversation = true, locale = "en" }: {
-  onOpenEnvironments?: () => void; onDraftChange?: (protectedDraft: boolean) => void;
+export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChange, onDraftSnapshot, embeddedConversation = true, onDiscussSavedFile, locale = "en" }: {
+  onDiscussSavedFile?: (reference: { path: string; sha256: string; controller: string }) => void; onOpenEnvironments?: () => void; onDraftChange?: (protectedDraft: boolean) => void;
   navigation?: { requestId: string; filePath?: string };
   onDraftSnapshot?: (drafts: WorkbenchDraft[]) => void; embeddedConversation?: boolean; locale?: "en" | "zh";
 }) {
@@ -99,6 +99,8 @@ export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChan
   const busy = operationBusy || proposalBusy;
   const [error, setError] = useState("");
   const [layout, setLayout] = useState(preferences);
+  const [filesOpen, setFilesOpen] = useState(true);
+  const columns = useRef<HTMLDivElement>(null);
   const [runs, setRuns] = useState<DeveloperRun[]>([]);
   const [contextRuns, setContextRuns] = useState<DeveloperRun[]>([]);
   const [runController, setRunController] = useState(getConfig().url);
@@ -194,6 +196,8 @@ export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChan
     setLoadedContent(tab.loadedContent); setLoadedSha256(tab.sha256);
     setLoadedController(tab.controller); setPreview(tab.preview); setWriteResult(tab.writeResult);
     setReference(undefined); setError("");
+    const width = columns.current?.getBoundingClientRect().width || 0;
+    if (width > 0 && width < 600) setFilesOpen(false);
     if (profile === "python" || profile === "python-compile" || profile === "node") setRunTarget(tab.path);
   };
 
@@ -405,7 +409,7 @@ export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChan
   return <div className="developer-panel" style={{ display: "grid", gap: space.md }}>
     <details style={panel}><summary style={{ padding: space.md, cursor: "pointer" }}>{t("Panel settings", "面板设置")}</summary><div className="developer-settings">
       <label>{t("Editor size", "编辑器字号")} <select aria-label="Editor font size" value={layout.fontSize} onChange={event => setLayout(value => ({ ...value, fontSize: Number(event.target.value) }))}>{[12, 14, 16, 18].map(size => <option key={size}>{size}</option>)}</select></label>
-      <label><input type="checkbox" checked={layout.conversation} onChange={event => setLayout(value => ({ ...value, conversation: event.target.checked }))} />{t(" Collaboration panel", " 协作面板")}</label>
+      {embeddedConversation && <label><input type="checkbox" checked={layout.conversation} onChange={event => setLayout(value => ({ ...value, conversation: event.target.checked }))} />{t(" Collaboration panel", " 协作面板")}</label>}
       <label><input type="checkbox" checked={layout.activity} onChange={event => setLayout(value => ({ ...value, activity: event.target.checked }))} />{t(" Persisted activity", " 历史活动")}</label>
       {onOpenEnvironments && <button onClick={() => { if (protectedDraft || pending) setError("Save or explicitly discard the original drafts before leaving this panel."); else onOpenEnvironments(); }} disabled={busy} style={btnSecondary}>{t("Open environments", "查看环境")}</button>}
       <p>{t("Layout settings grant no permissions. Files stay in the configured workspace; code and containers still require admission and qualified isolation.", "布局设置不授予权限。文件位于当前工作区，执行仍需授权与合格的隔离环境。")}</p>
@@ -434,11 +438,12 @@ export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChan
         {contextRuns.map(item => <option key={item.run_id} value={item.run_id}>{item.run_id} · {item.state}</option>)}
       </select></label>
       <p>{t("Recent canonical Runtime Runs. Non-model or legacy Runs may have no input manifest; missing evidence remains UNKNOWN.", "显示原始运行记录。非模型或旧版运行可能没有输入清单；缺失证据保持 UNKNOWN。")}</p>
-      {contextView && <ContextInspector {...contextView} onClose={() => setContextView(null)} />}
+      {contextView && <ContextInspector locale={locale} {...contextView} onClose={() => setContextView(null)} />}
     </details>
 
-    <div className={`developer-columns ${embeddedConversation && layout.conversation ? "with-collaboration" : ""}`}>
-      <aside style={{ ...panel, overflow: "hidden" }}>
+    <div ref={columns} className={`developer-columns ${embeddedConversation && layout.conversation ? "with-collaboration" : ""}`}>
+      <aside className="developer-file-browser" style={{ ...panel, overflow: "hidden" }}>
+        <details open={filesOpen} onToggle={event => setFilesOpen(event.currentTarget.open)}><summary>{t("Project files", "项目文件")}</summary>
         <div style={{ padding: space.md, borderBottom: `1px solid ${colors.borderLight}` }}>
           <div style={{ display: "flex", gap: space.xs }}>
             <input aria-label="Search workspace" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void search(); }} placeholder={t("Search files", "搜索文件")} style={{ ...input, minWidth: 0, flex: 1 }} />
@@ -458,6 +463,7 @@ export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChan
           ))}
           {!listing?.files.length && <div style={{ padding: space.md, color: colors.textTertiary, fontSize: typo.sm }}>No editable files found.</div>}
         </div>
+        </details>
       </aside>
 
       <main style={{ display: "grid", gap: space.md, minWidth: 0 }}>
@@ -476,8 +482,8 @@ export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChan
           </div>
           <div role="tabpanel" id="workbench-editor" aria-labelledby={activeTab === null ? undefined : `workbench-tab-${activeTab}`}>
           <div style={{ padding: space.md, borderBottom: `1px solid ${colors.borderLight}`, display: "flex", gap: space.sm, alignItems: "center", flexWrap: "wrap" }}>
-            <input disabled={busy || !!pending || activeTab === null} aria-label="Workspace file path" value={filePath} onChange={(event) => { setFilePath(event.target.value); setPreview(null); setReference(undefined); }} placeholder={t("Open or create a file", "打开或新建文件")} style={{ ...input, flex: 1, minWidth: 0, fontFamily: typo.mono }} />
-            <button onClick={() => { setReference({ path: filePath, sha256: loadedSha256, controller: loadedController }); setLayout(value => ({ ...value, conversation: true })); }} disabled={busy || !!pending || dirty || !loadedSha256} style={btnSecondary}>{t("Discuss saved file", "讨论已保存文件")}</button>
+            <input disabled={busy || !!pending || activeTab === null} aria-label="Workspace file path" value={filePath} onChange={(event) => { setFilePath(event.target.value); setPreview(null); setReference(undefined); }} placeholder={t("Open or create a file", "打开或新建文件")} style={{ ...input, flex: "1 1 180px", minWidth: 0, fontFamily: typo.mono }} />
+            <button onClick={() => { const saved = { path: filePath, sha256: loadedSha256, controller: loadedController }; if (onDiscussSavedFile) onDiscussSavedFile(saved); else { setReference(saved); setLayout(value => ({ ...value, conversation: true })); } }} disabled={busy || !!pending || dirty || !loadedSha256} style={btnSecondary}>{t("Discuss saved file", "讨论已保存文件")}</button>
             <span style={{ color: dirty ? colors.warning : colors.textTertiary, fontSize: typo.xs }}>{dirty ? t("Unsaved", "未保存") : loadedSha256 ? t("Saved", "已保存") : t("No file selected", "未选择文件")}</span>
             <button onClick={() => void showPreview()} disabled={busy || !!pending || !filePath.trim()} style={btnSecondary}>{t("Preview diff", "预览差异")}</button>
             <button onClick={() => void save()} disabled={busy || !!pending || !filePath.trim() || !dirty || !preview} style={{ ...btnPrimary, opacity: busy || !!pending || !dirty || !preview ? 0.55 : 1 }}>{t("Save atomically", "保存修改")}</button>
@@ -510,7 +516,7 @@ export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChan
           {runResult && <pre style={{ margin: `${space.md} 0 0`, maxHeight: 300, overflow: "auto", padding: space.md, borderRadius: radius.md, background: colors.bg, color: runResult.ok ? colors.text : colors.danger, fontFamily: typo.mono, fontSize: typo.xs, whiteSpace: "pre-wrap" }}>{`run ${runResult.run_id}\nexit ${runResult.exit_code}\n${runResult.test_outcome ? `tests ${runResult.test_outcome}\n` : ""}${runResult.artifact_id ? `artifact ${runResult.artifact_id}\n` : ""}${runResult.stdout}${runResult.stderr ? `\n${runResult.stderr}` : ""}`}</pre>}
         </section>
       </main>
-      {embeddedConversation && <aside hidden={!layout.conversation} className="developer-collaboration" aria-label="Workspace collaboration"><div className="developer-activity"><button style={btnSecondary} aria-pressed={collaborationMode === "ask"} disabled={busy} onClick={() => setCollaborationMode("ask")}>{t("Ask", "只读分析")}</button><button style={btnSecondary} aria-pressed={collaborationMode === "edit"} disabled={busy} onClick={() => setCollaborationMode("edit")}>{t("Edit", "审查提案")}</button></div><p>{t("File references grant no authority. Edit prepares proposals for human review; execution and tests still require their own admission and backend.", "编辑模式只生成待审查的提案，不授予文件写入或测试执行权限。")}</p><ChatView conversationId={conversationId} onConversationCreated={setConversationId} workspaceFile={reference} onClearWorkspaceFile={() => setReference(undefined)} readOnly={collaborationMode === "ask"} onProposalCreated={setFocusProposalId} onCardClick={event => { const runId = String(event.payload?.run_id || event.metadata?.run_id || ""); if (runId) void showEvents(runId); }} onTraceClick={showTrace} /></aside>}
+      {embeddedConversation && <aside hidden={!layout.conversation} className="developer-collaboration" aria-label="Workspace collaboration"><div className="developer-activity"><button style={btnSecondary} aria-pressed={collaborationMode === "ask"} disabled={busy} onClick={() => setCollaborationMode("ask")}>{t("Ask", "只读分析")}</button><button style={btnSecondary} aria-pressed={collaborationMode === "edit"} disabled={busy} onClick={() => setCollaborationMode("edit")}>{t("Edit", "审查提案")}</button></div><p>{t("File references grant no authority. Edit prepares proposals for human review; execution and tests still require their own admission and backend.", "编辑模式只生成待审查的提案，不授予文件写入或测试执行权限。")}</p><ChatView locale={locale} conversationId={conversationId} onConversationCreated={setConversationId} workspaceFile={reference} onClearWorkspaceFile={() => setReference(undefined)} readOnly={collaborationMode === "ask"} onProposalCreated={setFocusProposalId} onCardClick={event => { const runId = String(event.payload?.run_id || event.metadata?.run_id || ""); if (runId) void showEvents(runId); }} onTraceClick={showTrace} /></aside>}
     </div>
     {closeTarget !== null && <section role="alert" style={{ ...panel, padding: space.md }}><p>Unsaved changes in {closeTarget === activeTab ? filePath : tabs.find(tab => tab.id === closeTarget)?.path}. Keep editing or explicitly discard this draft before closing.</p><button style={btnSecondary} onClick={() => setCloseTarget(null)}>{t("Keep editing", "继续编辑")}</button><button style={btnSecondary} onClick={() => closeTab(closeTarget, true)}>{t("Discard draft and close", "放弃草稿并关闭")}</button></section>}
     {pending && <section aria-label="Workbench approval" style={{ ...panel, padding: space.md }}><h3>{t("Explicit approval required", "需要独立审批")}</h3><p>Review the original {pending.kind} request: {pending.kind === "save" ? pending.path : `${pending.profile} ${pending.target}`}. Installation, model output and layout settings grant no authority.</p><p>Request {pending.approvalId}</p><button disabled={busy} style={btnPrimary} onClick={() => void decide("approve")}>Approve once and {pending.kind}</button><button disabled={busy} style={btnSecondary} onClick={() => void decide("deny")}>{t("Deny original request", "拒绝原始请求")}</button></section>}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 import re
 from collections.abc import Mapping, Sequence
 from graphlib import CycleError, TopologicalSorter
@@ -32,7 +33,9 @@ from nous_runtime.work.models import (
     WorkContext,
     WorkDecision,
 )
-from nous_runtime.model_runtime.cost_control import Usage
+from nous_runtime.model_runtime.cost_control import Usage, CostLimitExceeded
+from nous_runtime.events import EventStream, RunEvent
+from nous_runtime.context.explain import explain_model_input
 
 
 _DECISION_EVENT_LIMIT = 6
@@ -142,6 +145,7 @@ class ModelWorkDeliberator:
         preferred_model: str = "",
         timeout_s: float = 180.0,
         max_output_tokens: int = 1536,
+        event_stream: EventStream | None = None,
     ) -> None:
         self.facade = facade
         self.tools = tuple(dict(item) for item in tool_specifications)
@@ -149,6 +153,19 @@ class ModelWorkDeliberator:
         self.preferred_model = str(preferred_model or "")
         self.timeout_s = float(timeout_s)
         self.max_output_tokens = int(max_output_tokens)
+        self.event_stream = event_stream
+        self._invocations = 0
+
+    def _record_invocation(self, run_id: str, event_type: str, payload: dict) -> None:
+        if self.event_stream is not None:
+            self.event_stream.emit(
+                RunEvent(
+                    run_id=run_id,
+                    event_type=event_type,
+                    actor="work.harness",
+                    payload=payload,
+                )
+            )
 
     def __call__(self, context: WorkContext) -> WorkDecision:
         progress = _execution_progress(context)
@@ -181,6 +198,7 @@ class ModelWorkDeliberator:
             )
         native_tools = self._native_action_tools(context, progress)
         request = GatewayRequest(
+            request_id=f"modelreq_{uuid.uuid4().hex}",
             operation=GatewayOperation.STRUCTURED_OUTPUT,
             execution=GatewayExecutionContext(
                 task_id=str(context.goal.get("goal_id") or context.run_id),
@@ -285,7 +303,54 @@ class ModelWorkDeliberator:
                 "tool_choice": "auto",
             },
         )
+        self._invocations += 1
+        identity = {"iteration": self._invocations, "invocation_id": request.request_id}
+        self._record_invocation(
+            context.run_id,
+            "model.invocation.started",
+            {
+                **identity,
+                "operation": "work_decision",
+                "input_manifest": {
+                    **explain_model_input(
+                        request.messages,
+                        request.tools,
+                        {
+                            index: {
+                                "kind": "instruction"
+                                if message.get("role") == "system"
+                                else "work_checkpoint"
+                            }
+                            for index, message in enumerate(request.messages)
+                        },
+                    ),
+                    "scope": "prepared-work-gateway-input",
+                },
+            },
+        )
         response = self.facade.try_invoke_sync(request)
+        try:
+            recorded_usage = Usage.from_mapping(response.usage).to_dict()
+        except (CostLimitExceeded, TypeError, ValueError):
+            recorded_usage = Usage().to_dict()
+        receipt = response.raw_metadata.get("usage_receipt")
+        receipt = receipt if isinstance(receipt, Mapping) else {}
+        self._record_invocation(
+            context.run_id,
+            "model.invocation.completed" if response.ok else "model.invocation.failed",
+            {
+                **identity,
+                "provider_id": response.provider_id,
+                "model_id": response.model_id,
+                "usage": recorded_usage,
+                "cost_usd": response.cost_usd,
+                "cost_measurement": response.cost_measurement,
+                "usage_receipt_ref": str(receipt.get("receipt_id") or ""),
+                "usage_request_id": receipt.get("request_id"),
+                "usage_attempt": receipt.get("attempt"),
+                "latency_ms": response.latency_ms,
+            },
+        )
         if not response.ok:
             configuration = {
                 401: (

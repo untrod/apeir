@@ -224,6 +224,12 @@ test("Rejected model decisions remain recoverable across restart and the GUI res
   expect(after.work.run_id).toBe(id);
   expect(after.work.result).toBe("Original request restored");
   expect(after.work.action_sequence).toBe(0);
+  const inputEvents = after.events.filter((event: { event_type: string }) => event.event_type === "model.invocation.started");
+  expect(inputEvents).toHaveLength(2);
+  expect(new Set(inputEvents.map((event: { payload: { invocation_id: string } }) => event.payload.invocation_id)).size).toBe(2);
+  expect(inputEvents.every((event: { payload: { input_manifest: { scope: string; raw_content_recorded: boolean } } }) => event.payload.input_manifest.scope === "prepared-work-gateway-input" && event.payload.input_manifest.raw_content_recorded === false)).toBe(true);
+  expect(JSON.stringify(inputEvents)).not.toContain(objective);
+
   expect(after.events.filter((event: { event_type: string }) => event.event_type === "work.model.invalid")).toHaveLength(1);
   expect(mutations.map(value => JSON.parse(value))).toEqual([{ action: "resume", task_id: id }, { action: "resume", task_id: id }]);
   const list = await page.request.get(`${url}/api/v1/tasks`, { headers: { Authorization: `Bearer ${token}` } });
@@ -1690,4 +1696,36 @@ test("First-use opens the actual workspace once, defers models and respects redu
     await page.screenshot({ path: info.outputPath("paper-mark-studio-source-host-contract.png") });
     await info.attach("first-use-scope", { body: JSON.stringify({ runtime: "actual authenticated model-disabled HTTP Runtime", native_ipc: "explicit fixture; existing directory only", native_installation: "NOT_RUN", model_inference: "NOT_RUN", runtime_mutations: mutations.length, workspace: "original owned test workspace", reduced_motion: true, setup_restored_after_reload: false }), contentType: "application/json" });
   } finally { release(); }
+});
+
+
+test("Studio uses one Chat for saved file context, protects drafts and keeps the editor at its own scroll position", async ({ page }, info) => {
+  const mutations: string[] = []; const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("request", request => { if (request.url().includes("/api/") && !["GET", "OPTIONS"].includes(request.method())) mutations.push(request.url()); });
+  await open(page);
+  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "example.py", exact: true })).toBeInViewport();
+  await page.getByRole("button", { name: "example.py", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Code editor" })).toHaveValue(/def add/);
+  await expect(page.getByRole("textbox", { name: "Code editor" })).toBeInViewport();
+  await page.getByRole("button", { name: "Discuss saved file", exact: true }).click();
+  const chat = page.getByRole("region", { name: "AI conversation", exact: true });
+  await expect(chat.getByLabel("Selected workspace reference")).toContainText("example.py");
+  const draft = chat.getByRole("textbox", { name: "Message", exact: true });
+  await draft.fill("Preserve this original draft");
+  await page.locator(".developer-file-browser summary").click();
+  await page.getByRole("button", { name: "workspace.json", exact: true }).click();
+  await page.getByRole("button", { name: "Discuss saved file", exact: true }).click();
+  await expect(page.getByText("Send or clear the current draft before changing its context.")).toBeVisible();
+  await expect(draft).toHaveValue("Preserve this original draft");
+  await expect(chat.getByLabel("Selected workspace reference")).toContainText("example.py");
+  await draft.fill("");
+  await page.getByRole("button", { name: "Discuss saved file", exact: true }).click();
+  await expect(chat.getByLabel("Selected workspace reference")).toContainText("workspace.json");
+  await changeLanguage(page, "zh");
+  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveCount(1);
+  await expect(page.getByLabel("Selected workspace reference")).toContainText("workspace.json");
+  expect(mutations).toEqual([]); expect(errors).toEqual([]);
+  await info.attach("single-chat-scope", { body: JSON.stringify({ real_http: true, model_disabled: true, model_calls: 0, mutations, native_installation: false }), contentType: "application/json" });
 });

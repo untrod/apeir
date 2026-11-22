@@ -1393,8 +1393,10 @@ export function subscribeRuntimeEvents(
 ) {
   let active = true;
   let timer: number | undefined;
+  let polling = false;
+  const isPageVisible = () => document.visibilityState !== "hidden";
   const connection = captureRuntimeConnection();
-  const close = () => { active = false; if (timer !== undefined) window.clearTimeout(timer); };
+  const close = () => { active = false; if (timer !== undefined) window.clearTimeout(timer); document.removeEventListener("visibilitychange", visibility); };
   const current = () => {
     if (!active) return false;
     try { connection(); return true; } catch { close(); return false; }
@@ -1403,7 +1405,8 @@ export function subscribeRuntimeEvents(
   const intervalMs = Math.max(500, options.intervalMs || 1500);
 
   const poll = async () => {
-    if (!current()) return;
+    if (!current() || polling || !isPageVisible()) return;
+    polling = true;
     try {
       const result = await fetchEventStream(options.domain || "", lastEventId, 100);
       if (!current()) return;
@@ -1420,9 +1423,15 @@ export function subscribeRuntimeEvents(
         close(); options.onError?.();
       }
     } finally {
-      if (current()) timer = window.setTimeout(poll, intervalMs);
+      polling = false;
+      if (current() && isPageVisible()) timer = window.setTimeout(poll, intervalMs);
     }
   };
+  const visibility = () => {
+    if (timer !== undefined) window.clearTimeout(timer);
+    if (isPageVisible()) void poll();
+  };
+  document.addEventListener("visibilitychange", visibility);
   void poll();
   return { close, lastEventId: () => lastEventId };
 }
@@ -1434,8 +1443,10 @@ export function subscribeRunEvents(
 ) {
   let active = true;
   let timer: number | undefined;
+  let polling = false;
+  const isPageVisible = () => document.visibilityState !== "hidden";
   const connection = captureRuntimeConnection();
-  const close = () => { active = false; if (timer !== undefined) window.clearTimeout(timer); };
+  const close = () => { active = false; if (timer !== undefined) window.clearTimeout(timer); document.removeEventListener("visibilitychange", visibility); };
   const current = () => {
     if (!active) return false;
     try { connection(); return true; } catch { close(); return false; }
@@ -1444,7 +1455,8 @@ export function subscribeRunEvents(
   const intervalMs = Math.max(250, options.intervalMs || 1000);
 
   const poll = async () => {
-    if (!current()) return;
+    if (!current() || polling || !isPageVisible()) return;
+    polling = true;
     try {
       const page = await fetchRunEvents(runId, afterSequence);
       if (!current()) return;
@@ -1458,9 +1470,15 @@ export function subscribeRunEvents(
     } catch {
       if (current()) options.onStatus?.("reconnecting");
     } finally {
-      if (current()) timer = window.setTimeout(poll, intervalMs);
+      polling = false;
+      if (current() && isPageVisible()) timer = window.setTimeout(poll, intervalMs);
     }
   };
+  const visibility = () => {
+    if (timer !== undefined) window.clearTimeout(timer);
+    if (isPageVisible()) void poll();
+  };
+  document.addEventListener("visibilitychange", visibility);
   void poll();
   return { close, cursor: () => afterSequence };
 }

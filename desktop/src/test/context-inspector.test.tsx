@@ -22,6 +22,30 @@ beforeEach(() => {
 });
 
 describe("persisted actual-input inspection", () => {
+  it("matches exact invocation identity when a restarted host reuses iteration one", async () => {
+    vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: props.runId, events: [
+      { ...started, payload: { ...started.payload, invocation_id: "first" } },
+      { event_type: "model.invocation.completed", payload: { iteration: 1, invocation_id: "first", usage: { input_tokens: 11, counter_measurements: { input_tokens: "reported" } } } },
+      { ...started, event_id: "start-2", payload: { ...started.payload, invocation_id: "second" } },
+      { event_type: "model.invocation.completed", payload: { iteration: 1, invocation_id: "second", usage: { input_tokens: 99, counter_measurements: { input_tokens: "reported" } } } },
+    ], next_after_sequence: 4 });
+    render(<ContextInspector {...props} />);
+    const invocation = await screen.findByRole("combobox", { name: "Model invocation" });
+    fireEvent.change(invocation, { target: { value: "1" } });
+    expect(screen.getByText(/Recorded input tokens: 99/)).toBeInTheDocument();
+    expect(screen.queryByText(/Recorded input tokens: 11/)).not.toBeInTheDocument();
+  });
+  it("changes locale without another Runtime read or model request", async () => {
+    vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: props.runId, events: [], next_after_sequence: 0 });
+    const view = render(<ContextInspector {...props} locale="zh" />);
+    expect(await screen.findByRole("button", { name: "刷新记录" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("模型上下文")).toHaveTextContent("没有可用输入记录"));
+    const reads = vi.mocked(fetchRunEvents).mock.calls.length;
+    view.rerender(<ContextInspector {...props} locale="en" />);
+    expect(screen.getByRole("button", { name: "Reload evidence" })).toBeInTheDocument();
+    expect(fetchRunEvents).toHaveBeenCalledTimes(reads);
+  });
+
   it("identifies archived excerpts without treating them as full history or rendering raw text", async () => {
     const messages = [manifest.messages[0], { ...manifest.messages[1], role: "user", source: { kind: "conversation_summary", complete_history: false, raw_content: "PRIVATE_ARCHIVED_TEXT" } }];
     vi.mocked(fetchRunEvents).mockResolvedValue({ run_id: props.runId, events: [{ ...started, payload: { iteration: 1, input_manifest: { ...manifest, messages } } }], next_after_sequence: 1 });

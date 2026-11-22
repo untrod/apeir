@@ -37,6 +37,14 @@ selects Overview, Develop, Workflow, Run, Resources, or Tools;
 the row above the dock shows that section’s views. Navigation returns to an
 existing instance. **More / Add panel** deliberately creates another instance
 through the searchable panel library. Existing layouts and extension panels remain available.
+In Studio, **Discuss saved file** sends the saved path/version reference to the
+existing Chat panel. It does not read or send the file yet. Send or clear a Chat
+draft before replacing its selected context. The editor retains its own scroll
+position; new messages follow only while the reader is near the message bottom.
+
+Studio 中的“讨论已保存文件”会打开现有对话并附上文件引用，不会立即读取或发送正文。
+更换引用前请先发送或清空对话草稿；编辑器与对话各自滚动。
+
 Empty Chat offers **Connect a model**, **Open project files** and **Open Workflow**;
 these open existing views without submitting a task.
 **Workspace → Operations Console → Controller connection** configures the Runtime
