@@ -932,7 +932,7 @@ function AppShell() {
             <React.Suspense fallback={<p role="status">{locale === "zh" ? "正在加载模块…" : "Loading module…"}</p>}>
             {page === "chat" && <ChatView conversationId={activeConversationId} onConversationCreated={setActiveConversationId} onCardClick={handleEventClick} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} />}
             {page === "operations" && <OperationsConsole />}
-            {page === "tasks" && <TaskCenter onTaskClick={(id) => setDrawer({ kind: "task", taskId: id })} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} onConversationClick={id => { setActiveConversationId(id); setPage("chat"); }} />}
+            {page === "tasks" && <TaskCenter onTaskClick={(id) => setDrawer({ kind: "task", taskId: id })} onTraceClick={(traceId) => setDrawer({ kind: "trace", traceId })} onApprovalClick={requestId => setDrawer({ kind: "approval", requestId })} onConversationClick={id => { setActiveConversationId(id); setPage("chat"); }} />}
             {page === "develop" && <DeveloperPlatform />}
             {page === "documents" && <DocumentWorkbench />}
             {page === "environments" && <EnvironmentInspector />}

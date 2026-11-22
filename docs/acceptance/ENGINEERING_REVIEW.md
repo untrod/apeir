@@ -7479,3 +7479,68 @@ authorized cloud Provider, Windows Context timeout root cause, interactive
 PTY/Git writes, native first-use performance and physical Jetson→ESP32 effects
 remain independently unqualified. Windows ten-second assertions and open timing
 issues are preserved. No Native package, signature or Release was produced here.
+
+## Work decision and task-control recovery — 2026-11-18
+
+Baseline: `75ed38c29aa0fce9c13140eba7d89ee9a57ea20c`. Eight new regression cases
+reproduced two defects: enveloped JSON text was not decoded by the Gateway, and
+an in-flight model failure could supersede a newer pause, cancellation or steering
+instruction. The original failure logs are retained privately.
+
+The Gateway now decodes enveloped JSON. Work validates decision fields, finite
+JSON, loaded tool arguments and replacement DAGs before dispatch. Schema
+validation has no resource retriever. Invalid responses retain the original Work
+in WAITING_USER; explicit resume preserves its identity and does not replay an
+uncertain action. Newer user controls take precedence over stale model failures.
+Runtime progress owns the phase. Provider requests retain the portable schema;
+conditional checks run locally.
+
+Explicit model selection is locked to that model. Work disables automatic model
+fallback/retry, and native actions require the declared tool-calling capability.
+Authentication, account, missing-route and unsupported-parameter failures retain
+the original task for configuration review instead of making it irrecoverable.
+
+Tasks show the selected model, a concise recovery message and the original-task
+resume action. Execution requests retain their service identity; approval uses
+the existing independent human Inspector, session and one-use nonce. Approval
+does not automatically resume Work. A real HTTP/Chromium regression exercises
+rejection, host restart, separate approval and explicit original-run completion.
+Its IdP and model are fixtures, not real-account qualification.
+
+A separate real CPU Qwen3-0.6B Q2 request traversed the frozen Linux Kernel and
+Worker: 2,199 input / 105 output Tokens, 61,717 ms, monetary cost unknown. Its
+replacement plan was invalid, so the original Work remained WAITING_USER after
+restart with zero replay. This qualifies fail-closed recovery, **not** useful
+autonomous development. The pinned model/source inputs and raw request evidence
+are retained privately. Cloud inference, successful remote tools, Windows timing
+root cause, Windows 10 installation, PTY/Git writes and physical effects remain
+separate gates. Kernel, component lock and historical tags are unchanged.
+
+Local regression: **1,047 passed, 11 prerequisite/platform skips** across Work,
+Gateway, extension execution and Governance; **576 Desktop tests** and **29
+HTTP/browser scenarios** passed. TypeScript, ESLint, production build, Ruff,
+formatting, repository contracts and all 234 current Markdown link checks passed.
+The security scan reported zero high findings; its ten medium matches include
+seven retained baseline matches and three new explicit test-fixture strings.
+No scanner rule, timeout, security assertion or historical failure was removed.
+
+### Desktop dependency gate
+
+The first PR163 Desktop run failed at the unchanged high-severity npm audit:
+[run 44242911550](https://github.com/untrod/apeir/actions/runs/44242911550).
+The published minimatch advisory is addressed by TypeScript ESLint 8.73.0 within
+the existing major-version range, resolving its minimatch dependency to 11.0.9.
+Lint, typecheck, production build and all 576 Desktop tests pass with this lock.
+
+The separate [picomatch advisory](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)
+still affects the latest published version, 4.0.7, as checked on 2026-11-18; the
+advisory lists no patched release. npm reports ten high-severity affected entries
+through this dependency and its consumers. Integration remains **BLOCKED** under
+[issue 164](https://github.com/untrod/apeir/issues/164). The required audit and
+branch protection remain unchanged; local functional tests do not override them.
+
+An independently installed wheel from `165a18809bf103a95d5a1bdcab349929994b22f5`
+(SHA-256 `57eba32f8d6c35caa6664ebd130a8ca6c6f79089cb2aa31d4d24278a80a69104`)
+passed the production-frontend recovery case using isolated Python, real HTTP and
+the explicit fake model/IdP. All 897 wheel checksums and 877 packaged Python files
+matched. This is source qualification, not a public download or native installer.

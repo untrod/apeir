@@ -159,6 +159,30 @@ def test_facade_normalizes_structured_tools_route_usage_and_trace() -> None:
     assert response.trace_context["trace_id"] == "trace"
 
 
+@pytest.mark.parametrize(
+    "content",
+    ['{"answer":42}', '```json\n{"answer":42}\n```'],
+)
+def test_facade_decodes_json_text_inside_provider_envelopes(content) -> None:
+    facade, _adapter = build_facade({"content": content})
+    response = facade.invoke_sync(
+        request(GatewayOperation.STRUCTURED_OUTPUT, response_schema={"type": "object"})
+    )
+    assert response.structured_output == {"answer": 42}
+    assert response.content == content
+
+
+def test_facade_keeps_explicit_structured_strings_and_invalid_text() -> None:
+    for value in ({"content": "not JSON"}, {"structured_output": "42"}):
+        facade, _adapter = build_facade(value)
+        response = facade.invoke_sync(
+            request(
+                GatewayOperation.STRUCTURED_OUTPUT, response_schema={"type": "string"}
+            )
+        )
+        assert response.structured_output == next(iter(value.values()))
+
+
 def test_facade_normalizes_provider_usage_and_finish_reason() -> None:
     facade, adapter = build_facade(None)
     adapter.total_tokens = 0

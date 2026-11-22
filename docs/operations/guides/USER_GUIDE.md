@@ -197,6 +197,17 @@ historical inspection initially reads up to 200. A disconnected event reader
 shows a reconnecting state: that does not establish that the backend task stopped.
 Missing usage remains UNKNOWN; receipt-backed Usage remains the accounting view.
 
+If a model returns an invalid decision, **Tasks → Needs Input** keeps the original
+task and shows what needs attention. Check the model settings or task instructions,
+then choose **Resume original task**. A rejected response is not retried automatically.
+If the action needs approval, **Review approval** opens the existing Inspector.
+Approve or deny the bound request there, then repeat the task action yourself.
+Approval does not silently resume execution.
+
+模型回复格式或计划不合法时，原任务会保留在“需要处理”中。
+检查设置后恢复原任务即可，不必重新提交。需要审批的操作仍须单独批准；
+读取历史、重启程序或关闭面板都不会自动重试模型调用。
+
 **Stop waiting** closes the local request and event reader. It does not confirm
 Runtime cancellation or stop an already admitted charge. The message retains
 **Execution activity** for the original Run; inspect that record before submitting
