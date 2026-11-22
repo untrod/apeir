@@ -333,6 +333,95 @@ def test_stop_and_pending_execution_are_persisted_atomically(tmp_path: Path):
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("replacement", [False, True])
+def test_spool_retains_original_assignment_when_connection_changes_during_send(
+    tmp_path: Path, monkeypatch, replacement: bool
+):
+    async def scenario():
+        service = NodeRuntimeService(NodeRuntimeConfig(state_dir=tmp_path / "node"))
+        server = NodeRelayServer(state_dir=tmp_path / "relay")
+        node = service.identity.node_id
+        server.register_node(node, service.identity.public_key)
+
+        class Socket:
+            def __init__(self):
+                self.messages = []
+
+            async def send(self, raw):
+                self.messages.append(raw)
+
+        old, current = Socket(), Socket()
+        server.connections[node] = old
+        operation = "original-spool-operation"
+        request = {
+            "schema": "nous.remote-provider-request/v1",
+            "operation_id": operation,
+            "node_id": node,
+            "capability": "system.echo",
+            "arguments": {"message": "original"},
+            "timeout_seconds": 5,
+            "delivery_semantics": "at_most_once",
+            "binding": {
+                "intent_id": operation,
+                "effect_contract_digest": "a" * 64,
+                "target_ref": "node://test/service/echo",
+                "target_binding_digest": "b" * 64,
+                "workload_id": operation,
+                "request_digest": "c" * 64,
+                "provider_revision": "test-1",
+            },
+        }
+        server.provider_requests.mkdir(parents=True)
+        server.provider_results.mkdir(parents=True)
+        path = server.provider_requests / f"{operation}.json"
+        path.write_text(json.dumps(request), encoding="utf-8")
+        encode = server._encode_message
+
+        def replace_after_persistence(*args):
+            raw = encode(*args)
+            # Force the real durable-send boundary without sleeps or retries.
+            if replacement:
+                server.connections[node] = current
+            else:
+                server.connections.pop(node, None)
+            return raw
+
+        monkeypatch.setattr(server, "_encode_message", replace_after_persistence)
+        await server._ingest_provider_request(path)
+        assert path.is_file()
+        assert not (server.provider_results / path.name).exists()
+        assert not old.messages and not current.messages
+        original = server.pending[node][operation]
+        assert original["arguments"] == request["arguments"]
+        assert original["binding"] == request["binding"]
+
+        # A restarted relay recovers this assignment, rather than a new request.
+        restored = NodeRelayServer(state_dir=tmp_path / "relay")
+        assert restored.pending[node][operation] == original
+        restored.connections[node] = current
+        await restored._send_workload(current, node, original)
+        assert len(current.messages) == 1
+        signed = NodeProtocolEnvelope.from_json(current.messages[0])
+        assert signed.verify(restored.public_key)
+        assert signed.payload["workload_id"] == operation
+        assert signed.payload["binding"] == request["binding"]
+        assert path.is_file()
+        assert not (server.provider_results / path.name).exists()
+
+        # Trust failures remain definitive refusal, never transport deferral.
+        def reject_trust(*_args):
+            raise NodeProtocolError("node trust is missing or revoked")
+
+        monkeypatch.setattr(restored, "_require_node_trust", reject_trust)
+        await restored._ingest_provider_request(path)
+        rejected = json.loads((restored.provider_results / path.name).read_text())
+        assert rejected["ok"] is False
+        assert rejected["error_code"] == "REMOTE_PROVIDER_REQUEST_REJECTED"
+        assert len(current.messages) == 1
+
+    asyncio.run(scenario())
+
+
 def test_external_provider_spool_reaches_signed_node_protocol(tmp_path: Path):
     async def scenario() -> None:
         relay_state = tmp_path / "relay"
@@ -479,6 +568,10 @@ def test_external_provider_spool_reaches_signed_node_protocol(tmp_path: Path):
                 "provider_error_code": redact_sensitive_text(
                     str(response.get("error", {}).get("code", "UNKNOWN"))
                 )[:120],
+                "provider_rejection_reason": {
+                    "NodeProtocolError: node connection changed before send": "NODE_CONNECTION_CHANGED",
+                    "NodeProtocolError: node trust is missing or revoked": "NODE_TRUST_REJECTED",
+                }.get(response.get("error", {}).get("message"), "UNCLASSIFIED"),
                 "client_phase": client._session_phase,
                 "node_memory_state": service._workloads.get(
                     operation["operation_id"], {}
