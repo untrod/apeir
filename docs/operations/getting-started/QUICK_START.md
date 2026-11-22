@@ -30,10 +30,10 @@ download; Windows 10 installation testing is still in progress.
 Download both artifacts from the same build and extract them into separate
 folders, named `runtime` and `frontend` here:
 
-- [Runtime wheel](https://github.com/untrod/apeir/actions/runs/43622764883/artifacts/14125072122)
-- [Built Studio](https://github.com/untrod/apeir/actions/runs/43622764883/artifacts/14124703581)
+- [Runtime wheel](https://github.com/untrod/apeir/actions/runs/44964785472/artifacts/14731391894)
+- [Built Studio](https://github.com/untrod/apeir/actions/runs/44964785472/artifacts/14731346937)
 
-These packages use source revision `3aafb1b26bf4fb5e223f5120691ca6c8444ea38f`.
+These packages use source revision `5c653cd626f6384be2b6150a28d39e82f277abfc`.
 GitHub sign-in is required. Check the [download metadata](#download-metadata)
 for hashes and retention dates.
 
@@ -206,7 +206,7 @@ a Runtime wheel, built frontend and their checksums.
 
 | Package | Source revision | Available until (UTC) |
 | --- | --- | --- |
-| [Runtime wheel](https://github.com/untrod/apeir/actions/runs/43622764883/artifacts/14125072122) and [browser Studio](https://github.com/untrod/apeir/actions/runs/43622764883/artifacts/14124703581) | `3aafb1b26bf4fb5e223f5120691ca6c8444ea38f` | 2026-11-21 |
+| [Runtime wheel](https://github.com/untrod/apeir/actions/runs/44964785472/artifacts/14731391894) and [browser Studio](https://github.com/untrod/apeir/actions/runs/44964785472/artifacts/14731346937) | `5c653cd626f6384be2b6150a28d39e82f277abfc` | 2026-11-29 |
 | [Windows x64](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424) | `d94159ea45badf665999dffdafe6786a5e35c085` | 2026-11-28 |
 | [Windows ARM64](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427) | `d94159ea45badf665999dffdafe6786a5e35c085` | 2026-11-28 |
 
@@ -221,7 +221,7 @@ These hashes apply to files **inside** the downloaded artifacts:
 
 | File | SHA-256 |
 | --- | --- |
-| `apeir_distribution-0.1.0rc1-py3-none-any.whl` | `e1e763ed71b8040b6e0036767a79a80d12ac279c58b06a039df6b78fd252b328` |
+| `apeir_distribution-0.1.0rc1-py3-none-any.whl` | `3a89766542eb260bf39c0639d1f065f92d09a8b906eecc7862e7bc3940dd36c6` |
 | `APEIR_0.1.0-rc1_x64-setup.exe` | `8374139b89f070ab6e2982c8930055b3ff2fbf44d278756e32a538362e360a4e` |
 | `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `95b65c4556e08812d64d5b0b631a9685d5000e0e26c38ecbc419144d8b030168` |
 | `APEIR_0.1.0-rc1_arm64-setup.exe` | `a75391060652b2f34ba590830a6ffef5ca889222813e410fd12d4796ba29c8d9` |
@@ -231,8 +231,8 @@ Outer artifact ZIP hashes, before extraction:
 
 | Artifact | SHA-256 |
 | --- | --- |
-| Runtime | `fc117e5cd8ffe133cba90956e323d00fd23cc27f1e403a5245b12358cf05fe00` |
-| Browser Studio | `3f2761a528b4a27f027ead053f5cca26696d17ca35a6523bbf80cb8cd48859fc` |
+| Runtime | `e0c5d92b2f0f6c4cdfba706cd68dcaa6480bb0a4881719d6cd93bfa24d1a6928` |
+| Browser Studio | `848b06c26c7ddb5c00cf5bf2eb89c8ad4e53ad23111c29cd388958891edf1fb1` |
 | Windows x64 | `eafb38ac9bde3bd57575d3de8d299829dc46631e52f81b1ea1ed6c390425f544` |
 | Windows ARM64 | `bd12c756ede57c30cddaa1b5bde8b8e8c1ffbacf5762cffa620b8ee86f425011` |
 

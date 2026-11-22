@@ -7544,3 +7544,32 @@ An independently installed wheel from `165a18809bf103a95d5a1bdcab349929994b22f5`
 passed the production-frontend recovery case using isolated Python, real HTTP and
 the explicit fake model/IdP. All 897 wheel checksums and 877 packaged Python files
 matched. This is source qualification, not a public download or native installer.
+
+
+### Integration and Source Preview follow-up — 2026-11-22
+
+The picomatch advisory was withdrawn upstream on 2026-11-18 because it was not
+a security issue. Fresh npm audit on the unchanged candidate lock reports zero
+vulnerabilities. [Desktop attempt 2](https://github.com/untrod/apeir/actions/runs/44244140026)
+passed its original audit, lint, 576 unit tests, typecheck, production build and
+29 browser scenarios; no exclusion or protection change was used. Core,
+Multi-Arch and Security passed at the same candidate. PR163 merged normally as
+`5c653cd626f6384be2b6150a28d39e82f277abfc`; issue164 closed with original failures
+retained. The completed branch was retired.
+
+[Official Source Preview run44964785472](https://github.com/untrod/apeir/actions/runs/44964785472)
+built the matching wheel and Studio frontend. Both outer ZIP hashes, all four
+Runtime and 27 frontend inner checksums matched. A fresh installation verified
+910 hashed RECORD entries and passed original-task recovery against the shipped
+production frontend. Its model and identity are explicit fixtures. Updated
+package links, hashes and retention dates are in the existing Quick Start;
+Windows package metadata remains bound to its separate binary source.
+
+A bounded real Qwen2.5-Coder 1.5B Q4 attempt made four frozen-Kernel/NKI requests:
+8,722 input / 273 output Tokens, including 3,244 reported cached input Tokens;
+monetary cost remained unknown. It did not complete the read-only code explanation.
+Invalid tool arguments were rejected, and the original Work remained WAITING_USER
+after restart without replay. This is inference/recovery evidence, not successful
+autonomous development. Owned services and temporary model storage were removed.
+Cloud accounts, full model-driven GUI development, Windows timing root cause,
+Windows 10 installation, signing and release qualification remain separate gates.
