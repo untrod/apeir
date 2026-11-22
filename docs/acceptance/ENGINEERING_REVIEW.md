@@ -7524,6 +7524,24 @@ The security scan reported zero high findings; its ten medium matches include
 seven retained baseline matches and three new explicit test-fixture strings.
 No scanner rule, timeout, security assertion or historical failure was removed.
 
+### Windows Relay follow-up — 2026-11-22
+
+Merge-head Core run44964785483 retained one Windows failure in
+`test_external_provider_spool_reaches_signed_node_protocol`: REMOTE_PROVIDER_REQUEST_REJECTED
+during initial reports, no signed result, with 6,445 other tests passed and
+105 skipped. The original log remains retained; its limited diagnostic does not
+establish the precise rejection cause or resolve older Windows timing issues.
+
+A deterministic follow-up found a transport-classification defect: a connection
+removed or superseded during durable message encoding raised the generic protocol
+error, so the Provider spool wrote a terminal rejection despite the persisted
+original assignment. A narrow internal exception now retains that request for
+existing reconnect/at-most-once reconciliation. Trust and binding errors keep
+their original rejection path. Both forced interleavings fail on the baseline
+and pass with the fix; restart restores the same signed assignment. Node/Relay
+regression passes 299 tests with three existing prerequisites skipped; all
+79 connectivity regressions also pass. Windows qualification remains separate; no timeout or security assertion was weakened.
+
 ### Desktop dependency gate
 
 The first PR163 Desktop run failed at the unchanged high-severity npm audit:

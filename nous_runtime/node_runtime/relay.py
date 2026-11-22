@@ -65,6 +65,10 @@ OBSERVED_MESSAGE_TYPES = frozenset(
 )
 
 
+class _RelayConnectionChanged(NodeProtocolError):
+    """The original assignment needs reconciliation on its current transport."""
+
+
 def public_key_hex(private_key: Ed25519PrivateKey) -> str:
     return (
         private_key.public_key()
@@ -1899,10 +1903,12 @@ class NodeRelayServer:
                 binding=value.get("binding"),
             )
             self._publish_provider_result(operation_id)
-        except ConnectionClosed:
+        except (ConnectionClosed, _RelayConnectionChanged):
             # A response-loss fault can close the cached socket while the spool
-            # transfers an input. Keep the request and persisted assignment for
-            # reconnect; at-most-once delivery still returns the Node journal.
+            # transfers an input or persists a signed send. Keep the request and
+            # original assignment when that transport is replaced or removed;
+            # this is not a definitive rejection or evidence of no effect.
+            # Reconnect uses that assignment and its at-most-once Node journal.
             return
         except OSError as exc:
             # Storage failure is not evidence of rejection or of no effect.
@@ -2047,7 +2053,7 @@ class NodeRelayServer:
                 # Persistence may yield to revocation or a successor connection.
                 self._require_node_trust(target)
                 if self.connections.get(target) is not websocket:
-                    raise NodeProtocolError("node connection changed before send")
+                    raise _RelayConnectionChanged("node connection changed before send")
             await websocket.send(raw)
 
     def _encode_message(
