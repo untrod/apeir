@@ -272,7 +272,8 @@ function ChatSession({
   const historyRequest = useRef(0);
   const [contextView, setContextView] = useState<{ runId: string; controller: string } | null>(null);
   const inspectContext = (runId: string) => setContextView({ runId, controller: getConfig().url });
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const followMessages = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   const subscriptionRef = useRef<ReturnType<typeof subscribeRunEvents> | null>(null);
   const active = useRef(true);
@@ -353,7 +354,8 @@ function ChatSession({
   // Unrelated Runtime snapshots must not move a reader's chat position.
   const latestMessage = allMessages[allMessages.length - 1];
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const box = messagesRef.current;
+    if (box && followMessages.current) box.scrollTop = box.scrollHeight;
   }, [latestMessage?.id, latestMessage?.content, latestMessage?.cards?.length, loading]);
 
 
@@ -374,6 +376,7 @@ function ChatSession({
       return;
     }
     if (abortRef.current && !abortRef.current.signal.aborted) recordStoppedWait(activeRunId);
+    followMessages.current = true;
     const userMsg = { id: `u_${Date.now()}`, role: "user", content: text, timestamp: new Date().toISOString() };
     setLocalMessages((prev) => [...prev, userMsg]);
     setLoading(true);
@@ -483,25 +486,25 @@ function ChatSession({
         background: colors.surface, display: "flex", alignItems: "center", gap: space.md,
       }}>
         <h1 style={{ fontSize: typo.lg, fontWeight: typo.semibold, color: colors.text, margin: 0 }}>APEIR</h1>
-        {readOnly && <span style={{ fontSize: typo.xs, color: colors.textSecondary }}>Read-only collaboration</span>}
+        {readOnly && <span style={{ fontSize: typo.xs, color: colors.textSecondary }}>{t("Read-only collaboration", "只读协作")}</span>}
         <span style={{ fontSize: typo.xs, color: colors.textTertiary }}>
           {!hydrated && !readOnly ? t("Connecting", "连接中") : activeTasks.length > 0 ? t(`${activeTasks.length} active`, `${activeTasks.length} 项进行中`) : models.length ? t(`${models.length} models`, `${models.length} 个模型`) : t("No models configured", "尚未配置模型")}
         </span>
-        {loading && <span style={{ fontSize: typo.xs, color: colors.accent, animation: "nousPulse 1.5s infinite" }}>Running</span>}
-        {activeRunId && <button onClick={() => inspectContext(activeRunId)} style={btnSecondary}>Inspect active input</button>}
+        {loading && <span style={{ fontSize: typo.xs, color: colors.accent, animation: "nousPulse 1.5s infinite" }}>{t("Running", "进行中")}</span>}
+        {activeRunId && <button onClick={() => inspectContext(activeRunId)} style={btnSecondary}>{t("Inspect active input", "查看当前输入")}</button>}
       </div>
-      {contextView && <ContextInspector {...contextView} onClose={() => setContextView(null)} />}
+      {contextView && <ContextInspector locale={locale} {...contextView} onClose={() => setContextView(null)} />}
       {workspaceFile && <div aria-label="Selected workspace reference" style={{ padding: space.md, overflowWrap: "anywhere", fontSize: typo.xs }}>
         {workspaceFile.path} · SHA-256 {workspaceFile.sha256}<br />
-        File content is not automatically sent. Send requests the saved version; current read and provider transfer permission are required.
-        <button onClick={onClearWorkspaceFile} style={{ marginLeft: space.sm }}>Remove reference</button>
+        {t("File content is not automatically sent. Send uses the saved version and requires current read and transfer permission.", "发送时使用已保存的文件版本，并检查当前读取与传输权限。")}
+        <button onClick={onClearWorkspaceFile} style={{ marginLeft: space.sm }}>{t("Remove reference", "移除引用")}</button>
       </div>}
 
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: `${space.xl} ${space.xl} 0`, scrollBehavior: "smooth" }}>
+      <div ref={messagesRef} aria-label={t("Conversation messages", "对话消息")} onScroll={event => { const box = event.currentTarget; followMessages.current = box.scrollHeight - box.scrollTop - box.clientHeight < 48; }} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: `${space.xl} ${space.xl} 0` }}>
         {!hydrated && !readOnly ? (
           <div style={{ padding: space.xl, color: colors.textTertiary, fontSize: typo.sm }}>
-            Loading conversation...
+            {t("Loading conversation…", "正在加载对话…")}
           </div>
         ) : allMessages.length === 0 ? (
           <div style={{ display: "grid", placeContent: "center", minHeight: "45%", padding: space.xl, textAlign: "center", gap: space.sm }}>
@@ -542,7 +545,7 @@ function ChatSession({
           </div>
         )}
 
-        <div ref={messagesEndRef} />
+
       </div>
 
       {/* Composer */}

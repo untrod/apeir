@@ -112,7 +112,9 @@ def main():
             args.workspace,
             component_factory=lambda *_: WorkExecutionComponents(
                 tools=None,
-                deliberator=ModelWorkDeliberator(FixtureFacade()),
+                deliberator=ModelWorkDeliberator(
+                    FixtureFacade(), event_stream=WorkHarness(args.workspace).events
+                ),
                 verifier=None,
             ),
         )

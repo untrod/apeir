@@ -29,10 +29,22 @@ The manifest describes **application Gateway input**, not the Provider's final
 HTTP envelope or proof of receipt. It is bounded to 256 messages, 64 tools and 128
 sources; complete counts/digest remain available. The inspector reads at most
 1,600 events with explicit truncation. Missing/legacy events stay UNKNOWN.
-Collaborative worker/reviewer inputs are not covered by this Chat manifest.
+Work model decisions now record their prepared input in the same EventStream.
+The inspector pairs start/end records by unique invocation ID, including after a
+host restart. A prepared Work manifest is not proof of execution admission or
+Provider receipt. Collaborative worker/reviewer inputs remain outside this scope.
 
 The archived conversation excerpt is untrusted, incomplete history, not a
-semantic summary or permission. Context snapshots preserve source/version,
+semantic summary or permission. Conversation selection reads the archive and
+recent messages from one WAL snapshot. Recent input takes priority over the
+optional archive; the selection records omitted messages and excerpt size. An
+oversized latest message remains whole and is explicitly marked over budget;
+the subsequent model/Context limits still apply. Stored history is unchanged.
+
+历史摘录不是完整记忆，也不授予权限。当前输入优先于可选摘录；超长的当前意图会被明确
+标记，不会被静默截断。输入清单不保存提示词或文件正文，缓存 Token 也不等于节省费用。
+
+ Context snapshots preserve source/version,
 owner, digests and omission reasons. Required objectives, plans and governance
 items stay whole; an insufficient budget blocks dispatch. Work Harness separately
 bounds prepared JSON to 96,000 characters and pauses before dispatch rather than
@@ -73,3 +85,8 @@ prices stay unknown. Token-only policy requires both existing
 `APEIR_MAX_DAILY_COST_USD` and `APEIR_MAX_RETRY_COST_USD` to be `none`; this read
 view never changes policy or invents a vendor billing cap.
 
+
+Event views pause their read polling while the browser page is hidden and resume
+from the original cursor when visible. This does not cancel backend execution.
+Conversation database paths use the existing static link/sidecar admission check;
+this is not at-rest encryption or protection against a compromised OS owner.

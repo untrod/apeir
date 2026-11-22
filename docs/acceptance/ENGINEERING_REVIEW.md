@@ -7591,3 +7591,62 @@ after restart without replay. This is inference/recovery evidence, not successfu
 autonomous development. Owned services and temporary model storage were removed.
 Cloud accounts, full model-driven GUI development, Windows timing root cause,
 Windows 10 installation, signing and release qualification remain separate gates.
+
+
+## Studio context continuity — 2026-11-22
+
+Baseline: `398064ef0d3b23358eab96ae1902a5d1ae2efe35`. The default Studio editor
+mounted a second Chat; its scroll-into-view moved ancestor panes. Studio now
+hands a saved reference to the existing Chat without transmitting contents or
+replacing an unsent draft. Standalone Workbench collaboration remains available.
+The Chat scroll follows its own message container and respects readers above the
+bottom. Embedded collaboration and input inspection receive the active locale;
+original IDs, hashes and receipt details remain available.
+
+Conversation input selection prioritizes whole recent messages, bounds optional
+archive excerpts and reports an oversized latest intent explicitly. Its two
+reads share one WAL snapshot. Persisted history is unchanged; this is not a
+semantic compactor. The existing private database-path validator also rejects
+static database/sidecar links before SQLite opens. No new database, memory owner,
+credential store or authorization mechanism is introduced.
+
+Work decisions publish content-free prepared-input manifests and actual returned
+usage through the existing EventStream. Unique invocation IDs disambiguate host
+restart from reused iteration numbers. Prepared input does not establish Kernel
+admission or Provider receipt; invalid model decisions still pause the original
+Work without replay. Hidden browser pages pause event reads and resume the same
+cursor, independently of backend cancellation.
+
+Baseline regression retained seven conversation failures and six UI failures.
+Candidate evidence includes real HTTP/Chromium for one Chat, saved reference
+handoff, draft protection, localization and original Work recovery with explicit
+fake model/identity fixtures. Real cloud inference, complete autonomous coding,
+semantic long-task compression, Windows 10 installation and formal release remain
+separate gates. Kernel, component lock and historical tags are unchanged.
+
+Local regression passes 1,559 Python tests (16 existing platform/prerequisite
+skips) and 581 Desktop tests in 70 files. The production frontend builds; lint,
+typecheck, repository checks and component-lock contracts pass. The security scan
+reports no high findings and ten existing medium findings, including fixture
+tokens and retained engineering paths. Actual Windows component verification is
+BLOCKED in this Linux checkout because the locked PE files are not staged.
+
+A separately bounded CPU qualification used the public Apache-2.0
+Qwen2.5-Coder 7B Q3_K_M weights at revision
+`13fb94bfda8c8cf22497dc57b78f391a9acb426a`, with verified SHA-256
+`ff5c64615cf8a44651d208e9d8da1f753feefc21605e6c1ee67957aa77257c3c`.
+Frozen Kernel/NKI/Worker reached Ollama 0.40.15, but the model loader exceeded
+the explicit 6 GiB container memory limit: cgroup evidence records an OOM kill,
+and Ollama returned HTTP 500. No model decision or file operation occurred.
+Restart restored the original failed Work without replay. This model is **not
+qualified** on this host; no resource limit, inference budget or security check
+was bypassed. Owned services and temporary weights were removed after retaining
+private diagnostics.
+
+The baseline main push also has a separate retained Windows failure:
+[Core run 45037674761](https://github.com/untrod/apeir/actions/runs/45037674761).
+It passed 6,446 tests but failed
+`test_failed_device_waits_for_original_signed_terminal_projection[operation_failure]`
+while waiting for the held signed result to arrive. Its cause is unconfirmed;
+it is not evidence that historical Context/Skill timeouts share one cause.
+The original deadline and no-reexecution assertions are unchanged.

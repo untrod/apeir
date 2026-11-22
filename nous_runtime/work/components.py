@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from nous_runtime.events import EventStream
+
 from nous_runtime.work.models import WorkContext, WorkSnapshot
 
 
@@ -110,6 +112,7 @@ def build_work_components(
         facade = get_gateway_facade(required=True)
     deliberator = ModelWorkDeliberator(
         facade,
+        event_stream=EventStream(str(workspace)),
         tool_specifications=tools.prompt_specifications(),
         tool_capabilities=tools.categories(),
         preferred_model=str(options.get("preferred_model") or ""),
