@@ -138,7 +138,7 @@ export function captureStudioLayout(model: IJsonModel, previous: StudioLayout, a
 
 export const STUDIO_TEMPLATES: Record<string, { en: string; zh: string; panels: string[][] }> = {
   general: { en: "General", zh: "通用", panels: [["chat"], ["editor", "tasks", "evidence"]] },
-  software: { en: "Software Development", zh: "软件开发", panels: [["editor"], ["chat", "tasks"], ["evidence", "activity"]] },
+  software: { en: "Software Development", zh: "软件开发", panels: [["editor"], ["chat"]] },
   agents: { en: "AI Agent Development", zh: "智能体开发", panels: [["chat"], ["models", "workflow"], ["tasks", "usage"]] },
   embedded: { en: "Embedded Engineering", zh: "嵌入式工程", panels: [["editor"], ["devices", "nodes"], ["environment", "evidence"]] },
   network: { en: "Network Operations", zh: "网络运维", panels: [["dashboard", "nodes", "devices"], ["diagnostics", "activity"], ["chat", "evidence"]] },
@@ -151,7 +151,7 @@ export function createStudioLayout(template = "general", locale: "en" | "zh" = "
   if (!preset) throw new Error("Unknown workspace template.");
   let sequence = 0;
   return parseStudioLayout(JSON.stringify({ schemaVersion: 1, kind: "workspace", name: preset.en, locale, layout: {
-    type: "row", id: "studio-root", children: preset.panels.map((types, i) => ({ type: "tabset", id: `group-${i}`, weight: template === "software" ? [55, 27, 18][i] : template === "general" ? [65, 35][i] : 100 / preset.panels.length,
+    type: "row", id: "studio-root", children: preset.panels.map((types, i) => ({ type: "tabset", id: `group-${i}`, weight: template === "software" ? [72, 28][i] : template === "general" ? [65, 35][i] : 100 / preset.panels.length,
       children: types.map(type => ({ type: "tab", id: `panel-${++sequence}`, component: type, name: type, ...(type === "dashboard" ? { config: template === "network" ? compactDashboard(["runtime", "kernel", "nodes", "resources", "topology", "usage", "works", "evidence"]) : compactDashboard() } : {}) })) })),
   } }));
 }
@@ -167,5 +167,5 @@ export function loadStudioLayout(storage: Storage, key = STUDIO_LAYOUT_KEY): Stu
       return createStudioLayout(Array.isArray(old.tabs) && old.tabs.includes("workspace") ? "software" : "general", old.locale === "zh" ? "zh" : "en");
     } catch { /* Invalid legacy preferences do not become executable configuration. */ }
   }
-  return createStudioLayout();
+  return createStudioLayout("software");
 }

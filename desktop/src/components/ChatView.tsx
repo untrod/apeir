@@ -495,9 +495,11 @@ function ChatSession({
       </div>
       {contextView && <ContextInspector locale={locale} {...contextView} onClose={() => setContextView(null)} />}
       {workspaceFile && <div aria-label="Selected workspace reference" style={{ padding: space.md, overflowWrap: "anywhere", fontSize: typo.xs }}>
-        {workspaceFile.path} · SHA-256 {workspaceFile.sha256}<br />
-        {t("File content is not automatically sent. Send uses the saved version and requires current read and transfer permission.", "发送时使用已保存的文件版本，并检查当前读取与传输权限。")}
+        <strong>{workspaceFile.path}</strong>
         <button onClick={onClearWorkspaceFile} style={{ marginLeft: space.sm }}>{t("Remove reference", "移除引用")}</button>
+        <details><summary>{t("File reference details", "文件引用详情")}</summary>
+          <code>SHA-256 {workspaceFile.sha256}</code><p>{t("File content is not automatically sent. Send uses the saved version and requires current read and transfer permission.", "发送时使用已保存的文件版本，并检查当前读取与传输权限。")}</p>
+        </details>
       </div>}
 
       {/* Messages */}
@@ -550,6 +552,7 @@ function ChatSession({
 
       {/* Composer */}
       <Composer
+        locale={locale}
         onDraftChange={onDraftChange}
         onSend={handleSend}
         onStop={handleStop}

@@ -20,7 +20,9 @@ describe("Studio Provider configuration", () => {
     open(); await screen.findByRole("button", { name: "Edit example" });
     fireEvent.click(screen.getByRole("button", { name: "Add model" }));
     fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "unsaved-model" } });
-    expect(screen.getByRole("button", { name: "Remove example" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Remove example" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove example", hidden: true })).toBeDisabled();
+    expect(screen.getByRole("form", { name: "New connection" })).toBeVisible();
     expect(screen.getByLabelText("Vendor model ID")).toHaveValue("unsaved-model");
     expect(governedStudioMutation).not.toHaveBeenCalled();
   });
@@ -29,8 +31,12 @@ describe("Studio Provider configuration", () => {
     fireEvent.change(screen.getByLabelText("Model to test"), { target: { value: "example/original" } });
     fireEvent.click(screen.getByRole("button", { name: "Edit example" }));
     fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "unsaved-model" } });
-    expect(screen.getByRole("button", { name: "Run inference test" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Run inference test" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run inference test", hidden: true })).toBeDisabled();
     expect(testModel).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel editing" }));
+    expect(screen.getByRole("table", { name: "Registered models" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Run inference test" })).toBeEnabled();
   });
   it("retires previous inference status when Provider metadata is refreshed", async () => {
     vi.mocked(testModel).mockResolvedValueOnce({ model_id: "example/original", selected_model_id: "example/original", instance_id: "instance", request_id: "original-request", response_id: "response", healthy: true, latency_ms: 1 });

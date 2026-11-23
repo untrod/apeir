@@ -35,6 +35,7 @@ export interface ComposerConstraints {
 }
 
 export interface ComposerProps {
+  locale?: "en" | "zh";
   onSend: (text: string, attachments: ComposerAttachment[], constraints: ComposerConstraints) => void;
   onStop: () => void;
   disabled: boolean;
@@ -79,11 +80,13 @@ function saveDraft(conversationId: string | undefined, text: string): void {
 
 
 export function Composer({
+  locale = "en",
   onSend, onStop, disabled, streaming,
   models, nodes, conversationId, readOnly = false,
   attachmentsSupported = true, extendedConstraintsSupported = true,
   stopLabel = "Stop waiting", onDraftChange,
 }: ComposerProps) {
+  const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   const [text, setText] = useState(() => loadDraft(conversationId));
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [constraints, setConstraints] = useState<ComposerConstraints>({});
@@ -351,8 +354,8 @@ export function Composer({
           onPaste={handlePaste}
           placeholder={
             attachments.length > 0
-              ? "Add a message about these files..."
-              : "Ask APEIR to plan, execute, or verify..."
+              ? t("Add a message about these files...", "补充文件说明…")
+              : t("Ask APEIR to plan, execute, or verify...", "描述你想完成的工作…")
           }
           disabled={disabled && !streaming}
           style={{
@@ -370,7 +373,7 @@ export function Composer({
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={!attachmentsSupported}
-            title="Attach files"
+            title={t("Attach files", "添加文件")}
             style={iconBtnStyle}
           >+</button>
           <input
@@ -383,7 +386,7 @@ export function Composer({
           {/* Constraints toggle */}
           <button
             onClick={() => setShowConstraints(!showConstraints)}
-            title="Constraints"
+            title={t("Constraints", "请求设置")}
             style={{
               ...iconBtnStyle,
               background: showConstraints ? colors.accentSoft : "transparent",
@@ -408,7 +411,7 @@ export function Composer({
             <button
               onClick={handleSend}
               disabled={disabled || (!text.trim() && attachments.length === 0)}
-              title="Send (Enter)"
+              title={t("Send (Enter)", "发送（Enter）")}
               style={{
                 ...iconBtnStyle,
                 width: 36, height: 36,
@@ -422,7 +425,7 @@ export function Composer({
         </div>
       </div>
 
-      {!attachmentsSupported && !admissionError && <div style={{ marginTop: space.sm, fontSize: typo.xs, color: colors.textTertiary }}>{CHAT_ATTACHMENTS_UNAVAILABLE}</div>}
+      {!attachmentsSupported && !admissionError && <details style={{ marginTop: space.sm, fontSize: typo.xs, color: colors.textSecondary }}><summary style={{ cursor: "pointer" }}>{t("File context", "文件上下文")}</summary><p>{t(CHAT_ATTACHMENTS_UNAVAILABLE, "请从项目中选择已保存的文件。发送前仍会检查读取与传输权限，不能直接上传附件。")}</p></details>}
       {admissionError && <div role="alert" style={{ marginTop: space.sm, fontSize: typo.xs, color: colors.danger }}>{admissionError}</div>}
 
       {/* Footer hint */}
@@ -431,7 +434,7 @@ export function Composer({
         fontSize: typo.xs, color: colors.textTertiary,
         display: "flex", justifyContent: "space-between",
       }}>
-        <span>Enter to send · Shift+Enter new line</span>
+        <span>{t("Enter to send · Shift+Enter new line", "Enter 发送 · Shift+Enter 换行")}</span>
         <span>
           {constraints.model_id && `Model: ${models.find(m => m.id === constraints.model_id)?.display_name || constraints.model_id}`}
           {constraints.budget_limit_usd && ` · Budget: $${constraints.budget_limit_usd}`}
