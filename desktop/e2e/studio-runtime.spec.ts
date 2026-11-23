@@ -1767,7 +1767,13 @@ test("Focused engineering layout puts content first and keeps setup, details and
   await expect(page.getByRole("table", { name: "已注册模型", exact: true })).toBeVisible();
   await closeSettings(page);
   await expect(editor).toHaveValue("UNSAVED_FOCUSED_EDITOR");
-  await expect(page.getByRole("region", { name: "任务", exact: true }).getByRole("heading", { name: "任务", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "任务", exact: true })).toHaveCount(0);
+  await page.getByRole("navigation", { name: "工作台面板", exact: true }).getByRole("button", { name: "运行", exact: true }).click();
+  const tasks = page.getByRole("region", { name: "任务", exact: true });
+  await expect(tasks.getByRole("heading", { name: "任务", exact: true })).toBeVisible();
+  const editorHost = page.locator(".studio-panel-host").filter({ has: editor });
+  expect((await tasks.boundingBox())!.y).toBeGreaterThanOrEqual((await editorHost.boundingBox())!.y + (await editorHost.boundingBox())!.height);
+  await expect(editor).toHaveValue("UNSAVED_FOCUSED_EDITOR");
   const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--nous-accent").trim());
   expect(accent).toBe("#34373D");
   await page.screenshot({ path: info.outputPath("focused-engineering-source.png"), animations: "disabled" });

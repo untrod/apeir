@@ -273,7 +273,12 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit, settings
     if (maximized) model.doAction(Actions.maximizeToggle(maximized.getId()));
     const root = model.getRootRow();
     if (!group && !root) return;
-    const added = model.doAction(Actions.addTab({ type: "tab", id: `panel-${crypto.randomUUID()}`, component: type, name: panel[locale], ...studioPanelSize(type), ...(type === "dashboard" ? { config: compactDashboard() } : {}) }, group?.getId() ?? root!.getId(), group ? DockLocation.CENTER : DockLocation.RIGHT, -1, true));
+    const auxiliary = panel.preferredDock === "bottom";
+    const auxiliaryGroup = auxiliary ? tabs.find(node => panels.some(contribution => contribution.type === node.getComponent() && contribution.preferredDock === "bottom"))?.getParent() : undefined;
+    const target = auxiliaryGroup ?? (auxiliary ? root : group ?? root);
+    if (!target) return;
+    const location = auxiliaryGroup ? DockLocation.CENTER : auxiliary ? DockLocation.BOTTOM : group ? DockLocation.CENTER : DockLocation.RIGHT;
+    const added = model.doAction(Actions.addTab({ type: "tab", id: `panel-${crypto.randomUUID()}`, component: type, name: panel[locale], ...studioPanelSize(type), ...(type === "dashboard" ? { config: compactDashboard() } : {}) }, target.getId(), location, -1, true));
     if (added instanceof TabNode) rememberView(added);
     setRevision(value => value + 1); closeUtility();
   };

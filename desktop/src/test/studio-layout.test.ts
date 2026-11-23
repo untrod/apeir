@@ -108,12 +108,12 @@ it("uses the editor-first preset only for a fresh workspace and preserves saved 
   localStorage.clear();
   const layout = loadStudioLayout(localStorage);
   expect(layout.name).toBe("Software Development");
-  expect(layout.layout.children?.[0].type).toBe("row");
+  expect(layout.layout.children).toHaveLength(2);
   const model = Model.fromJson(studioModel(layout));
-  expect(model.getNodeById("group-0")?.getParent()?.getId()).toBe("engineering-main");
-  expect(model.getNodeById("group-2")?.getParent()?.getId()).toBe("engineering-main");
+  expect(model.getNodeById("group-0")?.getParent()?.getId()).toBe("studio-root");
+  expect(model.getNodeById("group-2")).toBeUndefined();
   expect(model.getNodeById("group-1")?.getParent()?.getId()).toBe("studio-root");
-  expect(studioMinimumSize(layout.layout)).toEqual({ width: 709, height: 461 });
+  expect(studioMinimumSize(layout.layout)).toEqual({ width: 709, height: 236 });
   const saved = JSON.stringify(createStudioLayout("general", "zh"));
   localStorage.setItem("apeir.studio.layout.v1", saved);
   expect(loadStudioLayout(localStorage)).toEqual(JSON.parse(saved));

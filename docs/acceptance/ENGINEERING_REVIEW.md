@@ -7,7 +7,7 @@ change. Kernel, component lock, Runtime APIs and authorization owners are unchan
 
 | Area | Change / owner |
 | --- | --- |
-| Workspace | EXTEND existing v1 preset: editor/files left, Chat right, Tasks/Evidence below; existing saved trees are read without rewriting them |
+| Workspace | EXTEND existing v1 preset: editor/files left, Chat right, Tasks/Evidence opened below on demand; existing saved trees are read without rewriting them |
 | Navigation | FIX redundant section row; existing rail, panel library, command search and arrangement menus remain available |
 | Editor | EXTEND existing Workbench: compact project/view/input details, independent editor scrolling and expandable history; approvals and errors remain visible |
 | Models | EXTEND existing ProviderSettings: focused add/edit form, retained catalog, explicit separate inference test, current-Controller guards and native key references |

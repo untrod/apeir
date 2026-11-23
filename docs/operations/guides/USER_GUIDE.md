@@ -33,7 +33,7 @@ npm run dev
 ```
 
 New workspaces open with the Software Development layout: files and editor on
-the left, Chat on the right, and Tasks/Evidence below the editor. Saved layouts
+the left, Chat on the right, with Tasks/Evidence opened below when needed. Saved layouts
 keep their original positions and panels. Apply a different preset through
 **Layout → Template**, or reopen your saved arrangement from the layout library.
 The left rail selects Overview, Develop, Workflow, Run, Resources, or Tools.
@@ -42,7 +42,7 @@ searchable library to create another instance. All existing modules remain avail
 Project details, editor display settings and recorded model inputs are available
 from the editor toolbar. They no longer take several rows above the file.
 
-新工作区采用软件开发布局：文件与编辑器在左，对话在右，任务和证据在编辑器下方。
+新工作区采用软件开发布局：文件与编辑器在左，对话在右，任务和证据在需要时从下方打开。
 已有布局不会被改写。在“布局 → 模板”中可切换预设；项目详情、视图设置和模型输入
 记录收在编辑器工具栏中。按 Ctrl/Cmd+K 可查找并返回已有面板。
 In Studio, **Discuss saved file** sends the saved path/version reference to the
