@@ -70,12 +70,12 @@ const lightTokens: Record<string, string> = {
 
   "--nous-border": "#E8E5E0",
   "--nous-border-light": "#F0EDE8",
-  "--nous-border-focus": "#C4BDB4",
+  "--nous-border-focus": "#727780",
 
-  "--nous-accent": "#0D7B6E",
-  "--nous-accent-hover": "#0A6559",
-  "--nous-accent-soft": "#E6F4F2",
-  "--nous-accent-muted": "#DCEFEC",
+  "--nous-accent": "#34373D",
+  "--nous-accent-hover": "#23262B",
+  "--nous-accent-soft": "#ECEBE7",
+  "--nous-accent-muted": "#E2E1DD",
 
   "--nous-success": "#1D8A5E",
   "--nous-success-soft": "#E8F5EF",
@@ -117,12 +117,12 @@ const darkTokens: Record<string, string> = {
 
   "--nous-border": "#2E3038",
   "--nous-border-light": "#25272E",
-  "--nous-border-focus": "#4A4E58",
+  "--nous-border-focus": "#9DA0A8",
 
-  "--nous-accent": "#4DB5A8",
-  "--nous-accent-hover": "#5FC4B7",
-  "--nous-accent-soft": "#142420",
-  "--nous-accent-muted": "#1A302C",
+  "--nous-accent": "#D5D7DC",
+  "--nous-accent-hover": "#F0F1F3",
+  "--nous-accent-soft": "#30333A",
+  "--nous-accent-muted": "#3B3F47",
 
   "--nous-success": "#3DBA7A",
   "--nous-success-soft": "#14261C",

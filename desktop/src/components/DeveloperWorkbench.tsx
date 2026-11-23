@@ -101,6 +101,17 @@ export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChan
   const [layout, setLayout] = useState(preferences);
   const [filesOpen, setFilesOpen] = useState(true);
   const columns = useRef<HTMLDivElement>(null);
+  const toolbar = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const close = (event: PointerEvent) => {
+      if (event.target instanceof Node && !toolbar.current?.contains(event.target)) toolbar.current?.querySelectorAll("details[open]").forEach(node => { (node as HTMLDetailsElement).open = false; });
+    };
+    window.addEventListener("pointerdown", close);
+    return () => window.removeEventListener("pointerdown", close);
+  }, []);
+  const onePopover = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
+    if (event.currentTarget.open) toolbar.current?.querySelectorAll("details[open]").forEach(node => { if (node !== event.currentTarget) (node as HTMLDetailsElement).open = false; });
+  };
   const [runs, setRuns] = useState<DeveloperRun[]>([]);
   const [contextRuns, setContextRuns] = useState<DeveloperRun[]>([]);
   const [runController, setRunController] = useState(getConfig().url);
@@ -406,40 +417,40 @@ export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChan
     finally { setBusy(false); }
   };
 
-  return <div className="developer-panel" style={{ display: "grid", gap: space.md }}>
-    <details style={panel}><summary style={{ padding: space.md, cursor: "pointer" }}>{t("Panel settings", "面板设置")}</summary><div className="developer-settings">
+  return <div className={`developer-panel ${embeddedConversation ? "" : "developer-focused"}`}>
+    <header className="developer-toolbar" ref={toolbar} onKeyDown={event => {
+      if (event.key !== "Escape") return;
+      const opened = toolbar.current?.querySelector<HTMLDetailsElement>("details[open]");
+      if (opened) { event.preventDefault(); event.stopPropagation(); opened.open = false; opened.querySelector("summary")?.focus(); }
+    }}>
+      <strong className="developer-project-name">{listing?.workspace.split(/[\\/]/).filter(Boolean).at(-1) || t("Project", "项目")}</strong>
+      <details className="developer-popover" onToggle={onePopover}>
+        <summary style={{ cursor: "pointer" }}>{t("Project details", "项目详情")}</summary>
+        <div className="developer-project-details"><p>{listing?.workspace || t("Loading workspace…", "正在读取项目…")}</p>
+        <p>{t("Catalog availability", "能力目录可用项")}: {capabilities ? `${capabilities.summary.available}/${capabilities.summary.registered}` : t("checking…", "正在检查…")}</p>
+        <p>{t("File versions and permissions are rechecked before writes. Test execution requires its qualified sandbox.", "写入前重新检查文件版本与权限；测试执行需要合格的隔离环境。")}</p>
+      </div></details>
+    <details className="developer-popover" onToggle={onePopover}><summary>{t("View", "视图")}</summary><div className="developer-settings">
       <label>{t("Editor size", "编辑器字号")} <select aria-label="Editor font size" value={layout.fontSize} onChange={event => setLayout(value => ({ ...value, fontSize: Number(event.target.value) }))}>{[12, 14, 16, 18].map(size => <option key={size}>{size}</option>)}</select></label>
       {embeddedConversation && <label><input type="checkbox" checked={layout.conversation} onChange={event => setLayout(value => ({ ...value, conversation: event.target.checked }))} />{t(" Collaboration panel", " 协作面板")}</label>}
       <label><input type="checkbox" checked={layout.activity} onChange={event => setLayout(value => ({ ...value, activity: event.target.checked }))} />{t(" Persisted activity", " 历史活动")}</label>
       {onOpenEnvironments && <button onClick={() => { if (protectedDraft || pending) setError("Save or explicitly discard the original drafts before leaving this panel."); else onOpenEnvironments(); }} disabled={busy} style={btnSecondary}>{t("Open environments", "查看环境")}</button>}
       <p>{t("Layout settings grant no permissions. Files stay in the configured workspace; code and containers still require admission and qualified isolation.", "布局设置不授予权限。文件位于当前工作区，执行仍需授权与合格的隔离环境。")}</p>
     </div></details>
-    <section style={{ ...panel, padding: space.md, display: "flex", justifyContent: "space-between", gap: space.md, flexWrap: "wrap" }}>
-      <div>
-        <div style={{ color: colors.text, fontWeight: typo.semibold }}>{t("Project", "项目")}</div>
-        <div style={{ color: colors.textSecondary, fontSize: typo.xs, marginTop: 3 }}>
-          {listing?.workspace.split(/[\\/]/).filter(Boolean).at(-1) || t("Loading workspace…", "正在读取项目…")}
-        </div>
-      </div>
-      <details style={{ color: colors.textSecondary, fontSize: typo.xs, overflowWrap: "anywhere" }}>
-        <summary style={{ cursor: "pointer" }}>{t("Project details", "项目详情")}</summary>
-        <p>{listing?.workspace || t("Loading workspace…", "正在读取项目…")}</p>
-        <p>{t("Catalog availability", "能力目录可用项")}: {capabilities ? `${capabilities.summary.available}/${capabilities.summary.registered}` : t("checking…", "正在检查…")}</p>
-        <p>{t("File versions and permissions are rechecked before writes. Test execution requires its qualified sandbox.", "写入前重新检查文件版本与权限；测试执行需要合格的隔离环境。")}</p>
-      </details>
-    </section>
-
-    {error && <section role="alert" style={{ ...panel, padding: space.md, color: colors.danger, background: colors.dangerSoft }}>{error}</section>}
-
-    <details aria-label="Recorded model input" open={contextView ? true : undefined} style={{ ...panel, padding: space.md }}>
+    <details className="developer-context" onToggle={onePopover} aria-label="Recorded model input" open={contextView ? true : undefined} style={{ ...panel, padding: space.md }}>
       <summary style={{ cursor: "pointer" }}>{t("Inspect model input", "查看模型输入")}</summary>
-      <label>{t("Inspect recorded Run", "查看原始运行")} <select aria-label="Recorded input Run" style={{ ...input, maxWidth: "100%" }} value={contextView?.runId || ""} onChange={event => setContextView(event.target.value ? { runId: event.target.value, controller: runController } : null)}>
+      <div className="developer-context-details"><label>{t("Inspect recorded Run", "查看原始运行")} <select aria-label="Recorded input Run" style={{ ...input, maxWidth: "100%" }} value={contextView?.runId || ""} onChange={event => setContextView(event.target.value ? { runId: event.target.value, controller: runController } : null)}>
         <option value="">{t("Select a persisted Run", "选择已保存的运行")}</option>
         {contextRuns.map(item => <option key={item.run_id} value={item.run_id}>{item.run_id} · {item.state}</option>)}
       </select></label>
       <p>{t("Recent canonical Runtime Runs. Non-model or legacy Runs may have no input manifest; missing evidence remains UNKNOWN.", "显示原始运行记录。非模型或旧版运行可能没有输入清单；缺失证据保持 UNKNOWN。")}</p>
       {contextView && <ContextInspector locale={locale} {...contextView} onClose={() => setContextView(null)} />}
+      </div>
     </details>
+
+    </header>
+
+    {error && <section role="alert" style={{ ...panel, padding: space.md, color: colors.danger, background: colors.dangerSoft }}>{error}</section>}
 
     <div ref={columns} className={`developer-columns ${embeddedConversation && layout.conversation ? "with-collaboration" : ""}`}>
       <aside className="developer-file-browser" style={{ ...panel, overflow: "hidden" }}>
@@ -466,8 +477,8 @@ export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChan
         </details>
       </aside>
 
-      <main style={{ display: "grid", gap: space.md, minWidth: 0 }}>
-        <section style={{ ...panel, overflow: "hidden" }}>
+      <main className="developer-editor-area" style={{ display: "grid", gap: space.md, minWidth: 0 }}>
+        <section className="developer-editor-surface" style={{ ...panel, overflow: "hidden" }}>
           <div role="tablist" aria-label="Open workspace files" className="developer-file-tabs">
             {tabs.map(tab => <div key={tab.id} className="developer-file-tab">
               <button id={`workbench-tab-${tab.id}`} role="tab" aria-label={tab.id === activeTab ? filePath : tab.path}
@@ -481,7 +492,7 @@ export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChan
             </div>)}
           </div>
           <div role="tabpanel" id="workbench-editor" aria-labelledby={activeTab === null ? undefined : `workbench-tab-${activeTab}`}>
-          <div style={{ padding: space.md, borderBottom: `1px solid ${colors.borderLight}`, display: "flex", gap: space.sm, alignItems: "center", flexWrap: "wrap" }}>
+          <div className="developer-editor-actions" style={{ padding: space.md, borderBottom: `1px solid ${colors.borderLight}`, display: "flex", gap: space.sm, alignItems: "center", flexWrap: "wrap" }}>
             <input disabled={busy || !!pending || activeTab === null} aria-label="Workspace file path" value={filePath} onChange={(event) => { setFilePath(event.target.value); setPreview(null); setReference(undefined); }} placeholder={t("Open or create a file", "打开或新建文件")} style={{ ...input, flex: "1 1 180px", minWidth: 0, fontFamily: typo.mono }} />
             <button onClick={() => { const saved = { path: filePath, sha256: loadedSha256, controller: loadedController }; if (onDiscussSavedFile) onDiscussSavedFile(saved); else { setReference(saved); setLayout(value => ({ ...value, conversation: true })); } }} disabled={busy || !!pending || dirty || !loadedSha256} style={btnSecondary}>{t("Discuss saved file", "讨论已保存文件")}</button>
             <span style={{ color: dirty ? colors.warning : colors.textTertiary, fontSize: typo.xs }}>{dirty ? t("Unsaved", "未保存") : loadedSha256 ? t("Saved", "已保存") : t("No file selected", "未选择文件")}</span>
@@ -520,7 +531,7 @@ export function DeveloperWorkbench({ navigation, onOpenEnvironments, onDraftChan
     </div>
     {closeTarget !== null && <section role="alert" style={{ ...panel, padding: space.md }}><p>Unsaved changes in {closeTarget === activeTab ? filePath : tabs.find(tab => tab.id === closeTarget)?.path}. Keep editing or explicitly discard this draft before closing.</p><button style={btnSecondary} onClick={() => setCloseTarget(null)}>{t("Keep editing", "继续编辑")}</button><button style={btnSecondary} onClick={() => closeTab(closeTarget, true)}>{t("Discard draft and close", "放弃草稿并关闭")}</button></section>}
     {pending && <section aria-label="Workbench approval" style={{ ...panel, padding: space.md }}><h3>{t("Explicit approval required", "需要独立审批")}</h3><p>Review the original {pending.kind} request: {pending.kind === "save" ? pending.path : `${pending.profile} ${pending.target}`}. Installation, model output and layout settings grant no authority.</p><p>Request {pending.approvalId}</p><button disabled={busy} style={btnPrimary} onClick={() => void decide("approve")}>Approve once and {pending.kind}</button><button disabled={busy} style={btnSecondary} onClick={() => void decide("deny")}>{t("Deny original request", "拒绝原始请求")}</button></section>}
-    {layout.activity && <section aria-label="Workspace persisted activity" style={{ ...panel, padding: space.md }}><h3>{t("Workspace activity", "工作区活动")}</h3><p>{t("Actual EventStream file changes and executions, not keystrokes or monitoring of other applications. File content is not automatically sent to a model.", "显示已记录的文件变更与执行事件；不记录按键、不监控其他应用，也不自动发送文件内容。")}</p><div className="developer-activity">{runs.length ? runs.map(item => <button key={item.run_id} onClick={() => void showEvents(item.run_id)} style={btnSecondary}>{item.task_id} · {item.state}</button>) : <p>{t("No persisted workspace operations.", "尚无工作区操作记录。")}</p>}</div>{selectedRun && <p>Run {selectedRun}</p>}{events.map((event, index) => <details key={event.event_id || index}><summary>{event.sequence} · {event.event_type} · {event.timestamp}</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(event.payload, null, 2)}</pre></details>)}</section>}
+    {layout.activity && <details className="developer-history" open={embeddedConversation || !!selectedRun}><summary>{t("Workspace activity", "工作区活动")}</summary><section aria-label="Workspace persisted activity" style={{ ...panel, padding: space.md }}><h3>{t("Workspace activity", "工作区活动")}</h3><p>{t("Actual EventStream file changes and executions, not keystrokes or monitoring of other applications. File content is not automatically sent to a model.", "显示已记录的文件变更与执行事件；不记录按键、不监控其他应用，也不自动发送文件内容。")}</p><div className="developer-activity">{runs.length ? runs.map(item => <button key={item.run_id} onClick={() => void showEvents(item.run_id)} style={btnSecondary}>{item.task_id} · {item.state}</button>) : <p>{t("No persisted workspace operations.", "尚无工作区操作记录。")}</p>}</div>{selectedRun && <p>Run {selectedRun}</p>}{events.map((event, index) => <details key={event.event_id || index}><summary>{event.sequence} · {event.event_type} · {event.timestamp}</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(event.payload, null, 2)}</pre></details>)}</section></details>}
     {traceView && traceView.controller === getConfig().url && <DetailDrawer view={{ kind: "trace", traceId: traceView.traceId }} onClose={() => setTraceView(null)} />}
   </div>;
 }

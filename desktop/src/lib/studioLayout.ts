@@ -150,10 +150,19 @@ export function createStudioLayout(template = "general", locale: "en" | "zh" = "
   const preset = STUDIO_TEMPLATES[template];
   if (!preset) throw new Error("Unknown workspace template.");
   let sequence = 0;
-  return parseStudioLayout(JSON.stringify({ schemaVersion: 1, kind: "workspace", name: preset.en, locale, layout: {
-    type: "row", id: "studio-root", children: preset.panels.map((types, i) => ({ type: "tabset", id: `group-${i}`, weight: template === "software" ? [55, 27, 18][i] : template === "general" ? [65, 35][i] : 100 / preset.panels.length,
-      children: types.map(type => ({ type: "tab", id: `panel-${++sequence}`, component: type, name: type, ...(type === "dashboard" ? { config: template === "network" ? compactDashboard(["runtime", "kernel", "nodes", "resources", "topology", "usage", "works", "evidence"]) : compactDashboard() } : {}) })) })),
-  } }));
+  const tabset = (types: string[], id: string, weight: number) => ({ type: "tabset", id, weight,
+      children: types.map(type => ({ type: "tab", id: `panel-${++sequence}`, component: type, name: type, ...(type === "dashboard" ? { config: template === "network" ? compactDashboard(["runtime", "kernel", "nodes", "resources", "topology", "usage", "works", "evidence"]) : compactDashboard() } : {}) })),
+  });
+  // Only new/explicitly applied presets change; saved v1 layouts retain their tree.
+  const children = template === "software" ? [
+    { type: "row", id: "engineering-main", weight: 72, children: [
+      tabset(["editor"], "group-0", 76),
+      tabset(["tasks", "evidence", "activity"], "group-2", 24),
+    ] },
+    tabset(["chat"], "group-1", 28),
+  ] : preset.panels.map((types, i) => tabset(types, `group-${i}`, template === "general" ? [65, 35][i] : 100 / preset.panels.length));
+  return parseStudioLayout(JSON.stringify({ schemaVersion: 1, kind: "workspace", name: preset.en, locale,
+    layout: { type: "row", id: "studio-root", children } }));
 }
 
 export function loadStudioLayout(storage: Storage, key = STUDIO_LAYOUT_KEY): StudioLayout {
@@ -167,5 +176,5 @@ export function loadStudioLayout(storage: Storage, key = STUDIO_LAYOUT_KEY): Stu
       return createStudioLayout(Array.isArray(old.tabs) && old.tabs.includes("workspace") ? "software" : "general", old.locale === "zh" ? "zh" : "en");
     } catch { /* Invalid legacy preferences do not become executable configuration. */ }
   }
-  return createStudioLayout();
+  return createStudioLayout("software");
 }

@@ -14,3 +14,10 @@
 .provider-settings :is(input,select,button):focus-visible { outline:2px solid var(--nous-border-focus); outline-offset:2px; }
 @media(pointer:coarse) { .provider-settings button { min-height:40px; } }
 .provider-response { white-space:pre-wrap; overflow-wrap:anywhere; padding:12px; border:1px solid var(--nous-border); background:var(--nous-bg); border-radius:4px; line-height:1.5; }
+.provider-catalog { display:grid; gap:12px; }
+.provider-catalog[hidden] { display:none; }
+.provider-settings form { max-width:560px; background:var(--nous-surface); }
+.provider-settings form :is(input,select) { min-height:34px; width:100%; min-width:0; }
+.provider-settings form input[type=checkbox] { min-height:auto; width:auto; }
+.provider-settings form small { color:var(--nous-text-secondary); }
+.provider-settings form > div:last-child { padding-top:8px; }

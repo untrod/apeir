@@ -344,16 +344,16 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit, settings
   };
   return <StudioPresentation.Provider value={{ editing }}><section className={`studio-session ${editing ? "studio-editing" : "studio-browsing"} ${compact ? "studio-compact" : ""}`} aria-label="APEIR Studio">
     <header className="studio-toolbar">
-      <div className="studio-brand"><AppMark className="studio-brand-mark" /><strong>APEIR Studio</strong><span className="studio-workspace-name">{document.name}</span></div>
+      <div className="studio-brand"><AppMark className="studio-brand-mark" /><strong>APEIR Studio</strong><span className="studio-workspace-name">{Object.values(STUDIO_TEMPLATES).find(preset => preset.en === document.name)?.[locale] ?? document.name}</span></div>
       {compact && <span className="studio-compact-label" title={t("Panels stay open. Widen the window to restore your splits.", "面板继续保留；增大窗口可还原分屏。")}>{t("Compact view", "紧凑视图")}</span>}
       <div className="studio-toolbar-actions">
       {maximized && !compact && <button onClick={() => { model.doAction(Actions.maximizeToggle(maximized.getId())); setRevision(value => value + 1); }}><StudioIcon name="restore" />{t("Show all panels", "还原所有面板")}</button>}
       <button disabled={credentialBusy} aria-label={t("Search APEIR", "搜索 APEIR")} title={t("Search · Ctrl/⌘ K", "搜索 · Ctrl/⌘ K")} onClick={() => showUtility("commands")}><StudioIcon name="search" /><span className="studio-search-label">{t("Search", "搜索")}</span><kbd>Ctrl K</kbd></button>
-      <button disabled={credentialBusy} onClick={() => showUtility(picker ? null : "panels")} aria-expanded={picker} title={t("Add panel · Ctrl/⌘ Shift P", "添加面板 · Ctrl/⌘ Shift P")}><StudioIcon name="add" />{t("Add panel", "添加面板")}</button>
+      <button disabled={credentialBusy} aria-label={t("Add panel", "添加面板")} onClick={() => showUtility(picker ? null : "panels")} aria-expanded={picker} title={t("Add panel · Ctrl/⌘ Shift P", "添加面板 · Ctrl/⌘ Shift P")}><StudioIcon name="add" /></button>
       {(selectedType === "dashboard" || editing) && <button className="studio-edit-toggle" aria-pressed={editing} onClick={() => setEditing(value => !value)} title={t("Ctrl/⌘ Alt L", "Ctrl/⌘ Alt L")}><StudioIcon name={editing ? "check" : "edit"} />{editing ? t("Done editing", "完成编辑") : t("Customize Overview", "自定义概览")}</button>}
       {editing && <button onClick={save}>{t("Save layout", "保存布局")}</button>}
       <details className="studio-menu" ref={menu} onToggle={event => { if (event.currentTarget.open) { setUtility(null); setWindowMenu(null); } }}>
-      <summary aria-disabled={credentialBusy} onClick={event => { if (credentialBusy) event.preventDefault(); }} aria-label={t("Workspace menu", "工作区菜单")}>{t("Workspace", "工作区")} <span aria-hidden="true">⌄</span></summary>
+      <summary aria-disabled={credentialBusy} onClick={event => { if (credentialBusy) event.preventDefault(); }} aria-label={t("Workspace menu", "工作区菜单")}>{t("Layout", "布局")} <span aria-hidden="true">⌄</span></summary>
       <div className="studio-menu-content">
       <button onClick={() => { if (menu.current) menu.current.open = false; openSettings(); }}>{t("Settings", "设置")} <kbd>Ctrl/⌘ ,</kbd></button>
       {onExit && <button onClick={onExit}>{t("Operations Console", "操作控制台")}</button>}
@@ -389,7 +389,7 @@ function StudioWorkspace({ epoch, remember, onProtectionChange, onExit, settings
         <button disabled={credentialBusy} aria-label={t("All panels", "所有面板")} title={t("All panels", "所有面板")} onClick={() => showUtility(picker ? null : "panels")}><StudioIcon name="more" /><span>{t("More", "更多")}</span></button>
         <button disabled={credentialBusy} className="studio-settings-entry" aria-label={t("Settings", "设置")} aria-description={settingsDirty ? t("Unsaved settings are retained", "未保存的设置仍保留") : undefined} title={t("Settings · Ctrl/⌘ ,", "设置 · Ctrl/⌘ ,")} onClick={() => openSettings()}><StudioIcon name="settings" /><span>{t("Settings", "设置")}{settingsDirty ? " •" : ""}</span></button>
       </nav>
-      <div className="studio-content"><div className="studio-work-area" hidden={settings}><nav className="studio-section-tabs" aria-label={t("Section views", "分类视图")}><strong>{section[locale]}</strong>{section.types.filter(type => type !== "files" && !["diagnostics", "inspector", "operations"].includes(type)).map(type => { const panel = panels.find(panel => panel.type === type)!; return <button key={type} aria-label={`${t("Open", "打开")} ${panel[locale]}`} aria-pressed={selectedType === type || type === "editor" && selectedType === "files"} onClick={() => reveal(type)}>{type === "editor" ? t("Editor", "编辑") : type === "terminal" ? t("Commands", "命令") : panel[locale]}</button>; })}</nav>
+      <div className="studio-content"><div className="studio-work-area" hidden={settings}>
       <div ref={dock} className="studio-dock" data-layout-revision={revision}><Layout model={model} i18nTranslator={key => (locale === "zh" ? dockLabels[key] : undefined) ?? I18nLabelDefaults[key] ?? key} factory={node => <StudioPanelSlot host={getHost(node.getId())} />} onAction={action} onRenderTab={(node, values) => { const panel = panels.find(panel => panel.type === node.getComponent()); if (panel && [panel.type, panel.en, panel.zh].includes(node.getName())) values.content = panel[locale]; }} onRenderTabSet={(node, values) => {
         const selected = node.getSelectedNode();
         if (!selected) return;

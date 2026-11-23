@@ -1,5 +1,39 @@
 # Engineering review and research comparison
 
+## Focused Studio workbench — 2026-11-23
+
+Baseline: `f2b837f23d9a2331bcb9e4039f71a7100e22faf3`. This is a source-UI
+change. Kernel, component lock, Runtime APIs and authorization owners are unchanged.
+
+| Area | Change / owner |
+| --- | --- |
+| Workspace | EXTEND existing v1 preset: editor/files left, Chat right, Tasks/Evidence below; existing saved trees are read without rewriting them |
+| Navigation | FIX redundant section row; existing rail, panel library, command search and arrangement menus remain available |
+| Editor | EXTEND existing Workbench: compact project/view/input details, independent editor scrolling and expandable history; approvals and errors remain visible |
+| Models | EXTEND existing ProviderSettings: focused add/edit form, retained catalog, explicit separate inference test, current-Controller guards and native key references |
+| Appearance | FIX existing ThemeProvider accent tokens, native selection controls and missing Chinese task/composer copy; no new theme system |
+
+Linux validation: `npm --prefix desktop test` (582 cases), Desktop lint,
+typecheck and production build; `npm --prefix desktop run test:e2e` using the
+repository Python virtualenv (31 real CLI/HTTP/Chromium cases). The browser cases cover old layouts,
+bounded splits, unsaved editor/Provider drafts, bilingual settings, Controller
+changes, Workflow approval/recovery and extension lifecycle. Existing fake
+identity/decision fixtures remain explicitly scoped; no external inference,
+Windows installation or performance improvement is inferred.
+
+The first browser pass retained five failures: duplicate Tasks selection, a
+search shortcut issued before its handler was ready, flat-tree assumptions in
+two extension cases, and an unconditional file-browser toggle. Tests now use
+existing-instance search, wait for the actual search control, traverse nested
+groups and inspect disclosure state. Original recovery, authorization, layout
+content and single-effect assertions remain. The corrected full pass is 31/31;
+no timeout or retry allowance was increased.
+
+Production screenshots use the same frontend build and an authenticated,
+model-disabled Runtime. No Provider was saved and no model request was sent.
+The user guide retains its existing image paths and documents the new preset;
+existing native package qualifications remain separate.
+
 ## Quiet first launch and paper-frame identity — 2026-11-15
 
 Baseline: Distribution `c78b09d3ce5b28971ed1c6bf4ec9242c35d3a5a1`; the frozen

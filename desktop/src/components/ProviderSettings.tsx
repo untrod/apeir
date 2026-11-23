@@ -21,6 +21,7 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
   const version = useRuntimeConfigVersion();
   const active = useRef(false), inFlight = useRef(false), reads = useRef(0);
   const referenceTouched = useRef(false);
+  const form = useRef<HTMLFormElement>(null);
   const [providers, setProviders] = useState<ProviderSummary[]>([]);
   const [providerLoading, setProviderLoading] = useState(true);
   const [providerVersion, setProviderVersion] = useState<number | null>(null);
@@ -75,6 +76,7 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
     }
   }, [models, modelsReady, modelId]);
   const draftId = draft?.id;
+  useEffect(() => { if (draftId) form.current?.querySelector<HTMLInputElement>("input")?.focus(); }, [draftId]);
   const editingSaved = !!draft?.original;
   useEffect(() => {
     setSavedKeys([]); setKeyError("");
@@ -213,6 +215,10 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
       <button style={btnSecondary} disabled={busy} onClick={() => void perform(async () => { await refresh(); current(); await onChanged(); })}>{t("Refresh Providers", "刷新服务商")}</button>
       {onOpenCredentials && <button style={btnSecondary} disabled={!!draft || busy} title={draft ? t("Save or cancel this connection first", "请先保存或取消当前连接") : undefined} onClick={() => onOpenCredentials()}>{t("Manage credentials", "管理凭据")}</button>}
     </div>
+    {busy && <p role="status" aria-live="polite">{t("Applying the request… Please wait; do not submit again.", "正在处理请求，请稍候，不要重复提交。")}</p>}
+    {error && <p role="alert" style={{ color: colors.danger }}>{error}</p>}
+    {approvalRequired && onOpenApprovals && <button style={{ ...btnSecondary, justifySelf: "start" }} onClick={onOpenApprovals}>{t("Open original approvals", "查看原始审批")}</button>}
+    {message && <p role="status">{message}</p>}
     {adding && <fieldset className="provider-setup" aria-label={t("Add model", "添加模型")}>
       <legend>{t("Connect a model", "连接模型")}</legend>
       <ol className="provider-setup-steps"><li aria-current="step">{t("Service", "选择服务")}</li><li>{t("API key", "配置密钥")}</li><li>{t("Model & test", "模型与测试")}</li></ol>
@@ -220,27 +226,7 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
       <p role="status">{setupLoading ? t("Checking saved keys…", "正在检查已保存的密钥…") : keyError || (PROVIDER_TEMPLATES.find(item => item.providerId === setupProvider)?.credentialType === "none" ? t("Use a running local model service. No API key is needed.", "连接已运行的本地模型服务，无需 API 密钥。") : savedKeys.length ? t("Choose a saved key in the next step. No model request is sent during setup.", "下一步选择已有密钥。配置过程不会调用模型。") : t("First save an API key, then choose the model. Your key stays in the system credential store.", "先保存 API 密钥，再选择模型。密钥由系统凭据存储保管。"))}</p>
       <div style={rowStyle}><button disabled={setupLoading} style={btnPrimary} onClick={continueSetup}>{t("Continue", "继续")}</button><button style={btnSecondary} onClick={() => { setupReads.current++; setAdding(false); }}>{t("Cancel", "取消")}</button></div>
     </fieldset>}
-    <h3 style={{ margin: 0 }}>{t("Registered models", "已注册模型")}</h3>
-    <div style={{ overflowX: "auto" }}><table aria-label={t("Registered models", "已注册模型")} style={{ width: "100%", textAlign: "left", borderCollapse: "collapse" }}>
-      <thead><tr><th>{t("Model", "模型")}</th><th>{t("Provider", "服务商")}</th><th>{t("Status", "状态")}</th></tr></thead>
-      <tbody>{!modelsReady ? <tr><td colSpan={3} role="status">{t("Model catalog is loading or unavailable.", "模型名单正在加载或暂不可用。")}</td></tr> : !models.length ? <tr><td colSpan={3}>{t("No registered models. Save a connection below; saving an API key alone does not register a model.", "尚无已注册模型。请添加并保存下方连接；仅保存 API 密钥不会注册模型。")}</td></tr> : models.map(model => <tr key={model.model_id}><td><strong>{model.display_name}</strong><small style={{ display: "block" }}><code>{model.model_id}</code></small></td><td>{model.provider_id}<small style={{ display: "block" }}>{["local_model", "local_service"].includes(model.endpoint_type) ? t("Local", "本地") : model.endpoint_type === "cloud_api" ? "API" : t("Other", "其他")}</small></td><td>{result?.model_id === model.model_id ? result.healthy ? t("Inference verified", "推理已验证") : t("Test failed / blocked", "测试失败或受阻") : t("Not tested", "尚未测试")}<small style={{ display: "block" }}>{t("Reported status", "报告状态")}: {model.health || "UNKNOWN"} · {model.state || "UNKNOWN"}</small></td></tr>)}</tbody>
-    </table></div>
-    {busy && <p role="status" aria-live="polite">{t("Applying the request… Please wait; do not submit again.", "正在处理请求，请稍候，不要重复提交。")}</p>}
-    {error && <p role="alert" style={{ color: colors.danger }}>{error}</p>}
-    {approvalRequired && onOpenApprovals && <button style={{ ...btnSecondary, justifySelf: "start" }} onClick={onOpenApprovals}>{t("Open original approvals", "查看原始审批")}</button>}
-    {message && <p role="status">{message}</p>}
-    <h3 style={{ margin: 0 }}>{t("Saved connections", "已保存连接")}</h3>
-    {providerLoading ? <p role="status">{t("Loading connections…", "正在加载连接…")}</p> : !providers.length && !error && <p>{t("No saved connections. Add a Provider to get started.", "尚无已保存连接。请先添加服务商。")}</p>}
-    {providers.map(provider => <div key={provider.id} style={rowStyle}>
-      <span style={{ flex: 1 }}>{provider.name} <code>{provider.id}</code> · {t("Reported status", "报告状态")}: {typeof provider.health?.status === "string" ? provider.health.status : "UNKNOWN"}</span>
-      <button style={btnSecondary} disabled={busy || !provider.configuration || !!draft} aria-label={`${t("Edit", "编辑")} ${provider.id}`} onClick={() => {
-        const config = provider.configuration!;
-        setDraft({ id: provider.id, name: config.name, endpoint: config.api_base_url, model: config.model, credential: "", clearCredential: false, original: config }); setRemoving(""); setMessage(""); setResult(null);
-      }}>{t("Edit", "编辑")}</button>
-      <button style={btnSecondary} disabled={busy || !!draft || !provider.configuration} aria-label={`${removing === provider.id ? t("Confirm remove", "确认移除") : t("Remove", "移除")} ${provider.id}`} onClick={() => remove(provider.id)}>{removing === provider.id ? t("Confirm remove", "确认移除") : t("Remove", "移除")}</button>
-      {provider.configuration && <small style={{ width: "100%" }}>{provider.configuration.model || "UNKNOWN"} · {provider.configuration.api_base_url || "UNKNOWN"} · {provider.configuration.has_reference ? t("Reference saved", "引用已保存") : t("No saved reference", "无已保存引用")}</small>}
-    </div>)}
-    {draft && <form onSubmit={event => { event.preventDefault(); void save(); }} style={{ display: "grid", gap: space.sm }}>
+    {draft && <form ref={form} aria-label={t(draft.original ? "Edit connection" : "New connection", draft.original ? "编辑连接" : "新建连接")} onSubmit={event => { event.preventDefault(); void save(); }} style={{ display: "grid", gap: space.sm }}>
       {!draft.original && <label>{t("Protocol template", "协议模板")} <select aria-label={t("Protocol template", "协议模板")} value={templateId} disabled={busy} onChange={event => newDraft(event.target.value)} style={input}>
         {PROVIDER_TEMPLATES.map(preset => <option key={preset.providerId} value={preset.providerId} disabled={preset.unsupportedProtocol}>{preset.displayName}{preset.unsupportedProtocol ? " · UNSUPPORTED" : ""}</option>)}
       </select></label>}
@@ -270,6 +256,23 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
       </details>
       <div style={rowStyle}><button type="submit" disabled={busy} style={btnPrimary}>{t("Save Provider", "保存服务商")}</button><button type="button" disabled={busy} style={btnSecondary} onClick={() => setDraft(null)}>{t("Cancel editing", "取消编辑")}</button></div>
     </form>}
+    <div className="provider-catalog" hidden={!!draft || adding}>
+    <h3 style={{ margin: 0 }}>{t("Registered models", "已注册模型")}</h3>
+    <div style={{ overflowX: "auto" }}><table aria-label={t("Registered models", "已注册模型")} style={{ width: "100%", textAlign: "left", borderCollapse: "collapse" }}>
+      <thead><tr><th>{t("Model", "模型")}</th><th>{t("Provider", "服务商")}</th><th>{t("Status", "状态")}</th></tr></thead>
+      <tbody>{!modelsReady ? <tr><td colSpan={3} role="status">{t("Model catalog is loading or unavailable.", "模型名单正在加载或暂不可用。")}</td></tr> : !models.length ? <tr><td colSpan={3}>{t("Add a model connection to get started.", "添加模型连接，开始使用。")}</td></tr> : models.map(model => <tr key={model.model_id}><td><strong>{model.display_name}</strong><small style={{ display: "block" }}><code>{model.model_id}</code></small></td><td>{model.provider_id}<small style={{ display: "block" }}>{["local_model", "local_service"].includes(model.endpoint_type) ? t("Local", "本地") : model.endpoint_type === "cloud_api" ? "API" : t("Other", "其他")}</small></td><td>{result?.model_id === model.model_id ? result.healthy ? t("Inference verified", "推理已验证") : t("Test failed / blocked", "测试失败或受阻") : t("Not tested", "尚未测试")}<small style={{ display: "block" }}>{t("Reported status", "报告状态")}: {model.health || "UNKNOWN"} · {model.state || "UNKNOWN"}</small></td></tr>)}</tbody>
+    </table></div>
+    <h3 style={{ margin: 0 }}>{t("Saved connections", "已保存连接")}</h3>
+    {providerLoading ? <p role="status">{t("Loading connections…", "正在加载连接…")}</p> : !providers.length && !error && <p>{t("No saved connections. Add a Provider to get started.", "尚无已保存连接。请先添加服务商。")}</p>}
+    {providers.map(provider => <div key={provider.id} style={rowStyle}>
+      <span style={{ flex: 1 }}>{provider.name} <code>{provider.id}</code> · {t("Reported status", "报告状态")}: {typeof provider.health?.status === "string" ? provider.health.status : "UNKNOWN"}</span>
+      <button style={btnSecondary} disabled={busy || !provider.configuration || !!draft} aria-label={`${t("Edit", "编辑")} ${provider.id}`} onClick={() => {
+        const config = provider.configuration!;
+        setDraft({ id: provider.id, name: config.name, endpoint: config.api_base_url, model: config.model, credential: "", clearCredential: false, original: config }); setRemoving(""); setMessage(""); setResult(null);
+      }}>{t("Edit", "编辑")}</button>
+      <button style={btnSecondary} disabled={busy || !!draft || !provider.configuration} aria-label={`${removing === provider.id ? t("Confirm remove", "确认移除") : t("Remove", "移除")} ${provider.id}`} onClick={() => remove(provider.id)}>{removing === provider.id ? t("Confirm remove", "确认移除") : t("Remove", "移除")}</button>
+      {provider.configuration && <small style={{ width: "100%" }}>{provider.configuration.model || "UNKNOWN"} · {provider.configuration.api_base_url || "UNKNOWN"} · {provider.configuration.has_reference ? t("Reference saved", "引用已保存") : t("No saved reference", "无已保存引用")}</small>}
+    </div>)}
     <div style={rowStyle}>
       <select aria-label={t("Model to test", "待测试模型")} value={modelId} disabled={busy || !!draft || !modelsReady} onChange={event => { setModelId(event.target.value); setResult(null); }} style={input}>
         <option value="">{t("Select registered model", "选择已注册模型")}</option>
@@ -286,5 +289,6 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
       <p>Tokens: {measured(result.tokens_used)} · USD: {["reported", "derived", "estimated"].includes(result.cost_measurement || "") ? measured(result.cost_usd) : "UNKNOWN"} · {result.cost_measurement || "unknown"}</p>
       <details><summary>{t("Original request", "原始请求")}</summary><p>{result.request_id || "UNKNOWN"}</p><p>{result.response_preview}</p><p>{result.execution?.path || "UNKNOWN"} · {result.execution?.operation_id || result.execution?.workload_id || "UNKNOWN"}</p></details>
     </section>}
+    </div>
   </section>;
 }

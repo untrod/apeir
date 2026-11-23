@@ -34,6 +34,7 @@ export function TaskCenter(props: TaskCenterProps) {
 }
 function TaskCenterSession({ onTaskClick, onTraceClick, onConversationClick, onApprovalClick }: TaskCenterProps) {
   const { locale } = useTheme();
+  const t = (en: string, zh: string) => locale === "zh" ? zh : en;
   const allTasks = useTasks();
   const [filter, setFilter] = useState<string>("all");
 
@@ -45,11 +46,11 @@ function TaskCenterSession({ onTaskClick, onTraceClick, onConversationClick, onA
   };
   const matches = (task: Task, key: string) => key === "all" || statusGroups[key]?.includes(task.status);
   const tabs = [
-    { key: "all", label: "All", count: allTasks.length },
-    { key: "running", label: "Active", count: 0 },
-    { key: "needs_input", label: "Needs Input", count: 0 },
-    { key: "completed", label: "Completed", count: 0 },
-    { key: "failed", label: "Failed", count: 0 },
+    { key: "all", label: t("All", "全部"), count: allTasks.length },
+    { key: "running", label: t("Active", "进行中"), count: 0 },
+    { key: "needs_input", label: t("Needs Input", "需要处理"), count: 0 },
+    { key: "completed", label: t("Completed", "已完成"), count: 0 },
+    { key: "failed", label: t("Failed", "失败"), count: 0 },
   ].map(tab => ({ ...tab, count: allTasks.filter(task => matches(task, tab.key)).length }));
 
   const filtered = allTasks.filter(task => matches(task, filter));
@@ -58,7 +59,7 @@ function TaskCenterSession({ onTaskClick, onTraceClick, onConversationClick, onA
     <div role="region" aria-label={locale === "zh" ? "任务" : "Tasks"} style={{ height: "100%", display: "flex", flexDirection: "column", background: colors.bg }}>
       {/* Header + tabs */}
       <div style={{ padding: `${space.lg} ${space.xl}`, background: colors.surface, borderBottom: `1px solid ${colors.borderLight}` }}>
-        <h1 style={{ fontSize: typo.lg, fontWeight: typo.semibold, color: colors.text, margin: 0 }}>Tasks</h1>
+        <h1 style={{ fontSize: typo.lg, fontWeight: typo.semibold, color: colors.text, margin: 0 }}>{t("Tasks", "任务")}</h1>
         <div style={{ display: "flex", gap: space.sm, marginTop: space.md, flexWrap: "wrap" }}>
           {tabs.map((tab) => (
             <button
@@ -84,11 +85,11 @@ function TaskCenterSession({ onTaskClick, onTraceClick, onConversationClick, onA
       <div style={{ flex: 1, overflowY: "auto", padding: space.xl }}>
         {allTasks.length === 0 ? (
           <div style={{ textAlign: "center", padding: space.xxxl, color: colors.textTertiary, fontSize: typo.md }}>
-            No tasks yet. Send a message in Chat to create one.
+            {t("No tasks yet. Send a message in Chat to create one.", "尚无任务。可以从对话开始。")}
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: "center", padding: space.xxxl, color: colors.textTertiary, fontSize: typo.md }}>
-            No tasks match the current filter.
+            {t("No tasks match the current filter.", "没有符合筛选条件的任务。")}
           </div>
         ) : (
           filtered.map((task) => (

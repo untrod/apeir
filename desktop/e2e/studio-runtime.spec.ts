@@ -199,9 +199,7 @@ test("Rejected model decisions remain recoverable across restart and the GUI res
   await page.goto("/");
   try { await expect(page.getByRole("region", { name: "APEIR Studio", exact: true })).toBeVisible(); }
   finally { await info.attach("decision-ui-startup-requests", { body: JSON.stringify({ network, errors }), contentType: "application/json" }); }
-  await page.getByRole("button", { name: /Add panel/ }).click();
-  await page.getByRole("textbox", { name: "Search panels" }).fill("Tasks");
-  await page.getByRole("button", { name: "Tasks", exact: true }).last().click();
+  await revealView(page, "Tasks");
   const tasks = page.getByRole("region", { name: "Tasks", exact: true });
   await expect(tasks).toBeVisible();
   await tasks.getByText(objective, { exact: true }).click();
@@ -314,11 +312,10 @@ async function changeTheme(page: Page, value: string) {
   const dialog = await settings(page); await dialog.getByRole("tab", { name: /^(General|通用)$/ }).click(); await dialog.getByLabel("Studio theme", { exact: true }).selectOption(value); await closeSettings(page);
 }
 async function revealView(page: Page, name: string) {
-  const target = page.getByRole("button", { name: `Open ${name}`, exact: true });
-  if (await target.first().isVisible()) { await target.first().click(); return; }
-  const group = name === "Chat" || name === "Workspace Editor" || name === "Project Files" ? "Develop" : name === "Workflow Builder" ? "Workflow" : ["Models", "Nodes", "Devices", "Environment"].includes(name) ? "Resources" : name === "Dashboard" || name === "Model Usage" ? "Overview" : "Run";
-  await page.getByRole("navigation", { name: "Studio panels", exact: true }).getByRole("button", { name: group, exact: true }).click();
-  await target.first().click();
+  await page.getByRole("button", { name: "Search APEIR", exact: true }).click();
+  const palette = page.getByRole("dialog", { name: /Search and commands|搜索与命令/ });
+  await palette.getByRole("combobox").fill(name);
+  await palette.getByRole("option").filter({ hasText: name }).first().click();
 }
 async function dashboardMenu(page: Page) {
   const summary = page.getByLabel("Dashboard options", { exact: true });
@@ -405,7 +402,7 @@ s.emit_state_change("ux-inspection-original",RunState.CREATED,task_id="ux-read-o
   await expect(inspector).toBeVisible();
   await expect(inspector).toContainText("ux-inspection-original");
   await expect(inspector).toContainText("EventStream");
-  await page.getByRole("button", { name: "Open Chat", exact: true }).click();
+  await revealView(page, "Chat");
   const composer = page.getByRole("textbox", { name: "Message", exact: true }).first();
   await composer.fill("Unsent project discussion");
   await expect(inspector).toBeVisible();
@@ -1227,8 +1224,9 @@ test(`Declarative UI extension uses public review and approval, real status, rev
     await approveAndRetry("Enable");
     await expect.poll(() => page.evaluate(() => {
       const saved = JSON.parse(localStorage.getItem("apeir.studio.layout.v1") || "null");
-      const groups = saved?.layout?.children || [];
-      return groups.some((group: { selected?: number; children?: Array<{ component?: string }> }) => group.children?.[group.selected ?? 0]?.component === "extensions");
+      type Group = { selected?: number; component?: string; children?: Group[] };
+      const selected = (node: Group): boolean => node.children?.[node.selected ?? 0]?.component === "extensions" || !!node.children?.some(selected);
+      return !!saved?.layout && selected(saved.layout);
     })).toBe(true);
     const latestLayout = await page.evaluate(() => localStorage.getItem("apeir.studio.layout.v1"));
     const content = (raw: string | null) => JSON.parse(raw!, (key, value) => ["selected", "active"].includes(key) ? undefined : value);
@@ -1714,7 +1712,7 @@ test("Studio uses one Chat for saved file context, protects drafts and keeps the
   await expect(chat.getByLabel("Selected workspace reference")).toContainText("example.py");
   const draft = chat.getByRole("textbox", { name: "Message", exact: true });
   await draft.fill("Preserve this original draft");
-  await page.locator(".developer-file-browser summary").click();
+  if (!(await page.locator(".developer-file-browser > details").evaluate(node => (node as HTMLDetailsElement).open))) await page.locator(".developer-file-browser summary").click();
   await page.getByRole("button", { name: "workspace.json", exact: true }).click();
   await page.getByRole("button", { name: "Discuss saved file", exact: true }).click();
   await expect(page.getByText("Send or clear the current draft before changing its context.")).toBeVisible();
@@ -1728,4 +1726,51 @@ test("Studio uses one Chat for saved file context, protects drafts and keeps the
   await expect(page.getByLabel("Selected workspace reference")).toContainText("workspace.json");
   expect(mutations).toEqual([]); expect(errors).toEqual([]);
   await info.attach("single-chat-scope", { body: JSON.stringify({ real_http: true, model_disabled: true, model_calls: 0, mutations, native_installation: false }), contentType: "application/json" });
+});
+
+test("Focused engineering layout puts content first and keeps setup, details and drafts separate", async ({ page }, info) => {
+  const writes: string[] = [], errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("request", request => { if (request.url().includes("/api/") && !["GET", "OPTIONS"].includes(request.method())) writes.push(new URL(request.url()).pathname); });
+  await open(page);
+  await expect(page.locator(".studio-section-tabs")).toHaveCount(0);
+  await page.getByRole("button", { name: /example.py/ }).click();
+  const editor = page.getByRole("textbox", { name: "Code editor", exact: true });
+  const original = await editor.inputValue();
+  const geometry = await editor.boundingBox();
+  expect(geometry!.y).toBeLessThan(260);
+  expect(geometry!.height).toBeGreaterThanOrEqual(200);
+  const toolbar = page.locator(".developer-toolbar");
+  await toolbar.getByText("View", { exact: true }).click();
+  await expect(toolbar.getByLabel("Editor font size", { exact: true })).toBeVisible();
+  expect(await toolbar.getByRole("checkbox", { name: "Persisted activity" }).evaluate(node => getComputedStyle(node).accentColor)).toBe("rgb(52, 55, 61)");
+  await toolbar.getByText("Project details", { exact: true }).click();
+  await expect(toolbar.getByLabel("Editor font size", { exact: true })).toBeHidden();
+  await page.keyboard.press("Escape");
+  await expect(toolbar.getByText("Project details", { exact: true })).toBeFocused();
+  await editor.fill("UNSAVED_FOCUSED_EDITOR");
+  await settings(page);
+  await page.getByRole("tab", { name: "Models & credentials", exact: true }).click();
+  const connections = page.getByRole("region", { name: "Provider settings", exact: true });
+  await connections.getByRole("button", { name: "Add model", exact: true }).click();
+  await expect(connections.getByRole("form", { name: "New connection", exact: true })).toBeVisible();
+  await expect(connections.getByRole("table", { name: "Registered models", exact: true })).toBeHidden();
+  await expect(connections.getByRole("button", { name: "Run inference test", exact: true })).toBeHidden();
+  await connections.getByLabel("Protocol template", { exact: true }).selectOption("deepseek");
+  await connections.getByLabel("Vendor model ID", { exact: true }).fill("unsaved-explicit-model");
+  await page.getByRole("tab", { name: "General", exact: true }).click();
+  await page.getByLabel("Studio language", { exact: true }).selectOption("zh");
+  await page.getByRole("tab", { name: "模型与凭据", exact: true }).click();
+  await expect(page.getByRole("form", { name: "新建连接", exact: true }).getByLabel("厂商模型 ID", { exact: true })).toHaveValue("unsaved-explicit-model");
+  await page.screenshot({ path: info.outputPath("focused-model-setup-source.png"), animations: "disabled" });
+  await page.getByRole("button", { name: "取消编辑", exact: true }).click();
+  await expect(page.getByRole("table", { name: "已注册模型", exact: true })).toBeVisible();
+  await closeSettings(page);
+  await expect(editor).toHaveValue("UNSAVED_FOCUSED_EDITOR");
+  await expect(page.getByRole("region", { name: "任务", exact: true }).getByRole("heading", { name: "任务", exact: true })).toBeVisible();
+  const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--nous-accent").trim());
+  expect(accent).toBe("#34373D");
+  await page.screenshot({ path: info.outputPath("focused-engineering-source.png"), animations: "disabled" });
+  await editor.fill(original);
+  expect(writes).toEqual([]); expect(errors).toEqual([]);
 });

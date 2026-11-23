@@ -32,11 +32,19 @@ npm ci
 npm run dev
 ```
 
-Studio opens with Chat and project files in a new General layout. The left rail
-selects Overview, Develop, Workflow, Run, Resources, or Tools;
-the row above the dock shows that section’s views. Navigation returns to an
-existing instance. **More / Add panel** deliberately creates another instance
-through the searchable panel library. Existing layouts and extension panels remain available.
+New workspaces open with the Software Development layout: files and editor on
+the left, Chat on the right, and Tasks/Evidence below the editor. Saved layouts
+keep their original positions and panels. Apply a different preset through
+**Layout → Template**, or reopen your saved arrangement from the layout library.
+The left rail selects Overview, Develop, Workflow, Run, Resources, or Tools.
+**Ctrl/Cmd+K** finds and focuses an existing panel; **More / Add panel** opens the
+searchable library to create another instance. All existing modules remain available.
+Project details, editor display settings and recorded model inputs are available
+from the editor toolbar. They no longer take several rows above the file.
+
+新工作区采用软件开发布局：文件与编辑器在左，对话在右，任务和证据在编辑器下方。
+已有布局不会被改写。在“布局 → 模板”中可切换预设；项目详情、视图设置和模型输入
+记录收在编辑器工具栏中。按 Ctrl/Cmd+K 可查找并返回已有面板。
 In Studio, **Discuss saved file** sends the saved path/version reference to the
 existing Chat panel. It does not read or send the file yet. Send or clear a Chat
 draft before replacing its selected context. The editor retains its own scroll
@@ -47,10 +55,13 @@ Studio 中的“讨论已保存文件”会打开现有对话并附上文件引�
 
 Empty Chat offers **Connect a model**, **Open project files** and **Open Workflow**;
 these open existing views without submitting a task.
-**Workspace → Operations Console → Controller connection** configures the Runtime
+**Layout → Operations Console → Controller connection** configures the Runtime
 address and protected service session token. That token is not a Provider API key.
 
-![Studio project editor and visual workflow](../../media/studio-workspace-source.png)
+![Studio Software Development layout](../../media/studio-workspace-source.png)
+
+Source browser preview with an actual model-disabled Runtime. This screenshot
+is not Windows installation or live model qualification.
 
 | Action | How |
 | --- | --- |
@@ -82,6 +93,10 @@ store. Select a Provider and save its key, then select that saved reference when
 adding a connection. Saving shows progress and restarts the local Runtime;
 inference remains a separate, explicit action. See the
 [model setup guide](PROVIDER_GUIDE.md#configure).
+
+While adding or editing a connection, Studio shows its form and retains the
+model list in the background. Save or cancel to return to the list and explicit
+inference test. Editing a connection never starts a model request.
 
 Settings opens inside the workspace. Switch back to a panel without discarding
 the form, then return to Settings to continue. Unsaved settings are marked with

@@ -12,3 +12,16 @@
 @media(max-width:650px) { .developer-columns, .developer-columns.with-collaboration { display:flex; flex-direction:column; }.developer-columns > * { width:100%; box-sizing:border-box; }.developer-collaboration { height:580px; }.developer-panel button { white-space:normal; } }
 
 .developer-file-browser > details > summary { padding:12px 16px; cursor:pointer; color:var(--nous-text); border-bottom:1px solid var(--nous-border); font-size:12px; }
+
+.developer-panel { display:grid; gap:12px; }
+.developer-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-width:0; }
+.developer-project-name { margin-right:auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+.developer-toolbar > details { position:relative; border:0 !important; padding:0 !important; border-radius:0; font-size:12px; }
+.developer-toolbar summary { cursor:pointer; padding:6px; border-radius:4px; }
+.developer-toolbar summary:hover { background:var(--nous-surface-hover); }
+.developer-toolbar > details > div { position:absolute; top:100%; right:0; z-index:20; width:min(360px,calc(100vw - 100px)); max-height:50vh; overflow:auto; padding:16px; border:1px solid var(--nous-border); border-radius:6px; background:var(--nous-elevated); box-shadow:var(--nous-shadow-md); }
+.developer-project-details p:first-child { overflow-wrap:anywhere; }
+.developer-context-details label { display:grid; gap:6px; }
+.developer-toolbar .developer-settings { gap:12px; }
+.developer-toolbar p { color:var(--nous-text-secondary); }
+.developer-toolbar :is(summary,select):focus-visible { outline:2px solid var(--nous-border-focus); outline-offset:2px; }
