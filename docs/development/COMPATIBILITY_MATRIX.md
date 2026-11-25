@@ -8,7 +8,7 @@ release-maintenance environments.
 The [ARM64 preview](../operations/deployment/WINDOWS_10_ARM64_LOCAL.md) bundles
 CPython 3.13.17 and target-native Desktop, Runtime, Kernel and Worker. Full native
 validation and installed-sidecar smoke passed on Windows 11 ARM64 in
-[run43549737576](https://github.com/untrod/apeir/actions/runs/43549737576).
+[run45505847685](https://github.com/untrod/apeir/actions/runs/45505847685).
 Windows 10 ARM64 GUI, drivers, upgrade/uninstall and Defender checks remain PENDING.
 This does not qualify every Python version, Provider, local accelerator or sandbox.
 The historical maintenance-host tables below retain their original scope.

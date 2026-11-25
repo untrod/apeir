@@ -199,12 +199,21 @@ checks do not alter the reviewed Kernel hashes or remove licensing/install gates
 
 ## Current native command-qualified build
 
-The current unsigned Windows x64 package is [full-mode run43549734683](https://github.com/untrod/apeir/actions/runs/43549734683),
+The unsigned Windows x64 preview was built from
+`d1832b24504011484476d1ec9d9e6fe851495d24`. The full launcher and actual
+Kernel, Worker and Runtime smoke passed on Windows Server 2025.
+[Download Setup and Portable](https://github.com/untrod/apeir/actions/runs/45505843403/artifacts/14976528487)
+with GitHub sign-in. [Quick Start](../getting-started/QUICK_START.md#download-metadata)
+has the expiry date, checksums and matching Source Preview. Windows 10
+installation, upgrades and uninstallation are pending.
+
+### Previous model-setup producer — 2026-11-14
+
+The previous unsigned Windows x64 package was [full-mode run43549734683](https://github.com/untrod/apeir/actions/runs/43549734683),
 source `d94159ea45badf665999dffdafe6786a5e35c085`, preserved through
 [PR154](https://github.com/untrod/apeir/pull/154).
 [Artifact14097790424](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424)
-requires GitHub sign-in and expires **2026-11-28**. The matching source pair is in
-[Quick Start](../getting-started/QUICK_START.md#download-metadata).
+requires GitHub sign-in and expires **2026-11-28**.
 
 | File | SHA-256 |
 | --- | --- |

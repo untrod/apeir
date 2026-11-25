@@ -18,8 +18,8 @@ A local-first workspace for models, code and workflows.
 APEIR is open source. Studio brings project files, conversations and visual workflows together.
 Review changes before applying them, and keep a record of what ran.
 
-[**⬇ Windows x64**](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424) ·
-[**Windows ARM64**](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427) ·
+[**⬇ Windows x64**](https://github.com/untrod/apeir/actions/runs/45505843403/artifacts/14976528487) ·
+[**Windows ARM64**](https://github.com/untrod/apeir/actions/runs/45505847685/artifacts/14977666664) ·
 [**Source Preview**](docs/operations/getting-started/QUICK_START.md#source-preview) ·
 [**Quick Start**](docs/operations/getting-started/QUICK_START.md) ·
 [**Documentation**](docs/README.md) · [简体中文](README.zh-CN.md)
@@ -55,10 +55,10 @@ Already using [GitHub CLI](https://cli.github.com/)? Download and verify the x64
 installer in PowerShell:
 
 ```powershell
-gh run download 43549734683 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-rc1-x64
+gh run download 45505843403 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-rc1-x64
 if ($LASTEXITCODE -ne 0) { throw 'Download failed' }
 $setup = '.\apeir-rc1-x64\APEIR_0.1.0-rc1_x64-setup.exe'
-$expected = '8374139b89f070ab6e2982c8930055b3ff2fbf44d278756e32a538362e360a4e'
+$expected = '7cb7697c13df348d15f253cb4aa68e96082ac40817229363321d63a6ee54fcfa'
 if ((Get-FileHash -LiteralPath $setup -Algorithm SHA256 -ErrorAction Stop).Hash -ne $expected) { throw 'SHA-256 mismatch' }
 Write-Host 'Verified. Open the installer when ready.'
 ```

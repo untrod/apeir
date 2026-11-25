@@ -14,14 +14,14 @@ Windows 用户直接选择安装版或 Portable；开发者可以安装 Python �
 
 ## Native Installation
 
-[Download x64](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424) ·
-[Download ARM64](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427)
+[Download x64](https://github.com/untrod/apeir/actions/runs/45505843403/artifacts/14976528487) ·
+[Download ARM64](https://github.com/untrod/apeir/actions/runs/45505847685/artifacts/14977666664)
 
 Extract the downloaded bundle, then open its Setup installer. For Portable,
 extract the included Portable ZIP and open `APEIR-Portable/APEIR.exe`.
 [Installation guide](INSTALL_WINDOWS.md) covers verification, first launch and
 updates. The current unsigned Developer Preview requires GitHub sign-in to
-download; Windows 10 installation testing is still in progress.
+download. Windows 10 installation testing is pending on physical hardware.
 
 ## Source Preview
 
@@ -30,10 +30,10 @@ download; Windows 10 installation testing is still in progress.
 Download both artifacts from the same build and extract them into separate
 folders, named `runtime` and `frontend` here:
 
-- [Runtime wheel](https://github.com/untrod/apeir/actions/runs/44964785472/artifacts/14731391894)
-- [Built Studio](https://github.com/untrod/apeir/actions/runs/44964785472/artifacts/14731346937)
+- [Runtime wheel](https://github.com/untrod/apeir/actions/runs/45505843403/artifacts/14973588654)
+- [Built Studio](https://github.com/untrod/apeir/actions/runs/45505843403/artifacts/14973668197)
 
-These packages use source revision `5c653cd626f6384be2b6150a28d39e82f277abfc`.
+These packages use source revision `d1832b24504011484476d1ec9d9e6fe851495d24`.
 GitHub sign-in is required. Check the [download metadata](#download-metadata)
 for hashes and retention dates.
 
@@ -206,13 +206,13 @@ a Runtime wheel, built frontend and their checksums.
 
 | Package | Source revision | Available until (UTC) |
 | --- | --- | --- |
-| [Runtime wheel](https://github.com/untrod/apeir/actions/runs/44964785472/artifacts/14731391894) and [browser Studio](https://github.com/untrod/apeir/actions/runs/44964785472/artifacts/14731346937) | `5c653cd626f6384be2b6150a28d39e82f277abfc` | 2026-11-29 |
-| [Windows x64](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424) | `d94159ea45badf665999dffdafe6786a5e35c085` | 2026-11-28 |
-| [Windows ARM64](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427) | `d94159ea45badf665999dffdafe6786a5e35c085` | 2026-11-28 |
+| [Runtime wheel](https://github.com/untrod/apeir/actions/runs/45505843403/artifacts/14973588654) and [browser Studio](https://github.com/untrod/apeir/actions/runs/45505843403/artifacts/14973668197) | `d1832b24504011484476d1ec9d9e6fe851495d24` | 2026-12-01 23:03 |
+| [Windows x64](https://github.com/untrod/apeir/actions/runs/45505843403/artifacts/14976528487) | `d1832b24504011484476d1ec9d9e6fe851495d24` | 2026-12-08 23:59 |
+| [Windows ARM64](https://github.com/untrod/apeir/actions/runs/45505847685/artifacts/14977666664) | `d1832b24504011484476d1ec9d9e6fe851495d24` | 2026-12-09 00:08 |
 
-The browser Studio includes newer interface changes than these Windows packages.
-A documentation or screenshot update does not rebuild an installer. Actions
-artifacts expire; there is no public Release download yet.
+The Source Preview and both Windows packages use the same software revision.
+The table tracks the source embedded in the packages. These are expiring
+Actions artifacts. Public GitHub Releases are pending.
 
 <details>
 <summary>File checksums / SHA-256</summary>
@@ -221,20 +221,20 @@ These hashes apply to files **inside** the downloaded artifacts:
 
 | File | SHA-256 |
 | --- | --- |
-| `apeir_distribution-0.1.0rc1-py3-none-any.whl` | `3a89766542eb260bf39c0639d1f065f92d09a8b906eecc7862e7bc3940dd36c6` |
-| `APEIR_0.1.0-rc1_x64-setup.exe` | `8374139b89f070ab6e2982c8930055b3ff2fbf44d278756e32a538362e360a4e` |
-| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `95b65c4556e08812d64d5b0b631a9685d5000e0e26c38ecbc419144d8b030168` |
-| `APEIR_0.1.0-rc1_arm64-setup.exe` | `a75391060652b2f34ba590830a6ffef5ca889222813e410fd12d4796ba29c8d9` |
-| `APEIR-Portable-0.1.0-rc1-windows-arm64.zip` | `feae9bc7a299b51c34680ecbf8920f0ebdd70db8fb2adb42ffb0964c9c947e8d` |
+| `apeir_distribution-0.1.0rc1-py3-none-any.whl` | `73b73f36681943e7ac2b8bf476d16757e36f6ebe8a857e793c6aa0791c58b42e` |
+| `APEIR_0.1.0-rc1_x64-setup.exe` | `7cb7697c13df348d15f253cb4aa68e96082ac40817229363321d63a6ee54fcfa` |
+| `APEIR-Portable-0.1.0-rc1-windows-x64.zip` | `cb3f43d2f4181bb76820c3d47df874ded262945ca73cc176c627d7869f2a80b0` |
+| `APEIR_0.1.0-rc1_arm64-setup.exe` | `b7194ae5c0d710942cdd668bf86648a01e1d04ca97d8d617a1f8762434bd4f54` |
+| `APEIR-Portable-0.1.0-rc1-windows-arm64.zip` | `ed1aab1a3093ebc7a6038bfaa07b2a7f0f4615b3566f038103b122ff1e632dc2` |
 
 Outer artifact ZIP hashes, before extraction:
 
 | Artifact | SHA-256 |
 | --- | --- |
-| Runtime | `e0c5d92b2f0f6c4cdfba706cd68dcaa6480bb0a4881719d6cd93bfa24d1a6928` |
-| Browser Studio | `848b06c26c7ddb5c00cf5bf2eb89c8ad4e53ad23111c29cd388958891edf1fb1` |
-| Windows x64 | `eafb38ac9bde3bd57575d3de8d299829dc46631e52f81b1ea1ed6c390425f544` |
-| Windows ARM64 | `bd12c756ede57c30cddaa1b5bde8b8e8c1ffbacf5762cffa620b8ee86f425011` |
+| Runtime | `32667f17e6d54318edaf83f6e7331a698fcb3aa4fc85f3f35e13026dce0df537` |
+| Browser Studio | `df7e0912d98de405f5917d072495ffd1bc1b96e627c576f9d4bc7897729866cb` |
+| Windows x64 | `9f6f6fe353635ffff3e53dac0b61a49c37b68b01daa58b2db49a9fca3af68753` |
+| Windows ARM64 | `6426b527c2891c014a2f96b3fcbfd98fd8ac42db8e5765538b1210134c39f2f4` |
 
 Stop on a checksum mismatch. Build verification and platform test records are
 kept in [Engineering Review](../../acceptance/ENGINEERING_REVIEW.md);

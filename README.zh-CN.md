@@ -16,8 +16,8 @@
 APEIR Studio 将项目文件、对话和可视化工作流连接起来。修改先看 Diff，操作经过审批，
 执行结果随时可查。界面可以按自己的习惯组合，不必围着固定页面工作。
 
-[**⬇ Windows x64**](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424) ·
-[**Windows ARM64**](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427) ·
+[**⬇ Windows x64**](https://github.com/untrod/apeir/actions/runs/45505843403/artifacts/14976528487) ·
+[**Windows ARM64**](https://github.com/untrod/apeir/actions/runs/45505847685/artifacts/14977666664) ·
 [**快速开始**](docs/operations/getting-started/QUICK_START.md) ·
 [**文档**](docs/README.md) · [English](README.md)
 
@@ -53,10 +53,10 @@ Intel/AMD Windows 选 **x64**，Windows on Arm 选 **ARM64**。
 下载并校验 x64 安装程序：
 
 ```powershell
-gh run download 43549734683 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-rc1-x64
+gh run download 45505843403 --repo untrod/apeir --name windows-x64-native-development-build --dir .\apeir-rc1-x64
 if ($LASTEXITCODE -ne 0) { throw 'Download failed' }
 $setup = '.\apeir-rc1-x64\APEIR_0.1.0-rc1_x64-setup.exe'
-$expected = '8374139b89f070ab6e2982c8930055b3ff2fbf44d278756e32a538362e360a4e'
+$expected = '7cb7697c13df348d15f253cb4aa68e96082ac40817229363321d63a6ee54fcfa'
 if ((Get-FileHash -LiteralPath $setup -Algorithm SHA256 -ErrorAction Stop).Hash -ne $expected) { throw 'SHA-256 mismatch' }
 Write-Host 'Verified. Open the installer when ready.'
 ```
