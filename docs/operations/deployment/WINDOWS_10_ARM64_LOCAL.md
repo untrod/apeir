@@ -5,7 +5,7 @@
 Use the native **ARM64** build for Windows on Arm. The application includes its
 Runtime, Kernel and Worker; Python, Node.js and Rust are not required to open it.
 
-[**Download ARM64 Setup + Portable**](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427) ·
+[**Download ARM64 Setup + Portable**](https://github.com/untrod/apeir/actions/runs/45505847685/artifacts/14977666664) ·
 [Install and verify](../getting-started/INSTALL_WINDOWS.md) ·
 [Version and hashes](../getting-started/QUICK_START.md#download-metadata)
 

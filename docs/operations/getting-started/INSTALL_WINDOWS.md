@@ -1,7 +1,7 @@
 # Install APEIR on Windows
 
-[**Download x64**](https://github.com/untrod/apeir/actions/runs/43549734683/artifacts/14097790424) ·
-[**Download ARM64**](https://github.com/untrod/apeir/actions/runs/43549737576/artifacts/14097648427) ·
+[**Download x64**](https://github.com/untrod/apeir/actions/runs/45505843403/artifacts/14976528487) ·
+[**Download ARM64**](https://github.com/untrod/apeir/actions/runs/45505847685/artifacts/14977666664) ·
 [Version and checksums](QUICK_START.md#download-metadata)
 
 Each bundle contains Setup and Portable. You do not need to install Python,
@@ -19,8 +19,8 @@ Node.js or Rust to use either one.
 <a name="known-limitations"></a>
 
 Version **0.1.0-rc1** is an unsigned Developer Preview. GitHub sign-in is required
-for these Actions downloads, which are retained until **2026-11-28**.
-Windows 10 install, upgrade and uninstall testing is still in progress.
+for these Actions downloads. See [expiry dates by architecture](QUICK_START.md#download-metadata).
+Windows 10 install, upgrade and uninstall testing is pending on physical hardware.
 If Windows blocks the application, keep the exact message for troubleshooting;
 do not disable Defender or SmartScreen.
 
@@ -64,8 +64,8 @@ in PowerShell. Set `$apeirArch` to `arm64` for Windows on Arm:
 ```powershell
 $apeirArch = 'x64' # or 'arm64'
 $apeirPackages = @{
-    x64 = @{ Run = '43549734683'; Setup = '8374139b89f070ab6e2982c8930055b3ff2fbf44d278756e32a538362e360a4e'; Portable = '95b65c4556e08812d64d5b0b631a9685d5000e0e26c38ecbc419144d8b030168' }
-    arm64 = @{ Run = '43549737576'; Setup = 'a75391060652b2f34ba590830a6ffef5ca889222813e410fd12d4796ba29c8d9'; Portable = 'feae9bc7a299b51c34680ecbf8920f0ebdd70db8fb2adb42ffb0964c9c947e8d' }
+    x64 = @{ Run = '45505843403'; Setup = '7cb7697c13df348d15f253cb4aa68e96082ac40817229363321d63a6ee54fcfa'; Portable = 'cb3f43d2f4181bb76820c3d47df874ded262945ca73cc176c627d7869f2a80b0' }
+    arm64 = @{ Run = '45505847685'; Setup = 'b7194ae5c0d710942cdd668bf86648a01e1d04ca97d8d617a1f8762434bd4f54'; Portable = 'ed1aab1a3093ebc7a6038bfaa07b2a7f0f4615b3566f038103b122ff1e632dc2' }
 }
 if (!$apeirPackages.ContainsKey($apeirArch)) { throw 'Choose x64 or arm64' }
 $apeirPackage = $apeirPackages[$apeirArch]

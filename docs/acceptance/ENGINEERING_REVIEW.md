@@ -7684,3 +7684,35 @@ It passed 6,446 tests but failed
 while waiting for the held signed result to arrive. Its cause is unconfirmed;
 it is not evidence that historical Context/Skill timeouts share one cause.
 The original deadline and no-reexecution assertions are unchanged.
+
+## Studio and Windows preview — 2026-11-25
+
+Distribution `d1832b24504011484476d1ec9d9e6fe851495d24` and Kernel
+`87fd1b2ff28ef14ab1a515a58162592b452fda2e`. Core, Desktop, Security and
+Multi-Arch passed on this Distribution revision.
+
+The official Source Preview frontend and an isolated wheel install passed
+31 Chromium cases. In a separate Studio run against upstream IDNA 3.10, a
+denied two-file proposal left both files intact. An approved operator-authored
+proposal passed file readback. After separate test approval, the Linux x64
+read-only QEMU profile ran 6,256 upstream tests with exit code 0
+(5,771 passed and 485 upstream conditional skips). Runtime restart preserved
+the original proposal and test Run `workbench-exec-fb4aa8e4dd8346a1` without
+another execution. The test used a local test identity.
+
+Local Ollama through the frozen Kernel processed approved Workflow requests.
+One response failed schema validation. Other responses matched the schema
+but failed factual review, so their suggestions were left unapplied. Reading
+original history generated no new model usage. An approved external OpenAPI
+read returned `NETWORK_CONNECT_FAILED`; its original receipt and unresolved
+Work were retained. Live cloud and model-authored edits remain pending.
+
+The [x64](https://github.com/untrod/apeir/actions/runs/45505843403) and
+[ARM64](https://github.com/untrod/apeir/actions/runs/45505847685) native runs
+built Setup and Portable in full mode. Independent download verification
+checked the outer archives, internal file checksums, locked PE files, source
+and native reports, and the original recovery evidence. The ARM64 run
+also passed its [Windows 11 installed-sidecar check](https://github.com/untrod/apeir/actions/runs/45505847685/artifacts/14977726396).
+The [current download table](../operations/getting-started/QUICK_START.md#download-metadata)
+records the package hashes and expiry dates. Windows 10 lifecycle, signing,
+and public release acceptance remain open.
