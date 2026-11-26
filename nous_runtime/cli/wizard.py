@@ -25,6 +25,7 @@ def run_wizard() -> dict[str, Any]:
     print()
     print("Nous Runtime")
     from nous_runtime.version import __version__
+
     print(f"Version {__version__}")
     print()
     print("This wizard will help you set up your Nous environment.")
@@ -98,15 +99,24 @@ def run_wizard() -> dict[str, Any]:
 
 def _configure_provider() -> dict[str, Any] | None:
     """Interactive provider configuration."""
+    from nous_runtime.cli.provider_setup import SERVICE_PRESETS
+
+    deepseek = SERVICE_PRESETS["deepseek"]
     print()
     print("  Available providers:")
     print("    (1) OpenAI   - GPT-4, GPT-3.5")
-    print("    (2) DeepSeek - deepseek-chat")
+    print(f"    (2) DeepSeek - {deepseek['model']}")
     print("    (3) Claude   - claude-sonnet-4-6")
     print("    (4) Ollama   - local models")
     print("    (5) Custom   - any OpenAI-compatible API")
     choice = _prompt("  Select provider", "1")
-    providers = {"1": "openai", "2": "deepseek", "3": "claude", "4": "ollama", "5": "custom"}
+    providers = {
+        "1": "openai",
+        "2": "deepseek",
+        "3": "claude",
+        "4": "ollama",
+        "5": "custom",
+    }
     name = providers.get(choice, "openai")
 
     api_key = _prompt(f"  API Key for {name}", "", secret=True)
@@ -120,8 +130,8 @@ def _configure_provider() -> dict[str, Any] | None:
         endpoint = "https://api.openai.com/v1/chat/completions"
         model = "gpt-4"
     elif name == "deepseek":
-        endpoint = "https://api.deepseek.com/v1/chat/completions"
-        model = "deepseek-chat"
+        endpoint = str(deepseek["endpoint"])
+        model = str(deepseek["model"])
     elif name == "claude":
         endpoint = "https://api.anthropic.com/v1/messages"
         model = "claude-sonnet-4-6"
@@ -174,12 +184,15 @@ def _apply_config(config: dict[str, Any]) -> None:
             f.write(f"NOUS_LLM_MODEL={provider.get('model', '')}\n")
 
     print(f"  Configuration saved to {config_path}")
-    print("  Provider credentials were not stored; set NOUS_LLM_API_KEY in the environment.")
+    print(
+        "  Provider credentials were not stored; set NOUS_LLM_API_KEY in the environment."
+    )
 
     # Install packs
     for pack_path in config.get("packs", []):
         try:
             from nous_runtime.services.packs import install_pack
+
             full = os.path.join(os.getcwd(), pack_path)
             if os.path.isdir(full):
                 install_pack(full)
@@ -191,36 +204,12 @@ def _apply_config(config: dict[str, Any]) -> None:
 def _prompt(label: str, default: str = "", secret: bool = False) -> str:
     """Prompt the user with a default value."""
     if secret:
-        import msvcrt
-        suffix = " [hidden]: "
-    elif default:
-        suffix = f" [{default}]: "
-    else:
-        suffix = ": "
-    sys.stdout.write(f"  {label}{suffix}")
-    sys.stdout.flush()
+        from nous_runtime.cli.provider_setup import _prompt_secret
 
-    if secret:
-        chars = []
-        while True:
-            ch = msvcrt.getch() if hasattr(msvcrt, 'getch') else sys.stdin.read(1)
-            if ch in (b'\r', b'\n', '\r', '\n'):
-                print()
-                break
-            elif ch in (b'\x08', b'\x7f', '\x08', '\x7f'):
-                if chars:
-                    chars.pop()
-                    sys.stdout.write('\b \b')
-                    sys.stdout.flush()
-            else:
-                ch = ch.decode() if isinstance(ch, bytes) else ch
-                chars.append(ch)
-                sys.stdout.write('*')
-                sys.stdout.flush()
-        return ''.join(chars)
-    else:
-        val = input()
-        return val if val else default
+        return _prompt_secret(f"  {label}", default)
+    suffix = f" [{default}]: " if default else ": "
+    value = input(f"  {label}{suffix}")
+    return value or default
 
 
 def _confirm(prompt: str) -> bool:
