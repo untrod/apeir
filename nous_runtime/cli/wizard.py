@@ -98,10 +98,13 @@ def run_wizard() -> dict[str, Any]:
 
 def _configure_provider() -> dict[str, Any] | None:
     """Interactive provider configuration."""
+    from nous_runtime.cli.provider_setup import SERVICE_PRESETS
+
+    deepseek = SERVICE_PRESETS["deepseek"]
     print()
     print("  Available providers:")
     print("    (1) OpenAI   - GPT-4, GPT-3.5")
-    print("    (2) DeepSeek - deepseek-chat")
+    print(f"    (2) DeepSeek - {deepseek['model']}")
     print("    (3) Claude   - claude-sonnet-4-6")
     print("    (4) Ollama   - local models")
     print("    (5) Custom   - any OpenAI-compatible API")
@@ -120,8 +123,8 @@ def _configure_provider() -> dict[str, Any] | None:
         endpoint = "https://api.openai.com/v1/chat/completions"
         model = "gpt-4"
     elif name == "deepseek":
-        endpoint = "https://api.deepseek.com/v1/chat/completions"
-        model = "deepseek-chat"
+        endpoint = str(deepseek["endpoint"])
+        model = str(deepseek["model"])
     elif name == "claude":
         endpoint = "https://api.anthropic.com/v1/messages"
         model = "claude-sonnet-4-6"

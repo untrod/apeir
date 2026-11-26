@@ -382,6 +382,7 @@ def test_provider_quick_keeps_entered_key_process_scoped(monkeypatch, tmp_path):
         config = json.loads(raw)["deepseek"]
         assert "temporary-secret" not in raw
         assert config["credential_scope"] == "process"
+        assert config["model"] == "deepseek-flash"
         assert config["credential_ref"] == "env:NOUS_SESSION_PROVIDER_DEEPSEEK_KEY"
         assert "Provider saved." in result
     finally:

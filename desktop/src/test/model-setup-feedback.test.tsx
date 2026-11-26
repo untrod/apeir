@@ -52,7 +52,7 @@ it("waits for current saved connections before continuing a key setup and choose
   expect(screen.queryByLabelText("Vendor model ID")).not.toBeInTheDocument();
   await waitFor(() => expect(release).toBeDefined());
   await act(async () => { release([{ id: "deepseek", name: "Existing DeepSeek" }]); });
-  await waitFor(() => expect(screen.getByLabelText("Vendor model ID")).toHaveValue("deepseek-chat"));
+  await waitFor(() => expect(screen.getByLabelText("Vendor model ID")).toHaveValue("deepseek-flash"));
   expect(screen.getByLabelText("Provider ID")).toHaveValue("deepseek-2");
   expect(screen.getByLabelText("Credential reference")).toHaveValue("env:DEEPSEEK_API_KEY");
   expect(invoke.mock.calls.some(([name]) => name === "store_provider_credential")).toBe(false);
@@ -199,7 +199,7 @@ it("selects a newly saved local reference without exposing the actual API key to
   await waitFor(() => expect(screen.getByRole("button", { name: "Add model" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "Add model" }));
   await waitFor(() => expect(screen.getByLabelText("Saved API key")).toHaveValue("env:DEEPSEEK_API_KEY_2"));
-  expect(screen.getByLabelText("Vendor model ID")).toHaveValue("deepseek-chat");
+  expect(screen.getByLabelText("Vendor model ID")).toHaveValue("deepseek-flash");
   expect(screen.getByLabelText("Credential reference")).toHaveValue("env:DEEPSEEK_API_KEY_2");
   expect(invoke.mock.calls.some(([name]) => name === "store_provider_credential")).toBe(false);
 });

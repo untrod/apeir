@@ -229,7 +229,7 @@ const CAPABILITY_LABELS: Record<string, string> = {
 const PROVIDER_DEFAULT_MODELS: Record<string, Record<string, string>> = {
   openai: { default: "gpt-4o-mini" },
   anthropic: { default: "claude-sonnet-4-5" },
-  deepseek: { default: "deepseek-chat", reasoning: "deepseek-reasoner" },
+  deepseek: { default: "deepseek-flash" },
   moonshot: { default: "moonshot-v1-auto" },
   dashscope: { default: "qwen-plus" },
   zhipu: { default: "glm-4-flash" },

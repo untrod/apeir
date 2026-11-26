@@ -60,7 +60,7 @@ changing the interface language keeps the draft.
 **中文提示：** 从“设置 → 模型与凭据 → 模型 → 添加模型”开始，选择服务商。
 新密钥先在系统凭据存储中保存，再点“继续配置模型”；表单会带入已保存的引用。
 本地 Ollama 无需密钥。添加第二个模型会分配独立连接 ID，不覆盖原来的连接。“已注册模型”和“已保存连接”是两份独立名单。模型 ID 应使用
-服务商实际接受的标识，例如 `deepseek-chat`，不要填写显示名称或随意编号。
+服务商实际接受的标识，例如 DeepSeek 官方 API 的 `deepseek-flash`。
 保存配置不发起推理；“运行推理测试”是一次明确的模型调用，可能产生费用。
 “连接配置”“用量”“运行记录”分开展示，切换分类保留未保存草稿。
 Never put a key in layout JSON, ordinary configuration, source or a screenshot.
@@ -105,6 +105,12 @@ a profile does not send a model request; this is not native key-store validation
 | Anthropic Messages | Production calls are BLOCKED: the frozen NKI Worker has no Messages backend; the wizard disables that protocol |
 | Claude behind a compatible proxy | Only a genuinely implemented OpenAI-compatible proxy can use that adapter |
 | Native Gemini protocol | Not implemented in this configuration; keep unavailable or use a genuinely supported compatible endpoint |
+
+For the official DeepSeek API, Studio and the CLI suggest `deepseek-flash` for
+new connections. If a saved profile uses the retired `deepseek-chat` or
+`deepseek-reasoner` name, review the current price and edit the model ID
+explicitly. Existing profiles and registered Workflow definitions retain their
+saved IDs. [DeepSeek models and pricing](https://api-docs.deepseek.com/quick_start/pricing/)
 
 These are adapter paths, not an all-model compatibility list. Installing a model
 file does not start a server. Tool calling, vision, reasoning options, context

@@ -1457,12 +1457,13 @@ test("Grouped Studio controls preserve bilingual Provider drafts and add real Wo
   await providers.getByRole("button", { name: "添加模型" }).click();
   await providers.getByLabel("协议模板", { exact: true }).selectOption("deepseek");
   await expect(providers.getByLabel("端点", { exact: true })).toBeHidden();
-  await providers.getByLabel("厂商模型 ID", { exact: true }).fill("deepseek-chat");
+  await expect(providers.getByLabel("厂商模型 ID", { exact: true })).toHaveValue("deepseek-flash");
+  await providers.getByLabel("厂商模型 ID", { exact: true }).fill("deepseek-v4-pro");
   await providers.getByLabel("凭据引用", { exact: true }).fill("env:FAKE_STUDIO_KEY");
   await providers.screenshot({ path: info.outputPath("models-essential-settings-zh-source.png") });
   await changeLanguage(page, "en");
   const english = page.getByRole("region", { name: "Provider settings", exact: true });
-  await expect(english.getByLabel("Vendor model ID", { exact: true })).toHaveValue("deepseek-chat");
+  await expect(english.getByLabel("Vendor model ID", { exact: true })).toHaveValue("deepseek-v4-pro");
   await expect(english.getByLabel("Credential reference", { exact: true })).toHaveValue("env:FAKE_STUDIO_KEY");
   await english.getByLabel("Credential reference", { exact: true }).fill("sk-FAKE-NOT-A-REAL-CREDENTIAL");
   await english.getByRole("button", { name: "Save Provider", exact: true }).click();

@@ -364,7 +364,7 @@ def test_register_provider_from_config_persists_reference_only(tmp_path, monkeyp
         assert registered is not None
         assert registered.provider_id == "deepseek"
         assert registered.credential_ref == "env:DEEPSEEK_API_KEY"
-        assert "deepseek/deepseek-chat" in {
+        assert "deepseek/deepseek-flash" in {
             record.descriptor.model_id
             for record in gateway_service.get().registry.list()
         }

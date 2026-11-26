@@ -55,7 +55,7 @@ describe("Studio Provider configuration", () => {
     fireEvent.change(screen.getByLabelText("Vendor model ID"), { target: { value: "previous-model" } });
     fireEvent.change(screen.getByLabelText("Credential reference"), { target: { value: "env:PREVIOUS_PROVIDER_KEY" } });
     fireEvent.change(screen.getByLabelText("Protocol template"), { target: { value: "deepseek" } });
-    expect(screen.getByLabelText("Vendor model ID")).toHaveValue("deepseek-chat");
+    expect(screen.getByLabelText("Vendor model ID")).toHaveValue("deepseek-flash");
     expect(screen.getByLabelText("Credential reference")).toHaveValue("");
     expect(governedStudioMutation).not.toHaveBeenCalled();
     expect(testModel).not.toHaveBeenCalled();
