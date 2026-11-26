@@ -390,6 +390,25 @@ def test_provider_quick_keeps_entered_key_process_scoped(monkeypatch, tmp_path):
         unregister_adapter("deepseek")
 
 
+def test_init_uses_portable_secret_prompt_and_current_deepseek_model(monkeypatch):
+    from nous_runtime.cli import provider_setup, wizard
+
+    prompts = []
+
+    def read_secret(label, default=""):
+        prompts.append(label.strip())
+        return "fixture-secret"
+
+    monkeypatch.setattr(provider_setup, "_prompt_secret", read_secret)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "2")
+
+    provider = wizard._configure_provider()
+
+    assert prompts == ["API Key for deepseek"]
+    assert provider["model"] == "deepseek-flash"
+    assert provider["endpoint"] == "https://api.deepseek.com/v1/chat/completions"
+
+
 def test_provider_doctor_reports_safe_diagnostics(monkeypatch, tmp_path):
     workspace = _write_config(
         tmp_path,
