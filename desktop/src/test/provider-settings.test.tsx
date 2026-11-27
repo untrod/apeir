@@ -205,6 +205,22 @@ describe("Studio Provider configuration", () => {
     expect(testModel).toHaveBeenCalledOnce();
     expect(testModel).toHaveBeenCalledWith("example/original");
   });
+  it("localizes the Worker connection failure and keeps the original request visible", async () => {
+    vi.mocked(testModel).mockResolvedValueOnce({
+      model_id: "example/original", selected_model_id: "example/original", instance_id: "instance",
+      request_id: "modelreq_original", response_id: "", healthy: false, latency_ms: 1,
+      error_code: "NOUS_KERNEL_PROVIDER_NETWORK", error: "Provider Worker could not reach the model endpoint.",
+    });
+    render(<ProviderSettings locale="zh" models={models} onChanged={changed} />);
+    await screen.findByRole("button", { name: "编辑 example" });
+    fireEvent.change(screen.getByLabelText("待测试模型"), { target: { value: "example/original" } });
+    fireEvent.click(screen.getByRole("button", { name: "运行推理测试" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Provider Worker 无法连接模型端点");
+    const result = screen.getByLabelText("模型测试结果");
+    expect(result).toHaveTextContent("modelreq_original");
+    expect(result).toHaveTextContent("Tokens: UNKNOWN · USD: UNKNOWN");
+    expect(testModel).toHaveBeenCalledOnce();
+  });
   it("clears private drafts and rejects a late read on a Controller switch", async () => {
     let release!: (value: unknown) => void;
     open(); fireEvent.click(await screen.findByRole("button", { name: "Edit example" }));
