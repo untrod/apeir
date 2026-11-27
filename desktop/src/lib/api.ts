@@ -488,6 +488,7 @@ export interface ModelTestResult {
     workload_id?: string;
     backend?: string;
   };
+  error_code?: string;
   error?: string;
 }
 

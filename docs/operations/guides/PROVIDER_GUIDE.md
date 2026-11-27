@@ -154,6 +154,17 @@ This sends a minimal request and can incur cost. It requires the configured
 Gateway/NKI path, actual credentials, model and current budget authorization.
 There is no direct SDK fallback. Inspect its original response and usage.
 
+If Kernel rejects the saved credential reference, check the environment of
+the Kernel host. When starting Kernel manually, pass the referenced variable
+and authorize its exact name in `NOUS_ALLOWED_CREDENTIALS`. Studio supplies
+the allowlist for credentials it manages on Windows.
+
+If the Provider Worker cannot connect, check HTTPS reachability and certificate
+trust from that host. The frozen Kernel starts the Worker with a restricted
+environment that omits the parent process's proxy settings. A browser or CLI
+that can reach a Provider through an environment proxy can still succeed at
+the catalog check while the Worker's inference connection fails.
+
 | State | Meaning |
 | --- | --- |
 | UNCONFIGURED | Required configuration or credential reference is missing |

@@ -6,7 +6,9 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from compat.nki_client import NKIError
 
+from nous_runtime.control_plane.routes import handle_model_test_request
 from nous_runtime.model_runtime.factory import build_gateway_from_providers
 from nous_runtime.model_runtime.gateway import ModelGateway
 from nous_runtime.model_runtime.models import ModelRequest
@@ -412,6 +414,84 @@ class BalanceErrorKernelClient:
 
     async def close(self) -> None:
         return None
+
+
+@pytest.mark.parametrize(
+    ("message", "code", "public_message", "private_part"),
+    [
+        (
+            "provider process error: credential reference is not authorized for provider use",
+            "NOUS_KERNEL_PROVIDER_CREDENTIAL",
+            "Kernel rejected the saved Provider credential reference.",
+            "credential reference is not authorized for provider use",
+        ),
+        (
+            "provider process error: credential reference is unavailable",
+            "NOUS_KERNEL_PROVIDER_CREDENTIAL",
+            "Kernel rejected the saved Provider credential reference.",
+            "credential reference is unavailable",
+        ),
+        (
+            "provider process error: PROVIDER_EXECUTION_FAILED: provider process error: "
+            "error sending request for url (https://private-provider.example.test/call)",
+            "NOUS_KERNEL_PROVIDER_NETWORK",
+            "Provider Worker could not complete its network request.",
+            "private-provider.example.test",
+        ),
+    ],
+)
+def test_studio_surfaces_kernel_provider_failures_without_repeating_the_request(
+    monkeypatch, message, code, public_message, private_part
+):
+    from nous_runtime.model_runtime.factory import gateway_service
+
+    gateway = build_gateway_from_providers([RemoteProvider()])
+    requests = []
+
+    class UnavailableWorker:
+        async def execute_operation(self, operation, idempotency_key=""):
+            requests.append(idempotency_key)
+            raise NKIError(
+                "PROVIDER_ERROR", message, "provider", "provider-runtime", True
+            )
+
+        async def close(self):
+            pass
+
+    async def available():
+        return True
+
+    async def new_client():
+        return UnavailableWorker()
+
+    monkeypatch.setattr(gateway, "_ensure_nki_available", available)
+    monkeypatch.setattr(gateway, "_new_nki_client", new_client)
+    monkeypatch.setattr(gateway_service, "get", lambda: gateway)
+    try:
+        result = handle_model_test_request({"model_id": "deepseek/deepseek-chat"})
+    finally:
+        gateway.close_sync_bridge()
+
+    assert result["ok"] is True
+    data = result["data"]
+    assert data["healthy"] is False
+    assert data["error_code"] == code
+    assert public_message in data["error"]
+    assert data["tokens_used"] is None
+    assert data["cost_usd"] is None
+    assert requests == [data["request_id"]]
+    assert private_part not in json.dumps(data)
+
+
+def test_nki_diagnostic_does_not_trust_lookalike_provider_error():
+    message = "provider process error: credential reference is unavailable"
+    failure = ModelGateway._classify_provider_failure(
+        NKIError("PROVIDER_ERROR", message, "provider", "unverified-source"),
+        provider_id="example",
+        model_id="example-model",
+    )
+    assert failure.category == "unknown"
+    assert message not in failure.explanation
 
 
 def test_model_execution_uses_kernel_operation(monkeypatch) -> None:

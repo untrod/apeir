@@ -417,6 +417,23 @@ def handle_model_test(
             return err_response(
                 "NOUS_DEPENDENCY_MISSING", "Model runtime not available"
             )
+        from nous_runtime.model_runtime.errors import ModelProviderResponseError
+
+        code = (
+            exc.provider_error_code
+            if isinstance(exc, ModelProviderResponseError)
+            else ""
+        )
+        worker_diagnostics = {
+            "NOUS_KERNEL_PROVIDER_CREDENTIAL": (
+                "Kernel rejected the saved Provider credential reference. "
+                "Check the credentials configured on the Controller host."
+            ),
+            "NOUS_KERNEL_PROVIDER_NETWORK": (
+                "Provider Worker could not complete its network request. "
+                "Check network access and TLS trust from the Controller host."
+            ),
+        }
         status = getattr(exc, "http_status", None)
         diagnostic = (
             {
@@ -428,6 +445,7 @@ def handle_model_test(
             if type(status) is int
             else None
         )
+        worker_diagnostic = worker_diagnostics.get(code)
         return ok_response(
             {
                 "model_id": model_id,
@@ -436,7 +454,10 @@ def handle_model_test(
                 "tokens_used": None,
                 "cost_usd": None,
                 "cost_measurement": "unknown",
-                "error": (diagnostic or "Model test did not complete.")
+                **({"error_code": code} if worker_diagnostic else {}),
+                "error": (
+                    worker_diagnostic or diagnostic or "Model test did not complete."
+                )
                 + " Inspect the original request and usage before retrying.",
             }
         )

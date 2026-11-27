@@ -201,6 +201,11 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
   });
   const rowStyle = { display: "flex", gap: space.sm, alignItems: "center", flexWrap: "wrap" as const };
   const measured = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : "UNKNOWN";
+  const testError = locale === "zh" && result?.error_code === "NOUS_KERNEL_PROVIDER_CREDENTIAL"
+    ? "Kernel 拒绝了已保存的凭据引用。请检查 Runtime 所在主机的凭据授权。重新测试前，请查看原始请求和用量。"
+    : locale === "zh" && result?.error_code === "NOUS_KERNEL_PROVIDER_NETWORK"
+      ? "Provider Worker 未能完成模型网络请求。请检查 Runtime 所在主机的网络、代理和证书。重新测试前，请查看原始请求和用量。"
+      : result?.error;
   const localTemplate = !draft?.original && PROVIDER_TEMPLATES.find(item => item.providerId === templateId)?.credentialType === "none";
   const nativeKeyPicker = "__TAURI_INTERNALS__" in window && savedKeys.length > 0;
   const modelGroups = [
@@ -285,7 +290,7 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
       <strong>{result.healthy ? t("Inference completed", "推理已完成") : t("Inference failed / blocked", "推理失败或受阻")}</strong>
       <p>{t("Tested model", "已测试模型")}: <code>{result.model_id}</code> · {t("Latency", "耗时")}: {measured(result.latency_ms)} ms</p>
       {result.response_preview && <div className="provider-response" aria-label={t("Test response", "测试响应")}>{result.response_preview}</div>}
-      {result.error && <p role="alert">{result.error}</p>}
+      {testError && <p role="alert">{testError}</p>}
       <p>Tokens: {measured(result.tokens_used)} · USD: {["reported", "derived", "estimated"].includes(result.cost_measurement || "") ? measured(result.cost_usd) : "UNKNOWN"} · {result.cost_measurement || "unknown"}</p>
       <details><summary>{t("Original request", "原始请求")}</summary><p>{result.request_id || "UNKNOWN"}</p><p>{result.response_preview}</p><p>{result.execution?.path || "UNKNOWN"} · {result.execution?.operation_id || result.execution?.workload_id || "UNKNOWN"}</p></details>
     </section>}

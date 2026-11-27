@@ -513,6 +513,7 @@ class ModelGateway:
                     "authentication",
                     "authorization",
                     "budget_exceeded",
+                    "transport",
                     "unsupported",
                 }:
                     last_blocking_error = ModelProviderResponseError(
@@ -1737,6 +1738,7 @@ class ModelGateway:
         provider_id: str,
         model_id: str,
     ):
+        from compat.nki_client import NKIError
         from nous_runtime.context.selected_input import SelectedInputError
 
         if isinstance(error, SelectedInputError):
@@ -1746,6 +1748,34 @@ class ModelGateway:
                 evidence={},
                 explanation="Selected saved input admission failed",
             )
+        # The frozen Kernel reports these pre-response failures under the same
+        # NKI code. Publish fixed messages, never its raw endpoint or exception.
+        if (
+            isinstance(error, NKIError)
+            and error.code == "PROVIDER_ERROR"
+            and error.failed_phase == "provider"
+            and error.cause == "provider-runtime"
+        ):
+            if error.message in {
+                "provider process error: credential reference is not authorized for provider use",
+                "provider process error: credential reference is unavailable",
+            }:
+                return _ProviderFailure(
+                    category="authorization",
+                    retryable=False,
+                    evidence={"provider_error_code": "NOUS_KERNEL_PROVIDER_CREDENTIAL"},
+                    explanation="Kernel rejected the saved Provider credential reference",
+                )
+            if error.message.startswith(
+                "provider process error: PROVIDER_EXECUTION_FAILED: provider process error: "
+                "error sending request for url ("
+            ):
+                return _ProviderFailure(
+                    category="transport",
+                    retryable=False,
+                    evidence={"provider_error_code": "NOUS_KERNEL_PROVIDER_NETWORK"},
+                    explanation="Provider Worker could not complete its network request",
+                )
         # Only local, typed compatibility failures receive these fixed public
         # messages. Never publish arbitrary Provider exception text here.
         unsupported = {
