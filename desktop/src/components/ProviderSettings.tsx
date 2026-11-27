@@ -204,7 +204,7 @@ export function ProviderSettings({ locale = "en", models, modelsReady = true, on
   const testError = locale === "zh" && result?.error_code === "NOUS_KERNEL_PROVIDER_CREDENTIAL"
     ? "Kernel 拒绝了已保存的凭据引用。请检查 Runtime 所在主机的凭据授权。重新测试前，请查看原始请求和用量。"
     : locale === "zh" && result?.error_code === "NOUS_KERNEL_PROVIDER_NETWORK"
-      ? "Provider Worker 无法连接模型端点。请检查 Runtime 所在主机的网络、代理和证书。重新测试前，请查看原始请求和用量。"
+      ? "Provider Worker 未能完成模型网络请求。请检查 Runtime 所在主机的网络、代理和证书。重新测试前，请查看原始请求和用量。"
       : result?.error;
   const localTemplate = !draft?.original && PROVIDER_TEMPLATES.find(item => item.providerId === templateId)?.credentialType === "none";
   const nativeKeyPicker = "__TAURI_INTERNALS__" in window && savedKeys.length > 0;

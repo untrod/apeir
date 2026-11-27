@@ -209,13 +209,13 @@ describe("Studio Provider configuration", () => {
     vi.mocked(testModel).mockResolvedValueOnce({
       model_id: "example/original", selected_model_id: "example/original", instance_id: "instance",
       request_id: "modelreq_original", response_id: "", healthy: false, latency_ms: 1,
-      error_code: "NOUS_KERNEL_PROVIDER_NETWORK", error: "Provider Worker could not reach the model endpoint.",
+      error_code: "NOUS_KERNEL_PROVIDER_NETWORK", error: "Provider Worker could not complete its network request.",
     });
     render(<ProviderSettings locale="zh" models={models} onChanged={changed} />);
     await screen.findByRole("button", { name: "编辑 example" });
     fireEvent.change(screen.getByLabelText("待测试模型"), { target: { value: "example/original" } });
     fireEvent.click(screen.getByRole("button", { name: "运行推理测试" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Provider Worker 无法连接模型端点");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Provider Worker 未能完成模型网络请求");
     const result = screen.getByLabelText("模型测试结果");
     expect(result).toHaveTextContent("modelreq_original");
     expect(result).toHaveTextContent("Tokens: UNKNOWN · USD: UNKNOWN");

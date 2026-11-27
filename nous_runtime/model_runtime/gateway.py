@@ -1774,7 +1774,7 @@ class ModelGateway:
                     category="transport",
                     retryable=False,
                     evidence={"provider_error_code": "NOUS_KERNEL_PROVIDER_NETWORK"},
-                    explanation="Provider Worker could not reach the model endpoint",
+                    explanation="Provider Worker could not complete its network request",
                 )
         # Only local, typed compatibility failures receive these fixed public
         # messages. Never publish arbitrary Provider exception text here.

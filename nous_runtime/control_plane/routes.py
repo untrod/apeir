@@ -430,7 +430,7 @@ def handle_model_test(
                 "Check the credentials configured on the Controller host."
             ),
             "NOUS_KERNEL_PROVIDER_NETWORK": (
-                "Provider Worker could not reach the model endpoint. "
+                "Provider Worker could not complete its network request. "
                 "Check network access and TLS trust from the Controller host."
             ),
         }

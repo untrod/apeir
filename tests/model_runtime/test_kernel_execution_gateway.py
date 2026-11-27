@@ -435,7 +435,7 @@ class BalanceErrorKernelClient:
             "provider process error: PROVIDER_EXECUTION_FAILED: provider process error: "
             "error sending request for url (https://private-provider.example.test/call)",
             "NOUS_KERNEL_PROVIDER_NETWORK",
-            "Provider Worker could not reach the model endpoint.",
+            "Provider Worker could not complete its network request.",
             "private-provider.example.test",
         ),
     ],
