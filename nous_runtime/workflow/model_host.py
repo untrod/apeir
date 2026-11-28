@@ -30,7 +30,7 @@ from nous_runtime.model_runtime.facade import (
     GatewayFallbackPolicy,
     GatewayOperation,
     GatewayRequest,
-    ModelGatewayFacade,
+    get_gateway_facade,
 )
 from nous_runtime.model_runtime.models import RoutingMode
 from nous_runtime.model_runtime.errors import ModelRuntimeError
@@ -109,7 +109,7 @@ class WorkflowModelHost:
         self.runtime = runtime
         self.root = Path(runtime.store.path).parent.parent.resolve()
         self.authorization_context = authorization_context
-        self.gateway_factory = gateway_factory or ModelGatewayFacade
+        self.gateway_factory = gateway_factory or get_gateway_facade
 
     def __call__(self, step, context: dict[str, Any]) -> dict[str, Any]:
         validate_model_step(step)
