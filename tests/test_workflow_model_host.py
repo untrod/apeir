@@ -303,6 +303,7 @@ def test_studio_commits_original_human_approval_before_model_dispatch(
 ):
     from nous_runtime.api.workflow_routes import handle_workflow_run_action
     from nous_runtime.compat.capability import register_capability
+    from nous_runtime.model_runtime.factory import gateway_service
 
     register_capability(
         "project.read_file",
@@ -323,9 +324,8 @@ def test_studio_commits_original_human_approval_before_model_dispatch(
             ),
         )
     )
-    monkeypatch.setattr(
-        "nous_runtime.workflow.model_host.ModelGatewayFacade", host.facade_factory
-    )
+    gateway = host.facade_factory().gateway
+    monkeypatch.setattr(gateway_service, "get", lambda *, required: gateway)
     _, run = start(host)
 
     def committed_approval():
